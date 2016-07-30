@@ -311,9 +311,9 @@ def library(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 	if is_windows():
 		prefix = 'lib'
 	
-	buildpath = '/' + osname() + '/' + arch(bld) + '/' + link(bld) + variant(bld)
+	buildpath = osname() + '/' + arch(bld) + '/' + link(bld) + variant(bld)
 	
-	target = prefix + name + variant(bld)
+	target = buildpath + '/' + prefix + name + variant(bld)
 
 	install_path=''
 	if install != '':
@@ -365,7 +365,9 @@ def program(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 	global bldcontext
 	bld = bldcontext
 
-	buildpath = '/' + osname() + '/' + arch(bld) + '/' + bld.variant
+	buildpath = osname() + '/' + arch(bld) + '/' + link(bld) + variant(bld)
+
+	target = buildpath + '/' + name + variant(bld)
 
 	install_path=''
 	if install != '':
@@ -375,7 +377,7 @@ def program(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 		defines			= defines,
 		includes		= list_include(bld, includes),
 		source			= list_source(bld, source),
-		target			= name + variant(bld),
+		target			= target,
 		name			= name,
 		cxxflags		= cxxflags,
 		cflags			= cxxflags,
