@@ -133,6 +133,7 @@ def configure_default(conf):
 		conf.env.CXXFLAGS.append('/analyze-') # disable code analysis
 		conf.env.CXXFLAGS.append('/WX-') # warnings are not treated as errors 
 		conf.env.CXXFLAGS.append('/FS') # serialized writes to the program database (PDB)
+		# conf.env.CXXFLAGS.append('/Fd:testing.pdb') # file name for the program database (PDB) defaults to VCx0.pdb
 		
 		conf.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
 		# conf.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
@@ -176,7 +177,8 @@ def configure_debug(conf):
 	if is_windows():
 
 		conf.env.CXXFLAGS.append('/RTC1') # run-time error checks (stack frame & uninitialized used variables)
-		conf.env.CXXFLAGS.append('/ZI') # produces a program database in a format that supports the Edit and Continue feature.
+		# conf.env.CXXFLAGS.append('/ZI') # produces a program database in a format that supports the Edit and Continue feature.
+		conf.env.CXXFLAGS.append('/Z7') # embeds the program database
 		conf.env.CXXFLAGS.append('/Od') # disable optimizations
 		conf.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
 
