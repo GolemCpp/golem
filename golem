@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+
+import sys
+import subprocess
+
+# build all possible (according project file)
+def all():
+	subprocess.call(["python", "-B", "waf", "configure", "debug", "release", "--arch=x86"])
+	subprocess.call(["python", "-B", "waf", "configure", "debug", "release", "--arch=x64"])
+
+# build specific (with specified arguments)
+def build():
+	subprocess.call(["python", "-B", "waf"])
+
+# commit build (all) to specific repository (according project file)
+def release():
+	print("Releasing")
+	# 1. if release with message -> we commit the repo with the message, then 2.
+	# 2. build and commit build with the last repo commit hash
+	# always true, the repo status should be left nothing to commit (or throw error)
+
+# update deps and git
+def update():
+	print("Updating")
+
+def about():
+	print("Golem - Your C++ Build System Ready :D")
+
+for arg in sys.argv[1:]:
+	if arg == 'all':
+		all()
+	elif arg == 'build': 
+		build()
+	elif arg == 'release': 
+		release()
+	elif arg == 'update': 
+		update()
+	else:
+		about()

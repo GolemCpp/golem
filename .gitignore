@@ -1,0 +1,36 @@
+####################
+## Hidden Files
+####################
+
+*.hidden
+
+#################
+## Waf
+#################
+
+.waf*
+.lock*
+waf-*
+out*
+
+#############
+## Python
+#############
+
+*.py[co]
+
+############
+## Windows
+############
+
+# Windows image file caches
+Thumbs.db
+
+# Folder config file
+Desktop.ini
+
+############
+## Mac
+############
+
+.DS_Store
