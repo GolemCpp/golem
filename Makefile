@@ -1,21 +1,7 @@
-WAF=./scripts/waf
+GOLEM=./golem
 
-all: debug
-
-configure:
-	$(WAF) configure
-
-debug:
-	$(WAF)
-
-release:
-	$(WAF) --variant=release
+all:
+	$(GOLEM) all
 
 clean:
-	$(WAF) clean
-
-distclean:
-	$(WAF) distclean
-
-install:
-	$(WAF) install
+	$(GOLEM) clean

@@ -5,12 +5,17 @@ import subprocess
 
 # build all possible (according project file)
 def all():
-	subprocess.call(["python", "-B", "waf", "configure", "debug", "release", "--arch=x86"])
-	subprocess.call(["python", "-B", "waf", "configure", "debug", "release", "--arch=x64"])
+	print("Building ALL")
+	subprocess.call(["python", "-B", "waf", "all"])
 
 # build specific (with specified arguments)
-def build():
-	subprocess.call(["python", "-B", "waf"])
+def build(args):
+	print("Building")
+	subprocess.call(["python", "-B", "waf", "build"] + args)
+
+# clean
+def clean():
+	subprocess.call(["python", "-B", "waf", "distclean", "configure"])
 
 # commit build (all) to specific repository (according project file)
 def release():
@@ -24,16 +29,27 @@ def update():
 	print("Updating")
 
 def about():
-	print("Golem - Your C++ Build System Ready :D")
+	print("=== Golem C++ Build System ===")
 
-for arg in sys.argv[1:]:
-	if arg == 'all':
-		all()
-	elif arg == 'build': 
-		build()
-	elif arg == 'release': 
-		release()
-	elif arg == 'update': 
-		update()
-	else:
-		about()
+def invalid_command(arg):
+	print(arg + " : Invalid command")
+
+about()
+
+if len(sys.argv) < 2:
+	sys.exit(0)
+
+arg = sys.argv[1]
+
+if arg == 'all':
+	all()
+elif arg == 'build':
+	build(sys.argv[2:])
+elif arg == 'clean': 
+	clean()
+elif arg == 'release': 
+	release()
+elif arg == 'update': 
+	update()
+else:
+	invalid_command(arg)

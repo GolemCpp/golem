@@ -37,15 +37,15 @@ def variant_release():
 
 def variant(bld):
 	variant = ''
-	if bld.variant == variant_debug():
+	if bld.options.variant == variant_debug():
 		variant = '-' + variant_debug()
 	return variant
 		
 def is_debug(bld):
-	return bld.variant == variant_debug()
+	return bld.options.variant == variant_debug()
 		
 def is_release(bld):
-	return bld.variant == variant_release()
+	return bld.options.variant == variant_release()
 
 def os_windows():
 	return 'windows'
@@ -94,7 +94,7 @@ def is_x64(conf):
 
 def options(opt):
 	opt.load('compiler_cxx')
-	# opt.add_option("--variant", action="store", default='debug', help="Runtime Linking")
+	opt.add_option("--variant", action="store", default='debug', help="Runtime Linking")
 	opt.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
 	opt.add_option("--link", action="store", default='shared', help="Library Linking")
 	opt.add_option("--arch", action="store", default='x86', help="Target Architecture")
@@ -104,12 +104,13 @@ def options(opt):
 	else: 
 		opt.add_option("--nounicode", action="store_true", default=True, help="Unicode Support")
 
-def configure_default(conf):
+def configure_init(conf):
 	conf.env.DEFINES=[]
 	conf.env.CXXFLAGS=[]
 	conf.env.CFLAGS=[]
 	conf.env.LINKFLAGS=[]
 
+def configure_default(conf):
 	if not conf.options.nounicode:
 		conf.env.DEFINES.append('UNICODE')
 
@@ -143,6 +144,7 @@ def configure_default(conf):
 		conf.env.LINKFLAGS.append('/NXCOMPAT') # tested to be compatible with the Windows Data Execution Prevention feature
 		conf.env.LINKFLAGS.append('/DYNAMICBASE') # generate an executable image that can be randomly rebased at load time 
 		conf.env.LINKFLAGS.append('/NOLOGO') # suppress startup banner
+		conf.env.MSVC_MANIFEST = '' # disable waf manifest behavior
 		# conf.env.LINKFLAGS.append('/MANIFEST') # creates a side-by-side manifest file and optionally embeds it in the binary
 		# conf.env.LINKFLAGS.append('/MANIFESTUAC:"level=\'asInvoker\' uiAccess=\'false\'"')
 		# conf.env.LINKFLAGS.append('/ManifestFile:".dll.intermediate.manifest"')
@@ -171,7 +173,7 @@ def configure_default(conf):
 	if is_darwin():
 		conf.env.env.CXX	= ['clang++']
 		conf.env.CXXFLAGS.append('-stdlib=libc++')
-		conf.env.linkflags.append('-stdlib=libc++')
+		conf.env.LINKFLAGS.append('-stdlib=libc++')
 
 def configure_debug(conf):
 	if is_windows():
@@ -216,7 +218,8 @@ def configure_release(conf):
 			conf.env.CXXFLAGS.append('/MD')
 
 		# conf.env.LINKFLAGS.append('/DEF:"D:.def"')
-		conf.env.LINKFLAGS.append('/LTCG:incremental') # perform whole-program optimization
+		conf.env.LINKFLAGS.append('/LTCG') # perform whole-program optimization
+		# conf.env.LINKFLAGS.append('/LTCG:incremental') # perform incremental whole-program optimization
 		conf.env.LINKFLAGS.append('/OPT:REF') # eliminates functions and data that are never referenced
 		conf.env.LINKFLAGS.append('/OPT:ICF') # to perform identical COMDAT folding
 		if is_x86(conf):
@@ -226,17 +229,19 @@ def configure_release(conf):
 		conf.env.CXXFLAGS.append('-O3')
 
 def configure(conf):
-	conf.setenv('debug')
-	configure_default(conf)
-	configure_debug(conf)
-	conf.env.CFLAGS = conf.env.CXXFLAGS
+
+	conf.setenv('x86')
+	if is_windows():
+		conf.env.MSVC_VERSIONS = ['msvc 14.0']
+		conf.env.MSVC_TARGETS = ['x86']
 	conf.load('compiler_cxx')
 
-	conf.setenv('release')
-	configure_default(conf)
-	configure_release(conf)
-	conf.env.CFLAGS = conf.env.CXXFLAGS
+	conf.setenv('x64')
+	if is_windows():
+		conf.env.MSVC_VERSIONS = ['msvc 14.0']
+		conf.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
 	conf.load('compiler_cxx')
+
 
 def dep_system(bld, libs):
 	bld.env['LIB'] += libs
@@ -266,7 +271,7 @@ def dep_static(name, fullname, lib, libdebug):
 	bld.env['INCLUDES_' + name]		= list_include(bld, [includes])
 	bld.env['STLIBPATH_' + name]	= list_include(bld, [libpath])
 	
-	if bld.variant == 'debug':
+	if is_debug():
 		bld.env['STLIB_' + name]	= libdebug
 	else:
 		bld.env['STLIB_' + name]	= lib
@@ -297,7 +302,7 @@ def dep_shared(name, fullname, lib, libdebug):
 	bld.env['INCLUDES_' + name]		= list_include(bld, [includes])
 	bld.env['LIBPATH_' + name]		= list_include(bld, [libpath])
 	
-	if bld.variant == 'debug':
+	if is_debug():
 		bld.env['LIB_' + name]		= libdebug
 	else:
 		bld.env['LIB_' + name]		= lib
@@ -310,8 +315,8 @@ def library(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 	prefix = ''
 	if is_windows():
 		prefix = 'lib'
-	
-	buildpath = osname() + '/' + arch(bld) + '/' + link(bld) + variant(bld)
+
+	global buildpath
 	
 	target = buildpath + '/' + prefix + name + variant(bld)
 
@@ -365,7 +370,7 @@ def program(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 	global bldcontext
 	bld = bldcontext
 
-	buildpath = osname() + '/' + arch(bld) + '/' + link(bld) + variant(bld)
+	global buildpath
 
 	target = buildpath + '/' + name + variant(bld)
 
@@ -397,18 +402,29 @@ def program(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 			libs	= unideps
 		)
 
-def build_checks():
-	global bldcontext
-	bld = bldcontext
-	# verify options
-	if not bld.options.arch in ['x86', 'x64']:
-		bld.fatal("'" + bld.options.arch + "' is not a valid target architecture, instead use: ['x86', 'x64']")
-	if not bld.options.link in ['static', 'shared']:
-		bld.fatal("'" + bld.options.link + "' is not a valid linking option, instead use: ['static', 'shared']")
-	if not bld.options.runtime in ['static', 'shared']:
-		bld.fatal("'" + bld.options.runtime + "' is not a valid runtime-linking option, instead use: ['static', 'shared']")
-
 def build(bld):
 	global bldcontext
 	bldcontext = bld
-	build_checks()
+
+	bld.load_envs()
+	if is_x86(bld):
+		bld.env = bld.all_envs['x86'].derive()
+	else:
+		bld.env = bld.all_envs['x64'].derive()
+
+	configure_init(bld)
+	configure_default(bld)
+
+	if is_debug(bld):
+		configure_debug(bld)
+	else:
+		configure_release(bld)
+
+	bld.env.CFLAGS = bld.env.CXXFLAGS
+	
+	global buildpath
+
+	if bld.cmd == 'build':
+		buildpath = bld.options.variant
+	else:
+		buildpath = osname() + '-' + arch(bld) + '-' + link(bld) + variant(bld)
