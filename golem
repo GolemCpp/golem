@@ -15,7 +15,13 @@ def build(args):
 
 # clean
 def clean():
+	print("Cleaning")
 	subprocess.call(["python", "-B", "waf", "distclean", "configure"])
+
+# distclean
+def distclean():
+	print("Dist Cleaning")
+	subprocess.call(["python", "-B", "waf", "distclean"])
 
 # commit build (all) to specific repository (according project file)
 def release():
@@ -51,5 +57,7 @@ elif arg == 'release':
 	release()
 elif arg == 'update': 
 	update()
+elif arg == 'distclean': 
+	distclean()
 else:
 	invalid_command(arg)

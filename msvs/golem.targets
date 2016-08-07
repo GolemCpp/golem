@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="AfterBuild">
+    <Message Text="Build..." />
+    <Exec Command="$(RootPath)\make build --link=shared --arch=$(PlatformTarget) --variant=$(Configuration)" />
+  </Target>
+  <Target Name="BeforeClean">
+    <Message Text="Clean..." />
+    <Exec Command="$(RootPath)\make clean" />
+  </Target>
+  <PropertyGroup>
+    <LocalDebuggerCommand Condition="'$(Configuration)'=='Debug'">$(GolemPath)\out\$(Configuration)\tests-debug.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommand Condition="'$(Configuration)'=='Release'">$(GolemPath)\out\$(Configuration)\tests.exe</LocalDebuggerCommand>
+  </PropertyGroup>
+</Project>

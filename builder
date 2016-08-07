@@ -109,6 +109,7 @@ def configure_init(conf):
 	conf.env.CXXFLAGS=[]
 	conf.env.CFLAGS=[]
 	conf.env.LINKFLAGS=[]
+	conf.env.ARFLAGS=[]
 
 def configure_default(conf):
 	if not conf.options.nounicode:
@@ -144,18 +145,22 @@ def configure_default(conf):
 		conf.env.LINKFLAGS.append('/NXCOMPAT') # tested to be compatible with the Windows Data Execution Prevention feature
 		conf.env.LINKFLAGS.append('/DYNAMICBASE') # generate an executable image that can be randomly rebased at load time 
 		conf.env.LINKFLAGS.append('/NOLOGO') # suppress startup banner
-		conf.env.MSVC_MANIFEST = '' # disable waf manifest behavior
+		conf.env.MSVC_MANIFEST = False # disable waf manifest behavior
 		# conf.env.LINKFLAGS.append('/MANIFEST') # creates a side-by-side manifest file and optionally embeds it in the binary
 		# conf.env.LINKFLAGS.append('/MANIFESTUAC:"level=\'asInvoker\' uiAccess=\'false\'"')
 		# conf.env.LINKFLAGS.append('/ManifestFile:".dll.intermediate.manifest"')
 		# conf.env.LINKFLAGS.append('/SUBSYSTEM') # how to run the .exe file
 		# conf.env.LINKFLAGS.append('/DLL') # builds a DLL
 		# conf.env.LINKFLAGS.append('/TLBID:1') # resource ID of the linker-generated type library
+		
+		conf.env.ARFLAGS.append('/NOLOGO')
 
 		if is_x86(conf):
 			conf.env.LINKFLAGS.append('/MACHINE:X86')
+			conf.env.ARFLAGS.append('/MACHINE:X86')
 		else:
 			conf.env.LINKFLAGS.append('/MACHINE:X64')
+			conf.env.ARFLAGS.append('/MACHINE:X64')
 			
 		if is_x86(conf):
 			conf.env.MSVC_TARGETS = ['x86']
@@ -220,6 +225,7 @@ def configure_release(conf):
 		# conf.env.LINKFLAGS.append('/DEF:"D:.def"')
 		conf.env.LINKFLAGS.append('/LTCG') # perform whole-program optimization
 		# conf.env.LINKFLAGS.append('/LTCG:incremental') # perform incremental whole-program optimization
+		conf.env.ARFLAGS.append('/LTCG')
 		conf.env.LINKFLAGS.append('/OPT:REF') # eliminates functions and data that are never referenced
 		conf.env.LINKFLAGS.append('/OPT:ICF') # to perform identical COMDAT folding
 		if is_x86(conf):
@@ -307,7 +313,7 @@ def dep_shared(name, fullname, lib, libdebug):
 	else:
 		bld.env['LIB_' + name]		= lib
 	
-def library(name = '', defines = [], includes = [], source = [], cxxflags = [], linkflags = [], deps = [], windeps = [], unideps = [], install = ''):
+def library(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], deps = [], windeps = [], unideps = [], install = ''):
 
 	global bldcontext
 	bld = bldcontext
@@ -324,6 +330,11 @@ def library(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 	if install != '':
 		install_path = install
 
+	if is_shared(bld):
+		defines += defines_shared
+	else:
+		defines += defines_static
+	
 	if not is_windows():
 		cxxflags.append('-pthread')
 		linkflags.append('-pthread')
@@ -366,7 +377,7 @@ def library(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 			libs	= unideps
 		)
 	
-def program(name = '', defines = [], includes = [], source = [], cxxflags = [], linkflags = [], deps = [], windeps = [], unideps = [], install = ''):
+def program(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], deps = [], windeps = [], unideps = [], install = ''):
 	global bldcontext
 	bld = bldcontext
 
@@ -377,6 +388,11 @@ def program(name = '', defines = [], includes = [], source = [], cxxflags = [], 
 	install_path=''
 	if install != '':
 		install_path = install
+
+	if is_shared(bld):
+		defines += defines_shared
+	else:
+		defines += defines_static
 
 	program = bld.program(
 		defines			= defines,
