@@ -105,11 +105,12 @@ def options(opt):
 		opt.add_option("--nounicode", action="store_true", default=True, help="Unicode Support")
 
 def configure_init(conf):
-	conf.env.DEFINES=[]
-	conf.env.CXXFLAGS=[]
-	conf.env.CFLAGS=[]
-	conf.env.LINKFLAGS=[]
-	conf.env.ARFLAGS=[]
+	if is_windows():
+		conf.env.DEFINES=[]
+		conf.env.CXXFLAGS=[]
+		conf.env.CFLAGS=[]
+		conf.env.LINKFLAGS=[]
+		conf.env.ARFLAGS=[]
 
 def configure_default(conf):
 	if not conf.options.nounicode:
