@@ -138,6 +138,8 @@ def configure_default(conf):
 		conf.env.CXXFLAGS.append('/FS') # serialized writes to the program database (PDB)
 		# conf.env.CXXFLAGS.append('/Fd:testing.pdb') # file name for the program database (PDB) defaults to VCx0.pdb
 		
+		conf.env.CXXFLAGS.append('/std:c++latest') # enable all features as they become available, including feature removals
+		
 		conf.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
 		# conf.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
 		# conf.env.LINKFLAGS.append('/PDB:"D:.pdb"') # creates a program database (PDB) file
