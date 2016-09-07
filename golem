@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 
+import os
 import sys
+import re
 import subprocess
+import ConfigParser
+sys.dont_write_bytecode = True
+
+import imp
+project = imp.load_source('project', '../project')
 
 # build all possible (according project file)
 def all():
@@ -23,12 +30,70 @@ def distclean():
 	print("Dist Cleaning")
 	subprocess.call(["python", "-B", "waf", "distclean"])
 
+def repo_path():
+	return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+def repo_clear():
+	output = subprocess.check_output(["git", "status", "-s"], cwd=repo_path())
+	if output:
+		print(output)
+		return False
+	return True
+
+def repo_dirty():
+	return not repo_clear()
+
 # commit build (all) to specific repository (according project file)
-def release():
-	print("Releasing")
-	# 1. if release with message -> we commit the repo with the message, then 2.
-	# 2. build and commit build with the last repo commit hash
-	# always true, the repo status should be left nothing to commit (or throw error)
+def release(bumping):
+	if not bumping in {'major', 'minor', 'patch'}:
+		print('Usage golem release { major | minor | patch }')
+		return
+
+	if repo_dirty():
+		print("Your repository is dirty. You have to commit before releasing!")
+		return
+	
+	print("Releasing...")
+	config = ConfigParser.RawConfigParser()
+	config.read('../version')
+	if config.has_option('DEFAULT', 'version'):
+		version = config.get('DEFAULT', 'version')
+		parse = re.compile(r"(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(\-(?P<release>[a-z]+))?", re.VERBOSE)
+		match = parse.search(version)
+
+		parsed = {}
+		if not match:
+			print("Unrecognized version format")
+			return
+
+		for key, value in match.groupdict().items():
+			if key == 'release':
+				parsed[key] = str(value)
+			else:
+				parsed[key] = int(value)
+
+		bumped = False
+
+		for key, value in parsed.items():
+			if bumped:
+				parsed[key] = 0
+			elif key == bumping:
+				parsed[key] = value + 1
+				bumped = True
+
+		serialized = "{major}.{minor}.{patch}"
+		#if parsed['release']:
+		#	serialized += "-{release}"
+		newversion = serialized.format(**parsed)
+		print("Bump v" + version + " to v" + newversion)
+
+	else:
+		newversion = '0.0.0'
+		print("Init v" + newversion)
+
+	config.set('DEFAULT', 'version', newversion)
+	with open('../version', 'w') as configfile:
+		config.write(configfile)
 
 # update deps and git
 def update():
@@ -53,11 +118,106 @@ elif arg == 'build':
 	build(sys.argv[2:])
 elif arg == 'clean': 
 	clean()
-elif arg == 'release': 
-	release()
+elif arg == 'release':
+	if len(sys.argv) < 3:
+		print('Usage golem release { major | minor | patch }')
+		sys.exit(0) 
+	release(sys.argv[2])
 elif arg == 'update': 
 	update()
 elif arg == 'distclean': 
 	distclean()
 else:
 	invalid_command(arg)
+
+import os
+import sys
+import platform
+
+def identifier(flags):
+	return hash(str(flags))
+
+def compiler():
+	return 'vc140'
+
+def some_declaration():
+	name = 'bidon'
+	flags = [ '/MT', '/O3' ]
+	runtimes 	= [ 'shared', 'static' ]
+	targets		= [ 'shared', 'static', 'program' ]
+	variants 	= [ 'release', 'debug' ]
+	archs		= [ 'x86', 'x64' ]
+	systems		= [ 'windows', 'linux', 'macos' ]
+
+
+def build():
+	for arch in 'x86 x64'.split():
+		for link in 'shared static'.split():
+			for variant in 'debug release'.split():
+				os.makedirs('out/' + name + '-')
+	return
+
+def branch(name, system, compiler, arch, runtime, target, variant, flags):
+	return name + '-' + system + '-' + compiler + '-' + arch + '-' + runtime + '-' + target + '-' + variant + '-' + identifier(flags)
+
+
+class Dependency:
+	def __init__(self):
+		self.name = ''
+		self.version = 'latest'
+		self.system = sys.platform
+		self.compiler = 'vc140'
+		self.arch = platform.machine().lower()
+		self.runtime = 'shared'
+		self.target = 'shared'
+		self.variant = 'release'
+		self.hash = 'DEFAULT'
+	def __str__(self):
+		ret = ''
+		ret += 'Name' 	+ '\t\t' + self.name + '\n'
+		ret += 'Version' + '\t\t' + self.version + '\n'
+		ret += 'System' 	+ '\t\t' + self.system + '\n'
+		ret += 'Compiler' + '\t' + self.compiler + '\n'
+		ret += 'Arch' 	+ '\t\t' + self.arch + '\n'
+		ret += 'Runtime' + '\t\t' + self.runtime + '\n'
+		ret += 'Target' 	+ '\t\t' + self.target + '\n'
+		ret += 'Variant' + '\t\t' + self.variant + '\n'
+		ret += 'Hash' 	+ '\t\t' + self.hash
+		# ret += str(self.__dict__)
+		return ret
+
+class Project:
+	def __init__(self):
+		self.cache = []
+		self.deps = []
+
+	def __str__(self):
+		ret = ''
+		ret += 'Cache' + '\t' + str(self.cache) + '\n'
+		ret += 'Deps' + '\t' + str(self.deps)
+		return ret
+	
+	def get_deps(self):
+		ret = []
+		for fields in self.deps:
+			dep = Dependency()
+			for index, field in enumerate(fields):
+				if not field:
+					continue
+				if index == 0:
+					dep.name = field
+				if index == 1:
+					dep.version = field
+			if dep.name:
+				ret.append(dep)
+		return ret
+
+def print_project():
+	conf = Project()
+	project.deps(conf)
+	print conf
+	for dep in conf.get_deps():
+		print dep
+
+def print_subdir():
+	print [x[1][0] for x in os.walk('out') if x[1]]
