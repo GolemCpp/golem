@@ -6,10 +6,11 @@ import re
 import subprocess
 import ConfigParser
 import io
+import distutils.dir_util
 sys.dont_write_bytecode = True
 
 import imp
-project = imp.load_source('project', '../project')
+project = imp.load_source('project', '../project.glm')
 
 # build all possible (according project file)
 def all():
@@ -19,7 +20,12 @@ def all():
 # build specific (with specified arguments)
 def build(args):
 	print("Building")
-	subprocess.call(['python', '-B', 'waf', 'build'] + args)
+	subprocess.call(['python', '-B', 'waf', 'configure', 'build'] + args)
+
+# build specific (with specified arguments)
+def test(args):
+	print("Testing")
+	subprocess.call(['python', '-B', 'waf', 'test'] + args)
 
 # clean
 def clean():
@@ -45,12 +51,17 @@ def repo_dirty():
 	return not repo_clear()
 
 # commit build (all) to specific repository (according project file)
-def release(bumping):
+def release(args):
+	if not len(args):
+		print('Usage golem release { major | minor | patch }')
+		sys.exit(0)
+	bumping = args[0]
+	
 	if not bumping in {'major', 'minor', 'patch'}:
 		print('Usage: golem release { major | minor | patch }')
 		return
 	
-	with io.open('../project', 'rb') as f:
+	with io.open('../project.glm', 'rb') as f:
 		file_content = f.read().decode('utf-8')
 	match = re.search('VERSION\s*=\s*(.*)', file_content)
 
@@ -107,7 +118,7 @@ def release(bumping):
 
 	file_content = re.sub('^VERSION\s*=\s*(.*)', 'VERSION = \'' + newversion + '\'', file_content, flags=re.MULTILINE)
 	
-	with io.open('../project', 'wb') as f:
+	with io.open('../project.glm', 'wb') as f:
 		file_content = file_content.encode('utf-8')
 		f.write(file_content)
 	
@@ -125,14 +136,12 @@ def release(bumping):
 		
 	print "Released " + newversion
 
-	return
-
 # update deps and git
 def update():
-	print("Updating")
+	print "Updating"
 
 def about():
-	print("=== Golem C++ Build System ===")
+	print "=== Golem C++ Build System ==="
 
 def invalid_command(arg):
 	print(arg + " : Invalid command")
@@ -148,108 +157,15 @@ if arg == 'all':
 	all()
 elif arg == 'build':
 	build(sys.argv[2:])
+elif arg == 'test':
+	test(sys.argv[2:])
 elif arg == 'clean': 
 	clean()
 elif arg == 'release':
-	if len(sys.argv) < 3:
-		print('Usage golem release { major | minor | patch }')
-		sys.exit(0) 
-	release(sys.argv[2])
+	release(sys.argv[2:])
 elif arg == 'update': 
 	update()
 elif arg == 'distclean': 
 	distclean()
 else:
 	invalid_command(arg)
-
-import os
-import sys
-import platform
-
-def identifier(flags):
-	return hash(str(flags))
-
-def compiler():
-	return 'vc140'
-
-def some_declaration():
-	name = 'bidon'
-	flags = [ '/MT', '/O3' ]
-	runtimes 	= [ 'shared', 'static' ]
-	targets		= [ 'shared', 'static', 'program' ]
-	variants 	= [ 'release', 'debug' ]
-	archs		= [ 'x86', 'x64' ]
-	systems		= [ 'windows', 'linux', 'macos' ]
-
-
-def build():
-	for arch in 'x86 x64'.split():
-		for link in 'shared static'.split():
-			for variant in 'debug release'.split():
-				os.makedirs('out/' + name + '-')
-	return
-
-def branch(name, system, compiler, arch, runtime, target, variant, flags):
-	return name + '-' + system + '-' + compiler + '-' + arch + '-' + runtime + '-' + target + '-' + variant + '-' + identifier(flags)
-
-
-class Dependency:
-	def __init__(self):
-		self.name = ''
-		self.version = 'latest'
-		self.system = sys.platform
-		self.compiler = 'vc140'
-		self.arch = platform.machine().lower()
-		self.runtime = 'shared'
-		self.target = 'shared'
-		self.variant = 'release'
-		self.hash = 'DEFAULT'
-	def __str__(self):
-		ret = ''
-		ret += 'Name' 	+ '\t\t' + self.name + '\n'
-		ret += 'Version' + '\t\t' + self.version + '\n'
-		ret += 'System' 	+ '\t\t' + self.system + '\n'
-		ret += 'Compiler' + '\t' + self.compiler + '\n'
-		ret += 'Arch' 	+ '\t\t' + self.arch + '\n'
-		ret += 'Runtime' + '\t\t' + self.runtime + '\n'
-		ret += 'Target' 	+ '\t\t' + self.target + '\n'
-		ret += 'Variant' + '\t\t' + self.variant + '\n'
-		ret += 'Hash' 	+ '\t\t' + self.hash
-		# ret += str(self.__dict__)
-		return ret
-
-class Project:
-	def __init__(self):
-		self.cache = []
-		self.deps = []
-
-	def __str__(self):
-		ret = ''
-		ret += 'Cache' + '\t' + str(self.cache) + '\n'
-		ret += 'Deps' + '\t' + str(self.deps)
-		return ret
-	
-	def get_deps(self):
-		ret = []
-		for fields in self.deps:
-			dep = Dependency()
-			for index, field in enumerate(fields):
-				if not field:
-					continue
-				if index == 0:
-					dep.name = field
-				if index == 1:
-					dep.version = field
-			if dep.name:
-				ret.append(dep)
-		return ret
-
-def print_project():
-	conf = Project()
-	project.deps(conf)
-	print conf
-	for dep in conf.get_deps():
-		print dep
-
-def print_subdir():
-	print [x[1][0] for x in os.walk('out') if x[1]]

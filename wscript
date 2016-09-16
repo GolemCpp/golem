@@ -3,7 +3,6 @@
 import sys
 
 import imp
-project = imp.load_source('project', '../project')
 builder = imp.load_source('builder', 'builder')
 
 top = '.'
@@ -30,9 +29,6 @@ def build(bld):
 	bld.options.variant = bld.options.variant.lower()
 
 	builder.build(bld)
-	project.build(builder)
-	if bld.cmd == 'build':
-		project.test(builder)
 
 from waflib.Build import BuildContext, CleanContext, \
         InstallContext, UninstallContext
@@ -49,7 +45,7 @@ for arch in 'x86 x64'.split():
 				opt_variant = variant
 				all_build.append(cmd)
 
-def all(ctx):
+def all(bld):
 	import waflib.Options
 	waflib.Options.commands = ['configure'] + all_build + waflib.Options.commands
 
@@ -58,11 +54,6 @@ class tmp(Context):
 	cmd = 'all'
 	fun = 'all'
 
-def debug(ctx):
+def test(bld):
 	import waflib.Options
-	waflib.Options.commands = ['configure'] + all_build + waflib.Options.commands
-
-from waflib.Context import Context
-class tmp(Context):
-	cmd = 'all'
-	fun = 'all'
+	waflib.Options.commands = ['configure', 'build'] + waflib.Options.commands

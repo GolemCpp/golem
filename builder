@@ -3,10 +3,22 @@
 import os
 import sys
 import platform
+import subprocess
+import ConfigParser
+import distutils.dir_util
+import md5
+import shutil
 
+import imp
+project = imp.load_source('project', '../project.glm')
+
+def hash_identifier(flags):
+	m = md5.new()
+	m.update(''.join(flags))
+	return m.hexdigest()[:8]
 
 def list_include(bld, includes):
-	return [bld.srcnode.find_dir(x).abspath() for x in includes]
+	return [x if os.path.isabs(x) else bld.srcnode.find_dir(x).abspath() for x in includes]
 
 def list_source(bld, source):
 	return [item for sublist in [bld.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
@@ -19,15 +31,27 @@ def link_shared():
 	
 def link(bld):
 	return bld.options.link
-	
+
+def link_min(bld):
+	return link(bld)[:2]
+
 def is_static(bld):
 	return bld.options.link == link_static()
 
 def is_shared(bld):
 	return bld.options.link == link_shared()
 
+def runtime(bld):
+	return bld.options.runtime
+
+def runtime_min(bld):
+	return runtime(bld)[:2]
+
 def arch(bld):
 	return bld.options.arch
+
+def arch_min(bld):
+	return arch(bld)
 
 def variant_debug():
 	return 'debug'
@@ -40,12 +64,15 @@ def variant(bld):
 	if bld.options.variant == variant_debug():
 		variant = '-' + variant_debug()
 	return variant
-		
+
 def is_debug(bld):
 	return bld.options.variant == variant_debug()
 		
 def is_release(bld):
 	return bld.options.variant == variant_release()
+
+def variant_min(bld):
+	return bld.options.variant[:1]
 
 def os_windows():
 	return 'windows'
@@ -75,6 +102,15 @@ def osname():
 		osname = os_osx()
 	return osname
 
+def osname_min():
+	return osname()[:3]
+
+def compiler(bld):
+	return bld.env.CXX_NAME + '-' + '.'.join(bld.env.CC_VERSION)
+
+def compiler_min(bld):
+	return compiler(bld)
+
 def machine():
     if os.name == 'nt' and sys.version_info[:2] < (2,7):
         return os.environ.get("PROCESSOR_ARCHITEW6432", 
@@ -98,6 +134,7 @@ def options(opt):
 	opt.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
 	opt.add_option("--link", action="store", default='shared', help="Library Linking")
 	opt.add_option("--arch", action="store", default='x86', help="Target Architecture")
+	opt.add_option("--test", action="store_true", default=False, help="Target Architecture")
 	
 	if is_windows(): 
 		opt.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -316,18 +353,110 @@ def dep_shared(name, fullname, lib, libdebug):
 	else:
 		bld.env['LIB_' + name]		= lib
 	
-def library(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], deps = [], windeps = [], unideps = [], install = ''):
+class CacheConf:
+	def __init__(self):
+		self.remote = ''
+		self.location = ''
+
+def find_cache_conf():
+	if not os.path.exists('../settings.glm'):
+		return None
+
+	config = ConfigParser.RawConfigParser()
+	config.read('../settings.glm')
+
+	if not config.has_section('GOLEM'):
+		return None
+
+	conf = CacheConf()
+
+	# cache remote
+	if not config.has_option('GOLEM', 'cache.remote'):
+		return None
+	
+	remote = config.get('GOLEM', 'cache.remote')
+
+	if not remote:
+		return None
+
+	conf.remote = remote.strip('\'"')
+
+	# cache location
+	if not config.has_option('GOLEM', 'cache.location'):
+		location = os.path.join(os.path.expanduser("~"), '.cache', 'golem', 'builds')
+	else:
+		location = config.get('GOLEM', 'cache.location')
+
+	if not location:
+		return None
+
+	conf.location = location.strip('\'"')
+
+	# return cache configuration
+	return conf
+
+class Dependency:
+	def __init__(self):
+		self.name = ''
+		self.repo = ''
+		self.version = 'latest'
+		self.system = sys.platform
+		self.compiler = ''
+		self.arch = platform.machine().lower()
+		self.runtime = 'shared'
+		self.target = 'shared'
+		self.variant = 'release'
+		self.hash = 'DEFAULT'
+	def __str__(self):
+		ret = ''
+		ret += 'Name' 	+ '\t\t' + self.name + '\n'
+		ret += 'Repo' 	+ '\t\t' + self.repo + '\n'
+		ret += 'Version' + '\t\t' + self.version + '\n'
+		ret += 'System' 	+ '\t\t' + self.system + '\n'
+		ret += 'Compiler' + '\t' + self.compiler + '\n'
+		ret += 'Arch' 	+ '\t\t' + self.arch + '\n'
+		ret += 'Runtime' + '\t\t' + self.runtime + '\n'
+		ret += 'Target' 	+ '\t\t' + self.target + '\n'
+		ret += 'Variant' + '\t\t' + self.variant + '\n'
+		ret += 'Hash' 	+ '\t\t' + self.hash
+		# ret += str(self.__dict__)
+		return ret
+
+class Project:
+	def __init__(self):
+		self.cache = []
+		self.deps = []
+
+	def __str__(self):
+		ret = ''
+		ret += 'Cache' + '\t' + str(self.cache) + '\n'
+		ret += 'Deps' + '\t' + str(self.deps)
+		return ret
+	
+	def get_deps(self):
+		ret = []
+		for fields in self.deps:
+			dep = Dependency()
+			for index, field in enumerate(fields):
+				if not field:
+					continue
+				if index == 0:
+					dep.name = field
+				if index == 1:
+					dep.repo = field
+				if index == 2:
+					dep.version = field
+			if dep.name:
+				ret.append(dep)
+		return ret
+
+def target(ttype = '', name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
+
+	if not ttype in 'program library':
+		return
 
 	global bldcontext
 	bld = bldcontext
-
-	prefix = ''
-	if is_windows():
-		prefix = 'lib'
-
-	global buildpath
-	
-	target = buildpath + '/' + prefix + name + variant(bld)
 
 	install_path=''
 	if install != '':
@@ -341,87 +470,210 @@ def library(name = '', defines = [], defines_shared = [], defines_static = [], i
 	if not is_windows():
 		cxxflags.append('-pthread')
 		linkflags.append('-pthread')
-
-	if is_shared(bld):
-		lib = bld.shlib(
-			defines			= defines,
-			includes		= list_include(bld, includes),
-			source			= list_source(bld, source),
-			target			= target,
-			cxxflags		= cxxflags,
-			cflags			= cxxflags,
-			linkflags		= linkflags,
-			name			= name,
-			use				= deps,
-			install_path	= install_path
-		)
-	elif is_static(bld):
-		lib = bld.stlib(
-			defines			= defines,
-			includes		= list_include(bld, includes),
-			source			= list_source(bld, source),
-			target			= target,
-			cxxflags		= cxxflags,
-			cflags			= cxxflags,
-			linkflags		= linkflags,
-			name			= name,
-			use				= deps,
-			install_path	= install_path
-		)
 	
-	if is_windows():
-		dep_system(
-			bld		= lib,
-			libs	= windeps
-		)
-	else:
-		dep_system(
-			bld		= lib,
-			libs	= unideps
-		)
-	
-def program(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], deps = [], windeps = [], unideps = [], install = ''):
-	global bldcontext
-	bld = bldcontext
+	if ttype == 'library':
+		ttypestr = 'lib'
+	elif ttype == 'program':
+		ttypestr = 'app'
 
+	identifier = hash_identifier(bld.env.CXXFLAGS + bld.env.CFLAGS + bld.env.LINKFLAGS + bld.env.ARFLAGS + bld.env.DEFINES)
 	global buildpath
+	cachepath = name + '-' + ttypestr + '-' + 'master' + '-' + buildpath + '-' + identifier
 
-	target = buildpath + '/' + name + variant(bld)
-
-	install_path=''
-	if install != '':
-		install_path = install
-
-	if is_shared(bld):
-		defines += defines_shared
+	if bld.options.test:
+		targetpath = bld.options.variant
 	else:
-		defines += defines_static
+		targetpath = cachepath
 
-	program = bld.program(
-		defines			= defines,
-		includes		= list_include(bld, includes),
-		source			= list_source(bld, source),
-		target			= target,
-		name			= name,
-		cxxflags		= cxxflags,
-		cflags			= cxxflags,
-		linkflags		= linkflags,
-		use				= deps,
-		install_path	= install_path
-	)
+	pro = Project()
+	if hasattr(project, 'prepare'):
+		project.prepare(pro)
+	pro_deps = pro.get_deps()
+
+	for _dep in deps:
+		for dep in pro_deps:
+			if _dep == dep.name:
+
+				cache_conf = find_cache_conf()
+				if not cache_conf:
+					print("ERROR: no valid cache configuration found")
+					return
+				
+				cache_location = cache_conf.location
+				cache_repo = cache_conf.remote
+				
+				cache_dir = cache_location
+				if not os.path.exists(cache_dir):
+					os.makedirs(cache_dir)
+
+				dep_path_base = dep.name + '-' + 'lib' + '-' + 'master' + '-' + str(dep.version)
+				dep_path_build = dep_path_base + '-' + buildpath
+
+				# dep cache path with the current combination of flags (identifier)
+				dep_path_name = dep_path_build + '-' + identifier
+				dep_path_include = os.path.join(cache_dir, dep_path_base)
+				dep_path = os.path.join(cache_dir, dep_path_name)
+
+				if not os.path.exists(dep_path):
+					# dep cache path with an independant combination of flags (default)
+					dep_path_name = dep_path_build + '-' + 'default' 
+					dep_path = os.path.join(cache_dir, dep_path_name)
+
+				if not os.path.exists(dep_path):
+					print "INFO: can't find the dependency " + dep.name
+					print "Search in the cache repository..."
+
+					os.makedirs(dep_path)
+
+					# search the corresponding branch in the cache repo (with the right version)
+					ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_name])
+					if ret:
+						# no such a branch, have to build and cache
+
+						# building
+						build_dir = os.path.join(cache_dir, 'build')
+						if os.path.exists(build_dir):
+							shutil.rmtree(build_dir)
+						os.makedirs(build_dir)
+						
+						ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep.version, '--', dep.repo, '.'], cwd=build_dir)
+						if ret:
+							print "ERROR: cloning " + dep.repo + ' ' + dep.version
+							return
+
+						golem_dir = os.path.join(build_dir, 'golem')
+						if not os.path.exists(golem_dir):
+							print "ERROR: can't find golem to build the dependency"
+							return
+						
+						ret = subprocess.call(['python', '-B', 'golem', 'clean'], cwd=golem_dir)
+						if ret:
+							print "ERROR: dependency build failed"
+							return
+
+						ret = subprocess.call(['python', '-B', 'golem', 'build', '--runtime=' + bld.options.runtime, '--link=' + bld.options.link, '--arch=' + bld.options.arch, '--variant=' + bld.options.variant], cwd=golem_dir)
+						if ret:
+							print "ERROR: dependency build failed"
+							return
+
+						# caching
+						ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
+						if ret:
+							print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
+							return
+						ret = subprocess.call(['git', 'checkout', '-b', name], cwd=dep_path)
+						if ret:
+							print "ERROR: git checkout -b " + name
+						
+						bin_dir = os.path.join(golem_dir, 'out')
+						bin_dir = os.path.join(bin_dir, bld.options.variant)
+
+						if not os.path.exists(bin_dir):
+							print "ERROR: no binaries found in the dependency build"
+							return
+
+						distutils.dir_util.copy_tree(bin_dir, dep_path)
+
+						include_dir = os.path.join(build_dir, 'include')
+
+						if not os.path.exists(include_dir):
+							print "ERROR: no include found in the dependency build"
+							return
+						
+						distutils.dir_util.copy_tree(include_dir, dep_path_include)
+
+					else:
+						# branch found, have to clone it
+						ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', name, '--', cache_repo, '.'], cwd=dep_path)
+						if ret:
+							print "ERROR: git clone --depth 1 --branch " + name + ' -- ' + cache_repo + ' .'
+							return
+					
+				# use cache :)
+				print list_include(bld, [dep_path])
+				bld.env['INCLUDES_' + dep.name]		= list_include(bld, [dep_path_include])
+				bld.env['LIBPATH_' + dep.name]		= list_include(bld, [dep_path])
+				bld.env['LIB_' + dep.name]			= dep.name + variant(bld)
+				use.append(dep.name)
+
+				distutils.dir_util.copy_tree(dep_path, os.path.join(bld.out_dir, targetpath))
+
+
+	if ttype == 'library':
+		prefix = ''
+		if is_windows():
+			prefix = 'lib'
+		target = targetpath + '/' + prefix + name + variant(bld)
+	elif ttype == 'program':
+		target = targetpath + '/' + name + variant(bld)
+
+	if ttype == 'library':
+		if is_shared(bld):
+			ttarget = bld.shlib(
+				defines			= defines,
+				includes		= list_include(bld, includes),
+				source			= list_source(bld, source),
+				target			= target,
+				cxxflags		= cxxflags,
+				cflags			= cxxflags,
+				linkflags		= linkflags,
+				name			= name,
+				use				= use,
+				install_path	= install_path
+			)
+		elif is_static(bld):
+			ttarget = bld.stlib(
+				defines			= defines,
+				includes		= list_include(bld, includes),
+				source			= list_source(bld, source),
+				target			= target,
+				cxxflags		= cxxflags,
+				cflags			= cxxflags,
+				linkflags		= linkflags,
+				name			= name,
+				use				= use,
+				install_path	= install_path
+			)
+		else:
+			print "ERROR: no options found"
+			return
+
+	elif ttype == 'program':
+		ttarget = bld.program(
+			defines			= defines,
+			includes		= list_include(bld, includes),
+			source			= list_source(bld, source),
+			target			= target,
+			name			= name,
+			cxxflags		= cxxflags,
+			cflags			= cxxflags,
+			linkflags		= linkflags,
+			use				= use,
+			install_path	= install_path
+		)
 	
 	if is_windows():
 		dep_system(
-			bld		= program,
+			bld		= ttarget,
 			libs	= windeps
 		)
 	else:
 		dep_system(
-			bld		= program,
+			bld		= ttarget,
 			libs	= unideps
 		)
+
+def library(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
+	target('library', name, defines, defines_shared, defines_static, includes, source, cxxflags, linkflags, use, windeps, unideps, deps, install)
+
+def program(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
+	target('program', name, defines, defines_shared, defines_static, includes, source, cxxflags, linkflags, use, windeps, unideps, deps, install)
+
+def branch_name(name, system, compiler, arch, runtime, target, variant, flags):
+	return name + '-' + system + '-' + compiler + '-' + arch + '-' + runtime + '-' + target + '-' + variant + '-' + identifier(flags)
 
 def build(bld):
+
 	global bldcontext
 	bldcontext = bld
 
@@ -442,8 +694,10 @@ def build(bld):
 	bld.env.CFLAGS = bld.env.CXXFLAGS
 	
 	global buildpath
+	buildpath = osname_min() + '-' + compiler_min(bld) + '-' + arch_min(bld) + '-' + runtime_min(bld) + '-' + link_min(bld) + '-' + variant_min(bld)
 
-	if bld.cmd == 'build':
-		buildpath = bld.options.variant
-	else:
-		buildpath = osname() + '-' + arch(bld) + '-' + link(bld) + variant(bld)
+	myself = sys.modules[__name__]
+	project.build(myself)
+
+	if bld.options.test and hasattr(project, 'test'):
+		project.test(myself)
