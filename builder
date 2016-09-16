@@ -8,9 +8,13 @@ import ConfigParser
 import distutils.dir_util
 import md5
 import shutil
-
 import imp
-project = imp.load_source('project', '../project.glm')
+
+def make_project_path(bld, path):
+	return os.path.join(bld.options.dir, path)
+
+def make_project_path_array(bld, array):
+	return [make_project_path(bld, x) for x in array]
 
 def hash_identifier(flags):
 	m = md5.new()
@@ -18,10 +22,10 @@ def hash_identifier(flags):
 	return m.hexdigest()[:8]
 
 def list_include(bld, includes):
-	return [x if os.path.isabs(x) else bld.srcnode.find_dir(x).abspath() for x in includes]
+	return [bld.root.find_dir(x) if os.path.isabs(x) else bld.srcnode.find_dir(x) for x in includes]
 
 def list_source(bld, source):
-	return [item for sublist in [bld.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
+	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.cpp') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
 
 def link_static():
 	return 'static'
@@ -118,23 +122,34 @@ def machine():
     else:
         return platform.machine()
 
+def osarch_parser(arch):
+    machine2bits = {
+		'amd64': 'x64',
+		'x86_64': 'x64',
+		'x64': 'x64',
+		'i386': 'x86',
+		'i686': 'x86',
+		'x86': 'x86'
+	}
+    return machine2bits.get(arch.lower(), None)
+
 def osarch():
-    machine2bits = {'amd64': 'x64', 'x86_64': 'x64', 'i386': 'x86', 'x86': 'x86'}
-    return machine2bits.get(machine().lower(), None)
+    return osarch_parser(machine())
 
 def is_x86(conf):
-	return conf.options.arch == 'x86'
+	return osarch_parser(conf.options.arch) == 'x86'
 
 def is_x64(conf):
-	return conf.options.arch == 'x64'
+	return osarch_parser(conf.options.arch) == 'x64'
 
 def options(opt):
 	opt.load('compiler_cxx')
+	opt.add_option("--dir", action="store", default='.', help="Project location")
 	opt.add_option("--variant", action="store", default='debug', help="Runtime Linking")
 	opt.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
 	opt.add_option("--link", action="store", default='shared', help="Library Linking")
 	opt.add_option("--arch", action="store", default='x86', help="Target Architecture")
-	opt.add_option("--test", action="store_true", default=False, help="Target Architecture")
+	opt.add_option("--test", action="store_true", default=False, help="Test build")
 	
 	if is_windows(): 
 		opt.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -142,12 +157,11 @@ def options(opt):
 		opt.add_option("--nounicode", action="store_true", default=True, help="Unicode Support")
 
 def configure_init(conf):
-	if is_windows():
-		conf.env.DEFINES=[]
-		conf.env.CXXFLAGS=[]
-		conf.env.CFLAGS=[]
-		conf.env.LINKFLAGS=[]
-		conf.env.ARFLAGS=[]
+	conf.env.DEFINES=[]
+	conf.env.CXXFLAGS=[]
+	conf.env.CFLAGS=[]
+	conf.env.LINKFLAGS=[]
+	conf.env.ARFLAGS=[]
 
 def configure_default(conf):
 	if not conf.options.nounicode:
@@ -481,6 +495,7 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 	cachepath = name + '-' + ttypestr + '-' + 'master' + '-' + buildpath + '-' + identifier
 
 	if bld.options.test:
+		# targetpath = os.path.join(bld.options.dir, 'bin', bld.options.variant)
 		targetpath = bld.options.variant
 	else:
 		targetpath = cachepath
@@ -546,12 +561,7 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 							print "ERROR: can't find golem to build the dependency"
 							return
 						
-						ret = subprocess.call(['python', '-B', 'golem', 'clean'], cwd=golem_dir)
-						if ret:
-							print "ERROR: dependency build failed"
-							return
-
-						ret = subprocess.call(['python', '-B', 'golem', 'build', '--runtime=' + bld.options.runtime, '--link=' + bld.options.link, '--arch=' + bld.options.arch, '--variant=' + bld.options.variant], cwd=golem_dir)
+						ret = subprocess.call(['make', 'build', 'runtime=' + bld.options.runtime, 'link=' + bld.options.link, 'arch=' + bld.options.arch, 'variant=' + bld.options.variant], cwd=build_dir)
 						if ret:
 							print "ERROR: dependency build failed"
 							return
@@ -611,28 +621,28 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 		if is_shared(bld):
 			ttarget = bld.shlib(
 				defines			= defines,
-				includes		= list_include(bld, includes),
-				source			= list_source(bld, source),
+				includes		= list_include(bld, make_project_path_array(bld, includes)),
+				source			= list_source(bld, make_project_path_array(bld, source)),
 				target			= target,
 				cxxflags		= cxxflags,
 				cflags			= cxxflags,
 				linkflags		= linkflags,
 				name			= name,
 				use				= use,
-				install_path	= install_path
+				install_path	= make_project_path(bld, install_path)
 			)
 		elif is_static(bld):
 			ttarget = bld.stlib(
 				defines			= defines,
-				includes		= list_include(bld, includes),
-				source			= list_source(bld, source),
+				includes		= list_include(bld, make_project_path_array(bld, includes)),
+				source			= list_source(bld, make_project_path_array(bld, source)),
 				target			= target,
 				cxxflags		= cxxflags,
 				cflags			= cxxflags,
 				linkflags		= linkflags,
 				name			= name,
 				use				= use,
-				install_path	= install_path
+				install_path	= make_project_path(bld, install_path)
 			)
 		else:
 			print "ERROR: no options found"
@@ -641,15 +651,15 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 	elif ttype == 'program':
 		ttarget = bld.program(
 			defines			= defines,
-			includes		= list_include(bld, includes),
-			source			= list_source(bld, source),
+			includes		= list_include(bld, make_project_path_array(bld, includes)),
+			source			= list_source(bld, make_project_path_array(bld, source)),
 			target			= target,
 			name			= name,
 			cxxflags		= cxxflags,
 			cflags			= cxxflags,
 			linkflags		= linkflags,
 			use				= use,
-			install_path	= install_path
+			install_path	= make_project_path(bld, install_path)
 		)
 	
 	if is_windows():
@@ -676,6 +686,14 @@ def build(bld):
 
 	global bldcontext
 	bldcontext = bld
+
+	project_path = os.path.join(bld.options.dir, 'project.glm')
+	if not os.path.exists(project_path):
+		print "ERROR: can't find " + project_path
+		return
+	
+	global project
+	project = imp.load_source('project', project_path)
 
 	bld.load_envs()
 	if is_x86(bld):
