@@ -19,3 +19,6 @@ debug:
 
 clean:
 	$(GOLEM) clean
+
+.DEFAULT:
+	$(GOLEM) $(MAKECMDGOALS) --dir=$(shell pwd)
