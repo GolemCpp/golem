@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+sys.dont_write_bytecode = True
 
 import imp
 builder = imp.load_source('builder', 'builder')
@@ -57,3 +58,11 @@ class tmp(Context):
 def test(bld):
 	import waflib.Options
 	waflib.Options.commands = ['configure', 'build'] + waflib.Options.commands
+
+def release(bld):
+	builder.release(bld)
+
+from waflib.Context import Context
+class tmp(Context):
+	cmd = 'release'
+	fun = 'release'

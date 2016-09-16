@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
-import os
 import sys
+sys.dont_write_bytecode = True
+
+import os
 import platform
 import subprocess
 import ConfigParser
@@ -9,6 +11,8 @@ import distutils.dir_util
 import md5
 import shutil
 import imp
+import io
+import re
 
 def make_project_path(bld, path):
 	return os.path.join(bld.options.dir, path)
@@ -150,6 +154,9 @@ def options(opt):
 	opt.add_option("--link", action="store", default='shared', help="Library Linking")
 	opt.add_option("--arch", action="store", default='x86', help="Target Architecture")
 	opt.add_option("--test", action="store_true", default=False, help="Test build")
+	opt.add_option("--major", action="store_true", default=False, help="Release major version")
+	opt.add_option("--minor", action="store_true", default=False, help="Release minor version")
+	opt.add_option("--patch", action="store_true", default=False, help="Release patch version")
 	
 	if is_windows(): 
 		opt.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -719,3 +726,105 @@ def build(bld):
 
 	if bld.options.test and hasattr(project, 'test'):
 		project.test(myself)
+
+def repo_clear(path):
+	output = subprocess.check_output(['git', 'status', '-s'], cwd=path)
+	if output:
+		print(output)
+		return False
+	return True
+
+def repo_dirty(path):
+	return not repo_clear(path)
+
+# commit build (all) to specific repository (according project file)
+def release(bld):
+	project_path = os.path.join(bld.options.dir, 'project.glm')
+	if not os.path.exists(project_path):
+		print "ERROR: no project file found " + project_path
+		return
+
+	if bld.options.major:
+		bumping = 'major'
+	elif bld.options.minor:
+		bumping = 'minor'
+	elif bld.options.patch:
+		bumping = 'patch'
+	else:
+		print('Usage: release { major | minor | patch }')
+		return
+	
+	with io.open(project_path, 'rb') as f:
+		file_content = f.read().decode('utf-8')
+	match = re.search('VERSION\s*=\s*(.*)', file_content)
+
+	if not match:
+		print "ERROR: No VERSION found in the project file"
+		print "Before trying to Release, you should define a VERSION variable in your project. VERSION is a string using Semantic Versioning. Example: VERSION = 'v1.0.0'"
+		return
+	else:
+		found = True
+		version = match.group(1).strip('\'"')
+
+	if repo_dirty(bld.options.dir):
+		print("Your repository is dirty. You have to commit before releasing!")
+		return
+
+	parse = re.compile(r"(?P<major>\d+)\.?(?P<minor>\d+)?\.?(?P<patch>\d+)?(\-(?P<release>[a-z]+))?", re.VERBOSE)
+	match = parse.search(version)
+	
+	parsed = {}
+	if not match:
+		print("Unrecognized version format")
+		return
+	
+	for key, value in match.groupdict().items():
+		if key == 'release':
+			if value is None:
+				parsed[key] = None
+			else:
+				parsed[key] = str(value)
+		else:
+			if value is None:
+				parsed[key] = 0
+			else:
+				parsed[key] = int(value)
+
+	bumped = False
+
+	for key, value in parsed.items():
+		if bumped:
+			parsed[key] = 0
+		elif key == bumping:
+			parsed[key] = value + 1
+			bumped = True
+
+	serialized = 'v{major}.{minor}.{patch}'
+	
+	if parsed['release'] is not None:
+		serialized += '-{release}'
+
+	newversion = serialized.format(**parsed)
+	
+	default_message = "Bump " + str(version) + " to " + newversion
+	message = default_message
+
+	file_content = re.sub('^VERSION\s*=\s*(.*)', 'VERSION = \'' + newversion + '\'', file_content, flags=re.MULTILINE)
+	
+	with io.open(project_path, 'wb') as f:
+		file_content = file_content.encode('utf-8')
+		f.write(file_content)
+	
+	output = subprocess.check_output(['git', 'add', 'project.glm'], cwd=bld.options.dir)
+	if output:
+		print output
+
+	output = subprocess.check_output(['git', 'commit', '-m', message], cwd=bld.options.dir)
+	if output:
+		print output
+	
+	output = subprocess.check_output(['git', 'tag', '-a', newversion, '-m', message], cwd=bld.options.dir)
+	if output:
+		print output
+		
+	print "Released " + newversion
