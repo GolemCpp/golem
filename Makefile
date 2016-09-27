@@ -1,4 +1,4 @@
-GOLEM=./golem
+WAF=./waf
 
 dir=$(PWD)
 runtime=shared
@@ -8,21 +8,23 @@ variant=debug
 test=--test
 bump=
 
-all:
-	$(GOLEM) all --dir=$(dir)
+about:
+	@echo "=== Golem C++ Build System ==="
 
-build:
-	$(GOLEM) build --dir=$(dir) --runtime=$(runtime) --link=$(link) --arch=$(arch) --variant=$(variant) $(test)
+all: about
+	$(WAF) all --dir=$(dir)
 
-debug:
-	$(GOLEM) clean --dir=$(dir)
-	$(GOLEM) build --dir=$(dir) --runtime=$(runtime) --link=$(link) --arch=$(arch) --variant=$(variant) $(test)
+build: about
+	$(WAF) build --dir=$(dir) --runtime=$(runtime) --link=$(link) --arch=$(arch) --variant=$(variant) $(test)
 
-clean:
-	$(GOLEM) clean --dir=$(dir)
+debug: about clean
+	$(WAF) build --dir=$(dir) --runtime=$(runtime) --link=$(link) --arch=$(arch) --variant=$(variant) $(test)
 
-release:
-	$(GOLEM) release --dir=$(dir) --$(bump)
+clean: about
+	$(WAF) clean --dir=$(dir)
 
-.DEFAULT:
-	$(GOLEM) $(MAKECMDGOALS) --dir=$(dir)
+release: about
+	$(WAF) release --dir=$(dir) --$(bump)
+
+.DEFAULT: about
+	$(WAF) $(MAKECMDGOALS) --dir=$(dir)

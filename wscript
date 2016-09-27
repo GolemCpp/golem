@@ -6,7 +6,8 @@ sys.dont_write_bytecode = True
 import imp
 builder = imp.load_source('builder', 'builder')
 
-top = '.'
+import os
+top = os.path.dirname(os.path.abspath('__file__'))
 out = 'out'
 
 def options(opt):

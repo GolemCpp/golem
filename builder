@@ -379,12 +379,13 @@ class CacheConf:
 		self.remote = ''
 		self.location = ''
 
-def find_cache_conf():
-	if not os.path.exists('../settings.glm'):
+def find_cache_conf(bld):
+	settings_path = os.path.join(bld.options.dir, 'settings.glm')
+	if not os.path.exists(settings_path):
 		return None
 
 	config = ConfigParser.RawConfigParser()
-	config.read('../settings.glm')
+	config.read(settings_path)
 
 	if not config.has_section('GOLEM'):
 		return None
@@ -516,7 +517,7 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 		for dep in pro_deps:
 			if _dep == dep.name:
 
-				cache_conf = find_cache_conf()
+				cache_conf = find_cache_conf(bld)
 				if not cache_conf:
 					print("ERROR: no valid cache configuration found")
 					return
