@@ -47,14 +47,14 @@ for arch in 'x86 x64'.split():
 				opt_variant = variant
 				all_build.append(cmd)
 
-def all(bld):
+def everything(bld):
 	import waflib.Options
 	waflib.Options.commands = ['configure'] + all_build + waflib.Options.commands
 
 from waflib.Context import Context
 class tmp(Context):
-	cmd = 'all'
-	fun = 'all'
+	cmd = 'everything'
+	fun = 'everything'
 
 def test(bld):
 	import waflib.Options

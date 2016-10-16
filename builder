@@ -164,11 +164,21 @@ def options(opt):
 		opt.add_option("--nounicode", action="store_true", default=True, help="Unicode Support")
 
 def configure_init(conf):
-	conf.env.DEFINES=[]
-	conf.env.CXXFLAGS=[]
-	conf.env.CFLAGS=[]
-	conf.env.LINKFLAGS=[]
-	conf.env.ARFLAGS=[]
+	if not conf.env.DEFINES:
+		conf.env.DEFINES=[]
+	if not conf.env.CXXFLAGS:
+		conf.env.CXXFLAGS=[]
+	if not conf.env.CFLAGS:
+		conf.env.CFLAGS=[]
+	if not conf.env.LINKFLAGS:
+		conf.env.LINKFLAGS=[]
+	if not conf.env.ARFLAGS:
+		conf.env.ARFLAGS=[]
+	print 'DEFINES = ' + str(conf.env.DEFINES)
+	print 'CXXFLAGS = ' + str(conf.env.CXXFLAGS)
+	print 'CFLAGS = ' + str(conf.env.CFLAGS)
+	print 'LINKFLAGS = ' + str(conf.env.LINKFLAGS)
+	print 'ARFLAGS = ' + str(conf.env.ARFLAGS)
 
 def configure_default(conf):
 	if not conf.options.nounicode:
@@ -448,6 +458,8 @@ class Project:
 	def __init__(self):
 		self.cache = []
 		self.deps = []
+		self.unideps = []
+		self.windeps = []
 
 	def __str__(self):
 		ret = ''
@@ -471,6 +483,12 @@ class Project:
 			if dep.name:
 				ret.append(dep)
 		return ret
+	
+	def get_unideps(self):
+		return self.unideps
+
+	def get_windeps(self):
+		return self.windeps
 
 def target(ttype = '', name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
 
@@ -512,6 +530,9 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 	if hasattr(project, 'prepare'):
 		project.prepare(pro)
 	pro_deps = pro.get_deps()
+
+	unideps += pro.get_unideps()
+	windeps += pro.get_windeps()
 
 	for _dep in deps:
 		for dep in pro_deps:
