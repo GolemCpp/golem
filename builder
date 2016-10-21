@@ -585,12 +585,17 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 							print "ERROR: cloning " + dep.repo + ' ' + dep.version
 							return
 
-						golem_dir = os.path.join(build_dir, 'golem')
+						golem_dir = os.path.join(build_dir, os.path.join('build', 'golem'))
 						if not os.path.exists(golem_dir):
 							print "ERROR: can't find golem to build the dependency"
 							return
 						
-						ret = subprocess.call(['make', 'build', 'runtime=' + bld.options.runtime, 'link=' + bld.options.link, 'arch=' + bld.options.arch, 'variant=' + bld.options.variant], cwd=build_dir)
+						ret = subprocess.call(['make', 'configure'], cwd=build_dir)
+						if ret:
+							print "ERROR: dependency configure failed"
+							return
+
+						ret = subprocess.call(['make', 'all', 'runtime=' + bld.options.runtime, 'link=' + bld.options.link, 'arch=' + bld.options.arch, 'variant=' + bld.options.variant], cwd=build_dir)
 						if ret:
 							print "ERROR: dependency build failed"
 							return
