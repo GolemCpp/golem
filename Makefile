@@ -1,4 +1,5 @@
 WAF=./waf
+ASTYLE=./astyle
 
 dir=$(PWD)
 runtime=shared
@@ -38,6 +39,10 @@ rebuild: about distclean configure build
 .PHONY: release
 release: about
 	$(WAF) release --dir=$(dir) --$(bump)
+
+.PHONY: format
+format: about
+	$(ASTYLE) $(dir)
 
 .DEFAULT: about
 	$(WAF) $(MAKECMDGOALS) --dir=$(dir)

@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+
+import sys
+sys.dont_write_bytecode = True
+
+import os
+import subprocess
+
+def format_astyle(path, ext):
+    ret = subprocess.call(['astyle',
+        '--style=allman',
+        '--indent=tab',
+        '--indent-cases',
+        '--indent-namespaces',
+        '--indent-col1-comments',
+        '--min-conditional-indent=0',
+        '--max-instatement-indent=120',
+        '--break-blocks',
+        '--pad-oper',
+        '--pad-header',
+        '--unpad-paren',
+        '--align-pointer=middle',
+        '--align-reference=middle',
+        '--break-closing-brackets',
+        '--add-brackets',
+        '--close-templates',
+        '--lineend=windows',
+        '--recursive',
+        '-n',
+        os.path.join(path, ext)])
+
+def format_astyle_cpp(path):
+    format_astyle(path, '*.h')
+    format_astyle(path, '*.c')
+    format_astyle(path, '*.hpp')
+    format_astyle(path, '*.cpp')
+
+def format_astyle_dir(path):
+    format_astyle_cpp(os.path.join(path, 'include'))
+    format_astyle_cpp(os.path.join(path, 'src'))
+    format_astyle_cpp(os.path.join(path, 'test'))
+
+if len(sys.argv) < 2:
+    print "Usage: ./astyle path"
+    exit
+
+for path in sys.argv[1:]:
+    format_astyle_dir(path)
