@@ -34,7 +34,7 @@ distclean: about
 	$(WAF) distclean --dir=$(dir)
 
 .PHONY: rebuild
-rebuild: about distclean configure build
+rebuild: about distclean configure all
 
 .PHONY: release
 release: about
