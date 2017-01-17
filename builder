@@ -31,6 +31,9 @@ def list_include(bld, includes):
 def list_source(bld, source):
 	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.cpp') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
 
+def list_moc(bld, source):
+	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.hpp') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.hpp') for x in source] for item in sublist]
+
 def link_static():
 	return 'static'
 	
@@ -147,7 +150,7 @@ def is_x64(conf):
 	return osarch_parser(conf.options.arch) == 'x64'
 
 def options(opt):
-	opt.load('compiler_cxx')
+	opt.load('compiler_cxx qt5')
 	opt.add_option("--dir", action="store", default='.', help="Project location")
 	opt.add_option("--variant", action="store", default='debug', help="Runtime Linking")
 	opt.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
@@ -272,6 +275,7 @@ def configure_debug(conf):
 
 	else:
 		conf.env.CXXFLAGS.append('-g')
+		conf.env.CXXFLAGS.append('-O0')
 
 	conf.env.DEFINES.append('DEBUG')
 
@@ -304,21 +308,6 @@ def configure_release(conf):
 
 	else:
 		conf.env.CXXFLAGS.append('-O3')
-
-def configure(conf):
-
-	conf.setenv('x86')
-	if is_windows():
-		conf.env.MSVC_VERSIONS = ['msvc 14.0']
-		conf.env.MSVC_TARGETS = ['x86']
-	conf.load('compiler_cxx')
-
-	conf.setenv('x64')
-	if is_windows():
-		conf.env.MSVC_VERSIONS = ['msvc 14.0']
-		conf.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
-	conf.load('compiler_cxx')
-
 
 def dep_system(bld, libs):
 	bld.env['LIB'] += libs
@@ -460,6 +449,10 @@ class Project:
 		self.deps = []
 		self.unideps = []
 		self.windeps = []
+		self.cxxflags = []
+		self.linkflags = []
+		self.qt = False
+		self.qtdir = ''
 
 	def __str__(self):
 		ret = ''
@@ -533,6 +526,8 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 
 	unideps += pro.get_unideps()
 	windeps += pro.get_windeps()
+	cxxflags += pro.cxxflags
+	linkflags += pro.linkflags
 
 	for _dep in deps:
 		for dep in pro_deps:
@@ -663,7 +658,8 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 				linkflags		= linkflags,
 				name			= name,
 				use				= use,
-				install_path	= make_project_path(bld, install_path)
+				install_path	= make_project_path(bld, install_path),
+				features = 'qt5' if pro.qt else ''
 			)
 		elif is_static(bld):
 			ttarget = bld.stlib(
@@ -676,7 +672,8 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 				linkflags		= linkflags,
 				name			= name,
 				use				= use,
-				install_path	= make_project_path(bld, install_path)
+				install_path	= make_project_path(bld, install_path),
+				features = 'qt5' if pro.qt else ''
 			)
 		else:
 			print "ERROR: no options found"
@@ -693,7 +690,9 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 			cflags			= cxxflags,
 			linkflags		= linkflags,
 			use				= use,
-			install_path	= make_project_path(bld, install_path)
+			install_path	= make_project_path(bld, install_path),
+			moc = list_moc(bld, make_project_path_array(bld, source)),
+			features = 'qt5' if pro.qt else ''
 		)
 	
 	if is_windows():
@@ -715,6 +714,33 @@ def program(name = '', defines = [], defines_shared = [], defines_static = [], i
 
 def branch_name(name, system, compiler, arch, runtime, target, variant, flags):
 	return name + '-' + system + '-' + compiler + '-' + arch + '-' + runtime + '-' + target + '-' + variant + '-' + identifier(flags)
+
+def configure(conf):
+	
+	features_to_load = ['compiler_cxx']
+
+	project_path = os.path.join(conf.options.dir, 'project.glm')
+	if os.path.exists(project_path):
+		project = imp.load_source('project', project_path)
+		pro = Project()
+		if hasattr(project, 'prepare'):
+			project.prepare(pro)
+		if pro.qt:
+			features_to_load.append('qt5')
+			if os.path.exists(pro.qtdir):
+				conf.options.qtdir = pro.qtdir
+
+	conf.setenv('x86')
+	if is_windows():
+		conf.env.MSVC_VERSIONS = ['msvc 14.0']
+		conf.env.MSVC_TARGETS = ['x86']
+	conf.load(features_to_load)
+
+	conf.setenv('x64')
+	if is_windows():
+		conf.env.MSVC_VERSIONS = ['msvc 14.0']
+		conf.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
+	conf.load(features_to_load)
 
 def build(bld):
 
