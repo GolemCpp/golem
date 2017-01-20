@@ -34,6 +34,12 @@ def list_source(bld, source):
 def list_moc(bld, source):
 	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.hpp') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.hpp') for x in source] for item in sublist]
 
+def list_qt_qrc(bld, source):
+	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.qrc') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.qrc') for x in source] for item in sublist]
+
+def list_qt_ui(bld, source):
+	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.ui') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.ui') for x in source] for item in sublist]
+
 def link_static():
 	return 'static'
 	
@@ -646,12 +652,16 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 	elif ttype == 'program':
 		target = targetpath + '/' + name + variant(bld)
 
+	listinclude = list_include(bld, make_project_path_array(bld, includes))
+	listsource = list_source(bld, make_project_path_array(bld, source)) + list_qt_qrc(bld, make_project_path_array(bld, source)) + list_qt_ui(bld, make_project_path_array(bld, source)) if pro.qt else list_source(bld, make_project_path_array(bld, source))
+	listmoc = list_moc(bld, make_project_path_array(bld, includes + source)) if pro.qt else []
+
 	if ttype == 'library':
 		if is_shared(bld):
 			ttarget = bld.shlib(
 				defines			= defines,
-				includes		= list_include(bld, make_project_path_array(bld, includes)),
-				source			= list_source(bld, make_project_path_array(bld, source)),
+				includes		= listinclude,
+				source			= listsource,
 				target			= target,
 				cxxflags		= cxxflags,
 				cflags			= cxxflags,
@@ -659,13 +669,14 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 				name			= name,
 				use				= use,
 				install_path	= make_project_path(bld, install_path),
-				features = 'qt5' if pro.qt else ''
+				moc 			= listmoc,
+				features 		= 'qt5' if pro.qt else ''
 			)
 		elif is_static(bld):
 			ttarget = bld.stlib(
 				defines			= defines,
-				includes		= list_include(bld, make_project_path_array(bld, includes)),
-				source			= list_source(bld, make_project_path_array(bld, source)),
+				includes		= listinclude,
+				source			= listsource,
 				target			= target,
 				cxxflags		= cxxflags,
 				cflags			= cxxflags,
@@ -673,7 +684,8 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 				name			= name,
 				use				= use,
 				install_path	= make_project_path(bld, install_path),
-				features = 'qt5' if pro.qt else ''
+				moc 			= listmoc,
+				features 		= 'qt5' if pro.qt else ''
 			)
 		else:
 			print "ERROR: no options found"
@@ -682,8 +694,8 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 	elif ttype == 'program':
 		ttarget = bld.program(
 			defines			= defines,
-			includes		= list_include(bld, make_project_path_array(bld, includes)),
-			source			= list_source(bld, make_project_path_array(bld, source)),
+			includes		= listinclude,
+			source			= listsource,
 			target			= target,
 			name			= name,
 			cxxflags		= cxxflags,
@@ -691,8 +703,8 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 			linkflags		= linkflags,
 			use				= use,
 			install_path	= make_project_path(bld, install_path),
-			moc = list_moc(bld, make_project_path_array(bld, source)),
-			features = 'qt5' if pro.qt else ''
+			moc 			= listmoc,
+			features 		= 'qt5' if pro.qt else ''
 		)
 	
 	if is_windows():
