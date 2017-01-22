@@ -551,7 +551,38 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 				if not os.path.exists(cache_dir):
 					os.makedirs(cache_dir)
 
-				dep_path_base = dep.name + '-' + 'lib' + '-' + 'master' + '-' + str(dep.version)
+				dep_version = ''
+				if str(dep.version) == 'any':
+					hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repo, 'HEAD'])
+					if not hash:
+						print("ERROR: can't find HEAD commit")
+						return
+					dep_version = hash[:8]
+				else if str(dep.version) == 'latest':
+					tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repo])
+					tags = tags.split('\n')
+					badtag = ['^{}']
+					tmp = ''
+					for line in tags:
+						if '^{}' not in line:
+							tmp += line + '\n'
+					tags = tmp
+					versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
+					versions_list = set(versions_list)
+					versions_list = list(versions_list)
+					versions_list.sort(key=lambda s: map(int, s.split('.')))
+					last = versions_list[-1:]
+					if not last:
+						print("ERROR: no latest version")
+						return
+					last = 'v' + last
+					hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repo, last])
+					if not hash:
+						print("ERROR: can't find " + last)
+						return
+					dep_version = hash[:8]
+
+				dep_path_base = dep.name + '-' + 'lib' + '-' + 'master' + '-' + dep_version
 				dep_path_build = dep_path_base + '-' + buildpath
 
 				# dep cache path with the current combination of flags (identifier)
@@ -581,9 +612,9 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 							shutil.rmtree(build_dir)
 						os.makedirs(build_dir)
 						
-						ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep.version, '--', dep.repo, '.'], cwd=build_dir)
+						ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version, '--', dep.repo, '.'], cwd=build_dir)
 						if ret:
-							print "ERROR: cloning " + dep.repo + ' ' + dep.version
+							print "ERROR: cloning " + dep.repo + ' ' + dep_version
 							return
 
 						golem_dir = os.path.join(build_dir, os.path.join('build', 'golem'))
