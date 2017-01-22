@@ -558,7 +558,7 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 						print("ERROR: can't find HEAD commit")
 						return
 					dep_version = hash[:8]
-				else if str(dep.version) == 'latest':
+				elif str(dep.version) == 'latest':
 					tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repo])
 					tags = tags.split('\n')
 					badtag = ['^{}']
