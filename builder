@@ -13,6 +13,35 @@ import shutil
 import imp
 import io
 import re
+import copy
+import types
+
+def print_obj(obj, depth = 5, l = ""):
+	#fall back to repr
+	if depth<0: return repr(obj)
+	#expand/recurse dict
+	if isinstance(obj, dict):
+		name = ""
+		objdict = obj
+	else:
+		#if basic type, or list thereof, just print
+		canprint=lambda o:isinstance(o, (int, float, str, unicode, bool, types.NoneType, types.LambdaType))
+		try:
+			if canprint(obj) or sum(not canprint(o) for o in obj) == 0: return repr(obj)
+		except TypeError, e:
+			pass
+		#try to iterate as if obj were a list
+		try:
+			return "[\n" + "\n".join(l + print_obj(k, depth=depth-1, l=l+"  ") + "," for k in obj) + "\n" + l + "]"
+		except TypeError, e:
+			#else, expand/recurse object attribs
+			name = (hasattr(obj, '__class__') and obj.__class__.__name__ or type(obj).__name__)
+			objdict = {}
+			for a in dir(obj):
+				if a[:2] != "__" and (not hasattr(obj, a) or not hasattr(getattr(obj, a), '__call__')):
+					try: objdict[a] = getattr(obj, a)
+					except Exception, e: objdict[a] = str(e)
+	return name + " {\n" + "\n".join(l + repr(k) + ": " + print_obj(v, depth=depth-1, l=l+"  ") + "," for k, v in objdict.iteritems()) + "\n" + l + "}"
 
 def make_project_path(bld, path):
 	return os.path.join(bld.options.dir, path)
@@ -183,11 +212,6 @@ def configure_init(conf):
 		conf.env.LINKFLAGS=[]
 	if not conf.env.ARFLAGS:
 		conf.env.ARFLAGS=[]
-	print 'DEFINES = ' + str(conf.env.DEFINES)
-	print 'CXXFLAGS = ' + str(conf.env.CXXFLAGS)
-	print 'CFLAGS = ' + str(conf.env.CFLAGS)
-	print 'LINKFLAGS = ' + str(conf.env.LINKFLAGS)
-	print 'ARFLAGS = ' + str(conf.env.ARFLAGS)
 
 def configure_default(conf):
 	if not conf.options.nounicode:
@@ -254,6 +278,9 @@ def configure_default(conf):
 			conf.env.CXXFLAGS.append('-m64')
 
 		conf.env.CXXFLAGS.append('-std=c++14')
+
+		conf.env.CXXFLAGS.append('-pthread')
+		conf.env.LINKFLAGS.append('-pthread')
 	
 	if is_darwin():
 		conf.env.env.CXX	= ['clang++']
@@ -384,6 +411,9 @@ class CacheConf:
 		self.remote = ''
 		self.location = ''
 
+	def __str__(self):
+		return print_obj(self)
+
 def find_cache_conf(bld):
 	settings_path = os.path.join(bld.options.dir, 'settings.glm')
 	if not os.path.exists(settings_path):
@@ -423,101 +453,168 @@ def find_cache_conf(bld):
 	return conf
 
 class Dependency:
-	def __init__(self):
-		self.name = ''
-		self.repo = ''
-		self.version = 'latest'
-		self.system = sys.platform
-		self.compiler = ''
-		self.arch = platform.machine().lower()
-		self.runtime = 'shared'
-		self.target = 'shared'
-		self.variant = 'release'
-		self.hash = 'DEFAULT'
+	def __init__(self, name = None, repository = None, version = None):
+		self.name 		= '' if name is None else name
+		self.repository	= '' if repository is None else repository
+		self.version 	= '' if version is None else version
+
 	def __str__(self):
-		ret = ''
-		ret += 'Name' 	+ '\t\t' + self.name + '\n'
-		ret += 'Repo' 	+ '\t\t' + self.repo + '\n'
-		ret += 'Version' + '\t\t' + self.version + '\n'
-		ret += 'System' 	+ '\t\t' + self.system + '\n'
-		ret += 'Compiler' + '\t' + self.compiler + '\n'
-		ret += 'Arch' 	+ '\t\t' + self.arch + '\n'
-		ret += 'Runtime' + '\t\t' + self.runtime + '\n'
-		ret += 'Target' 	+ '\t\t' + self.target + '\n'
-		ret += 'Variant' + '\t\t' + self.variant + '\n'
-		ret += 'Hash' 	+ '\t\t' + self.hash
-		# ret += str(self.__dict__)
-		return ret
+		return print_obj(self)
+
+class Condition:
+	def __init__(self, variant = None, linking = None, runtime = None, osystem = None, arch = None, compiler = None):
+		self.variant 	= [] if variant is None else variant 	# debug, release
+		self.linking 	= [] if linking is None else linking 	# shared, static
+		self.runtime 	= [] if runtime is None else runtime 	# shared, static
+		self.osystem 	= [] if osystem is None else osystem 	# linux, windows, osx
+		self.arch 		= [] if arch is None else arch		# x86, x64
+		self.compiler 	= [] if compiler is None else compiler # gcc, clang, msvc
+
+	def __str__(self):
+		return print_obj(self)
+
+	def __nonzero__(self):
+		if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler:
+			return True
+		return False
+
+class Configuration:
+	def __init__(self, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, features = None, deps = None, use = None, **kwargs):
+		self.condition = Condition(**kwargs)
+
+		self.defines = [] if defines is None else defines
+		self.includes = [] if includes is None else includes
+		self.source = [] if source is None else source
+
+		self.cxxflags = [] if cxxflags is None else cxxflags
+		self.linkflags = [] if linkflags is None else linkflags
+		self.system = [] if system is None else system
+
+		self.features = [] if features is None else features
+		self.deps = [] if deps is None else deps
+		self.use = [] if use is None else use
+
+	def __str__(self):
+		return print_obj(self)
+
+	def append(self, config):
+		self.defines += config.defines
+		self.includes += config.includes
+		self.source += config.source
+
+		self.cxxflags += config.cxxflags
+		self.linkflags += config.linkflags
+		self.system += config.system
+
+		self.features += config.features
+		self.deps += config.deps
+		self.use += config.use
+	
+	def merge(self, bld, configs):
+		for c in configs:
+			if (	(not c.condition.variant or variant(bld) in c.condition.variant)
+				and (not c.condition.linking or link(bld) in c.condition.linking)
+				and (not c.condition.runtime or runtime(bld) in c.condition.runtime)
+				and (not c.condition.osystem or osname() in c.condition.osystem)
+				and (not c.condition.arch or arch(bld) in c.condition.arch)
+				and (not c.condition.compiler or compiler(bld) in c.condition.compiler)):
+				self.append(c)
+			
+class Target:
+	def __init__(self):
+		self.type = ''
+		self.name = ''
+		self.configs = []
+
+	def __str__(self):
+		return print_obj(self)
+
+	def when(self, **kwargs):
+		config = Configuration(**kwargs)
+		self.configs.append(config)
+		return config
 
 class Project:
 	def __init__(self):
 		self.cache = []
 		self.deps = []
-		self.unideps = []
-		self.windeps = []
-		self.cxxflags = []
-		self.linkflags = []
+
+		self.targets = []
+		self.exports = []
+
 		self.qt = False
 		self.qtdir = ''
 
 	def __str__(self):
-		ret = ''
-		ret += 'Cache' + '\t' + str(self.cache) + '\n'
-		ret += 'Deps' + '\t' + str(self.deps)
-		return ret
-	
-	def get_deps(self):
-		ret = []
-		for fields in self.deps:
-			dep = Dependency()
-			for index, field in enumerate(fields):
-				if not field:
-					continue
-				if index == 0:
-					dep.name = field
-				if index == 1:
-					dep.repo = field
-				if index == 2:
-					dep.version = field
-			if dep.name:
-				ret.append(dep)
-		return ret
-	
-	def get_unideps(self):
-		return self.unideps
+		return print_obj(self)
 
-	def get_windeps(self):
-		return self.windeps
+	def target(self, type, name, defines = None, includes = None, source = None, features = None, deps = None, use = None):
+		target = Target()
+		target.type = type
+		target.name = name
+		
+		config = Configuration()
 
-def target(ttype = '', name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
+		config.defines = [] if defines is None else defines
+		config.includes = [] if includes is None else includes
+		config.source = [] if source is None else source
 
-	if not ttype in 'program library':
+		config.features = [] if features is None else features
+		config.deps = [] if deps is None else deps
+		config.use = [] if use is None else use
+
+		target.configs.append(config)
+
+		if type == 'export':
+			self.exports.append(target)
+			return target
+
+		if any([feature.startswith("QT5") for feature in config.features]):
+			self.enable_qt()
+
+		self.targets.append(target)
+		return target
+
+	def library(self, **kwargs):
+		return self.target(type = 'library', **kwargs)
+
+	def program(self, **kwargs):
+		return self.target(type = 'program', **kwargs)
+
+	def export(self, **kwargs):
+		return self.target(type = 'export', **kwargs)
+
+	def dependency(self, **kwargs):
+		dep = Dependency(**kwargs)
+		self.deps.append(dep)
+		return dep
+
+	def enable_qt(self, path = ''):
+		self.qt = True
+		self.qtdir = path
+
+	def linux_check_packages(*packages):
+		installed_packages = subprocess.check_output(['dpkg', '-l'])
+		for package in packages:
+			if not installed_packages.find(str(package)):
+				subprocess.check_output(['sudo', 'apt-get', 'install', str(package)])
+
+def build_target(project, target):
+
+	if not target.type in 'program library':
 		return
 
 	global bldcontext
 	bld = bldcontext
-
-	install_path=''
-	if install != '':
-		install_path = install
-
-	if is_shared(bld):
-		defines += defines_shared
-	else:
-		defines += defines_static
 	
-	if not is_windows():
-		cxxflags.append('-pthread')
-		linkflags.append('-pthread')
-	
-	if ttype == 'library':
+	if target.type == 'library':
 		ttypestr = 'lib'
-	elif ttype == 'program':
+	elif target.type == 'program':
 		ttypestr = 'app'
 
 	identifier = hash_identifier(bld.env.CXXFLAGS + bld.env.CFLAGS + bld.env.LINKFLAGS + bld.env.ARFLAGS + bld.env.DEFINES)
 	global buildpath
-	cachepath = name + '-' + ttypestr + '-' + 'master' + '-' + buildpath + '-' + identifier
+	cachepath = target.name + '-' + ttypestr + '-' + 'master' + '-' + buildpath + '-' + identifier
 
 	if bld.options.test:
 		# targetpath = os.path.join(bld.options.dir, 'bin', bld.options.variant)
@@ -525,18 +622,16 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 	else:
 		targetpath = cachepath
 
-	pro = Project()
-	if hasattr(project, 'prepare'):
-		project.prepare(pro)
-	pro_deps = pro.get_deps()
+	config = Configuration()
+	config.merge(bld, target.configs)
 
-	unideps += pro.get_unideps()
-	windeps += pro.get_windeps()
-	cxxflags += pro.cxxflags
-	linkflags += pro.linkflags
+	for usename in config.use:
+		for u in project.exports:
+			if u.name == usename:
+				config.merge(bld, u.configs)
 
-	for _dep in deps:
-		for dep in pro_deps:
+	for _dep in config.deps:
+		for dep in project.deps:
 			if _dep == dep.name:
 
 				cache_conf = find_cache_conf(bld)
@@ -666,7 +761,6 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 							return
 					
 				# use cache :)
-				print list_include(bld, [dep_path])
 				bld.env['INCLUDES_' + dep.name]		= list_include(bld, [dep_path_include])
 				bld.env['LIBPATH_' + dep.name]		= list_include(bld, [dep_path])
 				bld.env['LIB_' + dep.name]			= dep.name + variant(bld)
@@ -675,99 +769,81 @@ def target(ttype = '', name = '', defines = [], defines_shared = [], defines_sta
 				distutils.dir_util.copy_tree(dep_path, os.path.join(bld.out_dir, targetpath))
 
 
-	if ttype == 'library':
+	if target.type == 'library':
 		prefix = ''
 		if is_windows():
 			prefix = 'lib'
-		target = targetpath + '/' + prefix + name + variant(bld)
-	elif ttype == 'program':
-		target = targetpath + '/' + name + variant(bld)
+		targetname = targetpath + '/' + prefix + target.name + variant(bld)
+	elif target.type == 'program':
+		targetname = targetpath + '/' + target.name + variant(bld)
 
-	listinclude = list_include(bld, make_project_path_array(bld, includes))
-	listsource = list_source(bld, make_project_path_array(bld, source)) + list_qt_qrc(bld, make_project_path_array(bld, source)) + list_qt_ui(bld, make_project_path_array(bld, source)) if pro.qt else list_source(bld, make_project_path_array(bld, source))
-	listmoc = list_moc(bld, make_project_path_array(bld, includes + source)) if pro.qt else []
-
-	if ttype == 'library':
+	listinclude = list_include(bld, make_project_path_array(bld, config.includes))
+	listsource = list_source(bld, make_project_path_array(bld, config.source)) + list_qt_qrc(bld, make_project_path_array(bld, config.source)) + list_qt_ui(bld, make_project_path_array(bld, config.source)) if project.qt else list_source(bld, make_project_path_array(bld, config.source))
+	listmoc = list_moc(bld, make_project_path_array(bld, config.includes + config.source)) if project.qt else []
+	
+	if target.type == 'library':
 		if is_shared(bld):
 			ttarget = bld.shlib(
-				defines			= defines,
+				defines			= config.defines,
 				includes		= listinclude,
 				source			= listsource,
-				target			= target,
-				cxxflags		= cxxflags,
-				cflags			= cxxflags,
-				linkflags		= linkflags,
-				name			= name,
-				use				= use,
-				install_path	= make_project_path(bld, install_path),
+				target			= targetname,
+				name			= target.name,
+				cxxflags		= config.cxxflags,
+				cflags			= config.cxxflags,
+				linkflags		= config.linkflags,
+				use				= config.use,
 				moc 			= listmoc,
-				features 		= 'qt5' if pro.qt else ''
+				features 		= 'qt5' if project.qt else ''
 			)
 		elif is_static(bld):
 			ttarget = bld.stlib(
-				defines			= defines,
+				defines			= config.defines,
 				includes		= listinclude,
 				source			= listsource,
-				target			= target,
-				cxxflags		= cxxflags,
-				cflags			= cxxflags,
-				linkflags		= linkflags,
-				name			= name,
-				use				= use,
-				install_path	= make_project_path(bld, install_path),
+				target			= targetname,
+				name			= target.name,
+				cxxflags		= config.cxxflags,
+				cflags			= config.cxxflags,
+				linkflags		= config.linkflags,
+				use				= config.use,
 				moc 			= listmoc,
-				features 		= 'qt5' if pro.qt else ''
+				features 		= 'qt5' if project.qt else ''
 			)
 		else:
 			print "ERROR: no options found"
 			return
 
-	elif ttype == 'program':
+	elif target.type == 'program':
 		ttarget = bld.program(
-			defines			= defines,
+			defines			= config.defines,
 			includes		= listinclude,
 			source			= listsource,
-			target			= target,
-			name			= name,
-			cxxflags		= cxxflags,
-			cflags			= cxxflags,
-			linkflags		= linkflags,
-			use				= use,
-			install_path	= make_project_path(bld, install_path),
+			target			= targetname,
+			name			= target.name,
+			cxxflags		= config.cxxflags,
+			cflags			= config.cxxflags,
+			linkflags		= config.linkflags,
+			use				= config.use,
 			moc 			= listmoc,
-			features 		= 'qt5' if pro.qt else ''
+			features 		= 'qt5' if project.qt else ''
 		)
 	
-	if is_windows():
+	if config.system:
 		dep_system(
 			bld		= ttarget,
-			libs	= windeps
+			libs	= config.system
 		)
-	else:
-		dep_system(
-			bld		= ttarget,
-			libs	= unideps
-		)
-
-def library(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
-	target('library', name, defines, defines_shared, defines_static, includes, source, cxxflags, linkflags, use, windeps, unideps, deps, install)
-
-def program(name = '', defines = [], defines_shared = [], defines_static = [], includes = [], source = [], cxxflags = [], linkflags = [], use = [], windeps = [], unideps = [], deps = [], install = ''):
-	target('program', name, defines, defines_shared, defines_static, includes, source, cxxflags, linkflags, use, windeps, unideps, deps, install)
-
-def branch_name(name, system, compiler, arch, runtime, target, variant, flags):
-	return name + '-' + system + '-' + compiler + '-' + arch + '-' + runtime + '-' + target + '-' + variant + '-' + identifier(flags)
 
 def configure(conf):
-	
 	features_to_load = ['compiler_cxx']
 
 	project_path = os.path.join(conf.options.dir, 'project.glm')
 	if os.path.exists(project_path):
-		project = imp.load_source('project', project_path)
+		project_config = imp.load_source('project', project_path)
 		pro = Project()
-		if hasattr(project, 'prepare'):
-			project.prepare(pro)
+		if hasattr(project_config, 'configure'):
+			project_config.configure(pro)
 		if pro.qt:
 			features_to_load.append('qt5')
 			if os.path.exists(pro.qtdir):
@@ -786,7 +862,6 @@ def configure(conf):
 	conf.load(features_to_load)
 
 def build(bld):
-
 	global bldcontext
 	bldcontext = bld
 
@@ -795,8 +870,7 @@ def build(bld):
 		print "ERROR: can't find " + project_path
 		return
 	
-	global project
-	project = imp.load_source('project', project_path)
+	project_config = imp.load_source('project', project_path)
 
 	bld.load_envs()
 	if is_x86(bld):
@@ -817,11 +891,15 @@ def build(bld):
 	global buildpath
 	buildpath = osname_min() + '-' + compiler_min(bld) + '-' + arch_min(bld) + '-' + runtime_min(bld) + '-' + link_min(bld) + '-' + variant_min(bld)
 
-	myself = sys.modules[__name__]
-	project.build(myself)
+	pro = Project()
+	if hasattr(project_config, 'configure'):
+		project_config.configure(pro)
 
-	if bld.options.test and hasattr(project, 'test'):
-		project.test(myself)
+	for target in pro.targets:
+		build_target(pro, target)
+
+	if bld.options.test:
+		pass
 
 def repo_clear(path):
 	output = subprocess.check_output(['git', 'status', '-s'], cwd=path)
