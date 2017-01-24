@@ -648,13 +648,13 @@ def build_target(project, target):
 
 				dep_version = ''
 				if str(dep.version) == 'any':
-					hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repo, 'HEAD'])
+					hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'HEAD'])
 					if not hash:
 						print("ERROR: can't find HEAD commit")
 						return
 					dep_version = hash[:8]
 				elif str(dep.version) == 'latest':
-					tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repo])
+					tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
 					tags = tags.split('\n')
 					badtag = ['^{}']
 					tmp = ''
@@ -670,12 +670,15 @@ def build_target(project, target):
 					if not last:
 						print("ERROR: no latest version")
 						return
-					last = 'v' + last
-					hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repo, last])
+					last = 'v' + last[0]
+					hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository, last])
 					if not hash:
 						print("ERROR: can't find " + last)
 						return
-					dep_version = hash[:8]
+					#dep_version = hash[:8]
+					dep_version = last
+				else:
+					dep_version = str(dep.version)
 
 				dep_path_base = dep.name + '-' + 'lib' + '-' + 'master' + '-' + dep_version
 				dep_path_build = dep_path_base + '-' + buildpath
@@ -707,9 +710,9 @@ def build_target(project, target):
 							shutil.rmtree(build_dir)
 						os.makedirs(build_dir)
 						
-						ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version, '--', dep.repo, '.'], cwd=build_dir)
+						ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version, '--', dep.repository, '.'], cwd=build_dir)
 						if ret:
-							print "ERROR: cloning " + dep.repo + ' ' + dep_version
+							print "ERROR: cloning " + dep.repository + ' ' + dep_version
 							return
 
 						golem_dir = os.path.join(build_dir, os.path.join('build', 'golem'))
@@ -732,9 +735,9 @@ def build_target(project, target):
 						if ret:
 							print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
 							return
-						ret = subprocess.call(['git', 'checkout', '-b', name], cwd=dep_path)
+						ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
 						if ret:
-							print "ERROR: git checkout -b " + name
+							print "ERROR: git checkout -b " + target.name
 						
 						bin_dir = os.path.join(golem_dir, 'out')
 						bin_dir = os.path.join(bin_dir, bld.options.variant)
@@ -755,16 +758,16 @@ def build_target(project, target):
 
 					else:
 						# branch found, have to clone it
-						ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', name, '--', cache_repo, '.'], cwd=dep_path)
+						ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', target.name, '--', cache_repo, '.'], cwd=dep_path)
 						if ret:
-							print "ERROR: git clone --depth 1 --branch " + name + ' -- ' + cache_repo + ' .'
+							print "ERROR: git clone --depth 1 --branch " + target.name + ' -- ' + cache_repo + ' .'
 							return
 					
 				# use cache :)
 				bld.env['INCLUDES_' + dep.name]		= list_include(bld, [dep_path_include])
 				bld.env['LIBPATH_' + dep.name]		= list_include(bld, [dep_path])
 				bld.env['LIB_' + dep.name]			= dep.name + variant(bld)
-				use.append(dep.name)
+				config.use.append(dep.name)
 
 				distutils.dir_util.copy_tree(dep_path, os.path.join(bld.out_dir, targetpath))
 
