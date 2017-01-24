@@ -780,9 +780,13 @@ def build_target(project, target):
 	elif target.type == 'program':
 		targetname = targetpath + '/' + target.name + variant(bld)
 
+	project_qt = False
+	if any([feature.startswith("QT5") for feature in config.features]):
+		project_qt = True
+
 	listinclude = list_include(bld, make_project_path_array(bld, config.includes))
-	listsource = list_source(bld, make_project_path_array(bld, config.source)) + list_qt_qrc(bld, make_project_path_array(bld, config.source)) + list_qt_ui(bld, make_project_path_array(bld, config.source)) if project.qt else list_source(bld, make_project_path_array(bld, config.source))
-	listmoc = list_moc(bld, make_project_path_array(bld, config.includes + config.source)) if project.qt else []
+	listsource = list_source(bld, make_project_path_array(bld, config.source)) + list_qt_qrc(bld, make_project_path_array(bld, config.source)) + list_qt_ui(bld, make_project_path_array(bld, config.source)) if project_qt else list_source(bld, make_project_path_array(bld, config.source))
+	listmoc = list_moc(bld, make_project_path_array(bld, config.includes + config.source)) if project_qt else []
 	
 	if target.type == 'library':
 		if is_shared(bld):
@@ -795,9 +799,9 @@ def build_target(project, target):
 				cxxflags		= config.cxxflags,
 				cflags			= config.cxxflags,
 				linkflags		= config.linkflags,
-				use				= config.use,
+				use				= config.use + config.features,
 				moc 			= listmoc,
-				features 		= 'qt5' if project.qt else ''
+				features 		= 'qt5' if project_qt else ''
 			)
 		elif is_static(bld):
 			ttarget = bld.stlib(
@@ -809,9 +813,9 @@ def build_target(project, target):
 				cxxflags		= config.cxxflags,
 				cflags			= config.cxxflags,
 				linkflags		= config.linkflags,
-				use				= config.use,
+				use				= config.use + config.features,
 				moc 			= listmoc,
-				features 		= 'qt5' if project.qt else ''
+				features 		= 'qt5' if project_qt else ''
 			)
 		else:
 			print "ERROR: no options found"
@@ -827,9 +831,9 @@ def build_target(project, target):
 			cxxflags		= config.cxxflags,
 			cflags			= config.cxxflags,
 			linkflags		= config.linkflags,
-			use				= config.use,
+			use				= config.use + config.features,
 			moc 			= listmoc,
-			features 		= 'qt5' if project.qt else ''
+			features 		= 'qt5' if project_qt else ''
 		)
 	
 	if config.system:
