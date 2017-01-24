@@ -599,6 +599,43 @@ class Project:
 			if not installed_packages.find(str(package)):
 				subprocess.check_output(['sudo', 'apt-get', 'install', str(package)])
 
+def get_dep_version(dep):
+	dep_version = ''
+	if str(dep.version) == 'any':
+		hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'HEAD'])
+		if not hash:
+			print("ERROR: can't find HEAD commit")
+			return
+		dep_version = hash[:8]
+	elif str(dep.version) == 'latest':
+		tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
+		tags = tags.split('\n')
+		badtag = ['^{}']
+		tmp = ''
+		for line in tags:
+			if '^{}' not in line:
+				tmp += line + '\n'
+		tags = tmp
+		versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
+		versions_list = set(versions_list)
+		versions_list = list(versions_list)
+		versions_list.sort(key=lambda s: map(int, s.split('.')))
+		last = versions_list[-1:]
+		if not last:
+			print("ERROR: no latest version")
+			return
+		last = 'v' + last[0]
+		hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository, last])
+		if not hash:
+			print("ERROR: can't find " + last)
+			return
+		#dep_version = hash[:8]
+		dep_version = last
+	else:
+		dep_version = str(dep.version)
+
+	return dep_version
+
 def build_target(project, target):
 
 	if not target.type in 'program library':
@@ -646,39 +683,7 @@ def build_target(project, target):
 				if not os.path.exists(cache_dir):
 					os.makedirs(cache_dir)
 
-				dep_version = ''
-				if str(dep.version) == 'any':
-					hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'HEAD'])
-					if not hash:
-						print("ERROR: can't find HEAD commit")
-						return
-					dep_version = hash[:8]
-				elif str(dep.version) == 'latest':
-					tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
-					tags = tags.split('\n')
-					badtag = ['^{}']
-					tmp = ''
-					for line in tags:
-						if '^{}' not in line:
-							tmp += line + '\n'
-					tags = tmp
-					versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
-					versions_list = set(versions_list)
-					versions_list = list(versions_list)
-					versions_list.sort(key=lambda s: map(int, s.split('.')))
-					last = versions_list[-1:]
-					if not last:
-						print("ERROR: no latest version")
-						return
-					last = 'v' + last[0]
-					hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository, last])
-					if not hash:
-						print("ERROR: can't find " + last)
-						return
-					#dep_version = hash[:8]
-					dep_version = last
-				else:
-					dep_version = str(dep.version)
+				dep_version = get_dep_version(dep)
 
 				dep_path_base = dep.name + '-' + 'lib' + '-' + 'master' + '-' + dep_version
 				dep_path_build = dep_path_base + '-' + buildpath
