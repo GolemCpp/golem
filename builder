@@ -905,6 +905,10 @@ def build(bld):
 	for target in pro.targets:
 		build_target(pro, target)
 
+	pro = Project()
+	if hasattr(project_config, 'script'):
+		project_config.script(sys.modules[__name__])
+
 	if bld.options.test:
 		pass
 
