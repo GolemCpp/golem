@@ -15,6 +15,7 @@ import io
 import re
 import copy
 import types
+import pickle
 
 def print_obj(obj, depth = 5, l = ""):
 	#fall back to repr
@@ -43,369 +44,7 @@ def print_obj(obj, depth = 5, l = ""):
 					except Exception, e: objdict[a] = str(e)
 	return name + " {\n" + "\n".join(l + repr(k) + ": " + print_obj(v, depth=depth-1, l=l+"  ") + "," for k, v in objdict.iteritems()) + "\n" + l + "}"
 
-def make_project_path(bld, path):
-	return os.path.join(bld.options.dir, path)
 
-def make_project_path_array(bld, array):
-	return [make_project_path(bld, x) for x in array]
-
-def hash_identifier(flags):
-	m = md5.new()
-	m.update(''.join(flags))
-	return m.hexdigest()[:8]
-
-def list_include(bld, includes):
-	return [bld.root.find_dir(x) if os.path.isabs(x) else bld.srcnode.find_dir(x) for x in includes]
-
-def list_source(bld, source):
-	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.cpp') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
-
-def list_moc(bld, source):
-	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.hpp') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.hpp') for x in source] for item in sublist]
-
-def list_qt_qrc(bld, source):
-	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.qrc') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.qrc') for x in source] for item in sublist]
-
-def list_qt_ui(bld, source):
-	return [item for sublist in [bld.root.find_dir(x).ant_glob('*.ui') if os.path.isabs(x) else bld.srcnode.find_dir(x).ant_glob('*.ui') for x in source] for item in sublist]
-
-def link_static():
-	return 'static'
-	
-def link_shared():
-	return 'shared'
-	
-def link(bld):
-	return bld.options.link
-
-def link_min(bld):
-	return link(bld)[:2]
-
-def is_static(bld):
-	return bld.options.link == link_static()
-
-def is_shared(bld):
-	return bld.options.link == link_shared()
-
-def runtime(bld):
-	return bld.options.runtime
-
-def runtime_min(bld):
-	return runtime(bld)[:2]
-
-def arch(bld):
-	return bld.options.arch
-
-def arch_min(bld):
-	return arch(bld)
-
-def variant_debug():
-	return 'debug'
-
-def variant_release():
-	return 'release'
-
-def variant(bld):
-	variant = ''
-	if bld.options.variant == variant_debug():
-		variant = '-' + variant_debug()
-	return variant
-
-def is_debug(bld):
-	return bld.options.variant == variant_debug()
-		
-def is_release(bld):
-	return bld.options.variant == variant_release()
-
-def variant_min(bld):
-	return bld.options.variant[:1]
-
-def os_windows():
-	return 'windows'
-
-def os_linux():
-	return 'linux'
-
-def os_osx():
-	return 'osx'
-
-def is_windows():
-	return sys.platform.startswith('win32')
-
-def is_linux():
-	return sys.platform.startswith('linux')
-
-def is_darwin():
-	return sys.platform.startswith('darwin')
-
-def osname():
-	osname = ''
-	if is_windows():
-		osname = os_windows()
-	elif is_linux():
-		osname = os_linux()
-	elif is_darwin():
-		osname = os_osx()
-	return osname
-
-def osname_min():
-	return osname()[:3]
-
-def compiler(bld):
-	return bld.env.CXX_NAME + '-' + '.'.join(bld.env.CC_VERSION)
-
-def compiler_min(bld):
-	return compiler(bld)
-
-def machine():
-    if os.name == 'nt' and sys.version_info[:2] < (2,7):
-        return os.environ.get("PROCESSOR_ARCHITEW6432", 
-               os.environ.get('PROCESSOR_ARCHITECTURE', ''))
-    else:
-        return platform.machine()
-
-def osarch_parser(arch):
-    machine2bits = {
-		'amd64': 'x64',
-		'x86_64': 'x64',
-		'x64': 'x64',
-		'i386': 'x86',
-		'i686': 'x86',
-		'x86': 'x86'
-	}
-    return machine2bits.get(arch.lower(), None)
-
-def osarch():
-    return osarch_parser(machine())
-
-def is_x86(conf):
-	return osarch_parser(conf.options.arch) == 'x86'
-
-def is_x64(conf):
-	return osarch_parser(conf.options.arch) == 'x64'
-
-def options(opt):
-	opt.load('compiler_cxx qt5')
-	opt.add_option("--dir", action="store", default='.', help="Project location")
-	opt.add_option("--variant", action="store", default='debug', help="Runtime Linking")
-	opt.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
-	opt.add_option("--link", action="store", default='shared', help="Library Linking")
-	opt.add_option("--arch", action="store", default='x86', help="Target Architecture")
-	opt.add_option("--test", action="store_true", default=False, help="Test build")
-	opt.add_option("--major", action="store_true", default=False, help="Release major version")
-	opt.add_option("--minor", action="store_true", default=False, help="Release minor version")
-	opt.add_option("--patch", action="store_true", default=False, help="Release patch version")
-	
-	if is_windows(): 
-		opt.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
-	else: 
-		opt.add_option("--nounicode", action="store_true", default=True, help="Unicode Support")
-
-def configure_init(conf):
-	if not conf.env.DEFINES:
-		conf.env.DEFINES=[]
-	if not conf.env.CXXFLAGS:
-		conf.env.CXXFLAGS=[]
-	if not conf.env.CFLAGS:
-		conf.env.CFLAGS=[]
-	if not conf.env.LINKFLAGS:
-		conf.env.LINKFLAGS=[]
-	if not conf.env.ARFLAGS:
-		conf.env.ARFLAGS=[]
-
-def configure_default(conf):
-	if not conf.options.nounicode:
-		conf.env.DEFINES.append('UNICODE')
-
-	if is_windows():
-		# Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
-		# Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
-
-		conf.env.MSVC_VERSIONS = ['msvc 14.0']
-		# conf.env.CXXFLAGS.append('/MP') # compiles multiple source files by using multiple processes
-		conf.env.CXXFLAGS.append('/Gm-') # disable minimal rebuild
-		conf.env.CXXFLAGS.append('/Zc:inline') # compiler does not emit symbol information for unreferenced COMDAT functions or data
-		conf.env.CXXFLAGS.append('/Zc:forScope') # implement standard C++ behavior for for loops 
-		conf.env.CXXFLAGS.append('/Zc:wchar_t') # wchar_t as a built-in type 
-		conf.env.CXXFLAGS.append('/fp:precise') # improves the consistency of floating-point tests for equality and inequality 
-		conf.env.CXXFLAGS.append('/W4') # warning level 4
-		conf.env.CXXFLAGS.append('/sdl') # enables a superset of the baseline security checks provided by /GS
-		conf.env.CXXFLAGS.append('/GS') # detects some buffer overruns that overwrite things
-		conf.env.CXXFLAGS.append('/EHsc') # enable exception
-		conf.env.CXXFLAGS.append('/nologo') # suppress startup banner
-		conf.env.CXXFLAGS.append('/Gd') # specifies default calling convention
-		conf.env.CXXFLAGS.append('/analyze-') # disable code analysis
-		conf.env.CXXFLAGS.append('/WX-') # warnings are not treated as errors 
-		conf.env.CXXFLAGS.append('/FS') # serialized writes to the program database (PDB)
-		# conf.env.CXXFLAGS.append('/Fd:testing.pdb') # file name for the program database (PDB) defaults to VCx0.pdb
-		
-		conf.env.CXXFLAGS.append('/std:c++latest') # enable all features as they become available, including feature removals
-		
-		conf.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
-		# conf.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
-		# conf.env.LINKFLAGS.append('/PDB:"D:.pdb"') # creates a program database (PDB) file
-		# conf.env.LINKFLAGS.append('/IMPLIB:"D:.lib"')
-		# conf.env.LINKFLAGS.append('/PGD:"D:.pgd"') # specifies a .pgd file for profile-guided optimizations
-		conf.env.LINKFLAGS.append('/NXCOMPAT') # tested to be compatible with the Windows Data Execution Prevention feature
-		conf.env.LINKFLAGS.append('/DYNAMICBASE') # generate an executable image that can be randomly rebased at load time 
-		conf.env.LINKFLAGS.append('/NOLOGO') # suppress startup banner
-		conf.env.MSVC_MANIFEST = False # disable waf manifest behavior
-		# conf.env.LINKFLAGS.append('/MANIFEST') # creates a side-by-side manifest file and optionally embeds it in the binary
-		# conf.env.LINKFLAGS.append('/MANIFESTUAC:"level=\'asInvoker\' uiAccess=\'false\'"')
-		# conf.env.LINKFLAGS.append('/ManifestFile:".dll.intermediate.manifest"')
-		# conf.env.LINKFLAGS.append('/SUBSYSTEM') # how to run the .exe file
-		# conf.env.LINKFLAGS.append('/DLL') # builds a DLL
-		# conf.env.LINKFLAGS.append('/TLBID:1') # resource ID of the linker-generated type library
-		
-		conf.env.ARFLAGS.append('/NOLOGO')
-
-		if is_x86(conf):
-			conf.env.LINKFLAGS.append('/MACHINE:X86')
-			conf.env.ARFLAGS.append('/MACHINE:X86')
-		else:
-			conf.env.LINKFLAGS.append('/MACHINE:X64')
-			conf.env.ARFLAGS.append('/MACHINE:X64')
-			
-		if is_x86(conf):
-			conf.env.MSVC_TARGETS = ['x86']
-		else:
-			conf.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
-		
-	else:
-		if is_x86(conf) == 'x86':
-			conf.env.CXXFLAGS.append('-m32')
-		else:
-			conf.env.CXXFLAGS.append('-m64')
-
-		conf.env.CXXFLAGS.append('-std=c++14')
-
-		conf.env.CXXFLAGS.append('-pthread')
-		conf.env.LINKFLAGS.append('-pthread')
-	
-	if is_darwin():
-		conf.env.env.CXX	= ['clang++']
-		conf.env.CXXFLAGS.append('-stdlib=libc++')
-		conf.env.LINKFLAGS.append('-stdlib=libc++')
-
-def configure_debug(conf):
-	if is_windows():
-
-		conf.env.CXXFLAGS.append('/RTC1') # run-time error checks (stack frame & uninitialized used variables)
-		# conf.env.CXXFLAGS.append('/ZI') # produces a program database in a format that supports the Edit and Continue feature.
-		conf.env.CXXFLAGS.append('/Z7') # embeds the program database
-		conf.env.CXXFLAGS.append('/Od') # disable optimizations
-		conf.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
-
-		if is_static(conf):
-			conf.env.CXXFLAGS.append('/MTd')
-		elif is_shared(conf):
-			conf.env.CXXFLAGS.append('/MDd')
-
-		conf.env.LINKFLAGS.append('/MAP') # creates a mapfile
-		conf.env.LINKFLAGS.append('/MAPINFO:EXPORTS') # includes exports information in the mapfile
-		conf.env.LINKFLAGS.append('/DEBUG') # creates debugging information
-		conf.env.LINKFLAGS.append('/INCREMENTAL') # incremental linking
-
-	else:
-		conf.env.CXXFLAGS.append('-g')
-		conf.env.CXXFLAGS.append('-O0')
-
-	conf.env.DEFINES.append('DEBUG')
-
-def configure_release(conf):
-	if is_windows():
-	
-		# conf.env.CXXFLAGS.append('/Zi') # produces a program database (PDB) does not affect optimizations
-
-		# About COMDATs, linker requires that functions be packaged separately as COMDATs to EXCLUTE or ORDER individual functions in a DLL or .exe file.
-		conf.env.CXXFLAGS.append('/Gy') # allows the compiler to package individual functions in the form of packaged functions (COMDATs)
-										
-		conf.env.CXXFLAGS.append('/GL') # enables whole program optimization
-		conf.env.CXXFLAGS.append('/O2') # generate fast code
-		conf.env.CXXFLAGS.append('/Oi') # request to the compiler to replace some function calls with intrinsics
-		conf.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
-
-		if is_static(conf):
-			conf.env.CXXFLAGS.append('/MT')
-		elif is_shared(conf):
-			conf.env.CXXFLAGS.append('/MD')
-
-		# conf.env.LINKFLAGS.append('/DEF:"D:.def"')
-		conf.env.LINKFLAGS.append('/LTCG') # perform whole-program optimization
-		# conf.env.LINKFLAGS.append('/LTCG:incremental') # perform incremental whole-program optimization
-		conf.env.ARFLAGS.append('/LTCG')
-		conf.env.LINKFLAGS.append('/OPT:REF') # eliminates functions and data that are never referenced
-		conf.env.LINKFLAGS.append('/OPT:ICF') # to perform identical COMDAT folding
-		if is_x86(conf):
-			conf.env.LINKFLAGS.append('/SAFESEH') # image will contain a table of safe exception handlers
-
-	else:
-		conf.env.CXXFLAGS.append('-O3')
-
-def dep_system(bld, libs):
-	bld.env['LIB'] += libs
-	
-def dep_static_release(name, fullname, lib):
-	
-	global bldcontext
-	bld = bldcontext
-
-	deppath = 'dep/' + osname() + '/' + arch(bld) + '/' + fullname + '/' + link_static()
-	includes = deppath + '/include'
-	libpath = deppath + '/lib'
-	
-	bld.env['INCLUDES_' + name]		= list_include(bld, [includes])
-	bld.env['STLIBPATH_' + name]	= list_include(bld, [libpath])
-	bld.env['STLIB_' + name]		= lib
-	
-def dep_static(name, fullname, lib, libdebug):
-
-	global bldcontext
-	bld = bldcontext
-
-	deppath = 'dep/' + osname() + '/' + arch(bld) + '/' + fullname + '/' + link_static() + variant(bld)
-	includes = deppath + '/include'
-	libpath = deppath + '/lib'
-	
-	bld.env['INCLUDES_' + name]		= list_include(bld, [includes])
-	bld.env['STLIBPATH_' + name]	= list_include(bld, [libpath])
-	
-	if is_debug():
-		bld.env['STLIB_' + name]	= libdebug
-	else:
-		bld.env['STLIB_' + name]	= lib
-		
-	
-def dep_shared_release(name, fullname, lib):
-	
-	global bldcontext
-	bld = bldcontext
-
-	deppath = 'dep/' + osname() + '/' + arch(bld) + '/' + fullname + '/' + link_shared()
-	includes = deppath + '/include'
-	libpath = deppath + '/lib'
-	
-	bld.env['INCLUDES_' + name]		= list_include(bld, [includes])
-	bld.env['LIBPATH_' + name]		= list_include(bld, [libpath])
-	bld.env['LIB_' + name]			= lib
-	
-def dep_shared(name, fullname, lib, libdebug):
-
-	global bldcontext
-	bld = bldcontext
-
-	deppath = 'dep/' + osname() + '/' + arch(bld) + '/' + fullname + '/' + link_shared() + variant(bld)
-	includes = deppath + '/include'
-	libpath = deppath + '/lib'
-	
-	bld.env['INCLUDES_' + name]		= list_include(bld, [includes])
-	bld.env['LIBPATH_' + name]		= list_include(bld, [libpath])
-	
-	if is_debug():
-		bld.env['LIB_' + name]		= libdebug
-	else:
-		bld.env['LIB_' + name]		= lib
-	
 class CacheConf:
 	def __init__(self):
 		self.remote = ''
@@ -414,8 +53,8 @@ class CacheConf:
 	def __str__(self):
 		return print_obj(self)
 
-def find_cache_conf(bld):
-	settings_path = os.path.join(bld.options.dir, 'settings.glm')
+def find_cache_conf(self):
+	settings_path = make_project_path('settings.glm')
 	if not os.path.exists(settings_path):
 		return None
 
@@ -425,7 +64,7 @@ def find_cache_conf(bld):
 	if not config.has_section('GOLEM'):
 		return None
 
-	conf = CacheConf()
+	context = CacheConf()
 
 	# cache remote
 	if not config.has_option('GOLEM', 'cache.remote'):
@@ -436,7 +75,7 @@ def find_cache_conf(bld):
 	if not remote:
 		return None
 
-	conf.remote = remote.strip('\'"')
+	context.remote = remote.strip('\'"')
 
 	# cache location
 	if not config.has_option('GOLEM', 'cache.location'):
@@ -447,10 +86,10 @@ def find_cache_conf(bld):
 	if not location:
 		return None
 
-	conf.location = location.strip('\'"')
+	context.location = location.strip('\'"')
 
 	# return cache configuration
-	return conf
+	return context
 
 class Dependency:
 	def __init__(self, name = None, repository = None, version = None):
@@ -510,14 +149,14 @@ class Configuration:
 		self.deps += config.deps
 		self.use += config.use
 	
-	def merge(self, bld, configs):
+	def merge(self, context, configs):
 		for c in configs:
-			if (	(not c.condition.variant or variant(bld) in c.condition.variant)
-				and (not c.condition.linking or link(bld) in c.condition.linking)
-				and (not c.condition.runtime or runtime(bld) in c.condition.runtime)
-				and (not c.condition.osystem or osname() in c.condition.osystem)
-				and (not c.condition.arch or arch(bld) in c.condition.arch)
-				and (not c.condition.compiler or compiler(bld) in c.condition.compiler)):
+			if (	(not c.condition.variant or context.variant() in c.condition.variant)
+				and (not c.condition.linking or context.link() in c.condition.linking)
+				and (not c.condition.runtime or context.runtime() in c.condition.runtime)
+				and (not c.condition.osystem or context.osname() in c.condition.osystem)
+				and (not c.condition.arch or context.arch() in c.condition.arch)
+				and (not c.condition.compiler or context.compiler() in c.condition.compiler)):
 				self.append(c)
 			
 class Target:
@@ -599,235 +238,637 @@ class Project:
 			if not installed_packages.find(str(package)):
 				subprocess.check_output(['sudo', 'apt-get', 'install', str(package)])
 
-def get_dep_version(dep):
-	dep_version = ''
-	if str(dep.version) == 'any':
-		hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'HEAD'])
-		if not hash:
-			print("ERROR: can't find HEAD commit")
+class Module:
+	def __init__(self, path = None):
+		self.path = '.' if path is None else path
+
+		if sys.modules.get('project'):
+			self.module = sys.modules.get('project')
+		else:
+			project_path = os.path.join(self.path, 'project.glm')
+
+			if not os.path.exists(project_path):
+				print "ERROR: can't find " + project_path
+				return
+			self.module = imp.load_source('project', project_path)
+
+	def project(self):
+
+		if not hasattr(self.module, 'configure'):
+			print "ERROR: no configure function found"
 			return
-		dep_version = hash[:8]
-	elif str(dep.version) == 'latest':
-		tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
-		tags = tags.split('\n')
-		badtag = ['^{}']
-		tmp = ''
-		for line in tags:
-			if '^{}' not in line:
-				tmp += line + '\n'
-		tags = tmp
-		versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
-		versions_list = set(versions_list)
-		versions_list = list(versions_list)
-		versions_list.sort(key=lambda s: map(int, s.split('.')))
-		last = versions_list[-1:]
-		if not last:
-			print("ERROR: no latest version")
+
+		project = Project()
+		self.module.configure(project)
+		return project
+
+	def script(self, context):
+
+		#if not hasattr(self.module, 'script'):
+		#	print "ERROR: no script function found"
+		#	return
+
+		if hasattr(self.module, 'script'):
+			self.module.script(context)
+
+
+class Context:
+	def __init__(self, context):
+		self.context = context
+		self.module = Module(self.get_project_dir())
+		self.project = self.module.project()
+
+	def get_project_dir(self):
+		return self.context.options.dir
+
+	def make_project_path(self, path):
+		return os.path.join(self.get_project_dir(), path)
+
+	def make_project_path_array(self, array):
+		return [self.make_project_path(x) for x in array]
+
+	@staticmethod
+	def hash_identifier(flags):
+		m = md5.new()
+		m.update(''.join(flags))
+		return m.hexdigest()[:8]
+
+	def list_include(self, includes):
+		return [self.context.root.find_dir(x) if os.path.isabs(x) else self.context.srcnode.find_dir(x) for x in includes]
+
+	def list_source(self, source):
+		return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.cpp') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
+
+	def list_moc(self, source):
+		return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.hpp') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.hpp') for x in source] for item in sublist]
+
+	def list_qt_qrc(self, source):
+		return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.qrc') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.qrc') for x in source] for item in sublist]
+
+	def list_qt_ui(self, source):
+		return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.ui') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.ui') for x in source] for item in sublist]
+
+	@staticmethod
+	def link_static():
+		return 'static'
+		
+	@staticmethod
+	def link_shared():
+		return 'shared'
+		
+	def link(self):
+		return self.context.options.link
+
+	def link_min(self):
+		return self.link()[:2]
+
+	def is_static(self):
+		return self.context.options.link == self.link_static()
+
+	def is_shared(self):
+		return self.context.options.link == self.link_shared()
+
+	def runtime(self):
+		return self.context.options.runtime
+
+	def runtime_min(self):
+		return self.runtime()[:2]
+
+	def arch(self):
+		return self.context.options.arch
+
+	def arch_min(self):
+		return self.arch()
+
+	@staticmethod
+	def variant_debug():
+		return 'debug'
+
+	@staticmethod
+	def variant_release():
+		return 'release'
+
+	def variant(self):
+		variant = ''
+		if self.context.options.variant == self.variant_debug():
+			variant = '-' + self.variant_debug()
+		return variant
+
+	def is_debug(self):
+		return self.context.options.variant == self.variant_debug()
+			
+	def is_release(self):
+		return self.context.options.variant == self.variant_release()
+
+	def variant_min(self):
+		return self.context.options.variant[:1]
+
+	@staticmethod
+	def os_windows():
+		return 'windows'
+
+	@staticmethod
+	def os_linux():
+		return 'linux'
+
+	@staticmethod
+	def os_osx():
+		return 'osx'
+
+	@staticmethod
+	def is_windows():
+		return sys.platform.startswith('win32')
+
+	@staticmethod
+	def is_linux():
+		return sys.platform.startswith('linux')
+
+	@staticmethod
+	def is_darwin():
+		return sys.platform.startswith('darwin')
+
+	@staticmethod
+	def osname():
+		osname = ''
+		if Context.is_windows():
+			osname = Context.os_windows()
+		elif Context.is_linux():
+			osname = Context.os_linux()
+		elif Context.is_darwin():
+			osname = Context.os_osx()
+		return osname
+
+	def osname_min(self):
+		return self.osname()[:3]
+
+	def compiler(self):
+		return self.context.env.CXX_NAME + '-' + '.'.join(self.context.env.CC_VERSION)
+
+	def compiler_min(self):
+		return self.compiler()
+
+	@staticmethod
+	def machine():
+		if os.name == 'nt' and sys.version_info[:2] < (2,7):
+			return os.environ.get("PROCESSOR_ARCHITEW6432", 
+				os.environ.get('PROCESSOR_ARCHITECTURE', ''))
+		else:
+			return platform.machine()
+
+	@staticmethod
+	def osarch_parser(arch):
+		machine2bits = {
+			'amd64': 'x64',
+			'x86_64': 'x64',
+			'x64': 'x64',
+			'i386': 'x86',
+			'i686': 'x86',
+			'x86': 'x86'
+		}
+		return machine2bits.get(arch.lower(), None)
+
+	@staticmethod
+	def osarch():
+		return Context.osarch_parser(Context.machine())
+
+	def is_x86(self):
+		return Context.osarch_parser(self.context.options.arch) == 'x86'
+
+	def is_x64(self):
+		return Context.osarch_parser(self.context.options.arch) == 'x64'
+
+	@staticmethod
+	def options(context):
+		context.load('compiler_cxx qt5')
+		context.add_option("--dir", action="store", default='.', help="Project location")
+		context.add_option("--variant", action="store", default='debug', help="Runtime Linking")
+		context.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
+		context.add_option("--link", action="store", default='shared', help="Library Linking")
+		context.add_option("--arch", action="store", default=Context.osarch(), help="Target Architecture")
+
+		context.add_option("--major", action="store_true", default=False, help="Release major version")
+		context.add_option("--minor", action="store_true", default=False, help="Release minor version")
+		context.add_option("--patch", action="store_true", default=False, help="Release patch version")
+
+		context.add_option("--export", action="store", default='', help="Export folder")
+		
+		if Context.is_windows(): 
+			context.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
+		else: 
+			context.add_option("--nounicode", action="store_true", default=True, help="Unicode Support")
+
+	def configure_init(self):
+		if not self.context.env.DEFINES:
+			self.context.env.DEFINES=[]
+		if not self.context.env.CXXFLAGS:
+			self.context.env.CXXFLAGS=[]
+		if not self.context.env.CFLAGS:
+			self.context.env.CFLAGS=[]
+		if not self.context.env.LINKFLAGS:
+			self.context.env.LINKFLAGS=[]
+		if not self.context.env.ARFLAGS:
+			self.context.env.ARFLAGS=[]
+
+	def configure_default(self):
+		if not self.context.options.nounicode:
+			self.context.env.DEFINES.append('UNICODE')
+
+		if self.is_windows():
+			# Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
+			# Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
+
+			self.context.env.MSVC_VERSIONS = ['msvc 14.0']
+			# self.context.env.CXXFLAGS.append('/MP') # compiles multiple source files by using multiple processes
+			self.context.env.CXXFLAGS.append('/Gm-') # disable minimal rebuild
+			self.context.env.CXXFLAGS.append('/Zc:inline') # compiler does not emit symbol information for unreferenced COMDAT functions or data
+			self.context.env.CXXFLAGS.append('/Zc:forScope') # implement standard C++ behavior for for loops 
+			self.context.env.CXXFLAGS.append('/Zc:wchar_t') # wchar_t as a built-in type 
+			self.context.env.CXXFLAGS.append('/fp:precise') # improves the consistency of floating-point tests for equality and inequality 
+			self.context.env.CXXFLAGS.append('/W4') # warning level 4
+			self.context.env.CXXFLAGS.append('/sdl') # enables a superset of the baseline security checks provided by /GS
+			self.context.env.CXXFLAGS.append('/GS') # detects some buffer overruns that overwrite things
+			self.context.env.CXXFLAGS.append('/EHsc') # enable exception
+			self.context.env.CXXFLAGS.append('/nologo') # suppress startup banner
+			self.context.env.CXXFLAGS.append('/Gd') # specifies default calling convention
+			self.context.env.CXXFLAGS.append('/analyze-') # disable code analysis
+			self.context.env.CXXFLAGS.append('/WX-') # warnings are not treated as errors 
+			self.context.env.CXXFLAGS.append('/FS') # serialized writes to the program database (PDB)
+			# self.context.env.CXXFLAGS.append('/Fd:testing.pdb') # file name for the program database (PDB) defaults to VCx0.pdb
+			
+			self.context.env.CXXFLAGS.append('/std:c++latest') # enable all features as they become available, including feature removals
+			
+			self.context.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
+			# self.context.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
+			# self.context.env.LINKFLAGS.append('/PDB:"D:.pdb"') # creates a program database (PDB) file
+			# self.context.env.LINKFLAGS.append('/IMPLIB:"D:.lib"')
+			# self.context.env.LINKFLAGS.append('/PGD:"D:.pgd"') # specifies a .pgd file for profile-guided optimizations
+			self.context.env.LINKFLAGS.append('/NXCOMPAT') # tested to be compatible with the Windows Data Execution Prevention feature
+			self.context.env.LINKFLAGS.append('/DYNAMICBASE') # generate an executable image that can be randomly rebased at load time 
+			self.context.env.LINKFLAGS.append('/NOLOGO') # suppress startup banner
+			self.context.env.MSVC_MANIFEST = False # disable waf manifest behavior
+			# self.context.env.LINKFLAGS.append('/MANIFEST') # creates a side-by-side manifest file and optionally embeds it in the binary
+			# self.context.env.LINKFLAGS.append('/MANIFESTUAC:"level=\'asInvoker\' uiAccess=\'false\'"')
+			# self.context.env.LINKFLAGS.append('/ManifestFile:".dll.intermediate.manifest"')
+			# self.context.env.LINKFLAGS.append('/SUBSYSTEM') # how to run the .exe file
+			# self.context.env.LINKFLAGS.append('/DLL') # builds a DLL
+			# self.context.env.LINKFLAGS.append('/TLBID:1') # resource ID of the linker-generated type library
+			
+			self.context.env.ARFLAGS.append('/NOLOGO')
+
+			if self.is_x86():
+				self.context.env.LINKFLAGS.append('/MACHINE:X86')
+				self.context.env.ARFLAGS.append('/MACHINE:X86')
+			else:
+				self.context.env.LINKFLAGS.append('/MACHINE:X64')
+				self.context.env.ARFLAGS.append('/MACHINE:X64')
+				
+			if self.is_x86():
+				self.context.env.MSVC_TARGETS = ['x86']
+			else:
+				self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
+			
+		else:
+			if self.is_x86() == 'x86':
+				self.context.env.CXXFLAGS.append('-m32')
+			else:
+				self.context.env.CXXFLAGS.append('-m64')
+
+			self.context.env.CXXFLAGS.append('-std=c++14')
+
+			self.context.env.CXXFLAGS.append('-pthread')
+			self.context.env.LINKFLAGS.append('-pthread')
+		
+		if self.is_darwin():
+			self.context.env.env.CXX	= ['clang++']
+			self.context.env.CXXFLAGS.append('-stdlib=libc++')
+			self.context.env.LINKFLAGS.append('-stdlib=libc++')
+
+	def configure_debug(self):
+		if self.is_windows():
+
+			self.context.env.CXXFLAGS.append('/RTC1') # run-time error checks (stack frame & uninitialized used variables)
+			# self.context.env.CXXFLAGS.append('/ZI') # produces a program database in a format that supports the Edit and Continue feature.
+			self.context.env.CXXFLAGS.append('/Z7') # embeds the program database
+			self.context.env.CXXFLAGS.append('/Od') # disable optimizations
+			self.context.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
+
+			if self.is_static():
+				self.context.env.CXXFLAGS.append('/MTd')
+			elif self.is_shared():
+				self.context.env.CXXFLAGS.append('/MDd')
+
+			self.context.env.LINKFLAGS.append('/MAP') # creates a mapfile
+			self.context.env.LINKFLAGS.append('/MAPINFO:EXPORTS') # includes exports information in the mapfile
+			self.context.env.LINKFLAGS.append('/DEBUG') # creates debugging information
+			self.context.env.LINKFLAGS.append('/INCREMENTAL') # incremental linking
+
+		else:
+			self.context.env.CXXFLAGS.append('-g')
+			self.context.env.CXXFLAGS.append('-O0')
+
+		self.context.env.DEFINES.append('DEBUG')
+
+	def configure_release(self):
+		if self.is_windows():
+		
+			# self.context.env.CXXFLAGS.append('/Zi') # produces a program database (PDB) does not affect optimizations
+
+			# About COMDATs, linker requires that functions be packaged separately as COMDATs to EXCLUTE or ORDER individual functions in a DLL or .exe file.
+			self.context.env.CXXFLAGS.append('/Gy') # allows the compiler to package individual functions in the form of packaged functions (COMDATs)
+											
+			self.context.env.CXXFLAGS.append('/GL') # enables whole program optimization
+			self.context.env.CXXFLAGS.append('/O2') # generate fast code
+			self.context.env.CXXFLAGS.append('/Oi') # request to the compiler to replace some function calls with intrinsics
+			self.context.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
+
+			if self.is_static():
+				self.context.env.CXXFLAGS.append('/MT')
+			elif self.is_shared():
+				self.context.env.CXXFLAGS.append('/MD')
+
+			# self.context.env.LINKFLAGS.append('/DEF:"D:.def"')
+			self.context.env.LINKFLAGS.append('/LTCG') # perform whole-program optimization
+			# self.context.env.LINKFLAGS.append('/LTCG:incremental') # perform incremental whole-program optimization
+			self.context.env.ARFLAGS.append('/LTCG')
+			self.context.env.LINKFLAGS.append('/OPT:REF') # eliminates functions and data that are never referenced
+			self.context.env.LINKFLAGS.append('/OPT:ICF') # to perform identical COMDAT folding
+			if self.is_x86():
+				self.context.env.LINKFLAGS.append('/SAFESEH') # image will contain a table of safe exception handlers
+
+		else:
+			self.context.env.CXXFLAGS.append('-O3')
+
+	def environment(self):
+		
+		# load all environment variables
+		self.context.load_envs()
+
+		# set environment variables according architecture
+		if self.is_x86():
+			self.context.env = self.context.all_envs['x86'].derive()
+		else:
+			self.context.env = self.context.all_envs['x64'].derive()
+
+		# init default environment variables
+		self.configure_init()
+		self.configure_default()
+
+		# set environment variables according variant
+		if self.is_debug():
+			self.configure_debug()
+		else:
+			self.configure_release()
+
+		# copy cxxflags to cflags
+		self.context.env.CFLAGS = self.context.env.CXXFLAGS
+
+	def dep_system(self, libs):
+		self.context.env['LIB'] += libs
+		
+	def dep_static_release(self, name, fullname, lib):
+		
+		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
+		self.context.env['STLIBPATH_' + name]	= list_include(self.context, ['libpath'])
+		self.context.env['STLIB_' + name]		= lib
+		
+	def dep_static(self, name, fullname, lib, libdebug):
+		
+		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
+		self.context.env['STLIBPATH_' + name]	= list_include(self.context, ['libpath'])
+		
+		if self.is_debug():
+			self.context.env['STLIB_' + name]	= libdebug
+		else:
+			self.context.env['STLIB_' + name]	= lib
+			
+		
+	def dep_shared_release(self, name, fullname, lib):
+		
+		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
+		self.context.env['LIBPATH_' + name]		= list_include(self.context, ['libpath'])
+		self.context.env['LIB_' + name]			= lib
+		
+	def dep_shared(self, name, fullname, lib, libdebug):
+		
+		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
+		self.context.env['LIBPATH_' + name]		= list_include(self.context, ['libpath'])
+		
+		if self.is_debug():
+			self.context.env['LIB_' + name]		= libdebug
+		else:
+			self.context.env['LIB_' + name]		= lib
+		
+	def get_dep_version(dep):
+		dep_version = ''
+		if str(dep.version) == 'any':
+			hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'HEAD'])
+			if not hash:
+				print("ERROR: can't find HEAD commit")
+				return
+			dep_version = hash[:8]
+		elif str(dep.version) == 'latest':
+			tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
+			tags = tags.split('\n')
+			badtag = ['^{}']
+			tmp = ''
+			for line in tags:
+				if '^{}' not in line:
+					tmp += line + '\n'
+			tags = tmp
+			versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
+			versions_list = set(versions_list)
+			versions_list = list(versions_list)
+			versions_list.sort(key=lambda s: map(int, s.split('.')))
+			last = versions_list[-1:]
+			if not last:
+				print("ERROR: no latest version")
+				return
+			last = 'v' + last[0]
+			hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository, last])
+			if not hash:
+				print("ERROR: can't find " + last)
+				return
+			#dep_version = hash[:8]
+			dep_version = last
+		else:
+			dep_version = str(dep.version)
+
+		return dep_version
+
+	def link_dependency(self, dep):
+
+		cache_conf = find_cache_conf()
+		if not cache_conf:
+			print("ERROR: no valid cache configuration found")
 			return
-		last = 'v' + last[0]
-		hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository, last])
-		if not hash:
-			print("ERROR: can't find " + last)
-			return
-		#dep_version = hash[:8]
-		dep_version = last
-	else:
-		dep_version = str(dep.version)
+		
+		cache_location = cache_conf.location
+		cache_repo = cache_conf.remote
+		
+		cache_dir = cache_location
+		if not os.path.exists(cache_dir):
+			os.makedirs(cache_dir)
 
-	return dep_version
+		dep_version = get_dep_version(dep)
 
-def build_target(project, target):
+		dep_path_base = dep.name + '-' + 'master' + '-' + dep_version
+		dep_path_build = dep_path_base + '-' + buildpath
 
-	if not target.type in 'program library':
-		return
+		# dep cache path with the current combination of flags (identifier)
+		dep_path_name = dep_path_build + '-' + identifier
+		dep_path_include = os.path.join(cache_dir, dep_path_base)
+		dep_path = os.path.join(cache_dir, dep_path_name)
 
-	global bldcontext
-	bld = bldcontext
-	
-	if target.type == 'library':
-		ttypestr = 'lib'
-	elif target.type == 'program':
-		ttypestr = 'app'
+		if not os.path.exists(dep_path):
+			# dep cache path with an independant combination of flags (default)
+			dep_path_name = dep_path_build + '-' + 'default' 
+			dep_path = os.path.join(cache_dir, dep_path_name)
 
-	identifier = hash_identifier(bld.env.CXXFLAGS + bld.env.CFLAGS + bld.env.LINKFLAGS + bld.env.ARFLAGS + bld.env.DEFINES)
-	global buildpath
-	cachepath = target.name + '-' + ttypestr + '-' + 'master' + '-' + buildpath + '-' + identifier
+		if not os.path.exists(dep_path):
+			print "INFO: can't find the dependency " + dep.name
+			print "Search in the cache repository..."
 
-	if bld.options.test:
-		# targetpath = os.path.join(bld.options.dir, 'bin', bld.options.variant)
-		targetpath = bld.options.variant
-	else:
-		targetpath = cachepath
+			os.makedirs(dep_path)
 
-	config = Configuration()
-	config.merge(bld, target.configs)
+			# search the corresponding branch in the cache repo (with the right version)
+			ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_name])
+			if ret:
+				# no such a branch, have to build and cache
 
-	for usename in config.use:
-		for u in project.exports:
-			if u.name == usename:
-				config.merge(bld, u.configs)
+				# building
+				build_dir = os.path.join(cache_dir, 'build')
+				if os.path.exists(build_dir):
+					shutil.rmtree(build_dir)
+				os.makedirs(build_dir)
+				
+				ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version, '--', dep.repository, '.'], cwd=build_dir)
+				if ret:
+					print "ERROR: cloning " + dep.repository + ' ' + dep_version
+					return
 
-	for _dep in config.deps:
-		for dep in project.deps:
-			if _dep == dep.name:
-
-				cache_conf = find_cache_conf(bld)
-				if not cache_conf:
-					print("ERROR: no valid cache configuration found")
+				golem_dir = os.path.join(build_dir, os.path.join('build', 'golem'))
+				if not os.path.exists(golem_dir):
+					print "ERROR: can't find golem to build the dependency"
 					return
 				
-				cache_location = cache_conf.location
-				cache_repo = cache_conf.remote
+				ret = subprocess.call(['make', 'configure'], cwd=build_dir)
+				if ret:
+					print "ERROR: dependency configure failed"
+					return
+
+				ret = subprocess.call(['make', 'all', 'runtime=' + self.context.options.runtime, 'link=' + self.context.options.link, 'arch=' + self.context.options.arch, 'variant=' + self.context.options.variant], cwd=build_dir)
+				if ret:
+					print "ERROR: dependency build failed"
+					return
+
+				# caching
+				ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
+				if ret:
+					print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
+					return
+				ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
+				if ret:
+					print "ERROR: git checkout -b " + target.name
 				
-				cache_dir = cache_location
-				if not os.path.exists(cache_dir):
-					os.makedirs(cache_dir)
+				bin_dir = os.path.join(golem_dir, 'out')
+				bin_dir = os.path.join(bin_dir, self.context.options.variant)
 
-				dep_version = get_dep_version(dep)
+				if not os.path.exists(bin_dir):
+					print "ERROR: no binaries found in the dependency build"
+					return
 
-				dep_path_base = dep.name + '-' + 'lib' + '-' + 'master' + '-' + dep_version
-				dep_path_build = dep_path_base + '-' + buildpath
+				distutils.dir_util.copy_tree(bin_dir, dep_path)
 
-				# dep cache path with the current combination of flags (identifier)
-				dep_path_name = dep_path_build + '-' + identifier
-				dep_path_include = os.path.join(cache_dir, dep_path_base)
-				dep_path = os.path.join(cache_dir, dep_path_name)
+				include_dir = os.path.join(build_dir, 'include')
 
-				if not os.path.exists(dep_path):
-					# dep cache path with an independant combination of flags (default)
-					dep_path_name = dep_path_build + '-' + 'default' 
-					dep_path = os.path.join(cache_dir, dep_path_name)
+				if not os.path.exists(include_dir):
+					print "ERROR: no include found in the dependency build"
+					return
+				
+				distutils.dir_util.copy_tree(include_dir, dep_path_include)
 
-				if not os.path.exists(dep_path):
-					print "INFO: can't find the dependency " + dep.name
-					print "Search in the cache repository..."
+			else:
+				# branch found, have to clone it
+				ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', target.name, '--', cache_repo, '.'], cwd=dep_path)
+				if ret:
+					print "ERROR: git clone --depth 1 --branch " + target.name + ' -- ' + cache_repo + ' .'
+					return
+			
+		# use cache :)
+		self.context.env['INCLUDES_' + dep.name]		= list_include(self.context, [dep_path_include])
+		self.context.env['LIBPATH_' + dep.name]		= list_include(self.context, [dep_path])
+		self.context.env['LIB_' + dep.name]			= dep.name + variant()
+		config.use.append(dep.name)
 
-					os.makedirs(dep_path)
+		distutils.dir_util.copy_tree(dep_path, os.path.join(self.context.out_dir, targetpath))
 
-					# search the corresponding branch in the cache repo (with the right version)
-					ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_name])
-					if ret:
-						# no such a branch, have to build and cache
+	def make_target_filename(self, target):
 
-						# building
-						build_dir = os.path.join(cache_dir, 'build')
-						if os.path.exists(build_dir):
-							shutil.rmtree(build_dir)
-						os.makedirs(build_dir)
-						
-						ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version, '--', dep.repository, '.'], cwd=build_dir)
-						if ret:
-							print "ERROR: cloning " + dep.repository + ' ' + dep_version
-							return
+		target_name = target.name
 
-						golem_dir = os.path.join(build_dir, os.path.join('build', 'golem'))
-						if not os.path.exists(golem_dir):
-							print "ERROR: can't find golem to build the dependency"
-							return
-						
-						ret = subprocess.call(['make', 'configure'], cwd=build_dir)
-						if ret:
-							print "ERROR: dependency configure failed"
-							return
+		if target.type == 'library':
+			target_name = 'lib' + target_name
 
-						ret = subprocess.call(['make', 'all', 'runtime=' + bld.options.runtime, 'link=' + bld.options.link, 'arch=' + bld.options.arch, 'variant=' + bld.options.variant], cwd=build_dir)
-						if ret:
-							print "ERROR: dependency build failed"
-							return
+		target_name += self.variant()
+		return target_name
 
-						# caching
-						ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
-						if ret:
-							print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
-							return
-						ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
-						if ret:
-							print "ERROR: git checkout -b " + target.name
-						
-						bin_dir = os.path.join(golem_dir, 'out')
-						bin_dir = os.path.join(bin_dir, bld.options.variant)
+	def make_target_name(self, target):
 
-						if not os.path.exists(bin_dir):
-							print "ERROR: no binaries found in the dependency build"
-							return
+		target_name = target.name
+		target_path = self.context.options.variant
 
-						distutils.dir_util.copy_tree(bin_dir, dep_path)
+		if target.type == 'library':
+			if self.is_windows():
+				target_name = 'lib' + target_name
 
-						include_dir = os.path.join(build_dir, 'include')
+		target_name += self.variant()
+		return target_name
 
-						if not os.path.exists(include_dir):
-							print "ERROR: no include found in the dependency build"
-							return
-						
-						distutils.dir_util.copy_tree(include_dir, dep_path_include)
+	def build_target(self, target):
+		
+		identifier = self.hash_identifier(self.context.env.CXXFLAGS + self.context.env.CFLAGS + self.context.env.LINKFLAGS + self.context.env.ARFLAGS + self.context.env.DEFINES)
+		cachepath = target.name + '-' + 'master' + '-' + self.build_path() + '-' + identifier
 
-					else:
-						# branch found, have to clone it
-						ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', target.name, '--', cache_repo, '.'], cwd=dep_path)
-						if ret:
-							print "ERROR: git clone --depth 1 --branch " + target.name + ' -- ' + cache_repo + ' .'
-							return
-					
-				# use cache :)
-				bld.env['INCLUDES_' + dep.name]		= list_include(bld, [dep_path_include])
-				bld.env['LIBPATH_' + dep.name]		= list_include(bld, [dep_path])
-				bld.env['LIB_' + dep.name]			= dep.name + variant(bld)
-				config.use.append(dep.name)
+		config = Configuration()
+		config.merge(self, target.configs)
 
-				distutils.dir_util.copy_tree(dep_path, os.path.join(bld.out_dir, targetpath))
+		for use_name in config.use:
+			for export in self.project.exports:
+				if use_name == export.name:
+					config.merge(self, export.configs)
 
+		for dep_name in config.deps:
+			for dep in self.project.deps:
+				if dep_name == dep.name:
+					link_dependency(dep)
+		
+		targetname = self.make_target_name(target)
 
-	if target.type == 'library':
-		prefix = ''
-		if is_windows():
-			prefix = 'lib'
-		targetname = targetpath + '/' + prefix + target.name + variant(bld)
-	elif target.type == 'program':
-		targetname = targetpath + '/' + target.name + variant(bld)
+		project_qt = False
+		if any([feature.startswith("QT5") for feature in config.features]):
+			project_qt = True
 
-	project_qt = False
-	if any([feature.startswith("QT5") for feature in config.features]):
-		project_qt = True
+		listinclude = self.list_include(self.make_project_path_array(config.includes))
+		listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(context, config.source)) + self.list_qt_ui(context, self.make_project_path_array(context, config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
+		listmoc = self.list_moc(self.make_project_path_array(config.includes + config.source)) if project_qt else []
+		
+		build_fun = None
 
-	listinclude = list_include(bld, make_project_path_array(bld, config.includes))
-	listsource = list_source(bld, make_project_path_array(bld, config.source)) + list_qt_qrc(bld, make_project_path_array(bld, config.source)) + list_qt_ui(bld, make_project_path_array(bld, config.source)) if project_qt else list_source(bld, make_project_path_array(bld, config.source))
-	listmoc = list_moc(bld, make_project_path_array(bld, config.includes + config.source)) if project_qt else []
-	
-	if target.type == 'library':
-		if is_shared(bld):
-			ttarget = bld.shlib(
-				defines			= config.defines,
-				includes		= listinclude,
-				source			= listsource,
-				target			= targetname,
-				name			= target.name,
-				cxxflags		= config.cxxflags,
-				cflags			= config.cxxflags,
-				linkflags		= config.linkflags,
-				use				= config.use + config.features,
-				moc 			= listmoc,
-				features 		= 'qt5' if project_qt else ''
-			)
-		elif is_static(bld):
-			ttarget = bld.stlib(
-				defines			= config.defines,
-				includes		= listinclude,
-				source			= listsource,
-				target			= targetname,
-				name			= target.name,
-				cxxflags		= config.cxxflags,
-				cflags			= config.cxxflags,
-				linkflags		= config.linkflags,
-				use				= config.use + config.features,
-				moc 			= listmoc,
-				features 		= 'qt5' if project_qt else ''
-			)
+		if target.type == 'library':
+			if self.is_shared():
+				build_fun = self.context.shlib
+			elif self.is_static():
+				build_fun = self.context.stlib
+			else:
+				print "ERROR: no options found"
+				return
+		elif target.type == 'program':
+			build_fun = self.context.program
 		else:
 			print "ERROR: no options found"
 			return
-
-	elif target.type == 'program':
-		ttarget = bld.program(
+		
+		ttarget = build_fun(
 			defines			= config.defines,
 			includes		= listinclude,
 			source			= listsource,
@@ -838,183 +879,215 @@ def build_target(project, target):
 			linkflags		= config.linkflags,
 			use				= config.use + config.features,
 			moc 			= listmoc,
-			features 		= 'qt5' if project_qt else ''
-		)
-	
-	if config.system:
-		dep_system(
-			bld		= ttarget,
-			libs	= config.system
+			features 		= 'qt5' if project_qt else '',
+			install_path 	= None
 		)
 
-def configure(conf):
-	features_to_load = ['compiler_cxx']
+		if config.system:
+			self.dep_system(
+				context		= ttarget,
+				libs	= config.system
+			)
 
-	project_path = os.path.join(conf.options.dir, 'project.glm')
-	if os.path.exists(project_path):
-		project_config = imp.load_source('project', project_path)
-		pro = Project()
-		if hasattr(project_config, 'configure'):
-			project_config.configure(pro)
-		if pro.qt:
+		#pkl_file = open('mypro.pkl', 'rb')
+		#pro2 = pickle.load(pkl_file)
+		#pkl_file.close()
+
+	def configure(self):
+
+		# features list
+		features_to_load = ['compiler_cxx']
+
+		# qt check
+		if self.project.qt:
 			features_to_load.append('qt5')
-			if os.path.exists(pro.qtdir):
-				conf.options.qtdir = pro.qtdir
+			if os.path.exists(self.project.qtdir):
+				self.context.options.qtdir = self.project.qtdir
 
-	conf.setenv('x86')
-	if is_windows():
-		conf.env.MSVC_VERSIONS = ['msvc 14.0']
-		conf.env.MSVC_TARGETS = ['x86']
-	conf.load(features_to_load)
+		# configure x86 context
+		self.context.setenv('x86')
+		if self.is_windows():
+			self.context.env.MSVC_VERSIONS = ['msvc 14.0']
+			self.context.env.MSVC_TARGETS = ['x86']
+		self.context.load(features_to_load)
 
-	conf.setenv('x64')
-	if is_windows():
-		conf.env.MSVC_VERSIONS = ['msvc 14.0']
-		conf.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
-	conf.load(features_to_load)
+		# configure x64 context
+		self.context.setenv('x64')
+		if self.is_windows():
+			self.context.env.MSVC_VERSIONS = ['msvc 14.0']
+			self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
+		self.context.load(features_to_load)
 
-def build(bld):
-	global bldcontext
-	bldcontext = bld
+	def build_path(self):
+		return self.osname() + '-' + self.arch_min() + '-' + self.compiler_min() + '-' + self.runtime_min() + '-' + self.link_min() + '-' + self.variant_min()
 
-	project_path = os.path.join(bld.options.dir, 'project.glm')
-	if not os.path.exists(project_path):
-		print "ERROR: can't find " + project_path
-		return
-	
-	project_config = imp.load_source('project', project_path)
+	def build(self):
 
-	bld.load_envs()
-	if is_x86(bld):
-		bld.env = bld.all_envs['x86'].derive()
-	else:
-		bld.env = bld.all_envs['x64'].derive()
+		self.environment()
 
-	configure_init(bld)
-	configure_default(bld)
+		for target in self.project.targets:
+			self.build_target(target)
 
-	if is_debug(bld):
-		configure_debug(bld)
-	else:
-		configure_release(bld)
+		self.module.script(self)
 
-	bld.env.CFLAGS = bld.env.CXXFLAGS
-	
-	global buildpath
-	buildpath = osname_min() + '-' + compiler_min(bld) + '-' + arch_min(bld) + '-' + runtime_min(bld) + '-' + link_min(bld) + '-' + variant_min(bld)
-
-	pro = Project()
-	if hasattr(project_config, 'configure'):
-		project_config.configure(pro)
-
-	for target in pro.targets:
-		build_target(pro, target)
-
-	pro = Project()
-	if hasattr(project_config, 'script'):
-		project_config.script(sys.modules[__name__])
-
-	if bld.options.test:
-		pass
-
-def repo_clear(path):
-	output = subprocess.check_output(['git', 'status', '-s'], cwd=path)
-	if output:
-		print(output)
-		return False
-	return True
-
-def repo_dirty(path):
-	return not repo_clear(path)
-
-# commit build (all) to specific repository (according project file)
-def release(bld):
-	project_path = os.path.join(bld.options.dir, 'project.glm')
-	if not os.path.exists(project_path):
-		print "ERROR: no project file found " + project_path
-		return
-
-	if bld.options.major:
-		bumping = 'major'
-	elif bld.options.minor:
-		bumping = 'minor'
-	elif bld.options.patch:
-		bumping = 'patch'
-	else:
-		print('Usage: release { major | minor | patch }')
-		return
-	
-	with io.open(project_path, 'rb') as f:
-		file_content = f.read().decode('utf-8')
-	match = re.search('VERSION\s*=\s*(.*)', file_content)
-
-	if not match:
-		print "ERROR: No VERSION found in the project file"
-		print "Before trying to Release, you should define a VERSION variable in your project. VERSION is a string using Semantic Versioning. Example: VERSION = 'v1.0.0'"
-		return
-	else:
-		found = True
-		version = match.group(1).strip('\'"')
-
-	if repo_dirty(bld.options.dir):
-		print("Your repository is dirty. You have to commit before releasing!")
-		return
-
-	parse = re.compile(r"(?P<major>\d+)\.?(?P<minor>\d+)?\.?(?P<patch>\d+)?(\-(?P<release>[a-z]+))?", re.VERBOSE)
-	match = parse.search(version)
-	
-	parsed = {}
-	if not match:
-		print("Unrecognized version format")
-		return
-	
-	for key, value in match.groupdict().items():
-		if key == 'release':
-			if value is None:
-				parsed[key] = None
-			else:
-				parsed[key] = str(value)
-		else:
-			if value is None:
-				parsed[key] = 0
-			else:
-				parsed[key] = int(value)
-
-	bumped = False
-
-	for key, value in parsed.items():
-		if bumped:
-			parsed[key] = 0
-		elif key == bumping:
-			parsed[key] = value + 1
-			bumped = True
-
-	serialized = 'v{major}.{minor}.{patch}'
-	
-	if parsed['release'] is not None:
-		serialized += '-{release}'
-
-	newversion = serialized.format(**parsed)
-	
-	default_message = "Bump " + str(version) + " to " + newversion
-	message = default_message
-
-	file_content = re.sub('^VERSION\s*=\s*(.*)', 'VERSION = \'' + newversion + '\'', file_content, flags=re.MULTILINE)
-	
-	with io.open(project_path, 'wb') as f:
-		file_content = file_content.encode('utf-8')
-		f.write(file_content)
-	
-	output = subprocess.check_output(['git', 'add', 'project.glm'], cwd=bld.options.dir)
-	if output:
-		print output
-
-	output = subprocess.check_output(['git', 'commit', '-m', message], cwd=bld.options.dir)
-	if output:
-		print output
-	
-	output = subprocess.check_output(['git', 'tag', '-a', newversion, '-m', message], cwd=bld.options.dir)
-	if output:
-		print output
+	def export(self):
 		
-	print "Released " + newversion
+		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in project.targets]
+		for export in self.project.exports:
+			if export.name in targets:
+				
+				config = Configuration()
+				config.merge(self, export.configs)
+
+				outpath = os.path.join(self.context.options.export, export.name)
+
+				if not os.path.exists(outpath):
+					os.makedirs(outpath)
+
+				includes = config.includes
+				config.includes = []
+
+				outpath_include = os.path.join(outpath, 'include')
+				if not os.path.exists(outpath_include):
+					os.makedirs(outpath_include)
+				config.includes.append(outpath_include)
+
+				for include in includes:
+					distutils.dir_util.copy_tree(self.make_project_path(include), outpath_include)
+
+				outpath_lib = os.path.join(outpath, self.build_path())
+				if not os.path.exists(outpath_lib):
+					os.makedirs(outpath_lib)
+
+				target_path = os.path.join(self.context.out_dir, 'lib' + self.make_target_filename(export) + '.so')
+				shutil.copy(target_path, outpath_lib)
+
+				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
+				pickle.dump(config, output)
+				output.close()
+
+	def repo_clear(path):
+		output = subprocess.check_output(['git', 'status', '-s'], cwd=path)
+		if output:
+			print(output)
+			return False
+		return True
+
+	def repo_dirty(path):
+		return not repo_clear(path)
+
+	# commit build (all) to specific repository (according project file)
+	def release(self):
+		project_path = os.path.join(self.get_project_dir(), 'project.glm')
+		if not os.path.exists(project_path):
+			print "ERROR: no project file found " + project_path
+			return
+
+		if self.context.options.major:
+			bumping = 'major'
+		elif self.context.options.minor:
+			bumping = 'minor'
+		elif self.context.options.patch:
+			bumping = 'patch'
+		else:
+			print('Usage: release { major | minor | patch }')
+			return
+		
+		with io.open(project_path, 'rb') as f:
+			file_content = f.read().decode('utf-8')
+		match = re.search('VERSION\s*=\s*(.*)', file_content)
+
+		if not match:
+			print "ERROR: No VERSION found in the project file"
+			print "Before trying to Release, you should define a VERSION variable in your project. VERSION is a string using Semantic Versioning. Example: VERSION = 'v1.0.0'"
+			return
+		else:
+			found = True
+			version = match.group(1).strip('\'"')
+
+		if repo_dirty(self.get_project_dir()):
+			print("Your repository is dirty. You have to commit before releasing!")
+			return
+
+		parse = re.compile(r"(?P<major>\d+)\.?(?P<minor>\d+)?\.?(?P<patch>\d+)?(\-(?P<release>[a-z]+))?", re.VERBOSE)
+		match = parse.search(version)
+		
+		parsed = {}
+		if not match:
+			print("Unrecognized version format")
+			return
+		
+		for key, value in match.groupdict().items():
+			if key == 'release':
+				if value is None:
+					parsed[key] = None
+				else:
+					parsed[key] = str(value)
+			else:
+				if value is None:
+					parsed[key] = 0
+				else:
+					parsed[key] = int(value)
+
+		bumped = False
+
+		for key, value in parsed.items():
+			if bumped:
+				parsed[key] = 0
+			elif key == bumping:
+				parsed[key] = value + 1
+				bumped = True
+
+		serialized = 'v{major}.{minor}.{patch}'
+		
+		if parsed['release'] is not None:
+			serialized += '-{release}'
+
+		newversion = serialized.format(**parsed)
+		
+		default_message = "Bump " + str(version) + " to " + newversion
+		message = default_message
+
+		file_content = re.sub('^VERSION\s*=\s*(.*)', 'VERSION = \'' + newversion + '\'', file_content, flags=re.MULTILINE)
+		
+		with io.open(project_path, 'wb') as f:
+			file_content = file_content.encode('utf-8')
+			f.write(file_content)
+		
+		output = subprocess.check_output(['git', 'add', 'project.glm'], cwd=self.get_project_dir())
+		if output:
+			print output
+
+		output = subprocess.check_output(['git', 'commit', '-m', message], cwd=self.get_project_dir())
+		if output:
+			print output
+		
+		output = subprocess.check_output(['git', 'tag', '-a', newversion, '-m', message], cwd=self.get_project_dir())
+		if output:
+			print output
+			
+		print "Released " + newversion
+
+
+def get_context(context):
+	global global_context
+	if not 'global_context' in globals():
+		global_context = Context(context)
+
+	global_context.context = context
+	return global_context
+
+def options(context):
+	Context.options(context)
+
+def configure(context):
+	ctx = get_context(context)
+	ctx.configure()
+
+def build(context):
+	ctx = get_context(context)
+	ctx.build()
+
+def export(context):
+	ctx = get_context(context)
+	ctx.export()

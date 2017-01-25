@@ -7,8 +7,11 @@ import imp
 builder = imp.load_source('builder', 'builder')
 
 import os
-top = os.path.dirname(os.path.abspath('__file__'))
+top = ''
 out = 'out'
+
+from waflib import Configure
+Configure.autoconfig = True 
 
 def options(opt):
 	builder.options(opt)
@@ -30,10 +33,19 @@ def build(bld):
 	bld.options.link = bld.options.link.lower()
 	bld.options.variant = bld.options.variant.lower()
 
+	if bld.options.export:
+		if os.path.exists(bld.options.export):
+			bld.add_post_fun(builder.export)
+		else:
+			print "ERROR: export path doesn't exist"
+			return
+
 	builder.build(bld)
 
 from waflib.Build import BuildContext, CleanContext, \
         InstallContext, UninstallContext
+
+# All build combinations
 
 all_build = []
 
@@ -47,6 +59,8 @@ for arch in 'x86 x64'.split():
 				opt_variant = variant
 				all_build.append(cmd)
 
+# Everything
+
 def everything(bld):
 	import waflib.Options
 	waflib.Options.commands = ['configure'] + all_build + waflib.Options.commands
@@ -56,9 +70,18 @@ class tmp(Context):
 	cmd = 'everything'
 	fun = 'everything'
 
-def test(bld):
+# Rebuild
+
+def rebuild(bld):
 	import waflib.Options
-	waflib.Options.commands = ['configure', 'build'] + waflib.Options.commands
+	waflib.Options.commands = ['distclean', 'configure', 'build'] + waflib.Options.commands
+
+from waflib.Context import Context
+class tmp(Context):
+	cmd = 'rebuild'
+	fun = 'rebuild'
+
+# Release
 
 def release(bld):
 	builder.release(bld)
@@ -67,6 +90,8 @@ from waflib.Context import Context
 class tmp(Context):
 	cmd = 'release'
 	fun = 'release'
+
+# Qt stuff
 
 from waflib.TaskGen import feature, before_method, after_method
 @feature('cxx')

@@ -1,0 +1,14 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import subprocess
+
+sys.dont_write_bytecode = True
+
+print "=== Golem C++ Build System ==="
+sys.stdout.flush()
+
+argv = ['python', 'waf'] + sys.argv[1:] + ['--dir=' + os.getcwd()]
+cwd = os.path.dirname(os.path.abspath(__file__))
+subprocess.call(argv, cwd = cwd)
