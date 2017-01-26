@@ -80,8 +80,10 @@ class Condition:
 		return False
 
 class Configuration:
-	def __init__(self, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, features = None, deps = None, use = None, **kwargs):
+	def __init__(self, target = None, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, features = None, deps = None, use = None, **kwargs):
 		self.condition = Condition(**kwargs)
+
+		self.target = '' if target is None else target
 
 		self.defines = [] if defines is None else defines
 		self.includes = [] if includes is None else includes
@@ -149,12 +151,14 @@ class Project:
 	def __str__(self):
 		return print_obj(self)
 
-	def target(self, type, name, defines = None, includes = None, source = None, features = None, deps = None, use = None):
+	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None):
 		target = Target()
 		target.type = type
 		target.name = name
 		
 		config = Configuration()
+
+		config.target = '' if target is None else target
 
 		config.defines = [] if defines is None else defines
 		config.includes = [] if includes is None else includes
@@ -798,26 +802,30 @@ class Context:
 		filepkl.close()
 		config.merge(self.context, [depconfig])
 
-	def make_target_filename(self, target):
+	def make_target_by_config(self, config, target):
+		if config.target:
+			return config.target
+		else:
+			return target.name + self.variant()
 
-		target_name = target.name
+
+	def make_target_filename(self, config, target):
+
+		target_name = self.make_target_by_config(config, target)
 
 		if target.type == 'library':
 			target_name = 'lib' + target_name
 
-		target_name += self.variant()
 		return target_name
 
-	def make_target_name(self, target):
+	def make_target_name(self, config, target):
 
-		target_name = target.name
-		target_path = self.context.options.variant
+		target_name = self.make_target_by_config(config, target)
 
 		if target.type == 'library':
 			if self.is_windows():
 				target_name = 'lib' + target_name
 
-		target_name += self.variant()
 		return target_name
 
 	def build_target(self, target):
@@ -838,7 +846,7 @@ class Context:
 				if dep_name == dep.name:
 					self.link_dependency(config, dep)
 		
-		targetname = self.make_target_name(target)
+		targetname = self.make_target_name(config, target)
 
 		project_qt = False
 		if any([feature.startswith("QT5") for feature in config.features]):
@@ -951,7 +959,7 @@ class Context:
 				if not os.path.exists(outpath_lib):
 					os.makedirs(outpath_lib)
 
-				target_path = os.path.join(self.context.out_dir, 'lib' + self.make_target_filename(export) + '.so')
+				target_path = os.path.join(self.context.out_dir, 'lib' + self.make_target_filename(config, export) + '.so')
 				shutil.copy(target_path, outpath_lib)
 
 				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
