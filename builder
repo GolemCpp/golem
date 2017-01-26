@@ -101,6 +101,8 @@ class Configuration:
 		return print_obj(self)
 
 	def append(self, config):
+		self.target = config.target
+
 		self.defines += config.defines
 		self.includes += config.includes
 		self.source += config.source
@@ -626,8 +628,8 @@ class Context:
 		# copy cxxflags to cflags
 		self.context.env.CFLAGS = self.context.env.CXXFLAGS
 
-	def dep_system(self, libs):
-		self.context.env['LIB'] += libs
+	def dep_system(self, context, libs):
+		context.env['LIB'] += libs
 		
 	def dep_static_release(self, name, fullname, lib):
 		
@@ -724,9 +726,11 @@ class Context:
 		dep_path_include = os.path.join(dep_path, 'include')
 		dep_path_build = os.path.join(dep_path, self.build_path())
 
-		if os.path.exists(dep_path):
-			shutil.rmtree(dep_path)
-		os.makedirs(dep_path)
+		#if os.path.exists(dep_path):
+		#	shutil.rmtree(dep_path)
+		#os.makedirs(dep_path)
+		if not os.path.exists(dep_path):
+			os.makedirs(dep_path)
 
 		if not os.path.exists(dep_path_build):
 			print "INFO: can't find the dependency " + dep.name
@@ -792,7 +796,7 @@ class Context:
 		# use cache :)
 		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
 		self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-		self.context.env['LIB_' + dep.name]				= dep.name + self.variant()
+		self.context.env['LIB_' + dep.name]				= self.make_target_by_config(config, dep)
 		config.use.append(dep.name)
 
 		distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
@@ -930,7 +934,7 @@ class Context:
 		for targetname in self.context.targets.split(','):
 			if not targetname in [target.name for target in self.project.targets]:
 				self.context(rule="touch ${TGT}", target=targetname)
-			
+
 	def export(self):
 		
 		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
