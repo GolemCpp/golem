@@ -795,7 +795,7 @@ class Context:
 		self.context.env['LIB_' + dep.name]				= dep.name + self.variant()
 		config.use.append(dep.name)
 
-		distutils.dir_util.copy_tree(dep_path_build, self.context.out_dir)
+		distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
 
 		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
 		depconfig = pickle.load(filepkl)
@@ -808,15 +808,6 @@ class Context:
 		else:
 			return target.name + self.variant()
 
-
-	def make_target_filename(self, config, target):
-
-		target_name = self.make_target_by_config(config, target)
-
-		if target.type == 'library':
-			target_name = 'lib' + target_name
-
-		return target_name
 
 	def make_target_name(self, config, target):
 
@@ -831,10 +822,10 @@ class Context:
 	def make_target_out(self):
 		return 'out'
 
+	def make_out_path(self):
+		return os.path.join(self.context.out_dir, self.make_target_out())
+
 	def build_target(self, target):
-		
-		identifier = self.hash_identifier(self.context.env.CXXFLAGS + self.context.env.CFLAGS + self.context.env.LINKFLAGS + self.context.env.ARFLAGS + self.context.env.DEFINES)
-		cachepath = target.name + '-' + 'master' + '-' + self.build_path() + '-' + identifier
 
 		config = Configuration()
 		config.merge(self, target.configs)
@@ -962,8 +953,7 @@ class Context:
 				if not os.path.exists(outpath_lib):
 					os.makedirs(outpath_lib)
 
-				target_path = os.path.join(self.context.out_dir, self.make_target_out(), 'lib' + self.make_target_filename(config, export) + '.so')
-				shutil.copy(target_path, outpath_lib)
+				distutils.dir_util.copy_tree(self.make_out_path(), outpath_lib)
 
 				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
 				pickle.dump(config, output)

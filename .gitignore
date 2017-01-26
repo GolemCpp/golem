@@ -12,6 +12,7 @@
 .lock*
 waf-*
 out*
+build*
 
 #############
 ## Python
