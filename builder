@@ -927,6 +927,10 @@ class Context:
 
 		self.module.script(self)
 
+		for targetname in self.context.targets.split(','):
+			if not targetname in [target.name for target in self.project.targets]:
+				self.context(rule="touch ${TGT}", target=targetname)
+			
 	def export(self):
 		
 		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
