@@ -660,13 +660,7 @@ class Context:
 		
 	def get_dep_version(self, dep):
 		dep_version = ''
-		if str(dep.version) == 'any':
-			hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'master'])
-			if not hash:
-				print("ERROR: can't find HEAD commit")
-				return
-			dep_version = hash[:8]
-		elif str(dep.version) == 'latest':
+		if str(dep.version) == 'latest':
 			tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
 			tags = tags.split('\n')
 			badtag = ['^{}']
@@ -691,7 +685,11 @@ class Context:
 			#dep_version = hash[:8]
 			dep_version = last
 		else:
-			dep_version = str(dep.version)
+			hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, str(dep.version)])
+			if hash:
+				dep_version = hash[:8]
+			else:
+				dep_version = str(dep.version)
 
 		return dep_version
 
@@ -710,8 +708,13 @@ class Context:
 			os.makedirs(cache_dir)
 
 		dep_version = self.get_dep_version(dep)
+		dep_version_hash = dep_version
+		dep_version_branch = dep_version
+		if dep.version != 'latest' and dep_version != dep.version:
+			dep_version_hash = dep_version
+			dep_version_branch = dep.version
 
-		dep_path_base = dep.name + '-' + dep_version
+		dep_path_base = dep.name + '-' + dep_version_hash
 		dep_path = os.path.join(cache_dir, dep_path_base)
 
 		dep_path_include = os.path.join(dep_path, 'include')
@@ -736,9 +739,9 @@ class Context:
 					shutil.rmtree(build_dir)
 				os.makedirs(build_dir)
 				
-				ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version, '--', dep.repository, '.'], cwd=build_dir)
+				ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
 				if ret:
-					print "ERROR: cloning " + dep.repository + ' ' + dep_version
+					print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
 					return
 
 				golem_dir = os.path.join(build_dir, 'golem')
@@ -784,11 +787,16 @@ class Context:
 			
 		# use cache :)
 		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
-		self.context.env['LIBPATH_' + dep.name]		= self.list_include([dep_path_build])
-		self.context.env['LIB_' + dep.name]			= dep.name + self.variant()
+		self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
+		self.context.env['LIB_' + dep.name]				= dep.name + self.variant()
 		config.use.append(dep.name)
 
 		distutils.dir_util.copy_tree(dep_path_build, self.context.out_dir)
+
+		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
+		depconfig = pickle.load(filepkl)
+		filepkl.close()
+		config.merge(self.context, [depconfig])
 
 	def make_target_filename(self, target):
 
@@ -876,10 +884,6 @@ class Context:
 				context		= ttarget,
 				libs	= config.system
 			)
-
-		#pkl_file = open('mypro.pkl', 'rb')
-		#pro2 = pickle.load(pkl_file)
-		#pkl_file.close()
 
 	def configure(self):
 
