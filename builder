@@ -154,9 +154,9 @@ class Project:
 		return print_obj(self)
 
 	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None):
-		target = Target()
-		target.type = type
-		target.name = name
+		newtarget = Target()
+		newtarget.type = type
+		newtarget.name = name
 		
 		config = Configuration()
 
@@ -170,17 +170,17 @@ class Project:
 		config.deps = [] if deps is None else deps
 		config.use = [] if use is None else use
 
-		target.configs.append(config)
+		newtarget.configs.append(config)
 
 		if type == 'export':
-			self.exports.append(target)
-			return target
+			self.exports.append(newtarget)
+			return newtarget
 
 		if any([feature.startswith("QT5") for feature in config.features]):
 			self.enable_qt()
 
-		self.targets.append(target)
-		return target
+		self.targets.append(newtarget)
+		return newtarget
 
 	def library(self, **kwargs):
 		return self.target(type = 'library', **kwargs)
@@ -932,7 +932,7 @@ class Context:
 		self.module.script(self)
 
 		for targetname in self.context.targets.split(','):
-			if not targetname in [target.name for target in self.project.targets]:
+			if targetname and not targetname in [target.name for target in self.project.targets]:
 				self.context(rule="touch ${TGT}", target=targetname)
 
 	def export(self):
