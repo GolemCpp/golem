@@ -819,11 +819,14 @@ class Context:
 
 		return target_name
 
+	def get_build_path(self):
+		return self.context.out_dir
+
 	def make_target_out(self):
 		return 'out'
 
 	def make_out_path(self):
-		return os.path.join(self.context.out_dir, self.make_target_out())
+		return os.path.join(self.get_build_path(), self.make_target_out())
 
 	def build_target(self, target):
 
@@ -926,7 +929,7 @@ class Context:
 
 	def export(self):
 		
-		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
+		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
 		for export in self.project.exports:
 			if export.name in targets:
 				
