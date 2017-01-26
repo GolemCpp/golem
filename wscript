@@ -8,7 +8,7 @@ builder = imp.load_source('builder', 'builder')
 
 import os
 top = ''
-out = 'out'
+out = 'build'
 
 from waflib import Configure
 Configure.autoconfig = True 

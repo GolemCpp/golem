@@ -828,6 +828,9 @@ class Context:
 
 		return target_name
 
+	def make_target_out(self):
+		return 'out'
+
 	def build_target(self, target):
 		
 		identifier = self.hash_identifier(self.context.env.CXXFLAGS + self.context.env.CFLAGS + self.context.env.LINKFLAGS + self.context.env.ARFLAGS + self.context.env.DEFINES)
@@ -876,7 +879,7 @@ class Context:
 			defines			= config.defines,
 			includes		= listinclude,
 			source			= listsource,
-			target			= targetname,
+			target			= os.path.join(self.make_target_out(), targetname),
 			name			= target.name,
 			cxxflags		= config.cxxflags,
 			cflags			= config.cxxflags,
@@ -959,7 +962,7 @@ class Context:
 				if not os.path.exists(outpath_lib):
 					os.makedirs(outpath_lib)
 
-				target_path = os.path.join(self.context.out_dir, 'lib' + self.make_target_filename(config, export) + '.so')
+				target_path = os.path.join(self.context.out_dir, self.make_target_out(), 'lib' + self.make_target_filename(config, export) + '.so')
 				shutil.copy(target_path, outpath_lib)
 
 				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
