@@ -53,44 +53,6 @@ class CacheConf:
 	def __str__(self):
 		return print_obj(self)
 
-def find_cache_conf(self):
-	settings_path = make_project_path('settings.glm')
-	if not os.path.exists(settings_path):
-		return None
-
-	config = ConfigParser.RawConfigParser()
-	config.read(settings_path)
-
-	if not config.has_section('GOLEM'):
-		return None
-
-	context = CacheConf()
-
-	# cache remote
-	if not config.has_option('GOLEM', 'cache.remote'):
-		return None
-	
-	remote = config.get('GOLEM', 'cache.remote')
-
-	if not remote:
-		return None
-
-	context.remote = remote.strip('\'"')
-
-	# cache location
-	if not config.has_option('GOLEM', 'cache.location'):
-		location = os.path.join(os.path.expanduser("~"), '.cache', 'golem', 'builds')
-	else:
-		location = config.get('GOLEM', 'cache.location')
-
-	if not location:
-		return None
-
-	context.location = location.strip('\'"')
-
-	# return cache configuration
-	return context
-
 class Dependency:
 	def __init__(self, name = None, repository = None, version = None):
 		self.name 		= '' if name is None else name
@@ -469,6 +431,44 @@ class Context:
 		if not self.context.env.ARFLAGS:
 			self.context.env.ARFLAGS=[]
 
+	def find_cache_conf(self):
+		settings_path = self.make_project_path('settings.glm')
+		if not os.path.exists(settings_path):
+			return None
+
+		config = ConfigParser.RawConfigParser()
+		config.read(settings_path)
+
+		if not config.has_section('GOLEM'):
+			return None
+
+		cacheconf = CacheConf()
+
+		# cache remote
+		if not config.has_option('GOLEM', 'cache.remote'):
+			return None
+		
+		remote = config.get('GOLEM', 'cache.remote')
+
+		if not remote:
+			return None
+
+		cacheconf.remote = remote.strip('\'"')
+
+		# cache location
+		if not config.has_option('GOLEM', 'cache.location'):
+			location = os.path.join(os.path.expanduser("~"), '.cache', 'golem', 'builds')
+		else:
+			location = config.get('GOLEM', 'cache.location')
+
+		if not location:
+			return None
+
+		cacheconf.location = location.strip('\'"')
+
+		# return cache configuration
+		return cacheconf
+
 	def configure_default(self):
 		if not self.context.options.nounicode:
 			self.context.env.DEFINES.append('UNICODE')
@@ -658,10 +658,10 @@ class Context:
 		else:
 			self.context.env['LIB_' + name]		= lib
 		
-	def get_dep_version(dep):
+	def get_dep_version(self, dep):
 		dep_version = ''
 		if str(dep.version) == 'any':
-			hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'HEAD'])
+			hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, 'master'])
 			if not hash:
 				print("ERROR: can't find HEAD commit")
 				return
@@ -695,9 +695,9 @@ class Context:
 
 		return dep_version
 
-	def link_dependency(self, dep):
+	def link_dependency(self, config, dep):
 
-		cache_conf = find_cache_conf()
+		cache_conf = self.find_cache_conf()
 		if not cache_conf:
 			print("ERROR: no valid cache configuration found")
 			return
@@ -709,31 +709,26 @@ class Context:
 		if not os.path.exists(cache_dir):
 			os.makedirs(cache_dir)
 
-		dep_version = get_dep_version(dep)
+		dep_version = self.get_dep_version(dep)
 
-		dep_path_base = dep.name + '-' + 'master' + '-' + dep_version
-		dep_path_build = dep_path_base + '-' + buildpath
+		dep_path_base = dep.name + '-' + dep_version
+		dep_path = os.path.join(cache_dir, dep_path_base)
 
-		# dep cache path with the current combination of flags (identifier)
-		dep_path_name = dep_path_build + '-' + identifier
-		dep_path_include = os.path.join(cache_dir, dep_path_base)
-		dep_path = os.path.join(cache_dir, dep_path_name)
+		dep_path_include = os.path.join(dep_path, 'include')
+		dep_path_build = os.path.join(dep_path, self.build_path())
 
-		if not os.path.exists(dep_path):
-			# dep cache path with an independant combination of flags (default)
-			dep_path_name = dep_path_build + '-' + 'default' 
-			dep_path = os.path.join(cache_dir, dep_path_name)
+		if os.path.exists(dep_path):
+			shutil.rmtree(dep_path)
+		os.makedirs(dep_path)
 
-		if not os.path.exists(dep_path):
+		if not os.path.exists(dep_path_build):
 			print "INFO: can't find the dependency " + dep.name
 			print "Search in the cache repository..."
 
-			os.makedirs(dep_path)
-
 			# search the corresponding branch in the cache repo (with the right version)
-			ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_name])
+			ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_build])
 			if ret:
-				# no such a branch, have to build and cache
+				print "Nothing in cache, have to build..."
 
 				# building
 				build_dir = os.path.join(cache_dir, 'build')
@@ -746,46 +741,39 @@ class Context:
 					print "ERROR: cloning " + dep.repository + ' ' + dep_version
 					return
 
-				golem_dir = os.path.join(build_dir, os.path.join('build', 'golem'))
+				golem_dir = os.path.join(build_dir, 'golem')
 				if not os.path.exists(golem_dir):
 					print "ERROR: can't find golem to build the dependency"
 					return
-				
-				ret = subprocess.call(['make', 'configure'], cwd=build_dir)
-				if ret:
-					print "ERROR: dependency configure failed"
-					return
 
-				ret = subprocess.call(['make', 'all', 'runtime=' + self.context.options.runtime, 'link=' + self.context.options.link, 'arch=' + self.context.options.arch, 'variant=' + self.context.options.variant], cwd=build_dir)
-				if ret:
-					print "ERROR: dependency build failed"
-					return
+				ret = subprocess.check_output(['python', 'golem/golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
+				print ret
 
 				# caching
-				ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
-				if ret:
-					print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
-					return
-				ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
-				if ret:
-					print "ERROR: git checkout -b " + target.name
+				#ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
+				#if ret:
+				#	print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
+				#	return
+				#ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
+				#if ret:
+				#	print "ERROR: git checkout -b " + target.name
 				
-				bin_dir = os.path.join(golem_dir, 'out')
-				bin_dir = os.path.join(bin_dir, self.context.options.variant)
+				#bin_dir = os.path.join(golem_dir, 'out')
+				#bin_dir = os.path.join(bin_dir, self.context.options.variant)
 
-				if not os.path.exists(bin_dir):
-					print "ERROR: no binaries found in the dependency build"
-					return
+				#if not os.path.exists(bin_dir):
+				#	print "ERROR: no binaries found in the dependency build"
+				#	return
 
-				distutils.dir_util.copy_tree(bin_dir, dep_path)
+				#distutils.dir_util.copy_tree(bin_dir, dep_path)
 
-				include_dir = os.path.join(build_dir, 'include')
+				#include_dir = os.path.join(build_dir, 'include')
 
-				if not os.path.exists(include_dir):
-					print "ERROR: no include found in the dependency build"
-					return
+				#if not os.path.exists(include_dir):
+				#	print "ERROR: no include found in the dependency build"
+				#	return
 				
-				distutils.dir_util.copy_tree(include_dir, dep_path_include)
+				#distutils.dir_util.copy_tree(include_dir, dep_path_include)
 
 			else:
 				# branch found, have to clone it
@@ -795,12 +783,12 @@ class Context:
 					return
 			
 		# use cache :)
-		self.context.env['INCLUDES_' + dep.name]		= list_include(self.context, [dep_path_include])
-		self.context.env['LIBPATH_' + dep.name]		= list_include(self.context, [dep_path])
-		self.context.env['LIB_' + dep.name]			= dep.name + variant()
+		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
+		self.context.env['LIBPATH_' + dep.name]		= self.list_include([dep_path_build])
+		self.context.env['LIB_' + dep.name]			= dep.name + self.variant()
 		config.use.append(dep.name)
 
-		distutils.dir_util.copy_tree(dep_path, os.path.join(self.context.out_dir, targetpath))
+		distutils.dir_util.copy_tree(dep_path_build, self.context.out_dir)
 
 	def make_target_filename(self, target):
 
@@ -840,7 +828,7 @@ class Context:
 		for dep_name in config.deps:
 			for dep in self.project.deps:
 				if dep_name == dep.name:
-					link_dependency(dep)
+					self.link_dependency(config, dep)
 		
 		targetname = self.make_target_name(target)
 
@@ -932,14 +920,14 @@ class Context:
 
 	def export(self):
 		
-		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in project.targets]
+		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
 		for export in self.project.exports:
 			if export.name in targets:
 				
 				config = Configuration()
 				config.merge(self, export.configs)
 
-				outpath = os.path.join(self.context.options.export, export.name)
+				outpath = self.context.options.export
 
 				if not os.path.exists(outpath):
 					os.makedirs(outpath)
