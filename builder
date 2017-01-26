@@ -101,7 +101,9 @@ class Configuration:
 		return print_obj(self)
 
 	def append(self, config):
-		self.target = config.target
+		
+		if config.target:
+			self.target = config.target
 
 		self.defines += config.defines
 		self.includes += config.includes
