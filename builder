@@ -851,7 +851,7 @@ class Context:
 			project_qt = True
 
 		listinclude = self.list_include(self.make_project_path_array(config.includes))
-		listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(context, config.source)) + self.list_qt_ui(context, self.make_project_path_array(context, config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
+		listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
 		listmoc = self.list_moc(self.make_project_path_array(config.includes + config.source)) if project_qt else []
 		
 		build_fun = None
