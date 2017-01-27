@@ -1,14 +1,33 @@
 #!/usr/bin/env python
 
-import os
 import sys
-import subprocess
-
 sys.dont_write_bytecode = True
+
+import os
+import imp
+import subprocess
 
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
 
+project_path = os.path.join(os.getcwd(), 'project.glm')
+if not os.path.exists(project_path):
+	print "ERROR: no project.glm file found"
+	sys.exit(1)
+
+module = imp.load_source('__golem_project_glm__', project_path)
+
+golem_path = os.path.dirname(os.path.realpath(__file__))
+if hasattr(module, 'GOLEM_PATH'):
+	golem_path = module.GOLEM_PATH
+
+golem_out = ''
+if hasattr(module, 'GOLEM_OUT'):
+	golem_out = module.GOLEM_OUT
+
 argv = ['python', 'waf'] + sys.argv[1:] + ['--dir=' + os.getcwd()]
-cwd = os.path.dirname(os.path.abspath(__file__))
-subprocess.call(argv, cwd = cwd)
+if golem_out:
+	argv.append('--out=' + os.path.join(os.getcwd(), golem_out))
+
+current_dir = os.path.join(os.getcwd(), golem_path)
+subprocess.call(argv, cwd = current_dir)
