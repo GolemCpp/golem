@@ -48,7 +48,7 @@ def print_obj(obj, depth = 5, l = ""):
 class CacheConf:
 	def __init__(self):
 		self.remote = ''
-		self.location = ''
+		self.location = os.path.join(os.path.expanduser("~"), '.cache', 'golem', 'builds')
 
 	def __str__(self):
 		return print_obj(self)
@@ -464,13 +464,8 @@ class Context:
 		cacheconf.remote = remote.strip('\'"')
 
 		# cache location
-		if not config.has_option('GOLEM', 'cache.location'):
-			location = os.path.join(os.path.expanduser("~"), '.cache', 'golem', 'builds')
-		else:
+		if config.has_option('GOLEM', 'cache.location'):
 			location = config.get('GOLEM', 'cache.location')
-
-		if not location:
-			return None
 
 		cacheconf.location = location.strip('\'"')
 
@@ -705,8 +700,7 @@ class Context:
 
 		cache_conf = self.find_cache_conf()
 		if not cache_conf:
-			print("ERROR: no valid cache configuration found")
-			return
+			cache_conf = CacheConf()
 		
 		cache_location = cache_conf.location
 		cache_repo = cache_conf.remote
