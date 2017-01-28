@@ -466,8 +466,8 @@ class Context:
 		# cache location
 		if config.has_option('GOLEM', 'cache.location'):
 			location = config.get('GOLEM', 'cache.location')
-
-		cacheconf.location = location.strip('\'"')
+			
+		cacheconf.location = cacheconf.location.strip('\'"')
 
 		# return cache configuration
 		return cacheconf
@@ -784,18 +784,22 @@ class Context:
 					print "ERROR: git clone --depth 1 --branch " + target.name + ' -- ' + cache_repo + ' .'
 					return
 			
+		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
+		depconfig = pickle.load(filepkl)
+		filepkl.close()
+		
+		config_target = config.target
+		config.merge(self.context, [depconfig])
+		config.target = config_target
+
 		# use cache :)
 		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
 		self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-		self.context.env['LIB_' + dep.name]				= self.make_target_by_config(config, dep)
+		self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
 
 		distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
 
-		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
-		depconfig = pickle.load(filepkl)
-		filepkl.close()
-		config.merge(self.context, [depconfig])
 
 	def make_target_by_config(self, config, target):
 		if config.target:
