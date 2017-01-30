@@ -53,14 +53,57 @@ class CacheConf:
 	def __str__(self):
 		return print_obj(self)
 
+def make_dep_base(dep):
+	return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
+
 class Dependency:
 	def __init__(self, name = None, repository = None, version = None):
 		self.name 		= '' if name is None else name
 		self.repository	= '' if repository is None else repository
 		self.version 	= '' if version is None else version
+		self.resolved_version = ''
 
 	def __str__(self):
 		return print_obj(self)
+
+	def resolve(self):
+		if self.resolved_version:
+			return self.resolved_version
+		
+		dep_version = ''
+		if str(self.version) == 'latest':
+			tags = subprocess.check_output(['git', 'ls-remote', '--tags', self.repository])
+			tags = tags.split('\n')
+			badtag = ['^{}']
+			tmp = ''
+			for line in tags:
+				if '^{}' not in line:
+					tmp += line + '\n'
+			tags = tmp
+			versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
+			versions_list = set(versions_list)
+			versions_list = list(versions_list)
+			versions_list.sort(key=lambda s: map(int, s.split('.')))
+			last = versions_list[-1:]
+			if not last:
+				print("ERROR: no latest version")
+				return
+			last = 'v' + last[0]
+			hash = subprocess.check_output(['git', 'ls-remote', '--tags', self.repository, last])
+			if not hash:
+				print("ERROR: can't find " + last)
+				return
+			#dep_version = hash[:8]
+			dep_version = last
+		else:
+			hash = subprocess.check_output(['git', 'ls-remote', '--heads', self.repository, str(self.version)])
+			if hash:
+				dep_version = hash[:8]
+			else:
+				dep_version = str(self.version)
+
+		self.resolved_version = dep_version
+		return self.resolved_version
 
 class Condition:
 	def __init__(self, variant = None, linking = None, runtime = None, osystem = None, arch = None, compiler = None):
@@ -155,6 +198,25 @@ class Project:
 	def __str__(self):
 		return print_obj(self)
 
+	def deps_resolve(self):
+		cache = []
+		for dep in self.deps:
+			dep.resolve()
+			cache.append([dep.name, dep.version, dep.resolve()])
+		return cache
+
+	def deps_load(self, cache):
+		for i, dep in enumerate(self.deps):
+			for item in cache:
+				if item[0] == dep.name and item[1] == dep.version:
+					print item[0] + " : " + item[1] + " -> " + item[2]
+					self.deps[i].resolved_version = item[2]
+					break;
+			if not self.deps[i].resolved_version:
+				print dep.name + " : no cached version"
+
+		sys.stdout.flush()
+
 	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None):
 		newtarget = Target()
 		newtarget.type = type
@@ -241,12 +303,24 @@ class Module:
 		if hasattr(self.module, 'script'):
 			self.module.script(context)
 
-
 class Context:
 	def __init__(self, context):
 		self.context = context
 		self.module = Module(self.get_project_dir())
 		self.project = self.module.project()
+		self.resolve()
+
+	def resolve(self):
+		deps_cache_file = self.make_build_path('deps.cache')
+		if os.path.exists(deps_cache_file):
+			cache = None
+			with io.open(deps_cache_file, 'rb') as file:
+				cache = pickle.load(file)
+			self.project.deps_load(cache)
+		else:
+			cache = self.project.deps_resolve()
+			with io.open(deps_cache_file, 'wb') as file:
+				pickle.dump(cache, file)
 
 	def get_project_dir(self):
 		return self.context.options.dir
@@ -660,41 +734,6 @@ class Context:
 			self.context.env['LIB_' + name]		= libdebug
 		else:
 			self.context.env['LIB_' + name]		= lib
-		
-	def get_dep_version(self, dep):
-		dep_version = ''
-		if str(dep.version) == 'latest':
-			tags = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository])
-			tags = tags.split('\n')
-			badtag = ['^{}']
-			tmp = ''
-			for line in tags:
-				if '^{}' not in line:
-					tmp += line + '\n'
-			tags = tmp
-			versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
-			versions_list = set(versions_list)
-			versions_list = list(versions_list)
-			versions_list.sort(key=lambda s: map(int, s.split('.')))
-			last = versions_list[-1:]
-			if not last:
-				print("ERROR: no latest version")
-				return
-			last = 'v' + last[0]
-			hash = subprocess.check_output(['git', 'ls-remote', '--tags', dep.repository, last])
-			if not hash:
-				print("ERROR: can't find " + last)
-				return
-			#dep_version = hash[:8]
-			dep_version = last
-		else:
-			hash = subprocess.check_output(['git', 'ls-remote', '--heads', dep.repository, str(dep.version)])
-			if hash:
-				dep_version = hash[:8]
-			else:
-				dep_version = str(dep.version)
-
-		return dep_version
 
 	def link_dependency(self, config, dep):
 
@@ -709,14 +748,12 @@ class Context:
 		if not os.path.exists(cache_dir):
 			os.makedirs(cache_dir)
 
-		dep_version = self.get_dep_version(dep)
-		dep_version_hash = dep_version
+		dep_version = dep.resolve()
 		dep_version_branch = dep_version
 		if dep.version != 'latest' and dep_version != dep.version:
-			dep_version_hash = dep_version
 			dep_version_branch = dep.version
 
-		dep_path_base = dep.name + '-' + dep_version_hash
+		dep_path_base = make_dep_base(dep)
 		dep_path = os.path.join(cache_dir, dep_path_base)
 
 		dep_path_include = os.path.join(dep_path, 'include')
@@ -728,62 +765,74 @@ class Context:
 		if not os.path.exists(dep_path):
 			os.makedirs(dep_path)
 
-		if not os.path.exists(dep_path_build):
-			print "INFO: can't find the dependency " + dep.name
-			print "Search in the cache repository..."
+		should_copy = False
+		beacon_build_done = self.make_build_path(dep_path_base + '.build')
 
-			# search the corresponding branch in the cache repo (with the right version)
-			ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_build])
-			if ret:
-				print "Nothing in cache, have to build..."
+		if not os.path.exists(beacon_build_done):
+			should_copy = True
 
-				# building
-				build_dir = os.path.join(cache_dir, 'build')
-				if os.path.exists(build_dir):
-					shutil.rmtree(build_dir)
-				os.makedirs(build_dir)
+			if not os.path.exists(dep_path_build):
+				print "INFO: can't find the dependency " + dep.name
+				print "Search in the cache repository..."
+
+				should_build = True
+				# search the corresponding branch in the cache repo (with the right version)
+				if cache_repo:
+					ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_build])
+					if not ret:
+						should_build = False
+						
+				if should_build:
+					print "Nothing in cache, have to build..."
+
+					# building
+					build_dir = os.path.join(cache_dir, 'build')
+					if os.path.exists(build_dir):
+						shutil.rmtree(build_dir)
+					os.makedirs(build_dir)
+					
+					ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
+					if ret:
+						print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
+						return
+
+					ret = subprocess.check_output(['python', 'project.glm', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
+					print ret
+
+					# caching
+					#ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
+					#if ret:
+					#	print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
+					#	return
+					#ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
+					#if ret:
+					#	print "ERROR: git checkout -b " + target.name
+					
+					#bin_dir = os.path.join(golem_dir, 'out')
+					#bin_dir = os.path.join(bin_dir, self.context.options.variant)
+
+					#if not os.path.exists(bin_dir):
+					#	print "ERROR: no binaries found in the dependency build"
+					#	return
+
+					#distutils.dir_util.copy_tree(bin_dir, dep_path)
+
+					#include_dir = os.path.join(build_dir, 'include')
+
+					#if not os.path.exists(include_dir):
+					#	print "ERROR: no include found in the dependency build"
+					#	return
+					
+					#distutils.dir_util.copy_tree(include_dir, dep_path_include)
+
+				else:
+					# branch found, have to clone it
+					ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', target.name, '--', cache_repo, '.'], cwd=dep_path)
+					if ret:
+						print "ERROR: git clone --depth 1 --branch " + target.name + ' -- ' + cache_repo + ' .'
+						return
+
 				
-				ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
-				if ret:
-					print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
-					return
-
-				ret = subprocess.check_output(['python', 'project.glm', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
-				print ret
-
-				# caching
-				#ret = subprocess.call(['git', 'clone', '--depth', '1', '--', cache_repo, '.'], cwd=dep_path)
-				#if ret:
-				#	print "ERROR: git clone --depth 1 -- " + cache_repo + ' .'
-				#	return
-				#ret = subprocess.call(['git', 'checkout', '-b', target.name], cwd=dep_path)
-				#if ret:
-				#	print "ERROR: git checkout -b " + target.name
-				
-				#bin_dir = os.path.join(golem_dir, 'out')
-				#bin_dir = os.path.join(bin_dir, self.context.options.variant)
-
-				#if not os.path.exists(bin_dir):
-				#	print "ERROR: no binaries found in the dependency build"
-				#	return
-
-				#distutils.dir_util.copy_tree(bin_dir, dep_path)
-
-				#include_dir = os.path.join(build_dir, 'include')
-
-				#if not os.path.exists(include_dir):
-				#	print "ERROR: no include found in the dependency build"
-				#	return
-				
-				#distutils.dir_util.copy_tree(include_dir, dep_path_include)
-
-			else:
-				# branch found, have to clone it
-				ret = subprocess.call(['git', 'clone', '--depth', '1', '--branch', target.name, '--', cache_repo, '.'], cwd=dep_path)
-				if ret:
-					print "ERROR: git clone --depth 1 --branch " + target.name + ' -- ' + cache_repo + ' .'
-					return
-			
 		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
 		depconfig = pickle.load(filepkl)
 		filepkl.close()
@@ -798,8 +847,10 @@ class Context:
 		self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
 
-		distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
-
+		if should_copy:
+			distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
+			with io.open(self.make_build_path(dep_path_base + '.build'), 'wb') as file:
+				file.write('done')
 
 	def make_target_by_config(self, config, target):
 		if config.target:
@@ -819,13 +870,16 @@ class Context:
 		return target_name
 
 	def get_build_path(self):
-		return self.context.out_dir
+		return self.context.out_dir if self.context.out_dir else self.context.options.out if self.context.options.out else ''
+
+	def make_build_path(self, path):
+		return os.path.join(self.get_build_path(), path)
 
 	def make_target_out(self):
 		return 'out'
 
 	def make_out_path(self):
-		return os.path.join(self.get_build_path(), self.make_target_out())
+		return self.make_build_path(self.make_target_out())
 
 	def build_target(self, target):
 
