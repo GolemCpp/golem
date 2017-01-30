@@ -965,15 +965,27 @@ class Context:
 				pickle.dump(config, output)
 				output.close()
 
-	def repo_clear(path):
+	def repo_clear(self, path):
 		output = subprocess.check_output(['git', 'status', '-s'], cwd=path)
 		if output:
 			print(output)
 			return False
 		return True
 
-	def repo_dirty(path):
+	def repo_dirty(self, path):
 		return not repo_clear(path)
+
+	def format(self):
+		paths = []
+		for target in self.project.targets:
+			for config in target.configs:
+				paths += config.includes
+				paths += config.source
+		paths = [self.make_project_path(path) for path in paths]
+		ret = subprocess.call(['python', 'astyle'] + paths)
+		if ret:
+			print "ERROR: astyle " + str(paths)
+			return
 
 	# commit build (all) to specific repository (according project file)
 	def release(self):
@@ -1086,6 +1098,14 @@ def configure(context):
 def build(context):
 	ctx = get_context(context)
 	ctx.build()
+
+def format(context):
+	ctx = get_context(context)
+	ctx.format()
+
+def release(context):
+	ctx = get_context(context)
+	ctx.release()
 
 def export(context):
 	ctx = get_context(context)

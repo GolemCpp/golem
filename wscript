@@ -81,6 +81,16 @@ class tmp(Context):
 	cmd = 'rebuild'
 	fun = 'rebuild'
 
+# Format
+
+def format(bld):
+	builder.format(bld)
+
+from waflib.Context import Context
+class tmp(Context):
+	cmd = 'format'
+	fun = 'format'
+
 # Release
 
 def release(bld):
