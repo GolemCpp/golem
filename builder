@@ -870,7 +870,7 @@ class Context:
 		return target_name
 
 	def get_build_path(self):
-		return self.context.out_dir if self.context.out_dir else self.context.options.out if self.context.options.out else ''
+		return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
 
 	def make_build_path(self, path):
 		return os.path.join(self.get_build_path(), path)
