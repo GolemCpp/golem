@@ -260,9 +260,10 @@ class Project:
 		self.deps.append(dep)
 		return dep
 
-	def enable_qt(self, path = ''):
+	def enable_qt(self, path = None):
 		self.qt = True
-		self.qtdir = path
+		if path:
+			self.qtdir = path
 
 	def linux_check_packages(*packages):
 		installed_packages = subprocess.check_output(['dpkg', '-l'])
@@ -901,6 +902,11 @@ class Context:
 		project_qt = False
 		if any([feature.startswith("QT5") for feature in config.features]):
 			project_qt = True
+
+		if self.is_debug() and self.is_windows():
+			for i, feature in enumerate(config.features):
+				if feature.startswith("QT5"):
+					config.features[i] += "_debug"
 
 		listinclude = self.list_include(self.make_project_path_array(config.includes))
 		listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
