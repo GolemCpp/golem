@@ -1,0 +1,15 @@
+diff --git a/waflib/Tools/msvc.py b/waflib/Tools/msvc.py
+index 05d5875..dea58cb 100644
+--- a/waflib/Tools/msvc.py
++++ b/waflib/Tools/msvc.py
+@@ -452,6 +452,10 @@ def gather_msvc_versions(conf, versions):
+ 		else:
+ 			vc_paths.append((version, os.path.abspath(str(path))))
+ 
++	buildtools_path = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\BuildTools"
++	if os.path.exists(buildtools_path):
++		vc_paths.append(("14.10", buildtools_path))
++
+ 	wince_supported_platforms = gather_wince_supported_platforms()
+ 
+ 	for version,vc_path in vc_paths:
