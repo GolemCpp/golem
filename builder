@@ -844,8 +844,9 @@ class Context:
 
 		# use cache :)
 		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
-		self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-		self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
+		if depconfig.target:
+			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
+			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
 
 		if should_copy:
