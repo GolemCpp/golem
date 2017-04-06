@@ -57,10 +57,11 @@ def make_dep_base(dep):
 	return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
 
 class Dependency:
-	def __init__(self, name = None, repository = None, version = None):
+	def __init__(self, name = None, repository = None, version = None, header_only = None):
 		self.name 		= '' if name is None else name
 		self.repository	= '' if repository is None else repository
 		self.version 	= '' if version is None else version
+		self.header_only 	= '' if header_only is None else header_only
 		self.resolved_version = ''
 
 	def __str__(self):
@@ -844,7 +845,7 @@ class Context:
 
 		# use cache :)
 		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
-		if depconfig.target:
+		if not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
 			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
