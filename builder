@@ -58,11 +58,11 @@ def make_dep_base(dep):
 
 class Dependency:
 	def __init__(self, name = None, repository = None, version = None, header_only = None):
-		self.name 		= '' if name is None else name
-		self.repository	= '' if repository is None else repository
-		self.version 	= '' if version is None else version
-		self.header_only 	= '' if header_only is None else header_only
-		self.resolved_version = ''
+		self.name				= '' if name is None else name
+		self.repository			= '' if repository is None else repository
+		self.version			= '' if version is None else version
+		self.header_only		= False if header_only is None else header_only
+		self.resolved_version	= ''
 
 	def __str__(self):
 		return print_obj(self)
