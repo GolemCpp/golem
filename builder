@@ -57,11 +57,10 @@ def make_dep_base(dep):
 	return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
 
 class Dependency:
-	def __init__(self, name = None, repository = None, version = None, header_only = None):
+	def __init__(self, name = None, repository = None, version = None):
 		self.name				= '' if name is None else name
 		self.repository			= '' if repository is None else repository
 		self.version			= '' if version is None else version
-		self.header_only		= False if header_only is None else header_only
 		self.resolved_version	= ''
 
 	def __str__(self):
@@ -124,7 +123,7 @@ class Condition:
 		return False
 
 class Configuration:
-	def __init__(self, target = None, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, features = None, deps = None, use = None, **kwargs):
+	def __init__(self, target = None, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, features = None, deps = None, use = None, header_only = None, **kwargs):
 		self.condition = Condition(**kwargs)
 
 		self.target = '' if target is None else target
@@ -140,6 +139,8 @@ class Configuration:
 		self.features = [] if features is None else features
 		self.deps = [] if deps is None else deps
 		self.use = [] if use is None else use
+
+		self.header_only = False if header_only is None else header_only
 
 	def __str__(self):
 		return print_obj(self)
@@ -218,7 +219,7 @@ class Project:
 
 		sys.stdout.flush()
 
-	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None):
+	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None, header_only = None):
 		newtarget = Target()
 		newtarget.type = type
 		newtarget.name = name
@@ -234,6 +235,8 @@ class Project:
 		config.features = [] if features is None else features
 		config.deps = [] if deps is None else deps
 		config.use = [] if use is None else use
+
+		config.header_only = False if header_only is None else header_only
 
 		newtarget.configs.append(config)
 
