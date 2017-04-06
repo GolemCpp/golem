@@ -162,7 +162,7 @@ class Configuration:
 		self.deps += config.deps
 		self.use += config.use
 	
-	def merge(self, context, configs):
+	def merge(self, context, configs, exporting = False):
 		for c in configs:
 			if (	(not c.condition.variant or context.variant() in c.condition.variant)
 				and (not c.condition.linking or context.link() in c.condition.linking)
@@ -171,6 +171,11 @@ class Configuration:
 				and (not c.condition.arch or context.arch() in c.condition.arch)
 				and (not c.condition.compiler or context.compiler() in c.condition.compiler)):
 				self.append(c)
+
+				if exporting:
+					if c.header_only is not None:
+						self.header_only = c.header_only
+
 			
 class Target:
 	def __init__(self):
@@ -1002,7 +1007,7 @@ class Context:
 			if export.name in targets:
 				
 				config = Configuration()
-				config.merge(self, export.configs)
+				config.merge(self, export.configs, exporting = True)
 
 				outpath = self.context.options.export
 
