@@ -853,7 +853,7 @@ class Context:
 
 		# use cache :)
 		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
-		if not depconfig.header_only:
+		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
 			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
