@@ -796,7 +796,7 @@ class Context:
 					print "Nothing in cache, have to build..."
 
 					# building
-					build_dir = os.path.join(cache_dir, 'build')
+					build_dir = os.path.join(dep_path, 'build')
 					if os.path.exists(build_dir):
 						shutil.rmtree(build_dir)
 					os.makedirs(build_dir)
@@ -991,8 +991,12 @@ class Context:
 
 		self.environment()
 
-		for target in self.project.targets:
-			self.build_target(target)
+		requested_targets = self.context.targets.split(',') if self.context.targets else [target.name for target in self.project.targets]
+		
+		for targetname in requested_targets:
+			for target in self.project.targets:
+				if targetname == target.name:
+					self.build_target(target)
 
 		self.module.script(self)
 
