@@ -846,6 +846,7 @@ class Context:
 		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
 		depconfig = pickle.load(filepkl)
 		filepkl.close()
+		depconfig.includes = []
 		
 		config_target = config.target
 		config.merge(self.context, [depconfig])
