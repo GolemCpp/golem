@@ -776,7 +776,7 @@ class Context:
 			os.makedirs(dep_path)
 
 		should_copy = False
-		beacon_build_done = os.path.join(dep_path_build, dep.name + '.pkl')
+		beacon_build_done = os.path.join(self.make_out_path(), dep.name + '.pkl')
 
 		if not os.path.exists(beacon_build_done):
 			should_copy = True
