@@ -776,7 +776,7 @@ class Context:
 			os.makedirs(dep_path)
 
 		should_copy = False
-		beacon_build_done = self.make_build_path(dep_path_base + '.build')
+		beacon_build_done = os.path.join(dep_path_build, dep.name + '.pkl')
 
 		if not os.path.exists(beacon_build_done):
 			should_copy = True
@@ -861,8 +861,6 @@ class Context:
 
 		if should_copy:
 			distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
-			with io.open(self.make_build_path(dep_path_base + '.build'), 'wb') as file:
-				file.write('done')
 
 	def make_target_by_config(self, config, target):
 		if config.target:
