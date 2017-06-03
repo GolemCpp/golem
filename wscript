@@ -10,6 +10,8 @@ import os
 top = ''
 out = 'build'
 
+import waflib
+
 from waflib import Configure
 Configure.autoconfig = True 
 
@@ -20,6 +22,9 @@ def configure(conf):
 	builder.configure(conf)
 
 def build(bld):
+	waflib.Tools.c_preproc.go_absolute=True
+	waflib.Tools.c_preproc.standard_includes=[]
+
 	if hasattr(bld, 'opt_arch'):
 		bld.options.arch = bld.opt_arch
 	
