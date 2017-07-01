@@ -965,11 +965,16 @@ class Context:
 			if Context.is_linux():
 				defines = subprocess.check_output(['g++', '-dM', '-E', '-x', 'c++'] + self.context.env.CXXFLAGS + config.cxxflags + ['/dev/null'])
 				defines = ["=".join(item[8:].split(" ", 1)) for item in defines.splitlines()] + self.context.env.DEFINES
+				for item in config.defines:
+					defines.append(str(item))
 				includes = subprocess.check_output(['g++', '-Wp,-v', '-fsyntax-only', '-x', 'c++'] + self.context.env.CXXFLAGS + config.cxxflags + ['/dev/null'], stderr=subprocess.STDOUT)
 				includes = [item[1:] for item in includes.splitlines() if item[0] == ' ']
 				for key in self.context.env.keys():
-					if key.startswith("INCLUDES_QT"):
-						includes += self.context.env[key]
+					if key.startswith("INCLUDES_"):
+						for path in self.context.env[key]:
+							includes.append(str(path))
+				for path in listinclude:
+					includes.append(str(path))
 				includes = list(set(includes))
 				from collections import OrderedDict
 				data = OrderedDict({
