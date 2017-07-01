@@ -16,6 +16,7 @@ import re
 import copy
 import types
 import pickle
+import json
 
 def print_obj(obj, depth = 5, l = ""):
 	#fall back to repr
@@ -505,6 +506,8 @@ class Context:
 		context.add_option("--patch", action="store_true", default=False, help="Release patch version")
 
 		context.add_option("--export", action="store", default='', help="Export folder")
+
+		context.add_option("--vscode", action="store_true", default=False, help="VSCode CppTools Properties")
 		
 		if Context.is_windows(): 
 			context.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -957,6 +960,36 @@ class Context:
 				context		= ttarget,
 				libs	= config.system
 			)
+		
+		if self.context.options.vscode:
+			if Context.is_linux():
+				defines = subprocess.check_output(['g++', '-dM', '-E', '-x', 'c++'] + self.context.env.CXXFLAGS + config.cxxflags + ['/dev/null'])
+				defines = ["=".join(item[8:].split(" ", 1)) for item in defines.splitlines()] + self.context.env.DEFINES
+				includes = subprocess.check_output(['g++', '-Wp,-v', '-fsyntax-only', '-x', 'c++'] + self.context.env.CXXFLAGS + config.cxxflags + ['/dev/null'], stderr=subprocess.STDOUT)
+				includes = [item[1:] for item in includes.splitlines() if item[0] == ' ']
+				for key in self.context.env.keys():
+					if key.startswith("INCLUDES_QT"):
+						includes += self.context.env[key]
+				includes = list(set(includes))
+				from collections import OrderedDict
+				data = OrderedDict({
+					"configurations": [
+						{
+							"name": "Linux",
+							"includePath": includes,
+							"defines": defines,
+							"intelliSenseMode": "clang-x64",
+							"browse": {
+								"path": includes,
+								"limitSymbolsToIncludedHeaders": True,
+								"databaseFilename": ""
+							}
+						}
+					]
+				})
+				properties_path = os.path.join(self.get_project_dir(), '.vscode', 'c_cpp_properties.json')
+				with open(properties_path, 'w') as outfile:
+					json.dump(data, outfile, indent=4, sort_keys=True)
 
 	def configure(self):
 
