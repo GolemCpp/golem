@@ -987,7 +987,7 @@ class Context:
 							"browse": {
 								"path": includes,
 								"limitSymbolsToIncludedHeaders": True,
-								"databaseFilename": ""
+								"databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
 							}
 						}
 					]
