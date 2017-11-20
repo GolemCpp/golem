@@ -934,6 +934,8 @@ class Context:
 		
 		build_fun = None
 
+		linkflags = config.linkflags
+
 		if target.type == 'library':
 			if self.is_shared():
 				build_fun = self.context.shlib
@@ -944,6 +946,10 @@ class Context:
 				return
 		elif target.type == 'program':
 			build_fun = self.context.program
+			if Context.is_linux():
+				linkflags += ['-Wl,--allow-shlib-undefined']
+			elif Context.is_darwin():
+				linkflags += ['-Wl,-undefined,suppress']
 		else:
 			print "ERROR: no options found"
 			return
@@ -956,7 +962,7 @@ class Context:
 			name			= target.name,
 			cxxflags		= config.cxxflags,
 			cflags			= config.cxxflags,
-			linkflags		= config.linkflags,
+			linkflags		= linkflags,
 			use				= config.use + config.features,
 			moc 			= listmoc,
 			features 		= 'qt5' if project_qt else '',
