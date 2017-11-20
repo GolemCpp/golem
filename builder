@@ -847,7 +847,9 @@ class Context:
 
 				
 		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
-		depconfig = pickle.load(filepkl)
+		dep_export_ctx = pickle.load(filepkl)
+		depdeps = dep_export_ctx[0]
+		depconfig = dep_export_ctx[1]
 		filepkl.close()
 		depconfig.includes = []
 		
@@ -1042,7 +1044,6 @@ class Context:
 				self.context(rule="touch ${TGT}", target=targetname)
 
 	def export(self):
-		
 		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
 		for export in self.project.exports:
 			if export.name in targets:
@@ -1073,7 +1074,8 @@ class Context:
 				distutils.dir_util.copy_tree(self.make_out_path(), outpath_lib)
 
 				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
-				pickle.dump(config, output)
+				export_ctx = [self.project.deps, config]
+				pickle.dump(export_ctx, output)
 				output.close()
 
 	def repo_clear(self, path):
