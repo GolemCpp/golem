@@ -868,7 +868,7 @@ class Context:
 			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
 		if depdeps is not None:
-			self.project.deps += depdeps
+			self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
 
 		if should_copy:
 			distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
