@@ -1080,7 +1080,8 @@ class Context:
 				distutils.dir_util.copy_tree(self.make_out_path(), outpath_lib)
 
 				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
-				export_ctx = [self.project.deps, config]
+				export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
+				export_ctx = [export_deps, config]
 				pickle.dump(export_ctx, output)
 				output.close()
 
