@@ -848,6 +848,7 @@ class Context:
 				
 		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
 		dep_export_ctx = pickle.load(filepkl)
+		depdeps = None
 		if isinstance(dep_export_ctx, Configuration):
 			depconfig = dep_export_ctx
 		else:
@@ -866,6 +867,8 @@ class Context:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
 			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
 		config.use.append(dep.name)
+		if depdeps is not None:
+			self.project.deps += depdeps
 
 		if should_copy:
 			distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
