@@ -848,8 +848,11 @@ class Context:
 				
 		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
 		dep_export_ctx = pickle.load(filepkl)
-		depdeps = dep_export_ctx[0]
-		depconfig = dep_export_ctx[1]
+		if isinstance(dep_export_ctx, Configuration):
+			depconfig = dep_export_ctx
+		else:
+			depdeps = dep_export_ctx[0]
+			depconfig = dep_export_ctx[1]
 		filepkl.close()
 		depconfig.includes = []
 		
