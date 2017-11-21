@@ -959,7 +959,10 @@ class Context:
 		version_short = None
 		version_source = []
 		if target.version_template is not None:
-			version_string = subprocess.check_output(['git', 'describe', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
+			try:
+				version_string = subprocess.check_output(['git', 'describe', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
+			except:
+				version_string = None
 			if version_string:
 				version_string = version_string.splitlines()[0]
 				version_major = re.search('^v([0-9]+)\\..*', version_string).group(1)
