@@ -959,15 +959,15 @@ class Context:
 		version_short = None
 		version_source = []
 		if target.version_template is not None:
-			for version_template in target.version_template:
-				version_string = subprocess.check_output(['git', 'describe', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
-				if version_string:
-					version_string = version_string.splitlines()[0]
-					version_major = re.search('^v([0-9]+)\\..*', version_string).group(1)
-					version_minor = re.search('^v[0-9]+\\.([0-9]+).*', version_string).group(1)
-					version_patch = re.search('^v[0-9]+\\.[0-9]+\\.([0-9]+).*', version_string).group(1)
-					version_sha1 = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
-					version_short = version_major + "." + version_minor + "." + version_patch
+			version_string = subprocess.check_output(['git', 'describe', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
+			if version_string:
+				version_string = version_string.splitlines()[0]
+				version_major = re.search('^v([0-9]+)\\..*', version_string).group(1)
+				version_minor = re.search('^v[0-9]+\\.([0-9]+).*', version_string).group(1)
+				version_patch = re.search('^v[0-9]+\\.[0-9]+\\.([0-9]+).*', version_string).group(1)
+				version_sha1 = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
+				version_short = version_major + "." + version_minor + "." + version_patch
+				for version_template in target.version_template:
 					self.context(
 						features    	= 'subst',
 						source      	= self.context.root.find_node(self.make_project_path(version_template)),
@@ -1116,121 +1116,6 @@ class Context:
 				pickle.dump(export_ctx, output)
 				output.close()
 
-	def repo_clear(self, path):
-		output = subprocess.check_output(['git', 'status', '-s'], cwd=path)
-		if output:
-			print(output)
-			return False
-		return True
-
-	def repo_dirty(self, path):
-		return not repo_clear(path)
-
-	def format(self):
-		paths = []
-		for target in self.project.targets:
-			for config in target.configs:
-				paths += config.includes
-				paths += config.source
-		paths = [self.make_project_path(path) for path in paths]
-		ret = subprocess.call(['python', 'astyle'] + paths)
-		if ret:
-			print "ERROR: astyle " + str(paths)
-			return
-
-	# commit build (all) to specific repository (according project file)
-	def release(self):
-		project_path = os.path.join(self.get_project_dir(), 'project.glm')
-		if not os.path.exists(project_path):
-			print "ERROR: no project file found " + project_path
-			return
-
-		if self.context.options.major:
-			bumping = 'major'
-		elif self.context.options.minor:
-			bumping = 'minor'
-		elif self.context.options.patch:
-			bumping = 'patch'
-		else:
-			print('Usage: release { major | minor | patch }')
-			return
-		
-		with io.open(project_path, 'rb') as f:
-			file_content = f.read().decode('utf-8')
-		match = re.search('VERSION\s*=\s*(.*)', file_content)
-
-		if not match:
-			print "ERROR: No VERSION found in the project file"
-			print "Before trying to Release, you should define a VERSION variable in your project. VERSION is a string using Semantic Versioning. Example: VERSION = 'v1.0.0'"
-			return
-		else:
-			found = True
-			version = match.group(1).strip('\'"')
-
-		if repo_dirty(self.get_project_dir()):
-			print("Your repository is dirty. You have to commit before releasing!")
-			return
-
-		parse = re.compile(r"(?P<major>\d+)\.?(?P<minor>\d+)?\.?(?P<patch>\d+)?(\-(?P<release>[a-z]+))?", re.VERBOSE)
-		match = parse.search(version)
-		
-		parsed = {}
-		if not match:
-			print("Unrecognized version format")
-			return
-		
-		for key, value in match.groupdict().items():
-			if key == 'release':
-				if value is None:
-					parsed[key] = None
-				else:
-					parsed[key] = str(value)
-			else:
-				if value is None:
-					parsed[key] = 0
-				else:
-					parsed[key] = int(value)
-
-		bumped = False
-
-		for key, value in parsed.items():
-			if bumped:
-				parsed[key] = 0
-			elif key == bumping:
-				parsed[key] = value + 1
-				bumped = True
-
-		serialized = 'v{major}.{minor}.{patch}'
-		
-		if parsed['release'] is not None:
-			serialized += '-{release}'
-
-		newversion = serialized.format(**parsed)
-		
-		default_message = "Bump " + str(version) + " to " + newversion
-		message = default_message
-
-		file_content = re.sub('^VERSION\s*=\s*(.*)', 'VERSION = \'' + newversion + '\'', file_content, flags=re.MULTILINE)
-		
-		with io.open(project_path, 'wb') as f:
-			file_content = file_content.encode('utf-8')
-			f.write(file_content)
-		
-		output = subprocess.check_output(['git', 'add', 'project.glm'], cwd=self.get_project_dir())
-		if output:
-			print output
-
-		output = subprocess.check_output(['git', 'commit', '-m', message], cwd=self.get_project_dir())
-		if output:
-			print output
-		
-		output = subprocess.check_output(['git', 'tag', '-a', newversion, '-m', message], cwd=self.get_project_dir())
-		if output:
-			print output
-			
-		print "Released " + newversion
-
-
 def get_context(context):
 	global global_context
 	if not 'global_context' in globals():
@@ -1249,14 +1134,6 @@ def configure(context):
 def build(context):
 	ctx = get_context(context)
 	ctx.build()
-
-def format(context):
-	ctx = get_context(context)
-	ctx.format()
-
-def release(context):
-	ctx = get_context(context)
-	ctx.release()
 
 def export(context):
 	ctx = get_context(context)
