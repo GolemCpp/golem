@@ -183,6 +183,7 @@ class Target:
 		self.type = ''
 		self.name = ''
 		self.configs = []
+		self.version_template = None
 
 	def __str__(self):
 		return print_obj(self)
@@ -225,10 +226,11 @@ class Project:
 
 		sys.stdout.flush()
 
-	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None, header_only = None):
+	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None, header_only = None, version_template = None):
 		newtarget = Target()
 		newtarget.type = type
 		newtarget.name = name
+		newtarget.version_template = version_template
 		
 		config = Configuration()
 
@@ -953,11 +955,33 @@ class Context:
 		else:
 			print "ERROR: no options found"
 			return
+
+		version_short = None
+		version_source = []
+		if target.version_template is not None:
+			for version_template in target.version_template:
+				version_string = subprocess.check_output(['git', 'describe', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
+				if version_string:
+					version_string = version_string.splitlines()[0]
+					version_major = re.search('^v([0-9]+)\\..*', version_string).group(1)
+					version_minor = re.search('^v[0-9]+\\.([0-9]+).*', version_string).group(1)
+					version_patch = re.search('^v[0-9]+\\.[0-9]+\\.([0-9]+).*', version_string).group(1)
+					version_sha1 = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
+					version_short = version_major + "." + version_minor + "." + version_patch
+					self.context(
+						features    	= 'subst',
+						source      	= self.context.root.find_node(self.make_project_path(version_template)),
+						target      	= version_template + '.cpp',
+						VERSION 		= version_string,
+						VERSION_SHORT 	= version_short,
+						VERSION_SHA1	= version_sha1
+					)
+					version_source.append(version_template + '.cpp')
 		
 		ttarget = build_fun(
 			defines			= config.defines,
 			includes		= listinclude,
-			source			= listsource,
+			source			= listsource + version_source,
 			target			= os.path.join(self.make_target_out(), targetname),
 			name			= target.name,
 			cxxflags		= config.cxxflags,
@@ -966,7 +990,8 @@ class Context:
 			use				= config.use + config.features,
 			moc 			= listmoc,
 			features 		= 'qt5' if project_qt else '',
-			install_path 	= None
+			install_path 	= None,
+			vnum			= version_short
 		)
 
 		if config.system:
