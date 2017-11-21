@@ -806,7 +806,8 @@ class Context:
 						shutil.rmtree(build_dir)
 					os.makedirs(build_dir)
 					
-					ret = subprocess.call(['git', 'clone', '--recursive', '--depth', '1', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
+					# removed ['--depth', '1'] because of git describe --tags
+					ret = subprocess.call(['git', 'clone', '--recursive', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
 					if ret:
 						print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
 						return
