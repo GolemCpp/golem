@@ -961,7 +961,7 @@ class Context:
 		version_source = []
 		if target.version_template is not None:
 			try:
-				version_string = subprocess.check_output(['git', 'describe', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
+				version_string = subprocess.check_output(['git', 'describe', '--long', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
 			except:
 				version_string = None
 			if version_string:
