@@ -86,26 +86,6 @@ class tmp(Context):
 	cmd = 'rebuild'
 	fun = 'rebuild'
 
-# Format
-
-def format(bld):
-	builder.format(bld)
-
-from waflib.Context import Context
-class tmp(Context):
-	cmd = 'format'
-	fun = 'format'
-
-# Release
-
-def release(bld):
-	builder.release(bld)
-
-from waflib.Context import Context
-class tmp(Context):
-	cmd = 'release'
-	fun = 'release'
-
 # Qt stuff
 
 from waflib.TaskGen import feature, before_method, after_method

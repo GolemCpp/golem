@@ -972,15 +972,18 @@ class Context:
 				version_sha1 = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
 				version_short = version_major + "." + version_minor + "." + version_patch
 				for version_template in target.version_template:
+					version_template_src = self.context.root.find_node(self.make_project_path(version_template))
+					version_template_dst = self.context.root.find_or_declare(self.make_build_path(os.path.basename(version_template) + '.cpp'))
 					self.context(
+						name			= version_template_dst,
 						features    	= 'subst',
-						source      	= self.context.root.find_node(self.make_project_path(version_template)),
-						target      	= version_template + '.cpp',
+						source      	= version_template_src,
+						target      	= version_template_dst,
 						VERSION 		= version_string,
 						VERSION_SHORT 	= version_short,
 						VERSION_SHA1	= version_sha1
 					)
-					version_source.append(version_template + '.cpp')
+					version_source.append(version_template_dst)
 		
 		ttarget = build_fun(
 			defines			= config.defines,
@@ -995,7 +998,8 @@ class Context:
 			moc 			= listmoc,
 			features 		= 'qt5' if project_qt else '',
 			install_path 	= None,
-			vnum			= version_short
+			vnum			= version_short,
+			depends_on		= version_source
 		)
 
 		if config.system:
@@ -1142,3 +1146,14 @@ def build(context):
 def export(context):
 	ctx = get_context(context)
 	ctx.export()
+
+from waflib.TaskGen import feature, before_method
+@feature('*') 
+@before_method('process_rule')
+def post_the_other(self):
+    deps = getattr(self, 'depends_on', []) 
+    for name in self.to_list(deps):
+        other = self.bld.get_tgen_by_name(name) 
+        print('other task generator tasks (before) %s' % other.tasks)
+        other.post() 
+        print('other task generator tasks (after) %s' % other.tasks)
