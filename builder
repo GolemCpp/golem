@@ -969,7 +969,7 @@ class Context:
 				version_major = re.search('^v([0-9]+)\\..*', version_string).group(1)
 				version_minor = re.search('^v[0-9]+\\.([0-9]+).*', version_string).group(1)
 				version_patch = re.search('^v[0-9]+\\.[0-9]+\\.([0-9]+).*', version_string).group(1)
-				version_sha1 = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
+				version_hash = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
 				version_short = version_major + "." + version_minor + "." + version_patch
 				for version_template in target.version_template:
 					version_template_src = self.context.root.find_node(self.make_project_path(version_template))
@@ -981,7 +981,7 @@ class Context:
 						target      	= version_template_dst,
 						VERSION 		= version_string,
 						VERSION_SHORT 	= version_short,
-						VERSION_SHA1	= version_sha1
+						VERSION_HASH	= version_hash
 					)
 					version_source.append(version_template_dst)
 		
