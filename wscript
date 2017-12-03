@@ -96,4 +96,4 @@ def add_includes_paths(self):
 	incs = set(self.to_list(getattr(self, 'includes', '')))
 	for x in self.compiled_tasks:
 		incs.add(x.inputs[0].parent.path_from(self.path))
-	self.includes = list(incs)
+	self.includes = sorted(incs)
