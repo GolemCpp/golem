@@ -1086,7 +1086,7 @@ class Context:
 
 		for targetname in self.context.targets.split(','):
 			if targetname and not targetname in [target.name for target in self.project.targets]:
-				if is_windows():
+				if self.is_windows():
 					self.context(rule="type nul >> ${TGT}", target=targetname)
 				else:
 					self.context(rule="touch ${TGT}", target=targetname)
