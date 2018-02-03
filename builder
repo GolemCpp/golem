@@ -569,7 +569,7 @@ class Context:
 			# Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
 			# Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
 
-			self.context.env.MSVC_VERSIONS = ['msvc 14.0']
+			# self.context.env.MSVC_VERSIONS = ['msvc 14.0']
 			# self.context.env.CXXFLAGS.append('/MP') # compiles multiple source files by using multiple processes
 			self.context.env.CXXFLAGS.append('/Gm-') # disable minimal rebuild
 			self.context.env.CXXFLAGS.append('/Zc:inline') # compiler does not emit symbol information for unreferenced COMDAT functions or data
@@ -1057,14 +1057,14 @@ class Context:
 		# configure x86 context
 		self.context.setenv('x86')
 		if self.is_windows():
-			self.context.env.MSVC_VERSIONS = ['msvc 14.0']
+			# self.context.env.MSVC_VERSIONS = ['msvc 14.0']
 			self.context.env.MSVC_TARGETS = ['x86']
 		self.context.load(features_to_load)
 
 		# configure x64 context
 		self.context.setenv('x64')
 		if self.is_windows():
-			self.context.env.MSVC_VERSIONS = ['msvc 14.0']
+			# self.context.env.MSVC_VERSIONS = ['msvc 14.0']
 			self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
 		self.context.load(features_to_load)
 
