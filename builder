@@ -658,8 +658,11 @@ class Context:
 			self.context.env.LINKFLAGS.append('/INCREMENTAL') # incremental linking
 
 		else:
-			self.context.env.CXXFLAGS.append('-g')
+			self.context.env.CXXFLAGS.append('-g3')
 			self.context.env.CXXFLAGS.append('-O0')
+
+			self.context.env.CXXFLAGS += '-fprofile-arcs -ftest-coverage --coverage -fno-inline -fno-inline-small-functions -fno-default-inline -fno-elide-constructors'.split()
+			self.context.env.LINKFLAGS.append('--coverage')
 
 		self.context.env.DEFINES.append('DEBUG')
 
