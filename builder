@@ -1086,7 +1086,10 @@ class Context:
 
 		for targetname in self.context.targets.split(','):
 			if targetname and not targetname in [target.name for target in self.project.targets]:
-				self.context(rule="touch ${TGT}", target=targetname)
+				if is_windows():
+					self.context(rule="type nul >> ${TGT}", target=targetname)
+				else:
+					self.context(rule="touch ${TGT}", target=targetname)
 
 	def export(self):
 		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
