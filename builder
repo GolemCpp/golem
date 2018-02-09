@@ -871,7 +871,7 @@ class Context:
 		config.target = config_target
 
 		# use cache :)
-		self.context.env['INCLUDES_' + dep.name]		= self.list_include([dep_path_include])
+		self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
 		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
 			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
