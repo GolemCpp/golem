@@ -6,6 +6,8 @@ sys.dont_write_bytecode = True
 import os
 import imp
 import subprocess
+from string import Template
+from shutil import copyfile
 
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
@@ -21,13 +23,25 @@ golem_path = os.path.dirname(os.path.realpath(__file__))
 if hasattr(module, 'GOLEM_PATH'):
 	golem_path = module.GOLEM_PATH
 
-golem_out = ''
+golem_out = 'bld'
 if hasattr(module, 'GOLEM_OUT'):
 	golem_out = module.GOLEM_OUT
 
 argv = ['python', 'waf'] + sys.argv[1:] + ['--dir=' + os.getcwd()]
-if golem_out:
-	argv.append('--out=' + os.path.join(os.getcwd(), golem_out))
 
-current_dir = os.path.join(os.getcwd(), golem_path)
-subprocess.call(argv, cwd = current_dir)
+build_dir = os.path.join(os.getcwd(), golem_out)
+
+filein = open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'wscript'))
+src = Template(filein.read())
+filein.close()
+out = src.substitute(builder_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'builder'))
+
+if not os.path.exists(build_dir):
+    os.makedirs(build_dir)
+
+fileout = open(os.path.join(build_dir, 'wscript'), 'w+')
+fileout.write(out)
+fileout.close()
+copyfile(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf'), os.path.join(os.path.join(os.getcwd(), golem_out), 'waf'))
+
+subprocess.call(argv, cwd = build_dir)

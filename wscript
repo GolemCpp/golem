@@ -4,11 +4,11 @@ import sys
 sys.dont_write_bytecode = True
 
 import imp
-builder = imp.load_source('builder', 'builder')
+builder = imp.load_source('builder', '$builder_path')
 
 import os
 top = ''
-out = 'build'
+out = '.'
 
 import waflib
 
