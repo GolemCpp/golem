@@ -818,7 +818,7 @@ class Context:
 						print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
 						return
 
-					ret = subprocess.check_output(['python', 'project.glm', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
+					ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
 					print ret
 
 					# caching
