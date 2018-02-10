@@ -906,7 +906,7 @@ class Context:
 		return os.path.join(self.get_build_path(), path)
 
 	def make_target_out(self):
-		return 'out'
+		return 'bin'
 
 	def make_out_path(self):
 		return self.make_build_path(self.make_target_out())

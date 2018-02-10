@@ -8,7 +8,7 @@ builder = imp.load_source('builder', '$builder_path')
 
 import os
 top = ''
-out = '.'
+out = 'out'
 
 import waflib
 
