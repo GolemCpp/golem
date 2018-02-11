@@ -992,13 +992,20 @@ class Context:
 					)
 					version_source.append(version_template_dst)
 		
+		isystemflags = []
+		for key in self.context.env.keys():
+			if key.startswith("INCLUDES_"):
+				for path in self.context.env[key]:
+					if path.startswith('/usr'):
+						isystemflags.append('-isystem' + str(path))
+
 		ttarget = build_fun(
 			defines			= config.defines,
 			includes		= listinclude,
 			source			= listsource + version_source,
 			target			= os.path.join(self.make_target_out(), targetname),
 			name			= target.name,
-			cxxflags		= config.cxxflags,
+			cxxflags		= config.cxxflags + isystemflags,
 			cflags			= config.cxxflags,
 			linkflags		= linkflags,
 			use				= config.use + config.features,
