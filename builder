@@ -872,6 +872,7 @@ class Context:
 
 		# use cache :)
 		self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
+		self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
 		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
 			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
@@ -1024,6 +1025,10 @@ class Context:
 				includes = [item[1:] for item in includes.splitlines() if item[0] == ' ']
 				for key in self.context.env.keys():
 					if key.startswith("INCLUDES_"):
+						for path in self.context.env[key]:
+							includes.append(str(path))
+				for key in self.context.env.keys():
+					if key.startswith("ISYSTEM_"):
 						for path in self.context.env[key]:
 							includes.append(str(path))
 				for path in listinclude:
