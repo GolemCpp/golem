@@ -5,6 +5,7 @@ sys.dont_write_bytecode = True
 
 import os
 import imp
+import string
 import subprocess
 from string import Template
 from shutil import copyfile
@@ -34,7 +35,7 @@ build_dir = os.path.join(os.getcwd(), golem_out)
 filein = open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'wscript'))
 src = Template(filein.read())
 filein.close()
-out = src.substitute(builder_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'builder'))
+out = src.substitute(builder_path = string.replace(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'builder'), '\\', '\\\\'))
 
 if not os.path.exists(build_dir):
     os.makedirs(build_dir)

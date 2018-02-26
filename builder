@@ -226,7 +226,7 @@ class Project:
 
 		sys.stdout.flush()
 
-	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None, header_only = None, version_template = None):
+	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None, header_only = None, version_template = None, system = None):
 		newtarget = Target()
 		newtarget.type = type
 		newtarget.name = name
@@ -240,6 +240,8 @@ class Project:
 		config.includes = [] if includes is None else includes
 		config.source = [] if source is None else source
 
+		config.system = [] if system is None else system
+		
 		config.features = [] if features is None else features
 		config.deps = [] if deps is None else deps
 		config.use = [] if use is None else use
@@ -588,6 +590,7 @@ class Context:
 			# self.context.env.CXXFLAGS.append('/Fd:testing.pdb') # file name for the program database (PDB) defaults to VCx0.pdb
 			
 			self.context.env.CXXFLAGS.append('/std:c++latest') # enable all features as they become available, including feature removals
+			self.context.env.CXXFLAGS.append('/bigobj')
 			
 			self.context.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
 			# self.context.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
@@ -818,7 +821,7 @@ class Context:
 						print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
 						return
 
-					ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
+					ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir, shell=True)
 					print ret
 
 					# caching
@@ -871,7 +874,11 @@ class Context:
 		config.target = config_target
 
 		# use cache :)
-		self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
+		if not self.is_windows():
+			self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
+		else:
+			self.context.env['CXXFLAGS_' + dep.name]			= ['/I', dep_path_include]
+		#	self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I', dep_path_include]
 		self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
 		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
@@ -1046,9 +1053,45 @@ class Context:
 					"configurations": [
 						{
 							"name": "Linux",
+							"intelliSenseMode": "clang-x64",
 							"includePath": includes,
 							"defines": defines,
-							"intelliSenseMode": "clang-x64",
+							"browse": {
+								"path": includes,
+								"limitSymbolsToIncludedHeaders": True,
+								"databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
+							}
+						}
+					]
+				})
+				properties_path = os.path.join(self.get_project_dir(), '.vscode', 'c_cpp_properties.json')
+				with open(properties_path, 'w') as outfile:
+					json.dump(data, outfile, indent=4, sort_keys=True)
+			if Context.is_windows():
+				defines = [] + self.context.env.DEFINES
+				for item in config.defines:
+					defines.append(str(item))
+				includes = []
+				for key in self.context.env.keys():
+					if key.startswith("INCLUDES_"):
+						for path in self.context.env[key]:
+							includes.append(str(path))
+				for key in self.context.env.keys():
+					if key.startswith("ISYSTEM_"):
+						for path in self.context.env[key]:
+							includes.append(str(path))
+				for path in listinclude:
+					includes.append(str(path))
+				includes = list(set(includes))
+				from collections import OrderedDict
+				data = OrderedDict({
+					"configurations": [
+						{
+							"name": "Win32",
+							"intelliSenseMode": "msvc-x64",
+							"includePath": includes,
+							"defines": defines,
+							"compileCommands": "${workspaceRoot}/build/out/compile_commands.json",
 							"browse": {
 								"path": includes,
 								"limitSymbolsToIncludedHeaders": True,
@@ -1085,6 +1128,8 @@ class Context:
 			# self.context.env.MSVC_VERSIONS = ['msvc 14.0']
 			self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
 		self.context.load(features_to_load)
+
+		self.context.load('clang_compilation_database')
 
 	def build_path(self):
 		return self.osname() + '-' + self.arch_min() + '-' + self.compiler_min() + '-' + self.runtime_min() + '-' + self.link_min() + '-' + self.variant_min()
