@@ -1033,79 +1033,26 @@ class Context:
 			)
 		
 		if self.context.options.vscode:
-			if Context.is_linux():
-				defines = subprocess.check_output(['g++', '-dM', '-E', '-x', 'c++'] + self.context.env.CXXFLAGS + config.cxxflags + ['/dev/null'])
-				defines = ["=".join(item[8:].split(" ", 1)) for item in defines.splitlines()] + self.context.env.DEFINES
-				for item in config.defines:
-					defines.append(str(item))
-				includes = subprocess.check_output(['g++', '-Wp,-v', '-fsyntax-only', '-x', 'c++'] + self.context.env.CXXFLAGS + config.cxxflags + ['/dev/null'], stderr=subprocess.STDOUT)
-				includes = [item[1:] for item in includes.splitlines() if item[0] == ' ']
-				for key in self.context.env.keys():
-					if key.startswith("INCLUDES_"):
-						for path in self.context.env[key]:
-							includes.append(str(path))
-				for key in self.context.env.keys():
-					if key.startswith("ISYSTEM_"):
-						for path in self.context.env[key]:
-							includes.append(str(path))
-				for path in listinclude:
-					includes.append(str(path))
-				includes = list(set(includes))
-				from collections import OrderedDict
-				data = OrderedDict({
-					"configurations": [
-						{
-							"name": "Linux",
-							"intelliSenseMode": "clang-x64",
-							"includePath": includes,
-							"defines": defines,
-							"browse": {
-								"path": includes,
-								"limitSymbolsToIncludedHeaders": True,
-								"databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
-							}
+			from collections import OrderedDict
+			data = OrderedDict({
+				"configurations": [
+					{
+						"name": "Win32" if Context.is_windows() else "Linux",
+						"intelliSenseMode": "msvc-x64" if Context.is_windows() else "clang-x64",
+						"includePath": [],
+						"defines": [],
+						"compileCommands": self.make_build_path("compile_commands.json"),
+						"browse": {
+							"path": [],
+							"limitSymbolsToIncludedHeaders": True,
+							"databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
 						}
-					]
-				})
-				properties_path = os.path.join(self.get_project_dir(), '.vscode', 'c_cpp_properties.json')
-				with open(properties_path, 'w') as outfile:
-					json.dump(data, outfile, indent=4, sort_keys=True)
-			if Context.is_windows():
-				defines = [] + self.context.env.DEFINES
-				for item in config.defines:
-					defines.append(str(item))
-				includes = []
-				for key in self.context.env.keys():
-					if key.startswith("INCLUDES_"):
-						for path in self.context.env[key]:
-							includes.append(str(path))
-				for key in self.context.env.keys():
-					if key.startswith("ISYSTEM_"):
-						for path in self.context.env[key]:
-							includes.append(str(path))
-				for path in listinclude:
-					includes.append(str(path))
-				includes = list(set(includes))
-				from collections import OrderedDict
-				data = OrderedDict({
-					"configurations": [
-						{
-							"name": "Win32",
-							"intelliSenseMode": "msvc-x64",
-							"includePath": includes,
-							"defines": defines,
-							"compileCommands": "${workspaceRoot}/build/out/compile_commands.json",
-							"browse": {
-								"path": includes,
-								"limitSymbolsToIncludedHeaders": True,
-								"databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
-							}
-						}
-					]
-				})
-				properties_path = os.path.join(self.get_project_dir(), '.vscode', 'c_cpp_properties.json')
-				with open(properties_path, 'w') as outfile:
-					json.dump(data, outfile, indent=4, sort_keys=True)
+					}
+				]
+			})
+			properties_path = os.path.join(self.get_project_dir(), '.vscode', 'c_cpp_properties.json')
+			with open(properties_path, 'w') as outfile:
+				json.dump(data, outfile, indent=4, sort_keys=True)
 
 	def configure(self):
 
