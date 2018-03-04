@@ -408,6 +408,9 @@ class Context:
 		return 'release'
 
 	def variant(self):
+		return self.context.options.variant
+
+	def variant_suffix(self):
 		variant = ''
 		if self.context.options.variant == self.variant_debug():
 			variant = '-' + self.variant_debug()
@@ -885,7 +888,8 @@ class Context:
 		self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
 		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-			self.context.env['LIB_' + dep.name]				= self.make_target_by_config(depconfig, dep)
+			self.context.env['LIB_' + dep.name]				= self.make_target_by_config_name(depconfig, dep)
+		
 		config.use.append(dep.name)
 		if depdeps is not None:
 			self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
@@ -897,7 +901,18 @@ class Context:
 		if config.target:
 			return config.target
 		else:
-			return target.name + self.variant()
+			return target.name + self.variant_suffix()
+
+	def make_target_by_config_name(self, config, target):
+		if config.target:
+			return config.target
+		else:
+			target_name = target.name + self.variant_suffix()
+
+			if self.is_windows():
+				target_name = 'lib' + target_name
+
+			return target_name
 
 
 	def make_target_name(self, config, target):
