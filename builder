@@ -49,7 +49,7 @@ def print_obj(obj, depth = 5, l = ""):
 class CacheConf:
 	def __init__(self):
 		self.remote = ''
-		self.location = os.path.join(os.path.expanduser("~"), '.cache', 'golem', 'builds')
+		self.location = os.path.join(os.path.expanduser("~"), '.cache', 'golem')
 
 	def __str__(self):
 		return print_obj(self)
