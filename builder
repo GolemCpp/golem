@@ -958,10 +958,10 @@ class Context:
 		if any([feature.startswith("QT5") for feature in config.features]):
 			project_qt = True
 
-		#if self.is_debug() and self.is_windows():
-		#	for i, feature in enumerate(config.features):
-		#		if feature.startswith("QT5"):
-		#			config.features[i] += "_DEBUG"
+		if self.is_debug() and self.is_windows():
+			for i, feature in enumerate(config.features):
+				if feature.startswith("QT5"):
+					config.features[i] += "D"
 
 		listinclude = self.list_include(self.make_project_path_array(config.includes))
 		listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
@@ -1086,6 +1086,17 @@ class Context:
 			# self.context.env.MSVC_VERSIONS = ['msvc 14.0']
 			self.context.env.MSVC_TARGETS = ['x86']
 		self.context.load(features_to_load)
+		
+		if self.is_debug() and self.is_windows():
+			for key in self.context.env.keys():
+				if key.startswith("INCLUDES_QT5"):
+					paths = []
+					for path in self.context.env[key]:
+						if path.endswith('d'):
+							paths.append(path[:-1])
+						else:
+							paths.append(path)
+					self.context.env[key] = paths
 
 		# configure x64 context
 		self.context.setenv('x64')
@@ -1093,6 +1104,17 @@ class Context:
 			# self.context.env.MSVC_VERSIONS = ['msvc 14.0']
 			self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
 		self.context.load(features_to_load)
+
+		if self.is_debug() and self.is_windows():
+			for key in self.context.env.keys():
+				if key.startswith("INCLUDES_QT5"):
+					paths = []
+					for path in self.context.env[key]:
+						if path.endswith('d'):
+							paths.append(path[:-1])
+						else:
+							paths.append(path)
+					self.context.env[key] = paths
 
 		self.context.load('clang_compilation_database')
 
