@@ -39,6 +39,13 @@ def handleRemoveReadonly(func, path, exc_info):
     else:
         raise
 
+def removeTree(ctx, path):
+	if ctx.is_windows():
+		# shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
+		os.system("rmdir /s /q %s" % path)
+	else:
+		shutil.rmtree(path)
+
 def print_obj(obj, depth = 5, l = ""):
 	#fall back to repr
 	if depth<0: return repr(obj)
@@ -807,7 +814,7 @@ class Context:
 		dep_path_build = os.path.join(dep_path, self.build_path())
 
 		#if os.path.exists(dep_path):
-		#	shutil.rmtree(dep_path)
+		#	removeTree(self, dep_path)
 		#os.makedirs(dep_path)
 		if not os.path.exists(dep_path):
 			os.makedirs(dep_path)
@@ -835,7 +842,7 @@ class Context:
 					# building
 					build_dir = os.path.join(dep_path, 'build')
 					if os.path.exists(build_dir):
-						shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
+						removeTree(self, build_dir)
 					os.makedirs(build_dir)
 					
 					# removed ['--depth', '1'] because of git describe --tags
