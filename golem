@@ -46,7 +46,8 @@ fileout.write(out)
 fileout.close()
 copyfile(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf'), os.path.join(os.path.join(os.getcwd(), golem_out), 'waf'))
 
-subprocess.call(argv, cwd = build_dir)
-
 if sys.argv[1] == 'distclean':
 	shutil.rmtree(golem_out)
+	sys.exit(0)
+
+subprocess.call(argv, cwd = build_dir)
