@@ -20,13 +20,24 @@ import json
 
 import errno, os, stat, shutil
 
-def handleRemoveReadonly(func, path, exc):
-  excvalue = exc[1]
-  if func in (os.rmdir, os.remove) and excvalue.errno == errno.EACCES:
-      os.chmod(path, stat.S_IRWXU| stat.S_IRWXG| stat.S_IRWXO) # 0777
-      func(path)
-  else:
-      raise
+def handleRemoveReadonly(func, path, exc_info):
+    """
+    Error handler for ``shutil.rmtree``.
+
+    If the error is due to an access error (read only file)
+    it attempts to add write permission and then retries.
+
+    If the error is for another reason it re-raises the error.
+
+    Usage : ``shutil.rmtree(path, onerror=handleRemoveReadonly)``
+    """
+    import stat
+    if not os.access(path, os.W_OK):
+        # Is the error an access error ?
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise
 
 def print_obj(obj, depth = 5, l = ""):
 	#fall back to repr
