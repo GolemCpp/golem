@@ -18,6 +18,16 @@ import types
 import pickle
 import json
 
+import errno, os, stat, shutil
+
+def handleRemoveReadonly(func, path, exc):
+  excvalue = exc[1]
+  if func in (os.rmdir, os.remove) and excvalue.errno == errno.EACCES:
+      os.chmod(path, stat.S_IRWXU| stat.S_IRWXG| stat.S_IRWXO) # 0777
+      func(path)
+  else:
+      raise
+
 def print_obj(obj, depth = 5, l = ""):
 	#fall back to repr
 	if depth<0: return repr(obj)
@@ -323,7 +333,6 @@ class Context:
 		self.context = context
 		self.module = Module(self.get_project_dir())
 		self.project = self.module.project()
-		self.resolve()
 
 	def resolve(self):
 		deps_cache_file = self.make_build_path('deps.cache')
@@ -815,7 +824,7 @@ class Context:
 					# building
 					build_dir = os.path.join(dep_path, 'build')
 					if os.path.exists(build_dir):
-						shutil.rmtree(build_dir)
+						shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
 					os.makedirs(build_dir)
 					
 					# removed ['--depth', '1'] because of git describe --tags
@@ -1194,10 +1203,12 @@ def configure(context):
 
 def build(context):
 	ctx = get_context(context)
+	ctx.resolve()
 	ctx.build()
 
 def export(context):
 	ctx = get_context(context)
+	ctx.resolve()
 	ctx.export()
 
 from waflib.TaskGen import feature, before_method

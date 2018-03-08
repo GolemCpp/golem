@@ -6,6 +6,7 @@ sys.dont_write_bytecode = True
 import os
 import imp
 import string
+import shutil
 import subprocess
 from string import Template
 from shutil import copyfile
@@ -24,7 +25,7 @@ golem_path = os.path.dirname(os.path.realpath(__file__))
 if hasattr(module, 'GOLEM_PATH'):
 	golem_path = module.GOLEM_PATH
 
-golem_out = 'bld'
+golem_out = 'build'
 if hasattr(module, 'GOLEM_OUT'):
 	golem_out = module.GOLEM_OUT
 
@@ -46,3 +47,6 @@ fileout.close()
 copyfile(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf'), os.path.join(os.path.join(os.getcwd(), golem_out), 'waf'))
 
 subprocess.call(argv, cwd = build_dir)
+
+if sys.argv[1] == 'distclean':
+	shutil.rmtree(golem_out)
