@@ -42,7 +42,10 @@ def handleRemoveReadonly(func, path, exc_info):
 def removeTree(ctx, path):
 	if ctx.is_windows():
 		# shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
-		os.system("rmdir /s /q %s" % path)
+		from time import sleep
+		while os.path.exists(path):
+			os.system("rmdir /s /q %s" % path)
+			sleep(0.1)
 	else:
 		shutil.rmtree(path)
 
