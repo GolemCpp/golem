@@ -46,7 +46,7 @@ fileout.write(out)
 fileout.close()
 copyfile(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf'), os.path.join(os.path.join(os.getcwd(), golem_out), 'waf'))
 
-if sys.argv[1] == 'distclean':
+if len(sys.argv) == 2 and sys.argv[1] == 'distclean':
 	shutil.rmtree(golem_out)
 	sys.exit(0)
 
