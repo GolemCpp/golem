@@ -9,34 +9,36 @@ import string
 import shutil
 import subprocess
 from string import Template
-from shutil import copyfile
+from shutil import copytree
 
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
 
 project_path = os.path.join(os.getcwd(), 'project.glm')
 if not os.path.exists(project_path):
-	print "ERROR: no project.glm file found"
-	sys.exit(1)
+    print "ERROR: no project.glm file found"
+    sys.exit(1)
 
 module = imp.load_source('__golem_project_glm__', project_path)
 
 golem_path = os.path.dirname(os.path.realpath(__file__))
 if hasattr(module, 'GOLEM_PATH'):
-	golem_path = module.GOLEM_PATH
+    golem_path = module.GOLEM_PATH
 
-golem_out = 'build'
+golem_out = os.path.join('build')
 if hasattr(module, 'GOLEM_OUT'):
-	golem_out = module.GOLEM_OUT
+    golem_out = module.GOLEM_OUT
 
-argv = ['python', 'waf'] + sys.argv[1:] + ['--dir=' + os.getcwd()]
+argv = ['python', 'waf/waf-light'] + sys.argv[1:] + ['--dir=' + os.getcwd()]
 
-build_dir = os.path.join(os.getcwd(), golem_out)
+build_dir = os.path.join(os.getcwd(), golem_out, 'golem')
 
-filein = open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'wscript'))
+filein = open(os.path.join(os.path.dirname(
+    os.path.realpath(__file__)), 'wscript'))
 src = Template(filein.read())
 filein.close()
-out = src.substitute(builder_path = string.replace(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'builder'), '\\', '\\\\'))
+out = src.substitute(builder_path=string.replace(os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), 'builder'), '\\', '\\\\'))
 
 if not os.path.exists(build_dir):
     os.makedirs(build_dir)
@@ -44,10 +46,14 @@ if not os.path.exists(build_dir):
 fileout = open(os.path.join(build_dir, 'wscript'), 'w+')
 fileout.write(out)
 fileout.close()
-copyfile(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf'), os.path.join(os.path.join(os.getcwd(), golem_out), 'waf'))
+
+src_waf_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf')
+dst_waf_dir = os.path.join(os.path.join(os.getcwd(), build_dir), 'waf')
+if not os.path.exists(dst_waf_dir):
+    copytree(src_waf_dir, dst_waf_dir)
+
+subprocess.call(argv, cwd=build_dir)
 
 if len(sys.argv) == 2 and sys.argv[1] == 'distclean':
-	shutil.rmtree(golem_out)
-	sys.exit(0)
-
-subprocess.call(argv, cwd = build_dir)
+    shutil.rmtree(golem_out)
+    sys.exit(0)

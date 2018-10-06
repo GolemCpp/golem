@@ -962,7 +962,7 @@ class Context:
 		return os.path.join(self.get_build_path(), path)
 
 	def make_target_out(self):
-		return 'bin'
+		return os.path.join('..', '..', 'bin')
 
 	def make_out_path(self):
 		return self.make_build_path(self.make_target_out())
@@ -1237,6 +1237,8 @@ from waflib.TaskGen import feature, before_method
 @before_method('process_rule')
 def post_the_other(self):
     deps = getattr(self, 'depends_on', []) 
+    print("Hello", self.__dict__)
+    print("Tasks", type(self.source[0]))
     for name in self.to_list(deps):
         other = self.bld.get_tgen_by_name(name) 
         print('other task generator tasks (before) %s' % other.tasks)
