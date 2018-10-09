@@ -76,11 +76,14 @@ def print_obj(obj, depth = 5, l = ""):
 					except Exception, e: objdict[a] = str(e)
 	return name + " {\n" + "\n".join(l + repr(k) + ": " + print_obj(v, depth=depth-1, l=l+"  ") + "," for k, v in objdict.iteritems()) + "\n" + l + "}"
 
+def default_cached_dir():
+	return os.path.join(os.path.expanduser("~"), '.cache', 'golem')
+
 
 class CacheConf:
 	def __init__(self):
 		self.remote = ''
-		self.location = os.path.join(os.path.expanduser("~"), '.cache', 'golem')
+		self.location = default_cached_dir()
 
 	def __str__(self):
 		return print_obj(self)
@@ -370,6 +373,12 @@ class Context:
 	def get_project_dir(self):
 		return self.context.options.dir
 
+	def make_cache_dir(self):
+		cache_dir = self.context.options.cache_dir
+		if not os.path.isabs(cache_dir):
+			cache_dir = os.path.join(self.get_project_dir(), cache_dir)
+		return cache_dir
+
 	def make_project_path(self, path):
 		return os.path.join(self.get_project_dir(), path)
 
@@ -545,6 +554,8 @@ class Context:
 		context.add_option("--export", action="store", default='', help="Export folder")
 
 		context.add_option("--vscode", action="store_true", default=False, help="VSCode CppTools Properties")
+
+		context.add_option("--cache-dir", action="store", default=default_cached_dir(), help="Cache directory location")
 		
 		if Context.is_windows(): 
 			context.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -575,6 +586,7 @@ class Context:
 			return None
 
 		cacheconf = CacheConf()
+		cacheconf.location = self.make_cache_dir()
 
 		# cache remote
 		if not config.has_option('GOLEM', 'cache.remote'):
@@ -797,6 +809,7 @@ class Context:
 		cache_conf = self.find_cache_conf()
 		if not cache_conf:
 			cache_conf = CacheConf()
+			cache_conf.location = self.make_cache_dir()
 		
 		cache_location = cache_conf.location
 		cache_repo = cache_conf.remote
@@ -855,9 +868,9 @@ class Context:
 						return
 
 					if self.is_windows():
-						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir, shell=True)
+						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir, shell=True)
 					else:
-						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path], cwd=build_dir)
+						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir)
 					print ret
 
 					# caching
@@ -913,8 +926,7 @@ class Context:
 		if not self.is_windows():
 			self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
 		else:
-			self.context.env['CXXFLAGS_' + dep.name]			= ['/I', dep_path_include]
-		#	self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I', dep_path_include]
+			self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I', dep_path_include]
 		self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
 		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
 			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
