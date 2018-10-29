@@ -100,6 +100,34 @@ class tmp(Context):
     cmd = 'rebuild'
     fun = 'rebuild'
 
+# Package
+
+
+def package(bld):
+    builder.package(bld)
+
+
+from waflib.Context import Context
+
+
+class tmp(Context):
+    cmd = 'package'
+    fun = 'package'
+
+# Requirements
+
+
+def requirements(bld):
+    builder.requirements(bld)
+
+
+from waflib.Context import Context
+
+
+class tmp(Context):
+    cmd = 'requirements'
+    fun = 'requirements'
+
 # Qt stuff
 
 

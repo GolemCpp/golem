@@ -40,14 +40,23 @@ def handleRemoveReadonly(func, path, exc_info):
         raise
 
 def removeTree(ctx, path):
-	if ctx.is_windows():
-		# shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
-		from time import sleep
-		while os.path.exists(path):
-			os.system("rmdir /s /q %s" % path)
-			sleep(0.1)
-	else:
-		shutil.rmtree(path)
+	if os.path.exists(path):
+		if ctx.is_windows():
+			# shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
+			from time import sleep
+			while os.path.exists(path):
+				os.system("rmdir /s /q %s" % path)
+				sleep(0.1)
+		else:
+			shutil.rmtree(path)
+
+def make_directory(base, path = None):
+	directory = base
+	if path is not None:
+		directory = os.path.join(directory, path)
+	if not os.path.exists(directory):
+		os.makedirs(directory)
+	return directory
 
 def print_obj(obj, depth = 5, l = ""):
 	#fall back to repr
@@ -141,24 +150,27 @@ class Dependency:
 		return self.resolved_version
 
 class Condition:
-	def __init__(self, variant = None, linking = None, runtime = None, osystem = None, arch = None, compiler = None):
+	def __init__(self, variant = None, linking = None, runtime = None, osystem = None, arch = None, compiler = None, distribution = None, release = None):
 		self.variant 	= [] if variant is None else variant 	# debug, release
 		self.linking 	= [] if linking is None else linking 	# shared, static
 		self.runtime 	= [] if runtime is None else runtime 	# shared, static
 		self.osystem 	= [] if osystem is None else osystem 	# linux, windows, osx
-		self.arch 		= [] if arch is None else arch		# x86, x64
-		self.compiler 	= [] if compiler is None else compiler # gcc, clang, msvc
+		self.arch 		= [] if arch is None else arch			# x86, x64
+		self.compiler 	= [] if compiler is None else compiler 	# gcc, clang, msvc
+
+		self.distribution	= [] if distribution is None else distribution	# debian, ubuntu, etc.
+		self.release 		= [] if release is None else release			# jessie, stretch, etc.
 
 	def __str__(self):
 		return print_obj(self)
 
 	def __nonzero__(self):
-		if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler:
+		if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release:
 			return True
 		return False
 
 class Configuration:
-	def __init__(self, target = None, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, features = None, deps = None, use = None, header_only = None, **kwargs):
+	def __init__(self, target = None, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, packages = None, packages_dev = None, packages_tool = None, features = None, deps = None, use = None, header_only = None, **kwargs):
 		self.condition = Condition(**kwargs)
 
 		self.target = '' if target is None else target
@@ -170,6 +182,10 @@ class Configuration:
 		self.cxxflags = [] if cxxflags is None else cxxflags
 		self.linkflags = [] if linkflags is None else linkflags
 		self.system = [] if system is None else system
+
+		self.packages = [] if packages is None else packages
+		self.packages_dev = [] if packages_dev is None else packages_dev
+		self.packages_tool = '' if packages_tool is None else packages_tool
 
 		self.features = [] if features is None else features
 		self.deps = [] if deps is None else deps
@@ -193,6 +209,11 @@ class Configuration:
 		self.linkflags += config.linkflags
 		self.system += config.system
 
+		self.packages += config.packages
+		self.packages_dev += config.packages_dev
+		if config.packages_tool:
+			self.packages_tool = config.packages_tool
+
 		self.features += config.features
 		self.deps += config.deps
 		self.use += config.use
@@ -204,7 +225,9 @@ class Configuration:
 				and (not c.condition.runtime or context.runtime() in c.condition.runtime)
 				and (not c.condition.osystem or context.osname() in c.condition.osystem)
 				and (not c.condition.arch or context.arch() in c.condition.arch)
-				and (not c.condition.compiler or context.compiler() in c.condition.compiler)):
+				and (not c.condition.compiler or context.compiler() in c.condition.compiler)
+				and (not c.condition.distribution or context.distribution() in c.condition.distribution)
+				and (not c.condition.release or context.release() in c.condition.release)):
 				self.append(c)
 
 				if exporting:
@@ -227,6 +250,20 @@ class Target:
 		self.configs.append(config)
 		return config
 
+class Package:
+	def __init__(self, targets = None, prefix = None, name = None, section = None, priority = None, maintainer = None, description = None, homepage = None):
+		self.targets = targets
+		self.prefix = prefix
+		self.name = name
+		self.section = section
+		self.priority = priority
+		self.maintainer = maintainer
+		self.description = description
+		self.homepage = homepage
+
+	def __str__(self):
+		return print_obj(self)
+	
 class Project:
 	def __init__(self):
 		self.cache = []
@@ -237,6 +274,8 @@ class Project:
 
 		self.qt = False
 		self.qtdir = ''
+
+		self.packages = []
 
 	def __str__(self):
 		return print_obj(self)
@@ -312,12 +351,20 @@ class Project:
 		self.qt = True
 		if path:
 			self.qtdir = path
-
-	def linux_check_packages(*packages):
-		installed_packages = subprocess.check_output(['dpkg', '-l'])
-		for package in packages:
-			if not installed_packages.find(str(package)):
-				subprocess.check_output(['sudo', 'apt-get', 'install', str(package)])
+	
+	def package(self, targets, name, section, priority, maintainer, description, homepage, prefix = None):
+		package = Package(
+			targets=targets,
+			prefix=prefix,
+			name=name,
+			section=section,
+			priority=priority,
+			maintainer=maintainer,
+			description=description,
+			homepage=homepage
+		)
+		self.packages.append(package)
+		return package
 
 class Module:
 	def __init__(self, path = None):
@@ -416,6 +463,18 @@ class Context:
 		
 	def link(self):
 		return self.context.options.link
+
+	def distribution(self):
+		if self.is_linux():
+			return platform.linux_distribution()[0].lower()
+		return None
+
+
+	def release(self):
+		if self.is_linux():
+			import lsb_release
+			return lsb_release.get_distro_information()['CODENAME'].lower()
+		return None
 
 	def link_min(self):
 		return self.link()[:2]
@@ -532,11 +591,21 @@ class Context:
 	def osarch():
 		return Context.osarch_parser(Context.machine())
 
+	def get_arch(self):
+		return Context.osarch_parser(self.context.options.arch)
+
 	def is_x86(self):
-		return Context.osarch_parser(self.context.options.arch) == 'x86'
+		return self.get_arch() == 'x86'
 
 	def is_x64(self):
-		return Context.osarch_parser(self.context.options.arch) == 'x64'
+		return self.get_arch() == 'x64'
+
+	def get_arch_for_linux(self, arch = None):
+		machine2bits = {
+			'x64': 'amd64',
+			'x86': 'i386'
+		}
+		return machine2bits.get(self.get_arch() if arch is None else arch.lower(), None)
 
 	@staticmethod
 	def options(context):
@@ -767,6 +836,7 @@ class Context:
 
 		# copy cxxflags to cflags
 		self.context.env.CFLAGS = self.context.env.CXXFLAGS
+		print('FLAGS', self.context.env.CFLAGS)
 
 	def dep_system(self, context, libs):
 		context.env['LIB'] += libs
@@ -968,7 +1038,8 @@ class Context:
 		return target_name
 
 	def get_build_path(self):
-		return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
+		# return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
+		return os.path.join(os.getcwd(), 'obj')
 
 	def make_build_path(self, path):
 		return os.path.join(self.get_build_path(), path)
@@ -978,6 +1049,90 @@ class Context:
 
 	def make_out_path(self):
 		return self.make_build_path(self.make_target_out())
+
+	def make_output_path(self, path):
+		return self.make_build_path(os.path.join('..', '..', path))
+
+	def get_output_path(self):
+		return self.make_output_path(".")
+
+	def get_long_version(self, default = None):
+
+		version_string = None
+		
+		try:
+			version_string = subprocess.check_output(['git', 'describe', '--long', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
+			version_string = version_string.splitlines()[0]
+			if version_string[0] == 'v':
+				version_string = version_string[1:]
+		except:
+			version_string = default
+
+		return version_string
+
+	def get_version_major(self, version_string = None):
+
+		if version_string is None:
+			version_string = self.get_long_version()
+
+		if version_string is None:
+			return None
+
+		return re.search('^([0-9]+)\\..*', version_string).group(1)
+
+	def get_version_minor(self, version_string = None):
+
+		if version_string is None:
+			version_string = self.get_long_version()
+
+		if version_string is None:
+			return None
+
+		return re.search('^[0-9]+\\.([0-9]+).*', version_string).group(1)
+
+	def get_version_patch(self, version_string = None):
+
+		if version_string is None:
+			version_string = self.get_long_version()
+
+		if version_string is None:
+			return None
+
+		return re.search('^[0-9]+\\.[0-9]+\\.([0-9]+).*', version_string).group(1)
+
+	def get_version_revision(self, version_string = None):
+
+		if version_string is None:
+			version_string = self.get_long_version()
+
+		if version_string is None:
+			return None
+
+		return re.search('^[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
+
+	def get_version_hash(self, version_string = None):
+
+		if version_string is None:
+			version_string = self.get_long_version()
+
+		if version_string is None:
+			return None
+
+		return re.search('^[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
+
+	def get_short_version(self, version_string = None):
+
+		if version_string is None:
+			version_string = self.get_long_version()
+
+		if version_string is None:
+			return None
+		
+		version_major = self.get_version_major(version_string)
+		version_minor = self.get_version_minor(version_string)
+		version_patch = self.get_version_patch(version_string)
+
+		return version_major + "." + version_minor + "." + version_patch
 
 	def build_target(self, target):
 
@@ -1034,17 +1189,10 @@ class Context:
 		version_short = None
 		version_source = []
 		if target.version_template is not None:
-			try:
-				version_string = subprocess.check_output(['git', 'describe', '--long', '--tags', '--dirty=-d'], cwd=self.get_project_dir())
-			except:
-				version_string = None
-			if version_string:
-				version_string = version_string.splitlines()[0]
-				version_major = re.search('^v([0-9]+)\\..*', version_string).group(1)
-				version_minor = re.search('^v[0-9]+\\.([0-9]+).*', version_string).group(1)
-				version_patch = re.search('^v[0-9]+\\.[0-9]+\\.([0-9]+).*', version_string).group(1)
-				version_hash = re.search('^v[0-9]+\\.[0-9]+\\.[0-9]+.(.*)', version_string).group(1)
-				version_short = version_major + "." + version_minor + "." + version_patch
+			version_string = self.get_long_version(default='0.0.0')
+			if version_string is not None:
+				version_hash = self.get_version_hash(version_string)
+				version_short = self.get_short_version(version_string)
 				for version_template in target.version_template:
 					version_template_src = self.context.root.find_node(self.make_project_path(version_template))
 					version_template_dst = self.context.root.find_or_declare(self.make_build_path(os.path.basename(version_template) + '.cpp'))
@@ -1219,6 +1367,162 @@ class Context:
 				pickle.dump(export_ctx, output)
 				output.close()
 
+	def requirements(self):
+		targets_to_process = []
+		asked_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
+		for asked_target in asked_targets:
+			for available_target in self.project.targets:
+				if asked_target == available_target.name:
+					targets_to_process.append(available_target)
+				else:
+					raise RuntimeError("Can't find any target configuration named \"{}\"".format(asked_target))
+		
+		packages = []
+		master_config = Configuration()
+		for target in targets_to_process:
+
+			config = Configuration()
+			config.merge(self, target.configs)
+
+			for use_name in config.use:
+				for export in self.project.exports:
+					if use_name == export.name:
+						config.merge(self, export.configs)
+
+			for dep_name in config.deps:
+				for dep in self.project.deps:
+					if dep_name == dep.name:
+						self.link_dependency(config, dep)
+
+			master_config.merge(self, [config])
+		packages += master_config.packages_dev if len(master_config.packages_dev) > 0 else master_config.packages
+		print('Packages required to be installed: {}'.format(packages))
+		print('Looking for installed packages...')
+
+		packages_to_install = []
+		installed_packages = subprocess.check_output(['dpkg', '-l'])
+		for package in packages:
+			if not installed_packages.find(package):
+				packages_to_install.append(package)
+			else:
+				print('Found installed package: {}'.format(package))
+		
+		if len(packages_to_install) > 0:
+			print('Install the following packages: {}'.format(packages_to_install))
+			subprocess.check_output(['sudo', 'apt', 'install', '-y'] + packages_to_install)
+		print('Done')
+
+	def package(self):
+
+		# Check asked package
+
+		packages_to_process = []
+		asked_packages = self.context.options.targets.split(',') if self.context.options.targets else [package.name for package in self.project.packages]
+		for asked_package in asked_packages:
+			for available_package in self.project.packages:
+				if asked_package == available_package.name:
+					packages_to_process.append(available_package)
+				else:
+					raise RuntimeError("Can't find any package configuration named \"{}\"".format(asked_package))
+		
+		for package in packages_to_process:
+			if self.is_windows():
+				self.package_windows(package)
+			elif self.is_darwin():
+				self.package_darwin(package)
+			elif self.is_linux():
+				self.package_debian(package)
+
+	def package_debian(self, package):
+
+		# Check package's targets
+
+		targets_to_process = []
+		asked_targets = package.targets
+		for asked_target in asked_targets:
+			for available_target in self.project.targets:
+				if asked_target == available_target.name:
+					targets_to_process.append(available_target)
+				else:
+					raise RuntimeError("Can't find any target configuration named \"{}\" for package named \"\"".format(asked_target, package.name))
+
+		depends = []
+		master_config = Configuration()
+		for target in targets_to_process:
+
+			config = Configuration()
+			config.merge(self, target.configs)
+
+			for use_name in config.use:
+				for export in self.project.exports:
+					if use_name == export.name:
+						config.merge(self, export.configs)
+
+			for dep_name in config.deps:
+				for dep in self.project.deps:
+					if dep_name == dep.name:
+						self.link_dependency(config, dep)
+
+			master_config.merge(self, [config])
+		depends += master_config.packages
+
+		# Don't run this script as root
+
+		# Gather package metadata
+		prefix = "/usr/local" if package.prefix is None else package.prefix
+
+		package_name = package.name
+		package_section = package.section
+		package_priority = package.priority
+		package_maintainer = package.maintainer
+		package_description = package.description
+		package_homepage = package.homepage
+
+		package_version = self.get_long_version(default='0.0.0')
+		package_arch = self.get_arch_for_linux()
+		package_depends = ', '.join(depends)
+
+		# Clean-up
+		package_directory = self.make_output_path('dist')
+		removeTree(self, package_directory)
+
+		# Install documentation
+
+		# Compression man pages
+
+		# Copy systemd unit if any
+
+		# Strip binaries, libraries, archives
+
+		# Prepare package
+		package_directory = make_directory(package_directory)
+
+		prefix_directory = make_directory(package_directory, '.' + prefix)
+
+		bin_directory = make_directory(prefix_directory, 'bin')
+
+		distutils.dir_util.copy_tree(self.make_out_path(), bin_directory)
+
+		debian_directory = make_directory(package_directory, 'DEBIAN')
+
+		control_path = os.path.join(debian_directory, 'control')
+		with open(control_path, 'w') as control_file:
+			control_file.writelines([
+					"Package: " + package_name + '\n',				# Foo
+					"Version: " + package_version + '\n',			# 0.1.2
+					"Section: " + package_section + '\n',			# misc
+					"Priority: " + package_priority + '\n',			# { optional | ... }
+					"Architecture: " + package_arch + '\n',			# amd64, i386
+					"Depends: " + package_depends + '\n',			# list, of, dependencies, as, package, names
+					"Maintainer: " + package_maintainer + '\n',		# { Company | Firstname LASTNAME }
+					"Description: " + package_description + '\n',	# One sentence description
+					"Homepage: " + package_homepage + '\n'			# https://company.com/
+				])
+
+		# Build package
+		output_filename = package_name + '_' + package_version + "_" + package_arch
+		subprocess.check_output(['fakeroot', 'dpkg-deb', '--build', package_directory, output_filename + '.deb'], cwd=self.get_output_path())
+
 def get_context(context):
 	global global_context
 	if not 'global_context' in globals():
@@ -1243,6 +1547,16 @@ def export(context):
 	ctx = get_context(context)
 	ctx.resolve()
 	ctx.export()
+
+def package(context):
+	ctx = get_context(context)
+	ctx.resolve()
+	ctx.package()
+
+def requirements(context):
+	ctx = get_context(context)
+	ctx.resolve()
+	ctx.requirements()
 
 from waflib.TaskGen import feature, before_method
 @feature('*') 
