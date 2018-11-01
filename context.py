@@ -8,8 +8,9 @@ import shutil
 import pickle
 import platform
 import subprocess
-import distutils
 import ConfigParser
+import distutils
+from distutils import dir_util
 from module import Module
 from cache import CacheConf
 from configuration import Configuration
