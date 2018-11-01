@@ -1,24 +1,19 @@
-#!/usr/bin/env python
-
-import sys
-sys.dont_write_bytecode = True
-
 import os
-import platform
-import subprocess
-import ConfigParser
-import distutils.dir_util
-import md5
-import shutil
-import imp
 import io
 import re
-import copy
-import types
-import pickle
+import sys
+import md5
 import json
-
-import errno, os, stat, shutil
+import shutil
+import pickle
+import platform
+import subprocess
+import distutils
+import ConfigParser
+from module import Module
+from cache import CacheConf
+from configuration import Configuration
+import cache
 
 def handleRemoveReadonly(func, path, exc_info):
     """
@@ -37,367 +32,32 @@ def handleRemoveReadonly(func, path, exc_info):
         os.chmod(path, stat.S_IWUSR)
         func(path)
     else:
-        raise
+        raise RuntimeError("Can't access to \"{}\"".format(path))
+
 
 def removeTree(ctx, path):
-	if os.path.exists(path):
-		if ctx.is_windows():
-			# shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
-			from time import sleep
-			while os.path.exists(path):
-				os.system("rmdir /s /q %s" % path)
-				sleep(0.1)
-		else:
-			shutil.rmtree(path)
-
-def make_directory(base, path = None):
-	directory = base
-	if path is not None:
-		directory = os.path.join(directory, path)
-	if not os.path.exists(directory):
-		os.makedirs(directory)
-	return directory
-
-def print_obj(obj, depth = 5, l = ""):
-	#fall back to repr
-	if depth<0: return repr(obj)
-	#expand/recurse dict
-	if isinstance(obj, dict):
-		name = ""
-		objdict = obj
-	else:
-		#if basic type, or list thereof, just print
-		canprint=lambda o:isinstance(o, (int, float, str, unicode, bool, types.NoneType, types.LambdaType))
-		try:
-			if canprint(obj) or sum(not canprint(o) for o in obj) == 0: return repr(obj)
-		except TypeError, e:
-			pass
-		#try to iterate as if obj were a list
-		try:
-			return "[\n" + "\n".join(l + print_obj(k, depth=depth-1, l=l+"  ") + "," for k in obj) + "\n" + l + "]"
-		except TypeError, e:
-			#else, expand/recurse object attribs
-			name = (hasattr(obj, '__class__') and obj.__class__.__name__ or type(obj).__name__)
-			objdict = {}
-			for a in dir(obj):
-				if a[:2] != "__" and (not hasattr(obj, a) or not hasattr(getattr(obj, a), '__call__')):
-					try: objdict[a] = getattr(obj, a)
-					except Exception, e: objdict[a] = str(e)
-	return name + " {\n" + "\n".join(l + repr(k) + ": " + print_obj(v, depth=depth-1, l=l+"  ") + "," for k, v in objdict.iteritems()) + "\n" + l + "}"
-
-def default_cached_dir():
-	return os.path.join(os.path.expanduser("~"), '.cache', 'golem')
+    if os.path.exists(path):
+        if ctx.is_windows():
+            # shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
+            from time import sleep
+            while os.path.exists(path):
+                os.system("rmdir /s /q %s" % path)
+                sleep(0.1)
+        else:
+            shutil.rmtree(path)
 
 
-class CacheConf:
-	def __init__(self):
-		self.remote = ''
-		self.location = default_cached_dir()
-
-	def __str__(self):
-		return print_obj(self)
+def make_directory(base, path=None):
+    directory = base
+    if path is not None:
+        directory = os.path.join(directory, path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    return directory
 
 def make_dep_base(dep):
 	return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
 
-class Dependency:
-	def __init__(self, name = None, repository = None, version = None):
-		self.name				= '' if name is None else name
-		self.repository			= '' if repository is None else repository
-		self.version			= '' if version is None else version
-		self.resolved_version	= ''
-
-	def __str__(self):
-		return print_obj(self)
-
-	def resolve(self):
-		if self.resolved_version:
-			return self.resolved_version
-		
-		dep_version = ''
-		if str(self.version) == 'latest':
-			tags = subprocess.check_output(['git', 'ls-remote', '--tags', self.repository])
-			tags = tags.split('\n')
-			badtag = ['^{}']
-			tmp = ''
-			for line in tags:
-				if '^{}' not in line:
-					tmp += line + '\n'
-			tags = tmp
-			versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
-			versions_list = set(versions_list)
-			versions_list = list(versions_list)
-			versions_list.sort(key=lambda s: map(int, s.split('.')))
-			last = versions_list[-1:]
-			if not last:
-				print("ERROR: no latest version")
-				return
-			last = 'v' + last[0]
-			hash = subprocess.check_output(['git', 'ls-remote', '--tags', self.repository, last])
-			if not hash:
-				print("ERROR: can't find " + last)
-				return
-			#dep_version = hash[:8]
-			dep_version = last
-		else:
-			hash = subprocess.check_output(['git', 'ls-remote', '--heads', self.repository, str(self.version)])
-			if hash:
-				dep_version = hash[:8]
-			else:
-				dep_version = str(self.version)
-
-		self.resolved_version = dep_version
-		return self.resolved_version
-
-class Condition:
-	def __init__(self, variant = None, linking = None, runtime = None, osystem = None, arch = None, compiler = None, distribution = None, release = None):
-		self.variant 	= [] if variant is None else variant 	# debug, release
-		self.linking 	= [] if linking is None else linking 	# shared, static
-		self.runtime 	= [] if runtime is None else runtime 	# shared, static
-		self.osystem 	= [] if osystem is None else osystem 	# linux, windows, osx
-		self.arch 		= [] if arch is None else arch			# x86, x64
-		self.compiler 	= [] if compiler is None else compiler 	# gcc, clang, msvc
-
-		self.distribution	= [] if distribution is None else distribution	# debian, ubuntu, etc.
-		self.release 		= [] if release is None else release			# jessie, stretch, etc.
-
-	def __str__(self):
-		return print_obj(self)
-
-	def __nonzero__(self):
-		if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release:
-			return True
-		return False
-
-class Configuration:
-	def __init__(self, target = None, defines = None, includes = None, source = None, cxxflags = None, linkflags = None, system = None, packages = None, packages_dev = None, packages_tool = None, features = None, deps = None, use = None, header_only = None, **kwargs):
-		self.condition = Condition(**kwargs)
-
-		self.target = '' if target is None else target
-
-		self.defines = [] if defines is None else defines
-		self.includes = [] if includes is None else includes
-		self.source = [] if source is None else source
-
-		self.cxxflags = [] if cxxflags is None else cxxflags
-		self.linkflags = [] if linkflags is None else linkflags
-		self.system = [] if system is None else system
-
-		self.packages = [] if packages is None else packages
-		self.packages_dev = [] if packages_dev is None else packages_dev
-		self.packages_tool = '' if packages_tool is None else packages_tool
-
-		self.features = [] if features is None else features
-		self.deps = [] if deps is None else deps
-		self.use = [] if use is None else use
-
-		self.header_only = False if header_only is None else header_only
-
-	def __str__(self):
-		return print_obj(self)
-
-	def append(self, config):
-		
-		if config.target:
-			self.target = config.target
-
-		self.defines += config.defines
-		self.includes += config.includes
-		self.source += config.source
-
-		self.cxxflags += config.cxxflags
-		self.linkflags += config.linkflags
-		self.system += config.system
-
-		self.packages += config.packages
-		self.packages_dev += config.packages_dev
-		if config.packages_tool:
-			self.packages_tool = config.packages_tool
-
-		self.features += config.features
-		self.deps += config.deps
-		self.use += config.use
-	
-	def merge(self, context, configs, exporting = False):
-		for c in configs:
-			if (	(not c.condition.variant or context.variant() in c.condition.variant)
-				and (not c.condition.linking or context.link() in c.condition.linking)
-				and (not c.condition.runtime or context.runtime() in c.condition.runtime)
-				and (not c.condition.osystem or context.osname() in c.condition.osystem)
-				and (not c.condition.arch or context.arch() in c.condition.arch)
-				and (not c.condition.compiler or context.compiler() in c.condition.compiler)
-				and (not c.condition.distribution or context.distribution() in c.condition.distribution)
-				and (not c.condition.release or context.release() in c.condition.release)):
-				self.append(c)
-
-				if exporting:
-					if c.header_only is not None:
-						self.header_only = c.header_only
-
-			
-class Target:
-	def __init__(self):
-		self.type = ''
-		self.name = ''
-		self.configs = []
-		self.version_template = None
-
-	def __str__(self):
-		return print_obj(self)
-
-	def when(self, **kwargs):
-		config = Configuration(**kwargs)
-		self.configs.append(config)
-		return config
-
-class Package:
-	def __init__(self, targets = None, prefix = None, name = None, section = None, priority = None, maintainer = None, description = None, homepage = None):
-		self.targets = targets
-		self.prefix = prefix
-		self.name = name
-		self.section = section
-		self.priority = priority
-		self.maintainer = maintainer
-		self.description = description
-		self.homepage = homepage
-
-	def __str__(self):
-		return print_obj(self)
-	
-class Project:
-	def __init__(self):
-		self.cache = []
-		self.deps = []
-
-		self.targets = []
-		self.exports = []
-
-		self.qt = False
-		self.qtdir = ''
-
-		self.packages = []
-
-	def __str__(self):
-		return print_obj(self)
-
-	def deps_resolve(self):
-		cache = []
-		for dep in self.deps:
-			dep.resolve()
-			cache.append([dep.name, dep.version, dep.resolve()])
-		return cache
-
-	def deps_load(self, cache):
-		for i, dep in enumerate(self.deps):
-			for item in cache:
-				if item[0] == dep.name and item[1] == dep.version:
-					print item[0] + " : " + item[1] + " -> " + item[2]
-					self.deps[i].resolved_version = item[2]
-					break;
-			if not self.deps[i].resolved_version:
-				print dep.name + " : no cached version"
-
-		sys.stdout.flush()
-
-	def target(self, type, name, target = None, defines = None, includes = None, source = None, features = None, deps = None, use = None, header_only = None, version_template = None, system = None):
-		newtarget = Target()
-		newtarget.type = type
-		newtarget.name = name
-		newtarget.version_template = version_template
-		
-		config = Configuration()
-
-		config.target = '' if target is None else target
-
-		config.defines = [] if defines is None else defines
-		config.includes = [] if includes is None else includes
-		config.source = [] if source is None else source
-
-		config.system = [] if system is None else system
-		
-		config.features = [] if features is None else features
-		config.deps = [] if deps is None else deps
-		config.use = [] if use is None else use
-
-		config.header_only = False if header_only is None else header_only
-
-		newtarget.configs.append(config)
-
-		if type == 'export':
-			self.exports.append(newtarget)
-			return newtarget
-
-		if any([feature.startswith("QT5") for feature in config.features]):
-			self.enable_qt()
-
-		self.targets.append(newtarget)
-		return newtarget
-
-	def library(self, **kwargs):
-		return self.target(type = 'library', **kwargs)
-
-	def program(self, **kwargs):
-		return self.target(type = 'program', **kwargs)
-
-	def export(self, **kwargs):
-		return self.target(type = 'export', **kwargs)
-
-	def dependency(self, **kwargs):
-		dep = Dependency(**kwargs)
-		self.deps.append(dep)
-		return dep
-
-	def enable_qt(self, path = None):
-		self.qt = True
-		if path:
-			self.qtdir = path
-	
-	def package(self, targets, name, section, priority, maintainer, description, homepage, prefix = None):
-		package = Package(
-			targets=targets,
-			prefix=prefix,
-			name=name,
-			section=section,
-			priority=priority,
-			maintainer=maintainer,
-			description=description,
-			homepage=homepage
-		)
-		self.packages.append(package)
-		return package
-
-class Module:
-	def __init__(self, path = None):
-		self.path = '.' if path is None else path
-
-		if sys.modules.get('project'):
-			self.module = sys.modules.get('project')
-		else:
-			project_path = os.path.join(self.path, 'project.glm')
-
-			if not os.path.exists(project_path):
-				print "ERROR: can't find " + project_path
-				return
-			self.module = imp.load_source('project', project_path)
-
-	def project(self):
-
-		if not hasattr(self.module, 'configure'):
-			print "ERROR: no configure function found"
-			return
-
-		project = Project()
-		self.module.configure(project)
-		return project
-
-	def script(self, context):
-
-		#if not hasattr(self.module, 'script'):
-		#	print "ERROR: no script function found"
-		#	return
-
-		if hasattr(self.module, 'script'):
-			self.module.script(context)
 
 class Context:
 	def __init__(self, context):
@@ -624,7 +284,7 @@ class Context:
 
 		context.add_option("--vscode", action="store_true", default=False, help="VSCode CppTools Properties")
 
-		context.add_option("--cache-dir", action="store", default=default_cached_dir(), help="Cache directory location")
+		context.add_option("--cache-dir", action="store", default=cache.default_cached_dir(), help="Cache directory location")
 		
 		if Context.is_windows(): 
 			context.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -836,21 +496,20 @@ class Context:
 
 		# copy cxxflags to cflags
 		self.context.env.CFLAGS = self.context.env.CXXFLAGS
-		print('FLAGS', self.context.env.CFLAGS)
 
 	def dep_system(self, context, libs):
 		context.env['LIB'] += libs
 		
 	def dep_static_release(self, name, fullname, lib):
 		
-		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
-		self.context.env['STLIBPATH_' + name]	= list_include(self.context, ['libpath'])
+		self.context.env['INCLUDES_' + name]		= self.list_include(self.context, ['includes'])
+		self.context.env['STLIBPATH_' + name]	= self.list_include(self.context, ['libpath'])
 		self.context.env['STLIB_' + name]		= lib
 		
 	def dep_static(self, name, fullname, lib, libdebug):
 		
-		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
-		self.context.env['STLIBPATH_' + name]	= list_include(self.context, ['libpath'])
+		self.context.env['INCLUDES_' + name]		= self.list_include(self.context, ['includes'])
+		self.context.env['STLIBPATH_' + name]	= self.list_include(self.context, ['libpath'])
 		
 		if self.is_debug():
 			self.context.env['STLIB_' + name]	= libdebug
@@ -860,14 +519,14 @@ class Context:
 		
 	def dep_shared_release(self, name, fullname, lib):
 		
-		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
-		self.context.env['LIBPATH_' + name]		= list_include(self.context, ['libpath'])
+		self.context.env['INCLUDES_' + name]		= self.list_include(self.context, ['includes'])
+		self.context.env['LIBPATH_' + name]		= self.list_include(self.context, ['libpath'])
 		self.context.env['LIB_' + name]			= lib
 		
 	def dep_shared(self, name, fullname, lib, libdebug):
 		
-		self.context.env['INCLUDES_' + name]		= list_include(self.context, ['includes'])
-		self.context.env['LIBPATH_' + name]		= list_include(self.context, ['libpath'])
+		self.context.env['INCLUDES_' + name]		= self.list_include(self.context, ['includes'])
+		self.context.env['LIBPATH_' + name]		= self.list_include(self.context, ['libpath'])
 		
 		if self.is_debug():
 			self.context.env['LIB_' + name]		= libdebug
@@ -1433,6 +1092,12 @@ class Context:
 			elif self.is_linux():
 				self.package_debian(package)
 
+	def package_windows(self, package):
+		raise RuntimeError("Not implemented yet")
+
+	def package_darwin(self, package):
+		raise RuntimeError("Not implemented yet")
+
 	def package_debian(self, package):
 
 		# Check package's targets
@@ -1444,7 +1109,7 @@ class Context:
 				if asked_target == available_target.name:
 					targets_to_process.append(available_target)
 				else:
-					raise RuntimeError("Can't find any target configuration named \"{}\" for package named \"\"".format(asked_target, package.name))
+					raise RuntimeError("Can't find any target configuration named \"{}\" for package named \"{}\"".format(asked_target, package.name))
 
 		depends = []
 		master_config = Configuration()
@@ -1522,51 +1187,3 @@ class Context:
 		# Build package
 		output_filename = package_name + '_' + package_version + "_" + package_arch
 		subprocess.check_output(['fakeroot', 'dpkg-deb', '--build', package_directory, output_filename + '.deb'], cwd=self.get_output_path())
-
-def get_context(context):
-	global global_context
-	if not 'global_context' in globals():
-		global_context = Context(context)
-
-	global_context.context = context
-	return global_context
-
-def options(context):
-	Context.options(context)
-
-def configure(context):
-	ctx = get_context(context)
-	ctx.configure()
-
-def build(context):
-	ctx = get_context(context)
-	ctx.resolve()
-	ctx.build()
-
-def export(context):
-	ctx = get_context(context)
-	ctx.resolve()
-	ctx.export()
-
-def package(context):
-	ctx = get_context(context)
-	ctx.resolve()
-	ctx.package()
-
-def requirements(context):
-	ctx = get_context(context)
-	ctx.resolve()
-	ctx.requirements()
-
-from waflib.TaskGen import feature, before_method
-@feature('*') 
-@before_method('process_rule')
-def post_the_other(self):
-    deps = getattr(self, 'depends_on', []) 
-    print("Hello", self.__dict__)
-    print("Tasks", type(self.source))
-    for name in self.to_list(deps):
-        other = self.bld.get_tgen_by_name(name) 
-        print('other task generator tasks (before) %s' % other.tasks)
-        other.post() 
-        print('other task generator tasks (after) %s' % other.tasks)

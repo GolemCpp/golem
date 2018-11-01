@@ -38,7 +38,7 @@ filein = open(os.path.join(os.path.dirname(
 src = Template(filein.read())
 filein.close()
 out = src.substitute(builder_path=string.replace(os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), 'builder'), '\\', '\\\\'))
+    golem_path, 'builder.py'), '\\', '\\\\'))
 
 if not os.path.exists(build_dir):
     os.makedirs(build_dir)
@@ -47,12 +47,14 @@ fileout = open(os.path.join(build_dir, 'wscript'), 'w+')
 fileout.write(out)
 fileout.close()
 
-src_waf_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'waf')
+src_waf_dir = os.path.join(golem_path, 'waf')
 dst_waf_dir = os.path.join(os.path.join(os.getcwd(), build_dir), 'waf')
 if not os.path.exists(dst_waf_dir):
     copytree(src_waf_dir, dst_waf_dir)
 
-subprocess.call(argv, cwd=build_dir)
+custom_env = os.environ
+custom_env['PYTHONPATH'] = golem_path
+subprocess.call(argv, cwd=build_dir, env=custom_env)
 
 if len(sys.argv) == 2 and sys.argv[1] == 'distclean':
     shutil.rmtree(golem_out)
