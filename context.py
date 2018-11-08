@@ -75,6 +75,7 @@ class Context:
 			self.project.deps_load(cache)
 		else:
 			cache = self.project.deps_resolve()
+			make_directory(os.path.dirname(deps_cache_file))
 			with io.open(deps_cache_file, 'wb') as file:
 				pickle.dump(cache, file)
 
