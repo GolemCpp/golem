@@ -15,50 +15,7 @@ from module import Module
 from cache import CacheConf
 from configuration import Configuration
 import cache
-
-def handleRemoveReadonly(func, path, exc_info):
-    """
-    Error handler for ``shutil.rmtree``.
-
-    If the error is due to an access error (read only file)
-    it attempts to add write permission and then retries.
-
-    If the error is for another reason it re-raises the error.
-
-    Usage : ``shutil.rmtree(path, onerror=handleRemoveReadonly)``
-    """
-    import stat
-    if not os.access(path, os.W_OK):
-        # Is the error an access error ?
-        os.chmod(path, stat.S_IWUSR)
-        func(path)
-    else:
-        raise RuntimeError("Can't access to \"{}\"".format(path))
-
-
-def removeTree(ctx, path):
-    if os.path.exists(path):
-        if ctx.is_windows():
-            # shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
-            from time import sleep
-            while os.path.exists(path):
-                os.system("rmdir /s /q %s" % path)
-                sleep(0.1)
-        else:
-            shutil.rmtree(path)
-
-
-def make_directory(base, path=None):
-    directory = base
-    if path is not None:
-        directory = os.path.join(directory, path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    return directory
-
-def make_dep_base(dep):
-	return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
-
+from helpers import *
 
 class Context:
 	def __init__(self, context):
@@ -283,6 +240,7 @@ class Context:
 		context.add_option("--patch", action="store_true", default=False, help="Release patch version")
 
 		context.add_option("--export", action="store", default='', help="Export folder")
+		context.add_option("--packages", action="store", default='debug', help="Packages to process")
 
 		context.add_option("--vscode", action="store_true", default=False, help="VSCode CppTools Properties")
 
@@ -534,6 +492,109 @@ class Context:
 			self.context.env['LIB_' + name]		= libdebug
 		else:
 			self.context.env['LIB_' + name]		= lib
+
+
+	def export_dependency(self, config, dep):
+
+		cache_conf = self.find_cache_conf()
+		if not cache_conf:
+			cache_conf = CacheConf()
+			cache_conf.location = self.make_cache_dir()
+		
+		cache_location = cache_conf.location
+		cache_repo = cache_conf.remote
+		
+		cache_dir = cache_location
+		if not os.path.exists(cache_dir):
+			os.makedirs(cache_dir)
+
+		dep_version = dep.resolve()
+		dep_version_branch = dep_version
+		if dep.version != 'latest' and dep_version != dep.version:
+			dep_version_branch = dep.version
+
+		dep_path_base = make_dep_base(dep)
+		dep_path = os.path.join(cache_dir, dep_path_base)
+
+		dep_path_include = os.path.join(dep_path, 'include')
+		dep_path_build = os.path.join(dep_path, self.build_path())
+
+		#if os.path.exists(dep_path):
+		#	removeTree(self, dep_path)
+		#os.makedirs(dep_path)
+		if not os.path.exists(dep_path):
+			os.makedirs(dep_path)
+
+		should_copy = False
+		beacon_build_done = os.path.join(self.make_out_path(), dep.name + '.pkl')
+
+		if not os.path.exists(beacon_build_done):
+			should_copy = True
+
+			if not os.path.exists(dep_path_build):
+				print "INFO: can't find the dependency " + dep.name
+				print "Search in the cache repository..."
+
+				should_build = True
+				# search the corresponding branch in the cache repo (with the right version)
+				if cache_repo:
+					ret = subprocess.call(['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_build])
+					if not ret:
+						should_build = False
+						
+				if should_build:
+					print "Nothing in cache, have to build..."
+
+					# building
+					build_dir = os.path.join(dep_path, 'build')
+					if os.path.exists(build_dir):
+						removeTree(self, build_dir)
+					os.makedirs(build_dir)
+					
+					# removed ['--depth', '1'] because of git describe --tags
+					ret = subprocess.call(['git', 'clone', '--recursive', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
+					if ret:
+						print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
+						return
+
+					if self.is_windows():
+						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir, shell=True)
+					else:
+						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir)
+					print ret
+
+				
+		filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
+		dep_export_ctx = pickle.load(filepkl)
+		depdeps = None
+		if isinstance(dep_export_ctx, Configuration):
+			depconfig = dep_export_ctx
+		else:
+			depdeps = dep_export_ctx[0]
+			depconfig = dep_export_ctx[1]
+		filepkl.close()
+		depconfig.includes = []
+		
+		config_target = config.target
+		config.merge(self.context, [depconfig])
+		config.target = config_target
+
+		# use cache :)
+		if not self.is_windows():
+			self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
+		else:
+			self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I', dep_path_include]
+		self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
+		if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
+			self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
+			self.context.env['LIB_' + dep.name]				= self.make_target_by_config_name(depconfig, dep)
+		
+		config.use.append(dep.name)
+		if depdeps is not None:
+			self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
+
+		if should_copy:
+			distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
 
 	def link_dependency(self, config, dep):
 
@@ -992,8 +1053,11 @@ class Context:
 				else:
 					self.context(rule="touch ${TGT}", target=targetname)
 
+	def get_asked_exports(self):
+		return self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
+
 	def export(self):
-		targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
+		targets = self.get_asked_exports()
 		for export in self.project.exports:
 			if export.name in targets:
 				
@@ -1001,6 +1065,9 @@ class Context:
 				config.merge(self, export.configs, exporting = True)
 
 				outpath = self.context.options.export
+
+				if not outpath:
+					outpath = self.make_output_path('export')
 
 				if not os.path.exists(outpath):
 					os.makedirs(outpath)
@@ -1020,7 +1087,9 @@ class Context:
 				if not os.path.exists(outpath_lib):
 					os.makedirs(outpath_lib)
 
-				distutils.dir_util.copy_tree(self.make_out_path(), outpath_lib)
+				out_path = self.make_out_path()
+				if os.path.exists(out_path):
+					distutils.dir_util.copy_tree(self.make_out_path(), outpath_lib)
 
 				output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
 				export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
@@ -1028,19 +1097,9 @@ class Context:
 				pickle.dump(export_ctx, output)
 				output.close()
 
-	def requirements(self):
-		targets_to_process = []
-		asked_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
-		for asked_target in asked_targets:
-			for available_target in self.project.targets:
-				if asked_target == available_target.name:
-					targets_to_process.append(available_target)
-				else:
-					raise RuntimeError("Can't find any target configuration named \"{}\"".format(asked_target))
-		
-		packages = []
-		master_config = Configuration()
-		for target in targets_to_process:
+	def resolve_local_configs(self, targets):
+		configs = dict()
+		for target in targets:
 
 			config = Configuration()
 			config.merge(self, target.configs)
@@ -1050,41 +1109,112 @@ class Context:
 					if use_name == export.name:
 						config.merge(self, export.configs)
 
+			configs[target.name] = config
+		return configs
+
+	def resolve_configs_recursively(self, targets):
+		configs = self.resolve_local_configs(targets)
+		for target in targets:
+			config = configs[target.name]
+
 			for dep_name in config.deps:
 				for dep in self.project.deps:
 					if dep_name == dep.name:
-						self.link_dependency(config, dep)
+						dep.configure(self, config)
+		return configs
 
+	def resolve_global_config(self, targets):
+		configs = self.resolve_configs_recursively(targets)
+
+		master_config = Configuration()
+		for target_name, config in configs.items():
 			master_config.merge(self, [config])
-		packages += master_config.packages_dev if len(master_config.packages_dev) > 0 else master_config.packages
+		return master_config
+
+	def resolve_recursively(self):
+		targets_to_process = self.get_targets_to_process()
+		config = self.resolve_global_config(targets_to_process)
+
+		outpath = self.context.options.export
+		outpath_lib = os.path.join(outpath, self.build_path())
+		if not os.path.exists(outpath_lib):
+			os.makedirs(outpath_lib)
+		
+		for target in targets_to_process:
+			output = open(os.path.join(outpath_lib, target.name + '.pkl'), 'wb')
+			export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
+			export_ctx = [export_deps, config]
+			pickle.dump(export_ctx, output)
+			output.close()
+
+	def get_targets_or_exports(self):
+		return self.project.targets if not self.context.options.export else self.project.exports
+
+	def get_targets_to_process(self, asked_targets = None):
+		if asked_targets is None:
+			asked_targets = self.get_asked_targets()
+
+		targets_to_process = []
+		for asked_target in asked_targets:
+			found_targets = [available_target for available_target in self.get_targets_or_exports() if asked_target == available_target.name]
+			if found_targets:
+				targets_to_process.append(found_targets[0])
+			else:
+				raise RuntimeError("Can't find any target configuration named \"{}\"".format(asked_target))
+		return targets_to_process
+
+	def get_asked_targets(self):
+		return self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.get_targets_or_exports()]
+
+	def get_packages_to_process(self, asked_packages = None):
+		if asked_packages is None:
+			asked_packages = self.get_asked_targets()
+
+		packages_to_process = []
+		for asked_package in asked_packages:
+			found_packages = [available_package for available_package in self.project.packages if asked_package == available_package.name]
+			if found_packages:
+				packages_to_process.append(found_packages[0])
+			else:
+				raise RuntimeError("Can't find any package configuration named \"{}\"".format(asked_package))
+
+	def get_asked_packages(self):
+		return self.context.options.packages.split(',') if self.context.options.packages else [package.name for package in self.project.packages]
+
+	def requirements(self):
+		targets_to_process = self.get_targets_to_process()
+		config = self.resolve_global_config(targets_to_process)
+		packages = config.packages_dev if len(config.packages_dev) > 0 else config.packages
+
+		packages = list(sorted(set(packages)))
 		print('Packages required to be installed: {}'.format(packages))
 		print('Looking for installed packages...')
 
 		packages_to_install = []
+		found_installed_packages = []
 		installed_packages = subprocess.check_output(['dpkg', '-l'])
 		for package in packages:
 			if not installed_packages.find(package):
 				packages_to_install.append(package)
 			else:
-				print('Found installed package: {}'.format(package))
+				found_installed_packages.append(package)
 		
+		if len(found_installed_packages) > 0:
+			print('Found already installed packages: {}'.format(found_installed_packages))
+
 		if len(packages_to_install) > 0:
 			print('Install the following packages: {}'.format(packages_to_install))
 			subprocess.check_output(['sudo', 'apt', 'install', '-y'] + packages_to_install)
+		else:
+			print('Nothing to install')
+
 		print('Done')
 
 	def package(self):
 
-		# Check asked package
+		print("Check asked package")
 
-		packages_to_process = []
-		asked_packages = self.context.options.targets.split(',') if self.context.options.targets else [package.name for package in self.project.packages]
-		for asked_package in asked_packages:
-			for available_package in self.project.packages:
-				if asked_package == available_package.name:
-					packages_to_process.append(available_package)
-				else:
-					raise RuntimeError("Can't find any package configuration named \"{}\"".format(asked_package))
+		packages_to_process = self.get_packages_to_process()
 		
 		for package in packages_to_process:
 			if self.is_windows():
@@ -1102,36 +1232,11 @@ class Context:
 
 	def package_debian(self, package):
 
-		# Check package's targets
+		print("Check package's targets")
 
-		targets_to_process = []
-		asked_targets = package.targets
-		for asked_target in asked_targets:
-			for available_target in self.project.targets:
-				if asked_target == available_target.name:
-					targets_to_process.append(available_target)
-				else:
-					raise RuntimeError("Can't find any target configuration named \"{}\" for package named \"{}\"".format(asked_target, package.name))
-
-		depends = []
-		master_config = Configuration()
-		for target in targets_to_process:
-
-			config = Configuration()
-			config.merge(self, target.configs)
-
-			for use_name in config.use:
-				for export in self.project.exports:
-					if use_name == export.name:
-						config.merge(self, export.configs)
-
-			for dep_name in config.deps:
-				for dep in self.project.deps:
-					if dep_name == dep.name:
-						self.link_dependency(config, dep)
-
-			master_config.merge(self, [config])
-		depends += master_config.packages
+		targets_to_process = self.get_targets_to_process(package.targets)
+		config = self.resolve_global_config(targets_to_process)
+		depends = config.packages
 
 		# Don't run this script as root
 

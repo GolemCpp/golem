@@ -13,6 +13,8 @@ out = 'obj'
 import waflib
 
 from waflib import Configure
+from waflib.Context import Context
+from waflib.Configure import conf, ConfigurationContext
 Configure.autoconfig = True
 
 
@@ -77,9 +79,6 @@ def everything(bld):
         all_build + waflib.Options.commands
 
 
-from waflib.Context import Context
-
-
 class tmp(Context):
     cmd = 'everything'
     fun = 'everything'
@@ -93,9 +92,6 @@ def rebuild(bld):
                                'configure', 'build'] + waflib.Options.commands
 
 
-from waflib.Context import Context
-
-
 class tmp(Context):
     cmd = 'rebuild'
     fun = 'rebuild'
@@ -107,9 +103,6 @@ def package(bld):
     builder.package(bld)
 
 
-from waflib.Context import Context
-
-
 class tmp(Context):
     cmd = 'package'
     fun = 'package'
@@ -118,15 +111,37 @@ class tmp(Context):
 
 
 def requirements(bld):
+    builder.configure(bld)
     builder.requirements(bld)
 
 
-from waflib.Context import Context
-
-
-class tmp(Context):
+class tmp(ConfigurationContext):
     cmd = 'requirements'
     fun = 'requirements'
+
+# Export
+
+
+def export(bld):
+    builder.configure(bld)
+    builder.export(bld)
+
+
+class tmp(ConfigurationContext):
+    cmd = 'export'
+    fun = 'export'
+
+# Resolve
+
+
+def resolve(bld):
+    builder.configure(bld)
+    builder.resolve(bld)
+
+
+class tmp(ConfigurationContext):
+    cmd = 'resolve'
+    fun = 'resolve'
 
 # Qt stuff
 

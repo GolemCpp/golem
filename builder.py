@@ -36,6 +36,12 @@ def export(context):
     ctx.export()
 
 
+def resolve(context):
+    ctx = get_context(context)
+    ctx.resolve()
+    ctx.resolve_recursively()
+
+
 def package(context):
     ctx = get_context(context)
     ctx.resolve()

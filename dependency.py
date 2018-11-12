@@ -1,6 +1,14 @@
 import re
+import os
 import subprocess
+import pickle
 import helpers
+import distutils
+from distutils import dir_util
+from cache import CacheConf
+# from context import Context
+from configuration import Configuration
+from helpers import *
 
 
 class Dependency:
@@ -54,3 +62,115 @@ class Dependency:
 
         self.resolved_version = dep_version
         return self.resolved_version
+
+    def configure(self, context, config):
+
+        cache_conf = context.find_cache_conf()
+        if not cache_conf:
+            cache_conf = CacheConf()
+            cache_conf.location = context.make_cache_dir()
+
+        cache_location = cache_conf.location
+        cache_repo = cache_conf.remote
+
+        if not os.path.exists(cache_location):
+            os.makedirs(cache_location)
+
+        dep_version = self.resolve()
+        dep_version_branch = dep_version
+        if self.version != 'latest' and dep_version != self.version:
+            dep_version_branch = self.version
+
+        dep_path_base = make_dep_base(self)
+        dep_path = os.path.join(cache_location, dep_path_base)
+
+        dep_path_include = os.path.join(dep_path, 'include')
+        dep_path_build = os.path.join(dep_path, context.build_path())
+
+        # if os.path.exists(dep_path):
+        #	removeTree(self, dep_path)
+        # os.makedirs(dep_path)
+        if not os.path.exists(dep_path):
+            os.makedirs(dep_path)
+
+        should_copy = False
+        beacon_build_done = os.path.join(
+            context.make_out_path(), self.name + '.pkl')
+
+        if not os.path.exists(beacon_build_done):
+            should_copy = True
+
+            if not os.path.exists(dep_path_build):
+                print "INFO: can't find the dependency " + self.name
+                print "Search in the cache repository..."
+
+                should_build = True
+                # search the corresponding branch in the cache repo (with the right version)
+                if cache_repo:
+                    ret = subprocess.call(
+                        ['git', 'ls-remote', '--heads', '--exit-code', cache_repo, dep_path_build])
+                    if not ret:
+                        should_build = False
+
+                if should_build:
+                    print "Nothing in cache, have to build..."
+
+                    # building
+                    build_dir = os.path.join(dep_path, 'build')
+                    if os.path.exists(build_dir):
+                        removeTree(self, build_dir)
+                    os.makedirs(build_dir)
+
+                    # removed ['--depth', '1'] because of git describe --tags
+                    ret = subprocess.call(['git', 'clone', '--recursive', '--branch',
+                                           dep_version_branch, '--', self.repository, '.'], cwd=build_dir)
+                    if ret:
+                        print "ERROR: cloning " + self.repository + ' ' + dep_version_branch
+                        return
+
+                    if context.is_windows():
+                        ret = subprocess.check_output(['golem', 'resolve', '--targets=' + self.name, '--runtime=' + context.context.options.runtime, '--link=' + context.context.options.link, '--arch=' +
+                                                       context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir()], cwd=build_dir, shell=True)
+                    else:
+                        ret = subprocess.check_output(['golem', 'resolve', '--targets=' + self.name, '--runtime=' + context.context.options.runtime, '--link=' + context.context.options.link,
+                                                       '--arch=' + context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir()], cwd=build_dir)
+                    print ret
+
+        filepkl = open(os.path.join(dep_path_build, self.name + '.pkl'), 'rb')
+        dep_export_ctx = pickle.load(filepkl)
+        depdeps = None
+        if isinstance(dep_export_ctx, Configuration):
+            depconfig = dep_export_ctx
+        else:
+            depdeps = dep_export_ctx[0]
+            depconfig = dep_export_ctx[1]
+        filepkl.close()
+        depconfig.includes = []
+
+        config_target = config.target
+        config.merge(context.context, [depconfig])
+        config.target = config_target
+
+        # use cache :)
+        if not context.is_windows():
+            context.context.env['CXXFLAGS_' +
+                                self.name] = ['-isystem' + dep_path_include]
+        else:
+            context.context.env['CXXFLAGS_' +
+                                self.name] = ['/external:I', dep_path_include]
+        context.context.env['ISYSTEM_' +
+                            self.name] = context.list_include([dep_path_include])
+        if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
+            context.context.env['LIBPATH_' +
+                                self.name] = context.list_include([dep_path_build])
+            context.context.env['LIB_' +
+                                self.name] = context.make_target_by_config_name(depconfig, self)
+
+        config.use.append(self.name)
+        if depdeps is not None:
+            context.project.deps = dict((obj.name, obj) for obj in (
+                context.project.deps + depdeps)).values()
+
+        if should_copy:
+            distutils.dir_util.copy_tree(
+                dep_path_build, context.make_out_path())
