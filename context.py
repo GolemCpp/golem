@@ -242,7 +242,7 @@ class Context:
 		context.add_option("--patch", action="store_true", default=False, help="Release patch version")
 
 		context.add_option("--export", action="store", default='', help="Export folder")
-		context.add_option("--packages", action="store", default='debug', help="Packages to process")
+		context.add_option("--packages", action="store", default='', help="Packages to process")
 
 		context.add_option("--vscode", action="store_true", default=False, help="VSCode CppTools Properties")
 
@@ -1220,7 +1220,7 @@ class Context:
 
 	def get_packages_to_process(self, asked_packages = None):
 		if asked_packages is None:
-			asked_packages = self.get_asked_targets()
+			asked_packages = self.get_asked_packages()
 
 		packages_to_process = []
 		for asked_package in asked_packages:
@@ -1229,6 +1229,7 @@ class Context:
 				packages_to_process.append(found_packages[0])
 			else:
 				raise RuntimeError("Can't find any package configuration named \"{}\"".format(asked_package))
+		return packages_to_process
 
 	def get_asked_packages(self):
 		return self.context.options.packages.split(',') if self.context.options.packages else [package.name for package in self.project.packages]
@@ -1299,7 +1300,7 @@ class Context:
 
 		# Don't run this script as root
 
-		# Gather package metadata
+		print("Gather package metadata")
 		prefix = "/usr/local" if package.prefix is None else package.prefix
 
 		package_name = package.name
@@ -1313,7 +1314,7 @@ class Context:
 		package_arch = self.get_arch_for_linux()
 		package_depends = ', '.join(depends)
 
-		# Clean-up
+		print("Clean-up")
 		package_directory = self.make_output_path('dist')
 		removeTree(self, package_directory)
 
@@ -1325,7 +1326,7 @@ class Context:
 
 		# Strip binaries, libraries, archives
 
-		# Prepare package
+		print("Prepare package")
 		package_directory = make_directory(package_directory)
 
 		prefix_directory = make_directory(package_directory, '.' + prefix)
@@ -1350,6 +1351,6 @@ class Context:
 					"Homepage: " + package_homepage + '\n'			# https://company.com/
 				])
 
-		# Build package
+		print("Build package")
 		output_filename = package_name + '_' + package_version + "_" + package_arch
 		subprocess.check_output(['fakeroot', 'dpkg-deb', '--build', package_directory, output_filename + '.deb'], cwd=self.get_output_path())

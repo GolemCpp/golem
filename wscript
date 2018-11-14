@@ -100,10 +100,11 @@ class tmp(Context):
 
 
 def package(bld):
+    builder.configure(bld)
     builder.package(bld)
 
 
-class tmp(Context):
+class tmp(ConfigurationContext):
     cmd = 'package'
     fun = 'package'
 
