@@ -631,14 +631,35 @@ class Context:
 
 		should_copy = False
 		beacon_build_done = os.path.join(
-			self.make_out_path(), 'bin', dep.get_target_filename(self)[0])
+			self.make_out_path(), dep.get_target_filename(self)[0])
+
+		header_only = False
+		if os.path.exists(os.path.join(dep_path_build, dep.name + '.pkl')):
+			filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
+			dep_export_ctx = pickle.load(filepkl)
+			depdeps = None
+			if isinstance(dep_export_ctx, Configuration):
+				depconfig = dep_export_ctx
+			else:
+				depdeps = dep_export_ctx[0]
+				depconfig = dep_export_ctx[1]
+			filepkl.close()
+			if depconfig.header_only:
+				header_only = True
+
+		if header_only:
+			beacon_build_done = dep_path_include
 
 		if not os.path.exists(beacon_build_done):
 			should_copy = True
 
 			dep_path_build_target = os.path.join(
 				dep_path_build, dep.get_target_filename(self)[0])
+			if header_only:
+				dep_path_build_target = dep_path_include
+			print('beacon_build_done', beacon_build_done)
 			if not os.path.exists(dep_path_build_target):
+				print('dep_path_build_target', dep_path_build_target)
 				print "INFO: can't find the dependency " + dep.name
 				print "Search in the cache repository..."
 
@@ -1144,7 +1165,9 @@ class Context:
 			for dep_name in config.deps:
 				for dep in self.project.deps:
 					if dep_name == dep.name:
-						dependencies[target.name] = dep
+						if target.name not in dependencies:
+							dependencies[target.name] = list()
+						dependencies[target.name].append(dep)
 
 		return dependencies
 
@@ -1166,7 +1189,11 @@ class Context:
 			os.makedirs(outpath_lib)
 		
 		for target in targets_to_process:
-			output = open(os.path.join(outpath_lib, target.name + '.pkl'), 'wb')
+			outpath_target = os.path.join(outpath_lib, target.name + '.pkl')
+			outpath_directory = os.path.dirname(outpath_target)
+			if not os.path.exists(outpath_directory):
+				os.makedirs(outpath_directory)
+			output = open(outpath_target, 'wb')
 			export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
 			export_ctx = [export_deps, config]
 			pickle.dump(export_ctx, output)
@@ -1238,8 +1265,9 @@ class Context:
 	def dependencies(self):
 		targets_to_process = self.get_targets_to_process()
 		dependencies = self.resolve_local_dependencies(targets_to_process)
-		for target_name, dependency in dependencies.items():
-			dependency.build(self)
+		for target_name, dependencies_list in dependencies.items():
+			for dependency in dependencies_list:
+				dependency.build(self)
 
 	def package(self):
 

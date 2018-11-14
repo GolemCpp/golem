@@ -64,7 +64,7 @@ class Dependency:
         return self.resolved_version
 
     def get_target_filename(self, context):
-        return [self.name + '.dll', self.name + '.lib', self.name + '.exe'] if context.is_windows() else ['lib' + self.name + '.so', self.name]
+        return [self.name + context.variant_suffix() + '.dll', self.name + context.variant_suffix() + '.lib', self.name + context.variant_suffix() + '.exe'] if context.is_windows() else ['lib' + self.name + context.variant_suffix() + '.so', self.name + context.variant_suffix()]
 
     def build(self, context):
 
