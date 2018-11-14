@@ -54,6 +54,12 @@ def requirements(context):
     ctx.requirements()
 
 
+def dependencies(context):
+    ctx = get_context(context)
+    ctx.resolve()
+    ctx.dependencies()
+
+
 from waflib.TaskGen import feature, before_method
 
 

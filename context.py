@@ -26,11 +26,13 @@ class Context:
 	def resolve(self):
 		deps_cache_file = self.make_build_path('deps.cache')
 		if os.path.exists(deps_cache_file):
+			print 'Found deps.cache'
 			cache = None
 			with io.open(deps_cache_file, 'rb') as file:
 				cache = pickle.load(file)
 			self.project.deps_load(cache)
 		else:
+			print 'No deps.cache'
 			cache = self.project.deps_resolve()
 			make_directory(os.path.dirname(deps_cache_file))
 			with io.open(deps_cache_file, 'wb') as file:
@@ -546,7 +548,7 @@ class Context:
 					print "Nothing in cache, have to build..."
 
 					# building
-					build_dir = os.path.join(dep_path, 'build')
+					build_dir = os.path.join(dep_path, 'repository')
 					if os.path.exists(build_dir):
 						removeTree(self, build_dir)
 					os.makedirs(build_dir)
@@ -558,9 +560,9 @@ class Context:
 						return
 
 					if self.is_windows():
-						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir, shell=True)
+						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
 					else:
-						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir)
+						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
 					print ret
 
 				
@@ -628,12 +630,15 @@ class Context:
 			os.makedirs(dep_path)
 
 		should_copy = False
-		beacon_build_done = os.path.join(self.make_out_path(), dep.name + '.pkl')
+		beacon_build_done = os.path.join(
+			self.make_out_path(), 'bin', dep.get_target_filename(self)[0])
 
 		if not os.path.exists(beacon_build_done):
 			should_copy = True
 
-			if not os.path.exists(dep_path_build):
+			dep_path_build_target = os.path.join(
+				dep_path_build, dep.get_target_filename(self)[0])
+			if not os.path.exists(dep_path_build_target):
 				print "INFO: can't find the dependency " + dep.name
 				print "Search in the cache repository..."
 
@@ -648,21 +653,28 @@ class Context:
 					print "Nothing in cache, have to build..."
 
 					# building
-					build_dir = os.path.join(dep_path, 'build')
+					build_dir = os.path.join(dep_path, 'repository')
 					if os.path.exists(build_dir):
-						removeTree(self, build_dir)
-					os.makedirs(build_dir)
-					
-					# removed ['--depth', '1'] because of git describe --tags
-					ret = subprocess.call(['git', 'clone', '--recursive', '--branch', dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
+						# removeTree(self, build_dir)
+						ret = subprocess.call(
+							['git', 'reset', '--hard'], cwd=build_dir)
+						ret = subprocess.call(
+							['git', 'clean', '-fxd'], cwd=build_dir)
+						ret = 0
+					else:
+						os.makedirs(build_dir)
+						# removed ['--depth', '1'] because of git describe --tags
+						ret = subprocess.call(['git', 'clone', '--recursive', '--branch',
+											   dep_version_branch, '--', dep.repository, '.'], cwd=build_dir)
+											   
 					if ret:
 						print "ERROR: cloning " + dep.repository + ' ' + dep_version_branch
 						return
 
 					if self.is_windows():
-						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir, shell=True)
+						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
 					else:
-						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir()], cwd=build_dir)
+						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
 					print ret
 
 					# caching
@@ -1123,6 +1135,19 @@ class Context:
 						dep.configure(self, config)
 		return configs
 
+	def resolve_local_dependencies(self, targets):
+		dependencies = dict()
+		configs = self.resolve_local_configs(targets)
+		for target in targets:
+			config = configs[target.name]
+
+			for dep_name in config.deps:
+				for dep in self.project.deps:
+					if dep_name == dep.name:
+						dependencies[target.name] = dep
+
+		return dependencies
+
 	def resolve_global_config(self, targets):
 		configs = self.resolve_configs_recursively(targets)
 
@@ -1209,6 +1234,12 @@ class Context:
 			print('Nothing to install')
 
 		print('Done')
+
+	def dependencies(self):
+		targets_to_process = self.get_targets_to_process()
+		dependencies = self.resolve_local_dependencies(targets_to_process)
+		for target_name, dependency in dependencies.items():
+			dependency.build(self)
 
 	def package(self):
 

@@ -143,6 +143,18 @@ class tmp(ConfigurationContext):
     cmd = 'resolve'
     fun = 'resolve'
 
+# Dependencies
+
+
+def dependencies(bld):
+    builder.configure(bld)
+    builder.dependencies(bld)
+
+
+class tmp(ConfigurationContext):
+    cmd = 'dependencies'
+    fun = 'dependencies'
+
 # Qt stuff
 
 
