@@ -1235,6 +1235,14 @@ class Context:
 		return self.context.options.packages.split(',') if self.context.options.packages else [package.name for package in self.project.packages]
 
 	def requirements(self):
+		if self.is_windows():
+			self.requirements_windows()
+		elif self.is_darwin():
+			self.requirements_darwin()
+		elif self.is_linux():
+			self.requirements_debian()
+
+	def requirements_debian(self):
 		targets_to_process = self.get_targets_to_process()
 		config = self.resolve_global_config(targets_to_process)
 		packages = config.packages_dev if len(config.packages_dev) > 0 else config.packages
