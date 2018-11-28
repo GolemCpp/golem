@@ -1242,6 +1242,12 @@ class Context:
 		elif self.is_linux():
 			self.requirements_debian()
 
+	def requirements_windows(self):
+		pass
+
+	def requirements_darwin(self):
+		pass
+
 	def requirements_debian(self):
 		targets_to_process = self.get_targets_to_process()
 		config = self.resolve_global_config(targets_to_process)
