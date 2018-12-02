@@ -47,6 +47,12 @@ class Context:
 			cache_dir = os.path.join(self.get_project_dir(), cache_dir)
 		return cache_dir
 
+	def make_static_cache_dir(self):
+		static_cache_dir = self.context.options.static_cache_dir
+		if not os.path.isabs(static_cache_dir):
+			static_cache_dir = os.path.join(self.get_project_dir(), static_cache_dir)
+		return static_cache_dir
+
 	def make_project_path(self, path):
 		return os.path.join(self.get_project_dir(), path)
 
@@ -247,6 +253,7 @@ class Context:
 		context.add_option("--vscode", action="store_true", default=False, help="VSCode CppTools Properties")
 
 		context.add_option("--cache-dir", action="store", default=cache.default_cached_dir(), help="Cache directory location")
+		context.add_option("--static-cache-dir", action="store", default='', help="Read-only cache directory location")
 		
 		if Context.is_windows(): 
 			context.add_option("--nounicode", action="store_true", default=False, help="Unicode Support")
@@ -560,9 +567,9 @@ class Context:
 						return
 
 					if self.is_windows():
-						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
+						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--static-cache-dir=' + self.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
 					else:
-						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
+						ret = subprocess.check_output(['golem', 'export', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--static-cache-dir=' + self.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
 					print ret
 
 				
@@ -654,7 +661,7 @@ class Context:
 			should_copy = True
 
 			dep_path_build_target = os.path.join(
-				dep_path_build, dep.get_target_filename(self)[0])
+				dep_path_build, dep.name + '.pkl')
 			if header_only:
 				dep_path_build_target = dep_path_include
 			print('beacon_build_done', beacon_build_done)
@@ -693,9 +700,9 @@ class Context:
 						return
 
 					if self.is_windows():
-						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
+						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--static-cache-dir=' + self.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
 					else:
-						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
+						ret = subprocess.check_output(['golem', '--targets=' + dep.name, '--runtime=' + self.context.options.runtime, '--link=' + self.context.options.link, '--arch=' + self.context.options.arch, '--variant=' + self.context.options.variant, '--export=' + dep_path, '--cache-dir=' + self.make_cache_dir(), '--static-cache-dir=' + self.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
 					print ret
 
 					# caching

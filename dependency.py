@@ -98,13 +98,13 @@ class Dependency:
 
         should_copy = False
         beacon_build_done = os.path.join(
-            context.make_out_path(), self.get_target_filename(context)[0])
+            context.make_out_path(), self.name + '.pkl')
 
         if not os.path.exists(beacon_build_done):
             should_copy = True
 
             dep_path_build_target = os.path.join(
-                dep_path_build, self.get_target_filename(context)[0])
+                dep_path_build, self.name + '.pkl')
             if not os.path.exists(dep_path_build_target):
                 print "INFO: can't find the dependency " + self.name
                 print "Search in the cache repository..."
@@ -140,10 +140,10 @@ class Dependency:
 
                     if context.is_windows():
                         ret = subprocess.check_output(['golem', '--targets=' + self.name, '--runtime=' + context.context.options.runtime, '--link=' + context.context.options.link, '--arch=' +
-                                                       context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
+                                                       context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--static-cache-dir=' + context.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
                     else:
                         ret = subprocess.check_output(['golem', '--targets=' + self.name, '--runtime=' + context.context.options.runtime, '--link=' + context.context.options.link,
-                                                       '--arch=' + context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
+                                                       '--arch=' + context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--static-cache-dir=' + context.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
                     print ret
 
         filepkl = open(os.path.join(dep_path_build, self.name + '.pkl'), 'rb')
@@ -232,10 +232,10 @@ class Dependency:
 
                     if context.is_windows():
                         ret = subprocess.check_output(['golem', 'resolve', '--targets=' + self.name, '--runtime=' + context.context.options.runtime, '--link=' + context.context.options.link, '--arch=' +
-                                                       context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
+                                                       context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--static-cache-dir=' + context.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir, shell=True)
                     else:
                         ret = subprocess.check_output(['golem', 'resolve', '--targets=' + self.name, '--runtime=' + context.context.options.runtime, '--link=' + context.context.options.link,
-                                                       '--arch=' + context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
+                                                       '--arch=' + context.context.options.arch, '--variant=' + context.context.options.variant, '--export=' + dep_path, '--cache-dir=' + context.make_cache_dir(), '--static-cache-dir=' + context.make_static_cache_dir(), '--dir=' + dep_path_build + '-build'], cwd=build_dir)
                     print ret
 
         filepkl = open(os.path.join(dep_path_build, self.name + '.pkl'), 'rb')
