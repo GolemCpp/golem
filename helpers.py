@@ -80,3 +80,42 @@ def make_directory(base, path=None):
 
 def make_dep_base(dep):
     return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
+
+
+def copy_tree(source_path, destination_path):
+    if not os.path.isdir(destination_path):
+        raise ValueError("destination_path is not a directory")
+
+    destination_path = make_directory(destination_path)
+
+    for dirName, subdirList, fileList in os.walk(source_path):
+        for fname in fileList:
+            copy_file(os.path.join(dirName, fname), destination_path)
+        for dname in subdirList:
+            copy_tree(os.path.join(dirName, dname),
+                      os.path.join(destination_path, dname))
+        break
+
+
+def copy_file(source_path, destination_path):
+    if os.path.isdir(destination_path):
+        destination_directory = destination_path
+        destination_path = os.path.join(
+            destination_path, os.path.basename(source_path))
+    else:
+        destination_directory = os.path.dirname(destination_path)
+
+    if os.path.islink(source_path):
+        link_path = os.readlink(source_path)
+        if os.path.isabs(link_path):
+            link_path_absolute = link_path
+            link_path_relative = os.path.basename(link_path_absolute)
+        else:
+            link_path_relative = link_path
+            link_path_absolute = os.path.join(
+                os.path.dirname(source_path), link_path_relative)
+
+        copy_file(link_path_absolute, destination_directory)
+        os.symlink(link_path_relative, destination_path)
+    else:
+        shutil.copy(source_path, destination_path)

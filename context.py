@@ -161,19 +161,25 @@ class Context:
             variant = '-' + self.variant_debug()
         return variant
 
-    def artifact_suffix(self):
-        if self.is_shared():
-            if self.is_windows():
-                return '.dll'
-            elif self.is_darwin():
-                return '.dylib'
+    def artifact_suffix(self, config):
+        if config.type == 'library':
+            if self.is_shared():
+                if self.is_windows():
+                    return ['.dll', '.lib']
+                elif self.is_darwin():
+                    return ['.dylib']
+                else:
+                    return ['.so']
             else:
-                return '.so'
+                if self.is_windows():
+                    return ['.lib']
+                else:
+                    return ['.a']
         else:
             if self.is_windows():
-                return '.lib'
+                return ['.exe']
             else:
-                return '.a'
+                return []
 
     def dev_artifact_suffix(self):
         if self.is_shared():
@@ -596,7 +602,7 @@ class Context:
         path = self.get_dep_artifact_location(dep, cache_dir)
         return os.path.join(path, dep.name + '.pkl')
         
-    def use_dep(self, config, dep, cache_dir, enable_env, should_copy):
+    def use_dep(self, config, dep, cache_dir, enable_env):
         dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
         dep_path_include = self.get_dep_include_location(dep, cache_dir)
             
@@ -612,10 +618,16 @@ class Context:
         depconfig.includes = []
         
         if config is not None:
-            config_target = config.target
+            config_targets = config.targets
             config.merge(self.context, [depconfig])
-            config.target = config_target
+            config.targets = config_targets
 
+            if dep.targets:
+                for target in dep.targets:
+                    if not target in depconfig.targets:
+                        raise RuntimeError("Cannot find target: " + target)
+                depconfig.targets = dep.targets
+                
             if enable_env:
                 # use cache :)
                 if not self.is_windows():
@@ -623,7 +635,7 @@ class Context:
                 else:
                     self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I', dep_path_include]
                 self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
-                if not hasattr(depconfig, 'header_only') or depconfig.header_only is not None and not depconfig.header_only:
+                if not depconfig.header_only:
                     self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
                     self.context.env['LIB_' + dep.name]				= self.make_target_by_config_name(depconfig, dep)
             
@@ -632,8 +644,11 @@ class Context:
         if depdeps is not None:
             self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
 
-        if should_copy:
-            distutils.dir_util.copy_tree(dep_path_build, self.make_out_path())
+        out_path = make_directory(self.make_out_path())
+        expected_files = self.get_expected_files(config, dep, cache_dir)
+        for file in expected_files:
+            if not os.path.exists(os.path.join(out_path, file)):
+                copy_file(os.path.join(dep_path_build, file), out_path)
 
     def clean_repo(self, repo_path):
         subprocess.call(['git', 'reset', '--hard'], cwd=repo_path)
@@ -664,7 +679,7 @@ class Context:
         repo_path = self.make_repo_ready(dep, cache_dir)
         build_path = self.get_dep_build_location(dep, cache_dir)
 
-        ret = subprocess.check_output([
+        process = subprocess.Popen([
             'golem',
             command,
             '--targets=' + dep.name,
@@ -676,9 +691,13 @@ class Context:
             '--cache-dir=' + self.make_writable_cache_dir(),
             '--static-cache-dir=' + self.make_static_cache_dir(),
             '--dir=' + build_path
-        ], cwd=repo_path, shell=self.is_windows())
-
-        print ret
+        ], cwd=repo_path, shell=self.is_windows(), stdout=subprocess.PIPE)
+        
+        for c in iter(lambda: process.stdout.read(1), ''):  # replace '' with b'' for Python 3
+            sys.stdout.write(c)
+        ret = process.wait()
+        if ret != 0:
+            raise RuntimeError("Return code {}".format(ret))
 
     def can_open_pkl(self, dep, cache_dir):
         pkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
@@ -703,8 +722,8 @@ class Context:
 
     def make_target_name_from_context(self, config, target_name):
 
-        if config.target:
-            return config.target
+        if config.targets:
+            return config.targets
         else:
             target_name = target_name + self.variant_suffix()
 
@@ -716,8 +735,14 @@ class Context:
     def make_target_from_context(self, config, target_name):
         target_name = self.make_target_name_from_context(config, target_name)
         if not self.is_windows():
-            target_name = ['lib' + target_name + self.artifact_suffix()] if isinstance(target_name, str) else ['lib' + target + self.artifact_suffix() for target in target_name]
-        return [target_name] if isinstance(target_name, str) else target_name
+            target_name = ['lib' + target_name] if isinstance(target_name, str) else ['lib' + target for target in target_name]
+        target_name = [target_name] if isinstance(target_name, str) else target_name
+        result = list()
+        for filename in target_name:
+            for suffix in self.artifact_suffix(config):
+                result.append(filename + suffix)
+        return result
+
 
     def get_expected_files(self, config, dep, cache_dir):
 
@@ -726,9 +751,11 @@ class Context:
         if dep_configs is None or dep_configs.header_only:
             return expected_files
 
-        for target in dep.targets:
-            if not target in dep_configs.target:
-                raise RuntimeError("Cannot find target: " + target)
+        if dep.targets:
+            for target in dep.targets:
+                if not target in dep_configs.targets:
+                    raise RuntimeError("Cannot find target: " + target)
+            dep_configs.targets = dep.targets
         
         config = deepcopy(config)
         config.merge(self.context, [dep_configs])
@@ -753,13 +780,12 @@ class Context:
         is_header_not_available = is_header_only and not os.path.exists(self.get_dep_include_location(dep, cache_dir))
         is_artifact_not_available = not is_header_only and not self.is_in_dep_artifact_in_cache_dir(dep, cache_dir, expects_files)
 
-        should_copy = False
         if is_header_not_available or is_artifact_not_available:
+            if cache_dir.is_static:
+                raise RuntimeError("Cannot find artifacts from the static cache location " + cache_dir.location)
             self.run_dep_command(dep, cache_dir, command)
-            should_copy = True
 
-        should_copy = should_copy or (not os.path.exists(self.get_dep_artifact_pkl(dep, cache_dir)))
-        self.use_dep(config, dep, cache_dir, enable_env, should_copy)
+        self.use_dep(config, dep, cache_dir, enable_env)
 
 
     def is_in_dep_artifact_in_cache_dir(self, dep, cache_dir, expects_files):
@@ -811,8 +837,8 @@ class Context:
             return target.name + self.variant_suffix()
 
     def make_target_by_config_name(self, config, target):
-        if config.target:
-            return config.target
+        if config.targets:
+            return config.targets
         else:
             target_name = target.name + self.variant_suffix()
 
@@ -1162,7 +1188,7 @@ class Context:
 
                 out_path = self.make_out_path()
                 if os.path.exists(out_path):
-                    distutils.dir_util.copy_tree(self.make_out_path(), outpath_lib)
+                    copy_tree(self.make_out_path(), outpath_lib)
 
                 output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
                 export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
@@ -1388,7 +1414,7 @@ class Context:
 
         bin_directory = make_directory(prefix_directory, 'bin')
 
-        distutils.dir_util.copy_tree(self.make_out_path(), bin_directory)
+        copy_tree(self.make_out_path(), bin_directory)
 
         debian_directory = make_directory(package_directory, 'DEBIAN')
 

@@ -3,10 +3,13 @@ from condition import Condition
 
 
 class Configuration:
-    def __init__(self, target=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, **kwargs):
+    def __init__(self, target=None, targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, **kwargs):
         self.condition = Condition(**kwargs)
 
-        self.target = '' if target is None else target
+        self.targets = [] if target is None else [target]
+        self.targets = self.targets if targets is None else self.targets
+
+        self.type = 'library' if type is None else type
 
         self.defines = [] if defines is None else defines
         self.includes = [] if includes is None else includes
@@ -29,10 +32,18 @@ class Configuration:
     def __str__(self):
         return helpers.print_obj(self)
 
+    @property
+    def target(self):
+        return '' if not self.targets else self.targets[0]
+
+    @target.setter
+    def target(self, value):
+        self.targets = [value] if value else []
+
     def append(self, config):
 
-        if config.target:
-            self.target = config.target
+        if config.targets:
+            self.targets = config.targets
 
         self.defines += config.defines
         self.includes += config.includes
