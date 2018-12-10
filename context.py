@@ -639,7 +639,7 @@ class Context:
                 self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
                 if not depconfig.header_only:
                     self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-                    self.context.env['LIB_' + dep.name]				= self.make_target_by_config_name(depconfig, dep)
+                    self.context.env['LIB_' + dep.name]				= self.make_target_name_from_context(depconfig, dep)
             
             config.use.append(dep.name)
 
@@ -724,24 +724,24 @@ class Context:
             return None
 
         return dep_pkl[1]
-
-    def make_target_name_from_context(self, config, target_name):
+    
+    def make_target_name_from_context(self, config, target):
 
         if config.targets:
             return config.targets
         else:
-            target_name = target_name + self.variant_suffix()
+            target_name = target.name + self.variant_suffix()
 
-            if self.is_windows():
-                target_name = 'lib' + target_name
+            if target.type == 'library':
+                if self.is_windows():
+                    target_name = 'lib' + target_name
 
-            return target_name
+            return [target_name]
 
-    def make_target_from_context(self, config, target_name):
-        target_name = self.make_target_name_from_context(config, target_name)
+    def make_target_from_context(self, config, target):
+        target_name = self.make_target_name_from_context(config, target)
         if not self.is_windows():
-            target_name = ['lib' + target_name] if isinstance(target_name, str) else ['lib' + target for target in target_name]
-        target_name = [target_name] if isinstance(target_name, str) else target_name
+            target_name = ['lib' + target for target in target_name]
         result = list()
         for filename in target_name:
             for suffix in self.artifact_suffix(config):
@@ -764,7 +764,7 @@ class Context:
         
         config = deepcopy(config)
         config.merge(self.context, [dep_configs])
-        return expected_files + self.make_target_from_context(config, dep.name)
+        return expected_files + self.make_target_from_context(config, dep)
 
     def is_header_only(self, dep, cache_dir):
 
@@ -834,34 +834,6 @@ class Context:
     def link_dependency(self, config, dep):
         self.dep_command(
             config, dep, self.make_cache_conf(), 'build', True)
-    
-    def make_target_by_config(self, config, target):
-        if config.target:
-            return config.target
-        else:
-            return target.name + self.variant_suffix()
-
-    def make_target_by_config_name(self, config, target):
-        if config.targets:
-            return config.targets
-        else:
-            target_name = target.name + self.variant_suffix()
-
-            if self.is_windows():
-                target_name = 'lib' + target_name
-
-            return target_name
-
-
-    def make_target_name(self, config, target):
-
-        target_name = self.make_target_by_config(config, target)
-
-        if target.type == 'library':
-            if self.is_windows():
-                target_name = 'lib' + target_name
-
-        return target_name
 
     def get_build_path(self):
         # return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
@@ -975,7 +947,7 @@ class Context:
                 if dep_name == dep.name:
                     self.link_dependency(config, dep)
         
-        targetname = self.make_target_name(config, target)
+        targetname = self.make_target_name_from_context(config, target)[0]
 
         project_qt = False
         if any([feature.startswith("QT5") for feature in config.features]):

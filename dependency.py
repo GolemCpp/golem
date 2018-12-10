@@ -18,6 +18,7 @@ class Dependency:
         self.repository = '' if repository is None else repository
         self.version = '' if version is None else version
         self.resolved_version = ''
+        self.type = 'library'
 
     def __str__(self):
         return helpers.print_obj(self)
