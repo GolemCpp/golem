@@ -388,6 +388,8 @@ class Context:
             
             self.context.env.CXXFLAGS.append('/std:c++latest') # enable all features as they become available, including feature removals
             self.context.env.CXXFLAGS.append('/bigobj')
+
+            self.context.env.CXXFLAGS.append('/experimental:external') # enable use of /external:I
             
             self.context.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
             # self.context.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
