@@ -646,6 +646,9 @@ class Context:
         if depdeps is not None:
             self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
 
+        if self.is_header_only(dep, cache_dir):
+            return
+
         out_path = make_directory(self.make_out_path())
         expected_files = self.get_expected_files(config, dep, cache_dir)
         for file in expected_files:
