@@ -604,7 +604,7 @@ class Context:
         path = self.get_dep_artifact_location(dep, cache_dir)
         return os.path.join(path, dep.name + '.pkl')
         
-    def use_dep(self, config, dep, cache_dir, enable_env):
+    def use_dep(self, config, dep, cache_dir, enable_env, has_artifacts):
         dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
         dep_path_include = self.get_dep_include_location(dep, cache_dir)
             
@@ -650,7 +650,7 @@ class Context:
             return
 
         out_path = make_directory(self.make_out_path())
-        expected_files = self.get_expected_files(config, dep, cache_dir)
+        expected_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
         for file in expected_files:
             if not os.path.exists(os.path.join(out_path, file)):
                 copy_file(os.path.join(dep_path_build, file), out_path)
@@ -749,9 +749,13 @@ class Context:
         return result
 
 
-    def get_expected_files(self, config, dep, cache_dir):
+    def get_expected_files(self, config, dep, cache_dir, has_artifacts):
 
         expected_files = [dep.name + '.pkl']
+
+        if not has_artifacts:
+            return expected_files
+        
         dep_configs = self.read_dep_configs(dep, cache_dir)
         if dep_configs is None or dep_configs.header_only:
             return expected_files
@@ -774,12 +778,16 @@ class Context:
         
         return dep_configs.header_only
 
+    def has_artifacts(self, command):
+        return command in ['build', 'export']
+
     def dep_command(self, config, dep, cache_conf, command, enable_env):
         dep.resolve()
 
         cache_dir = self.find_dep_cache_dir(dep, cache_conf)
+        has_artifacts = self.has_artifacts(command)
 
-        expects_files = self.get_expected_files(config, dep, cache_dir)
+        expects_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
         is_header_only = self.is_header_only(dep, cache_dir)
 
         is_header_not_available = is_header_only and not os.path.exists(self.get_dep_include_location(dep, cache_dir))
@@ -790,7 +798,7 @@ class Context:
                 raise RuntimeError("Cannot find artifacts from the static cache location " + cache_dir.location)
             self.run_dep_command(dep, cache_dir, command)
 
-        self.use_dep(config, dep, cache_dir, enable_env)
+        self.use_dep(config, dep, cache_dir, enable_env, has_artifacts)
 
 
     def is_in_dep_artifact_in_cache_dir(self, dep, cache_dir, expects_files):
