@@ -771,7 +771,7 @@ class Context:
         dep_configs = self.read_dep_configs(dep, cache_dir)
         if dep_configs is None:
             return False
-
+        
         return dep_configs.header_only
 
     def dep_command(self, config, dep, cache_conf, command, enable_env):
@@ -1178,12 +1178,12 @@ class Context:
         for target in targets:
 
             config = Configuration()
-            config.merge(self, target.configs)
+            config.merge(self, target.configs, exporting=True)
 
             for use_name in config.use:
                 for export in self.project.exports:
                     if use_name == export.name:
-                        config.merge(self, export.configs)
+                        config.merge(self, export.configs, exporting=True)
 
             configs[target.name] = config
         return configs
@@ -1219,7 +1219,7 @@ class Context:
 
         master_config = Configuration()
         for target_name, config in configs.items():
-            master_config.merge(self, [config])
+            master_config.merge(self, [config], exporting=True)
         return master_config
 
     def resolve_recursively(self):
