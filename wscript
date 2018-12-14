@@ -15,7 +15,7 @@ import waflib
 from waflib import Configure
 from waflib.Context import Context
 from waflib.Configure import conf, ConfigurationContext
-Configure.autoconfig = True
+Configure.autoconfig = False
 
 
 def options(opt):
@@ -100,11 +100,10 @@ class tmp(Context):
 
 
 def package(bld):
-    builder.configure(bld)
     builder.package(bld)
 
 
-class tmp(ConfigurationContext):
+class tmp(BuildContext):
     cmd = 'package'
     fun = 'package'
 
@@ -112,11 +111,10 @@ class tmp(ConfigurationContext):
 
 
 def requirements(bld):
-    builder.configure(bld)
     builder.requirements(bld)
 
 
-class tmp(ConfigurationContext):
+class tmp(BuildContext):
     cmd = 'requirements'
     fun = 'requirements'
 
@@ -124,11 +122,10 @@ class tmp(ConfigurationContext):
 
 
 def export(bld):
-    builder.configure(bld)
     builder.export(bld)
 
 
-class tmp(ConfigurationContext):
+class tmp(BuildContext):
     cmd = 'export'
     fun = 'export'
 
@@ -136,11 +133,10 @@ class tmp(ConfigurationContext):
 
 
 def resolve(bld):
-    builder.configure(bld)
     builder.resolve(bld)
 
 
-class tmp(ConfigurationContext):
+class tmp(BuildContext):
     cmd = 'resolve'
     fun = 'resolve'
 
@@ -148,11 +144,10 @@ class tmp(ConfigurationContext):
 
 
 def dependencies(bld):
-    builder.configure(bld)
     builder.dependencies(bld)
 
 
-class tmp(ConfigurationContext):
+class tmp(BuildContext):
     cmd = 'dependencies'
     fun = 'dependencies'
 

@@ -1,6 +1,8 @@
 import os
+import sys
 import types
 import shutil
+import subprocess
 
 
 def print_obj(obj, depth=5, l=""):
@@ -119,3 +121,12 @@ def copy_file(source_path, destination_path):
         os.symlink(link_path_relative, destination_path)
     else:
         shutil.copy(source_path, destination_path)
+
+
+def run_task(args, cwd=None, **kwargs):
+    process = subprocess.Popen(args, cwd=cwd, shell=sys.platform.startswith(
+        'win32'), **kwargs)
+    ret = process.wait()
+    if ret != 0:
+        raise RuntimeError(
+            "Return code {} when running \"{}\" from \"{}\"".format(ret, ' '.join(args), os.getcwd() if cwd is None else cwd))

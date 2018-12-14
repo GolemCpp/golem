@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from string import Template
 from shutil import copytree
+import helpers
 
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
@@ -59,7 +60,7 @@ if not os.path.exists(dst_waf_dir):
 
 custom_env = os.environ
 custom_env['PYTHONPATH'] = golem_path
-subprocess.call(argv, cwd=build_dir, env=custom_env)
+helpers.run_task(argv, cwd=build_dir, env=custom_env)
 
 if sys.argv[1] == 'distclean':
     shutil.rmtree(golem_out)

@@ -3,6 +3,7 @@ import io
 import re
 import sys
 import md5
+import glob
 import json
 import shutil
 import pickle
@@ -16,6 +17,7 @@ from module import Module
 from cache import CacheConf, CacheDir
 from configuration import Configuration
 import cache
+import helpers
 from helpers import *
 
 class Context:
@@ -62,9 +64,12 @@ class Context:
         return cache_dir_list
 
     def make_writable_cache_dir(self):
-        cache_dir = self.context.options.cache_dir
-        if not os.path.isabs(cache_dir):
-            cache_dir = os.path.join(self.get_project_dir(), cache_dir)
+        if self.context.options.cache_dir:
+            cache_dir = self.context.options.cache_dir
+            if not os.path.isabs(cache_dir):
+                cache_dir = os.path.join(self.get_project_dir(), cache_dir)
+        else:
+            cache_dir = cache.default_cached_dir().location
         return cache_dir
 
     def make_static_cache_dir(self):
@@ -86,19 +91,19 @@ class Context:
         return m.hexdigest()[:8]
 
     def list_include(self, includes):
-        return [self.context.root.find_dir(x) if os.path.isabs(x) else self.context.srcnode.find_dir(x) for x in includes]
+        return [self.context.root.find_dir(str(x)) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)) for x in includes]
 
     def list_source(self, source):
-        return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.cpp') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.cpp') for x in source] for item in sublist]
+        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.cpp') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.cpp') for x in source] for item in sublist]
 
     def list_moc(self, source):
-        return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.hpp') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.hpp') for x in source] for item in sublist]
+        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.hpp') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.hpp') for x in source] for item in sublist]
 
     def list_qt_qrc(self, source):
-        return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.qrc') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.qrc') for x in source] for item in sublist]
+        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.qrc') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.qrc') for x in source] for item in sublist]
 
     def list_qt_ui(self, source):
-        return [item for sublist in [self.context.root.find_dir(x).ant_glob('*.ui') if os.path.isabs(x) else self.context.srcnode.find_dir(x).ant_glob('*.ui') for x in source] for item in sublist]
+        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.ui') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.ui') for x in source] for item in sublist]
 
     @staticmethod
     def link_static():
@@ -522,6 +527,10 @@ class Context:
         # copy cxxflags to cflags
         self.context.env.CFLAGS = self.context.env.CXXFLAGS
 
+        self.restore_options()
+
+        self.resolve()
+
     def dep_system(self, context, libs):
         context.env['LIB'] += libs
         
@@ -646,27 +655,29 @@ class Context:
         if depdeps is not None:
             self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
 
-        if self.is_header_only(dep, cache_dir):
-            return
-
         out_path = make_directory(self.make_out_path())
         expected_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
         for file in expected_files:
             if not os.path.exists(os.path.join(out_path, file)):
-                copy_file(os.path.join(dep_path_build, file), out_path)
+                src_file_path = os.path.join(dep_path_build, file)
+                copy_file(src_file_path, out_path)
+                if self.is_linux() and file.endswith('.so'):
+                    src_file_path_glob = glob.glob(src_file_path + '.*')
+                    for other_file_path in src_file_path_glob:
+                        copy_file(other_file_path, out_path)
+                    
+
 
     def clean_repo(self, repo_path):
-        subprocess.call(['git', 'reset', '--hard'], cwd=repo_path)
-        subprocess.call(['git', 'clean', '-fxd'], cwd=repo_path)
+        helpers.run_task(['git', 'reset', '--hard'], cwd=repo_path)
+        helpers.run_task(['git', 'clean', '-fxd'], cwd=repo_path)
 
     def clone_repo(self, dep, repo_path):
         version_branch = self.get_dep_version_branch(dep)
         # NOTE: Can't use ['--depth', '1'] because of git describe --tags
 
         os.makedirs(repo_path)
-        ret = subprocess.call(['git', 'clone', '--recursive', '--branch', version_branch, '--', dep.repository, '.'], cwd=repo_path)
-        if ret:
-            raise RuntimeError("ERROR: cloning " + dep.repository + ' ' + version_branch)
+        helpers.run_task(['git', 'clone', '--recursive', '--branch', version_branch, '--', dep.repository, '.'], cwd=repo_path)
 
     def make_repo_ready(self, dep, cache_dir):
         repo_path = self.get_dep_repo_location(dep, cache_dir)
@@ -684,9 +695,9 @@ class Context:
         repo_path = self.make_repo_ready(dep, cache_dir)
         build_path = self.get_dep_build_location(dep, cache_dir)
 
-        process = subprocess.Popen([
+        helpers.run_task([
             'golem',
-            command,
+            'configure',
             '--targets=' + dep.name,
             '--runtime=' + self.context.options.runtime,
             '--link=' + self.context.options.link,
@@ -696,13 +707,21 @@ class Context:
             '--cache-dir=' + self.make_writable_cache_dir(),
             '--static-cache-dir=' + self.make_static_cache_dir(),
             '--dir=' + build_path
-        ], cwd=repo_path, shell=self.is_windows(), stdout=subprocess.PIPE)
-        
-        for c in iter(lambda: process.stdout.read(1), ''):  # replace '' with b'' for Python 3
-            sys.stdout.write(c)
-        ret = process.wait()
-        if ret != 0:
-            raise RuntimeError("Return code {}".format(ret))
+        ], cwd=repo_path)
+
+        helpers.run_task([
+            'golem',
+            command,
+            '--dir=' + build_path
+        ], cwd=repo_path)
+
+        if command == 'build':
+            helpers.run_task([
+                'golem',
+                'export',
+                '--dir=' + build_path
+            ], cwd=repo_path)
+
 
     def can_open_pkl(self, dep, cache_dir):
         pkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
@@ -1065,6 +1084,19 @@ class Context:
             with open(properties_path, 'w') as outfile:
                 json.dump(data, outfile, indent=4, sort_keys=True)
 
+    def save_options(self):
+        self.context.env.OPTIONS = json.dumps(self.context.options.__dict__)
+        if hasattr(self.context.options, 'targets'):
+            self.context.env.TARGETS = self.context.options.targets
+    
+    def restore_options(self):
+        def ascii_encode_dict(data):
+            ascii_encode = lambda x: x.encode('ascii') if isinstance(x, unicode) else x
+            return dict(map(ascii_encode, pair) for pair in data.items())
+        self.context.options.__dict__ = json.loads(self.context.env.OPTIONS, object_hook=ascii_encode_dict)
+        if hasattr(self.context, 'targets') and self.context.targets:
+            self.context.options.targets = self.context.targets
+
     def configure(self):
 
         # features list
@@ -1082,6 +1114,7 @@ class Context:
             # self.context.env.MSVC_VERSIONS = ['msvc 14.0']
             self.context.env.MSVC_TARGETS = ['x86']
         self.context.load(features_to_load)
+        self.save_options()
         
         if self.is_debug() and self.is_windows():
             for key in self.context.env.keys():
@@ -1100,6 +1133,7 @@ class Context:
             # self.context.env.MSVC_VERSIONS = ['msvc 14.0']
             self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
         self.context.load(features_to_load)
+        self.save_options()
 
         if self.is_debug() and self.is_windows():
             for key in self.context.env.keys():
@@ -1119,9 +1153,7 @@ class Context:
 
     def build(self):
 
-        self.environment()
-
-        requested_targets = self.context.targets.split(',') if self.context.targets else [target.name for target in self.project.targets]
+        requested_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
         
         for targetname in requested_targets:
             for target in self.project.targets:
@@ -1130,7 +1162,7 @@ class Context:
 
         self.module.script(self)
 
-        for targetname in self.context.targets.split(','):
+        for targetname in self.context.options.targets.split(','):
             if targetname and not targetname in [target.name for target in self.project.targets]:
                 if self.is_windows():
                     self.context(rule="type nul >> ${TGT}", target=targetname)
@@ -1157,12 +1189,10 @@ class Context:
                     os.makedirs(outpath)
 
                 includes = config.includes
-                config.includes = []
 
                 outpath_include = os.path.join(outpath, 'include')
                 if not os.path.exists(outpath_include):
                     os.makedirs(outpath_include)
-                config.includes.append(outpath_include)
 
                 for include in includes:
                     distutils.dir_util.copy_tree(self.make_project_path(include), outpath_include)
@@ -1174,12 +1204,6 @@ class Context:
                 out_path = self.make_out_path()
                 if os.path.exists(out_path):
                     copy_tree(self.make_out_path(), outpath_lib)
-
-                output = open(os.path.join(outpath_lib, export.name + '.pkl'), 'wb')
-                export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
-                export_ctx = [export_deps, config]
-                pickle.dump(export_ctx, output)
-                output.close()
 
     def resolve_local_configs(self, targets):
         configs = dict()
@@ -1232,7 +1256,7 @@ class Context:
 
     def resolve_recursively(self):
         targets_to_process = self.get_targets_to_process()
-        config = self.resolve_global_config(targets_to_process)
+        configs = self.resolve_configs_recursively(targets_to_process)
 
         outpath = self.context.options.export
         outpath_lib = os.path.join(outpath, self.build_path())
@@ -1240,10 +1264,17 @@ class Context:
             os.makedirs(outpath_lib)
         
         for target in targets_to_process:
+            config = configs[target.name]
+
+            config.includes = []
+            outpath_include = os.path.join(outpath, 'include')
+            config.includes.append(outpath_include)
+
             outpath_target = os.path.join(outpath_lib, target.name + '.pkl')
             outpath_directory = os.path.dirname(outpath_target)
             if not os.path.exists(outpath_directory):
                 os.makedirs(outpath_directory)
+            
             output = open(outpath_target, 'wb')
             export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
             export_ctx = [export_deps, config]
@@ -1322,7 +1353,7 @@ class Context:
 
         if len(packages_to_install) > 0:
             print('Install the following packages: {}'.format(packages_to_install))
-            subprocess.check_output(['sudo', 'apt', 'install', '-y'] + packages_to_install)
+            helpers.run_task(['sudo', 'apt', 'install', '-y'] + packages_to_install)
         else:
             print('Nothing to install')
 
@@ -1419,4 +1450,4 @@ class Context:
 
         print("Build package")
         output_filename = package_name + '_' + package_version + "_" + package_arch
-        subprocess.check_output(['fakeroot', 'dpkg-deb', '--build', package_directory, output_filename + '.deb'], cwd=self.get_output_path())
+        helpers.run_task(['fakeroot', 'dpkg-deb', '--build', package_directory, output_filename + '.deb'], cwd=self.get_output_path())

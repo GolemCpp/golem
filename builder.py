@@ -26,37 +26,37 @@ def configure(context):
 
 def build(context):
     ctx = get_context(context)
-    ctx.resolve()
+    ctx.environment()
     ctx.build()
 
 
 def export(context):
     ctx = get_context(context)
-    ctx.resolve()
+    ctx.environment()
     ctx.export()
 
 
 def resolve(context):
     ctx = get_context(context)
-    ctx.resolve()
+    ctx.environment()
     ctx.resolve_recursively()
 
 
 def package(context):
     ctx = get_context(context)
-    ctx.resolve()
+    ctx.environment()
     ctx.package()
 
 
 def requirements(context):
     ctx = get_context(context)
-    ctx.resolve()
+    ctx.environment()
     ctx.requirements()
 
 
 def dependencies(context):
     ctx = get_context(context)
-    ctx.resolve()
+    ctx.environment()
     ctx.dependencies()
 
 

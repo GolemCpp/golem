@@ -16,7 +16,7 @@ class CacheDir:
         return self._is_static
 
     def __str__(self):
-        return _location
+        return self._location
 
 
 def default_cached_dir():
