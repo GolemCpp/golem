@@ -1039,6 +1039,9 @@ class Context:
                     if path.startswith('/usr'):
                         isystemflags.append('-isystem' + str(path))
 
+        if self.is_windows():
+            version_short = None
+            
         ttarget = build_fun(
             defines			= config.defines,
             includes		= listinclude,
