@@ -508,6 +508,9 @@ class Context:
         # load all environment variables
         self.context.load_envs()
 
+        # Restore options
+        self.restore_options()
+
         # set environment variables according architecture
         if self.is_x86():
             self.context.env = self.context.all_envs['x86'].derive()
@@ -526,8 +529,6 @@ class Context:
 
         # copy cxxflags to cflags
         self.context.env.CFLAGS = self.context.env.CXXFLAGS
-
-        self.restore_options()
 
         self.resolve()
 
