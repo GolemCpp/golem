@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 
+import helpers
+from shutil import copytree
+from string import Template
+import subprocess
+import shutil
+import string
+import imp
+import os
 import sys
 sys.dont_write_bytecode = True
 
-import os
-import imp
-import string
-import shutil
-import subprocess
-from string import Template
-from shutil import copytree
-import helpers
 
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
@@ -63,5 +63,12 @@ custom_env['PYTHONPATH'] = golem_path
 helpers.run_task(argv, cwd=build_dir, env=custom_env)
 
 if sys.argv[1] == 'distclean':
-    shutil.rmtree(golem_out)
+    path = golem_out
+    if sys.platform.startswith('win32'):
+        from time import sleep
+        while os.path.exists(path):
+            os.system("rmdir /s /q %s" % path)
+            sleep(0.1)
+    else:
+        shutil.rmtree(path)
     sys.exit(0)

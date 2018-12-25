@@ -814,7 +814,7 @@ class Context:
 
         if is_header_not_available or is_artifact_not_available:
             if cache_dir.is_static:
-                raise RuntimeError("Cannot find artifacts from the static cache location " + cache_dir.location)
+                raise RuntimeError("Cannot find artifacts for {} from the static cache location {}".format(dep.name, cache_dir.location))
             self.run_dep_command(dep, cache_dir, command)
 
         self.use_dep(config, dep, cache_dir, enable_env, has_artifacts)
@@ -838,13 +838,13 @@ class Context:
 
         return cache_dir
 
-    def is_dep_in_cache_dir(self, dep, cache_dir):
-        path = self.get_dep_location(dep, cache_dir)
+    def is_dep_artifact_in_cache_dir(self, dep, cache_dir):
+        path = self.get_dep_artifact_location(dep, cache_dir)
         return os.path.exists(path)
 
     def find_existing_dep_cache_dir(self, dep, cache_conf):
         for cache_dir in cache_conf.locations:
-            if self.is_dep_in_cache_dir(dep, cache_dir):
+            if self.is_dep_artifact_in_cache_dir(dep, cache_dir):
                 return cache_dir
         return None
 
