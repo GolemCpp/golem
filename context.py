@@ -508,14 +508,17 @@ class Context:
         # load all environment variables
         self.context.load_envs()
 
-        # Restore options
-        self.restore_options()
+        x86_options = self.restore_options_env(self.context.all_envs['x86'])
+        is_x86 = Context.osarch_parser(x86_options['arch']) == 'x86'
 
         # set environment variables according architecture
-        if self.is_x86():
+        if is_x86:
             self.context.env = self.context.all_envs['x86'].derive()
         else:
             self.context.env = self.context.all_envs['x64'].derive()
+
+        # Restore options
+        self.restore_options()
 
         # init default environment variables
         self.configure_init()
@@ -1093,13 +1096,17 @@ class Context:
         if hasattr(self.context.options, 'targets'):
             self.context.env.TARGETS = self.context.options.targets
     
-    def restore_options(self):
+    def restore_options_env(self, env):
         def ascii_encode_dict(data):
             ascii_encode = lambda x: x.encode('ascii') if isinstance(x, unicode) else x
             return dict(map(ascii_encode, pair) for pair in data.items())
-        self.context.options.__dict__ = json.loads(self.context.env.OPTIONS, object_hook=ascii_encode_dict)
+        options = json.loads(env.OPTIONS, object_hook=ascii_encode_dict)
         if hasattr(self.context, 'targets') and self.context.targets:
-            self.context.options.targets = self.context.targets
+            options['targets'] = self.context.targets
+        return options
+    
+    def restore_options(self):
+        self.context.options.__dict__ = self.restore_options_env(self.context.env)
 
     def configure(self):
 
