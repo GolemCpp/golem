@@ -768,7 +768,10 @@ class Context:
         result = list()
         for filename in target_name:
             for suffix in self.artifact_suffix(config):
-                result.append(filename + suffix)
+                if suffix != '.dll' or config.dlls is None:
+                    result.append(filename + suffix)
+        if '.dll' in self.artifact_suffix(config) and config.dlls is not None:
+            result += [dll + '.dll' for dll in config.dlls]
         return result
 
 

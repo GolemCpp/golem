@@ -49,7 +49,7 @@ class Project:
 
         config = Configuration()
 
-        config.target = '' if target is None else target
+        config.targets = [] if target is None else [target]
         config.targets = config.targets if targets is None else targets
         config.type = type
 

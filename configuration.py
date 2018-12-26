@@ -3,11 +3,13 @@ from condition import Condition
 
 
 class Configuration:
-    def __init__(self, target=None, targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, **kwargs):
+    def __init__(self, target=None, targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, **kwargs):
         self.condition = Condition(**kwargs)
 
         self.targets = [] if target is None else [target]
         self.targets = self.targets if targets is None else self.targets
+
+        self.dlls = [] if dlls is None else dlls
 
         self.type = 'library' if type is None else type
 
@@ -44,6 +46,9 @@ class Configuration:
 
         if config.targets:
             self.targets = config.targets
+
+        if hasattr(config, 'dlls') and config.dlls:
+            self.dlls = config.dlls
 
         self.defines += config.defines
         self.includes += config.includes
