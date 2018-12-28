@@ -7,7 +7,7 @@ class Configuration:
         self.condition = Condition(**kwargs)
 
         self.targets = [] if target is None else [target]
-        self.targets = self.targets if targets is None else self.targets
+        self.targets = self.targets if targets is None else targets
 
         self.dlls = [] if dlls is None else dlls
 
