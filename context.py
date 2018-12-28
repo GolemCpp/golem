@@ -768,9 +768,9 @@ class Context:
         result = list()
         for filename in target_name:
             for suffix in self.artifact_suffix(config):
-                if suffix != '.dll' or config.dlls is None:
+                if suffix != '.dll' or not config.dlls:
                     result.append(filename + suffix)
-        if '.dll' in self.artifact_suffix(config) and config.dlls is not None:
+        if '.dll' in self.artifact_suffix(config) and config.dlls:
             result += [dll + '.dll' for dll in config.dlls]
         return result
 
@@ -792,7 +792,7 @@ class Context:
                     raise RuntimeError("Cannot find target: " + target)
             dep_configs.targets = dep.targets
         
-        config = deepcopy(config)
+        config = Configuration()
         config.merge(self.context, [dep_configs])
         return expected_files + self.make_target_from_context(config, dep)
 
@@ -821,7 +821,7 @@ class Context:
 
         if is_header_not_available or is_artifact_not_available:
             if cache_dir.is_static:
-                raise RuntimeError("Cannot find artifacts for {} from the static cache location {}".format(dep.name, cache_dir.location))
+                raise RuntimeError("Cannot find artifacts {} for {} from the static cache location {}".format(expects_files, dep.name, cache_dir.location))
             self.run_dep_command(dep, cache_dir, command)
 
         self.use_dep(config, dep, cache_dir, enable_env, has_artifacts)
