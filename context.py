@@ -121,7 +121,6 @@ class Context:
             return platform.linux_distribution()[0].lower()
         return None
 
-
     def release(self):
         if self.is_linux():
             import lsb_release
@@ -1111,6 +1110,15 @@ class Context:
     def restore_options(self):
         self.context.options.__dict__ = self.restore_options_env(self.context.env)
 
+    def ensures_qt_is_installed(self):
+        if self.is_linux() and self.distribution() == 'debian' and self.release() == 'stretch':
+            self.requirements_debian_install([
+                'qt5-default',
+                'qtwebengine5-dev',
+                'libqt5x11extras5-dev',
+                'qtbase5-private-dev'
+            ])
+
     def configure(self):
 
         # features list
@@ -1118,6 +1126,7 @@ class Context:
 
         # qt check
         if self.project.qt:
+            self.ensures_qt_is_installed()
             features_to_load.append('qt5')
             if os.path.exists(self.project.qtdir):
                 self.context.options.qtdir = self.project.qtdir
@@ -1344,11 +1353,7 @@ class Context:
     def requirements_darwin(self):
         pass
 
-    def requirements_debian(self):
-        targets_to_process = self.get_targets_to_process()
-        config = self.resolve_global_config(targets_to_process)
-        packages = config.packages_dev if len(config.packages_dev) > 0 else config.packages
-
+    def requirements_debian_install(self, packages):
         packages = list(sorted(set(packages)))
         print('Packages required to be installed: {}'.format(packages))
         print('Looking for installed packages...')
@@ -1370,6 +1375,13 @@ class Context:
             helpers.run_task(['sudo', 'apt', 'install', '-y'] + packages_to_install)
         else:
             print('Nothing to install')
+
+    def requirements_debian(self):
+        targets_to_process = self.get_targets_to_process()
+        config = self.resolve_global_config(targets_to_process)
+        packages = config.packages_dev if len(config.packages_dev) > 0 else config.packages
+
+        self.requirements_debian_install(packages)
 
         print('Done')
 
