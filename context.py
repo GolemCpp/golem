@@ -815,7 +815,8 @@ class Context:
         expects_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
         is_header_only = self.is_header_only(dep, cache_dir)
 
-        is_header_not_available = is_header_only and not os.path.exists(self.get_dep_include_location(dep, cache_dir))
+        is_header_exportable_yet = command == 'build'
+        is_header_not_available = is_header_exportable_yet and is_header_only and not os.path.exists(self.get_dep_include_location(dep, cache_dir))
         is_artifact_not_available = not is_header_only and not self.is_in_dep_artifact_in_cache_dir(dep, cache_dir, expects_files)
 
         if is_header_not_available or is_artifact_not_available:
@@ -1254,7 +1255,7 @@ class Context:
                         dep.configure(self, config)
         return configs
 
-    def resolve_local_dependencies(self, targets):
+    def build_local_dependencies(self, targets):
         dependencies = dict()
         configs = self.resolve_local_configs(targets)
         for target in targets:
@@ -1263,6 +1264,7 @@ class Context:
             for dep_name in config.deps:
                 for dep in self.project.deps:
                     if dep_name == dep.name:
+                        dep.build(self, config)
                         if target.name not in dependencies:
                             dependencies[target.name] = list()
                         dependencies[target.name].append(dep)
@@ -1387,11 +1389,7 @@ class Context:
 
     def dependencies(self):
         targets_to_process = self.get_targets_to_process()
-        configs = self.resolve_local_configs(targets_to_process)
-        dependencies = self.resolve_local_dependencies(targets_to_process)
-        for target_name, dependencies_list in dependencies.items():
-            for dependency in dependencies_list:
-                dependency.build(self, configs[target_name])
+        self.build_local_dependencies(targets_to_process)
 
     def package(self):
 
