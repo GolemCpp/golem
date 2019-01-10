@@ -647,7 +647,7 @@ class Context:
                 if not self.is_windows():
                     self.context.env['CXXFLAGS_' + dep.name]			= ['-isystem' + dep_path_include]
                 else:
-                    self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I', dep_path_include]
+                    self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I' + dep_path_include]
                 self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
                 if not depconfig.header_only:
                     self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
