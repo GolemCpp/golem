@@ -1454,6 +1454,7 @@ class Context:
 
         bin_directory = make_directory(prefix_directory, 'bin')
 
+        print("Copying " + str(self.make_out_path()) + " to " + str(bin_directory))
         copy_tree(self.make_out_path(), bin_directory)
 
         debian_directory = make_directory(package_directory, 'DEBIAN')

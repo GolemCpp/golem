@@ -86,7 +86,7 @@ def make_dep_base(dep):
 
 def copy_tree(source_path, destination_path):
     if not os.path.isdir(destination_path):
-        raise ValueError("destination_path is not a directory")
+        raise ValueError(str(destination_path) + " is not a directory")
 
     destination_path = make_directory(destination_path)
 
@@ -94,8 +94,9 @@ def copy_tree(source_path, destination_path):
         for fname in fileList:
             copy_file(os.path.join(dirName, fname), destination_path)
         for dname in subdirList:
+            dname_destination = make_directory(destination_path, dname)
             copy_tree(os.path.join(dirName, dname),
-                      os.path.join(destination_path, dname))
+                      dname_destination)
         break
 
 
