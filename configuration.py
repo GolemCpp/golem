@@ -3,11 +3,14 @@ from condition import Condition
 
 
 class Configuration:
-    def __init__(self, target=None, targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, **kwargs):
+    def __init__(self, target=None, targets=None, static_targets=None, shared_targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, **kwargs):
         self.condition = Condition(**kwargs)
 
         self.targets = [] if target is None else [target]
         self.targets = self.targets if targets is None else targets
+
+        self.static_targets = [] if static_targets is None else static_targets
+        self.shared_targets = [] if shared_targets is None else shared_targets
 
         self.dlls = [] if dlls is None else dlls
 
@@ -49,6 +52,12 @@ class Configuration:
 
         if hasattr(config, 'dlls') and config.dlls:
             self.dlls = config.dlls
+
+        if hasattr(config, 'static_targets'):
+            self.static_targets += config.static_targets
+
+        if hasattr(config, 'shared_targets'):
+            self.shared_targets += config.shared_targets
 
         self.defines += config.defines
         self.includes += config.includes

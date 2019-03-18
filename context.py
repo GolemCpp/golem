@@ -164,10 +164,10 @@ class Context:
         if self.context.options.variant == self.variant_debug():
             variant = '-' + self.variant_debug()
         return variant
-
-    def artifact_suffix(self, config):
+        
+    def artifact_suffix_mode(self, config, is_shared):
         if config.type == 'library':
-            if self.is_shared():
+            if is_shared:
                 if self.is_windows():
                     return ['.dll', '.lib']
                 elif self.is_darwin():
@@ -184,6 +184,9 @@ class Context:
                 return ['.exe']
             else:
                 return []
+
+    def artifact_suffix(self, config):
+        return self.artifact_suffix_mode(config, self.is_shared())
 
     def dev_artifact_suffix(self):
         if self.is_shared():
@@ -771,6 +774,18 @@ class Context:
                     result.append(filename + suffix)
         if '.dll' in self.artifact_suffix(config) and config.dlls:
             result += [dll + '.dll' for dll in config.dlls]
+
+        for filename in config.static_targets:
+            for suffix in self.artifact_suffix_mode(config=config, is_shared=False):
+                if not self.is_windows():
+                    filename = 'lib' + filename
+                result.append(filename + suffix)
+        for filename in config.shared_targets:
+            for suffix in self.artifact_suffix_mode(config=config, is_shared=True):
+                if not self.is_windows():
+                    filename = 'lib' + filename
+                if suffix != '.dll' or not config.dlls:
+                    result.append(filename + suffix)
         return result
 
 
