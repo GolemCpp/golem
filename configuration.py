@@ -3,7 +3,7 @@ from condition import Condition
 
 
 class Configuration:
-    def __init__(self, target=None, targets=None, static_targets=None, shared_targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, **kwargs):
+    def __init__(self, target=None, targets=None, static_targets=None, shared_targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, ldflags=None, **kwargs):
         self.condition = Condition(**kwargs)
 
         self.targets = [] if target is None else [target]
@@ -22,6 +22,7 @@ class Configuration:
 
         self.cxxflags = [] if cxxflags is None else cxxflags
         self.linkflags = [] if linkflags is None else linkflags
+        self.ldflags = [] if ldflags is None else ldflags
         self.system = [] if system is None else system
 
         self.packages = [] if packages is None else packages
@@ -65,6 +66,7 @@ class Configuration:
 
         self.cxxflags += config.cxxflags
         self.linkflags += config.linkflags
+        self.ldflags += config.ldflags
         self.system += config.system
 
         self.packages += config.packages

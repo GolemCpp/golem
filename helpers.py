@@ -131,3 +131,11 @@ def run_task(args, cwd=None, **kwargs):
     if ret != 0:
         raise RuntimeError(
             "Return code {} when running \"{}\" from \"{}\"".format(ret, ' '.join(args), os.getcwd() if cwd is None else cwd))
+
+
+def RepresentsInt(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
