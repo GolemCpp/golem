@@ -60,13 +60,15 @@ class Configuration:
         if hasattr(config, 'shared_targets'):
             self.shared_targets += config.shared_targets
 
+        if hasattr(config, 'ldflags'):
+            self.ldflags += config.ldflags
+
         self.defines += config.defines
         self.includes += config.includes
         self.source += config.source
 
         self.cxxflags += config.cxxflags
         self.linkflags += config.linkflags
-        self.ldflags += config.ldflags
         self.system += config.system
 
         self.packages += config.packages
