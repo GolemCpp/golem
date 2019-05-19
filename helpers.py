@@ -119,6 +119,8 @@ def copy_file(source_path, destination_path):
                 os.path.dirname(source_path), link_path_relative)
 
         copy_file(link_path_absolute, destination_directory)
+        if os.path.exists(destination_path):
+            os.remove(destination_path)
         os.symlink(link_path_relative, destination_path)
     else:
         shutil.copy(source_path, destination_path)
