@@ -428,6 +428,8 @@ class Context:
             # self.context.env.LINKFLAGS.append('/SUBSYSTEM') # how to run the .exe file
             # self.context.env.LINKFLAGS.append('/DLL') # builds a DLL
             # self.context.env.LINKFLAGS.append('/TLBID:1') # resource ID of the linker-generated type library
+
+            self.context.env.CXXFLAGS.append('/utf-8') # enable {source/executable/validate}-charset to utf-8
             
             self.context.env.ARFLAGS.append('/NOLOGO')
 
