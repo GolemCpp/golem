@@ -93,17 +93,20 @@ class Context:
     def list_include(self, includes):
         return [self.context.root.find_dir(str(x)) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)) for x in includes]
 
+    def list_files(self, source, extentions):
+        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('**/*.' + extention) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.cpp') for x in source for extention in extentions] for item in sublist]
+
     def list_source(self, source):
-        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.cpp') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.cpp') for x in source] for item in sublist]
+        return self.list_files(source, ['cpp', 'c', 'cxx', 'cc'])
 
     def list_moc(self, source):
-        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.hpp') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.hpp') for x in source] for item in sublist]
+        return self.list_files(source, ['hpp', 'h', 'hxx', 'hh'])
 
     def list_qt_qrc(self, source):
-        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.qrc') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.qrc') for x in source] for item in sublist]
+        return self.list_files(source, ['qrc'])
 
     def list_qt_ui(self, source):
-        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('*.ui') if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.ui') for x in source] for item in sublist]
+        return self.list_files(source, ['ui'])
 
     @staticmethod
     def link_static():
