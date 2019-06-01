@@ -92,6 +92,5 @@ class Configuration:
                     and (not c.condition.release or context.release() in c.condition.release)):
                 self.append(c)
 
-                if exporting:
-                    if c.header_only is not None:
-                        self.header_only = c.header_only
+                if exporting and not self.header_only and c.header_only is not None:
+                    self.header_only = c.header_only
