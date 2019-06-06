@@ -457,7 +457,7 @@ class Context:
 
             self.context.env.CXXFLAGS.append('-std=c++17')
 
-            self.context.env.CXXFLAGS += '-pedantic -Wall -Wextra -Wno-unused -Wcast-align -Wcast-qual -Wstrict-overflow=5 -Wlogical-op -Winline -Winit-self -Wswitch-default -Wswitch-enum -Wundef -Wredundant-decls -Wshadow -Wsign-conversion -Wsign-promo -Wold-style-cast -Woverloaded-virtual -Wdisabled-optimization -Wpointer-arith -Wwrite-strings -Wctor-dtor-privacy -Wformat=2 -Wmissing-declarations'.split()
+            self.context.env.CXXFLAGS += '-pedantic -Wall -Wextra -Wno-unused -Wcast-align -Wcast-qual -Wstrict-overflow=5 -Wlogical-op -Winit-self -Wswitch-default -Wswitch-enum -Wundef -Wredundant-decls -Wshadow -Wsign-conversion -Wsign-promo -Wold-style-cast -Woverloaded-virtual -Wdisabled-optimization -Wpointer-arith -Wwrite-strings -Wctor-dtor-privacy -Wformat=2 -Wmissing-declarations'.split()
             # FIX: Check the project configuration scaffolded with golem using -Wmissing-include-dirs
 
             self.context.env.CXXFLAGS.append('-pthread')
