@@ -12,13 +12,14 @@ from helpers import *
 
 
 class Dependency:
-    def __init__(self, name=None, targets=None, repository=None, version=None):
+    def __init__(self, name=None, targets=None, repository=None, version=None, link=None):
         self.name = '' if name is None else name
         self.targets = [] if targets is None else targets
         self.repository = '' if repository is None else repository
         self.version = '' if version is None else version
         self.resolved_version = ''
         self.type = 'library'
+        self.link = link
 
     def __str__(self):
         return helpers.print_obj(self)

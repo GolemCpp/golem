@@ -116,8 +116,8 @@ class Context:
     def link_shared():
         return 'shared'
         
-    def link(self):
-        return self.context.options.link
+    def link(self, dep = None):
+        return self.context.options.link if dep is None or not hasattr(dep, 'link') or dep.link is None else dep.link
 
     def distribution(self):
         if self.is_linux():
@@ -130,8 +130,8 @@ class Context:
             return lsb_release.get_distro_information()['CODENAME'].lower()
         return None
 
-    def link_min(self):
-        return self.link()[:2]
+    def link_min(self, dep = None):
+        return self.link(dep)[:2]
 
     def is_static(self):
         return self.context.options.link == self.link_static()
@@ -188,8 +188,10 @@ class Context:
             else:
                 return []
 
-    def artifact_suffix(self, config):
-        return self.artifact_suffix_mode(config, self.is_shared())
+    def artifact_suffix(self, config, target):
+        has_link = hasattr(target, 'link') and target.link is not None
+        is_shared = self.is_shared() if not has_link else target.link == 'shared'
+        return self.artifact_suffix_mode(config, is_shared)
 
     def dev_artifact_suffix(self):
         if self.is_shared():
@@ -638,7 +640,7 @@ class Context:
 
     def get_dep_artifact_location(self, dep, cache_dir):
         path = self.get_dep_location(dep, cache_dir)
-        return os.path.join(path, self.build_path())
+        return os.path.join(path, self.build_path(dep))
     
     def get_dep_build_location(self, dep, cache_dir):
         path = self.get_dep_artifact_location(dep, cache_dir)
@@ -735,7 +737,7 @@ class Context:
             'configure',
             '--targets=' + dep.name,
             '--runtime=' + self.context.options.runtime,
-            '--link=' + self.context.options.link,
+            '--link=' + (self.context.options.link if dep.link is None else dep.link),
             '--arch=' + self.context.options.arch,
             '--variant=' + self.context.options.variant,
             '--export=' + dep_path,
@@ -795,13 +797,13 @@ class Context:
     def make_target_from_context(self, config, target):
         target_name = self.make_target_name_from_context(config, target)
         if not self.is_windows():
-            target_name = ['lib' + target for target in target_name]
+            target_name = ['lib' + t for t in target_name]
         result = list()
         for filename in target_name:
-            for suffix in self.artifact_suffix(config):
+            for suffix in self.artifact_suffix(config, target):
                 if suffix != '.dll' or not config.dlls:
                     result.append(filename + suffix)
-        if '.dll' in self.artifact_suffix(config) and config.dlls:
+        if '.dll' in self.artifact_suffix(config, target) and config.dlls:
             result += [dll + '.dll' for dll in config.dlls]
 
         for filename in config.static_targets:
@@ -1564,8 +1566,25 @@ class Context:
 
         self.context.load('clang_compilation_database')
 
-    def build_path(self):
-        return self.osname() + '-' + self.arch_min() + '-' + self.compiler_min() + '-' + self.runtime_min() + '-' + self.link_min() + '-' + self.variant_min()
+    def build_path(self, dep = None):
+        return self.osname() + '-' + self.arch_min() + '-' + self.compiler_min() + '-' + self.runtime_min() + '-' + self.link_min(dep) + '-' + self.variant_min()
+
+    def find_dep_include_dir(self, dep_name):
+        dep_include = []
+        cache_conf = self.make_cache_conf()
+        for dep in self.project.deps:
+            if dep_name == dep.name:
+                cache_dir = self.find_dep_cache_dir(dep, cache_conf)
+                dep_include.append(self.get_dep_include_location(dep, cache_dir))
+        return dep_include
+
+    def build_dep(self, dep_name):
+        config = Configuration()
+        cache_conf = self.make_cache_conf()
+        for dep in self.project.deps:
+            if dep_name == dep.name:
+                self.link_dependency(config, dep)
+        return config
 
     def build(self):
 
