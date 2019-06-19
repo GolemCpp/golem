@@ -94,7 +94,7 @@ class Context:
         return [self.context.root.find_dir(str(x)) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)) for x in includes]
 
     def list_files(self, source, extentions):
-        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('**/*.' + extention) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('*.cpp') for x in source for extention in extentions] for item in sublist]
+        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('**/*.' + extention) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('**/*.' + extention) for x in source for extention in extentions] for item in sublist]
 
     def list_source(self, source):
         return self.list_files(source, ['cpp', 'c', 'cxx', 'cc'])
@@ -1096,6 +1096,43 @@ class Context:
 
         if self.is_windows():
             version_short = None
+
+        compile_commands = []
+
+        if os.path.exists(self.make_build_path('vscode_compile_commands.json')):
+            with open(self.make_build_path('vscode_compile_commands.json'), 'r') as fp:
+                compile_commands = json.load(fp)
+
+        for source in listsource + version_source + self.list_moc(self.make_project_path_array(config.includes + config.source)):
+            env_cxxflags = self.context.env.CXXFLAGS
+            env_defines = self.context.env.DEFINES
+            env_include = []
+            for key in self.context.env.keys():
+					if key.startswith("INCLUDES_"):
+						for path in self.context.env[key]:
+							env_include.append(str(path))
+            env_isystem = []
+            for key in self.context.env.keys():
+					if key.startswith("ISYSTEM_"):
+						for path in self.context.env[key]:
+							env_isystem.append(str(path))
+            file = {
+                "directory": self.get_build_path(),
+                "arguments": ["/usr/bin/g++"] 
+                + env_cxxflags + config.cxxflags 
+                + isystemflags
+                + ['-isystem' + str(d) for d in env_isystem] 
+                + ['-I' + str(d) for d in env_include] 
+                + ['-I' + str(d) for d in listinclude] 
+                + ['-D' + d for d in env_defines] 
+                + ['-D' + d for d in config.defines]
+                + [str(source), '-c'],
+                "file": str(source)
+            }
+            compile_commands.append(file)
+
+        with open(self.make_build_path('vscode_compile_commands.json'), 'w') as fp:
+            json.dump(compile_commands, fp, indent=4)
             
         ttarget = build_fun(
             defines			= config.defines,
@@ -1130,7 +1167,7 @@ class Context:
                         "intelliSenseMode": "msvc-x64" if Context.is_windows() else "clang-x64",
                         "includePath": [],
                         "defines": [],
-                        "compileCommands": self.make_build_path("compile_commands.json"),
+                        "compileCommands": self.make_build_path("vscode_compile_commands.json"),
                         "browse": {
                             "path": [],
                             "limitSymbolsToIncludedHeaders": True,
@@ -1587,6 +1624,9 @@ class Context:
         return config
 
     def build(self):
+
+        if os.path.exists(self.make_build_path('vscode_compile_commands.json')):
+            os.remove(self.make_build_path('vscode_compile_commands.json'))
 
         requested_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
         
