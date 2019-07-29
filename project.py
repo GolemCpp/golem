@@ -41,7 +41,7 @@ class Project:
 
         sys.stdout.flush()
 
-    def target(self, type, name, target=None, targets=None, defines=None, includes=None, source=None, features=None, deps=None, use=None, header_only=None, version_template=None, system=None):
+    def target(self, type, name, target=None, targets=None, defines=None, includes=None, source=None, features=None, deps=None, use=None, header_only=None, version_template=None, system=None, moc=None):
         newtarget = Target()
         newtarget.type = type
         newtarget.name = name
@@ -56,6 +56,7 @@ class Project:
         config.defines = [] if defines is None else defines
         config.includes = [] if includes is None else includes
         config.source = [] if source is None else source
+        config.moc = [] if moc is None else moc
 
         config.system = [] if system is None else system
 

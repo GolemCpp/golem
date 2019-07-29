@@ -3,7 +3,7 @@ from condition import Condition
 
 
 class Configuration:
-    def __init__(self, target=None, targets=None, static_targets=None, shared_targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, ldflags=None, **kwargs):
+    def __init__(self, target=None, targets=None, static_targets=None, shared_targets=None, type=None, defines=None, includes=None, source=None, cxxflags=None, linkflags=None, system=None, packages=None, packages_dev=None, packages_tool=None, features=None, deps=None, use=None, header_only=None, dlls=None, ldflags=None, moc=None, **kwargs):
         self.condition = Condition(**kwargs)
 
         self.targets = [] if target is None else [target]
@@ -19,6 +19,7 @@ class Configuration:
         self.defines = [] if defines is None else defines
         self.includes = [] if includes is None else includes
         self.source = [] if source is None else source
+        self.moc = [] if moc is None else moc
 
         self.cxxflags = [] if cxxflags is None else cxxflags
         self.linkflags = [] if linkflags is None else linkflags
@@ -66,6 +67,9 @@ class Configuration:
         self.defines += config.defines
         self.includes += config.includes
         self.source += config.source
+
+        if hasattr(config, 'moc'):
+            self.moc += config.moc
 
         self.cxxflags += config.cxxflags
         self.linkflags += config.linkflags
