@@ -29,12 +29,36 @@ class Project:
             cache.append([dep.name, dep.version, dep.resolve()])
         return cache
 
+    def deps_resolve_json(self):
+        cache = []
+        for dep in self.deps:
+            dep.resolve()
+            cache.append({
+                'name': dep.name,
+                'repository': dep.repository,
+                'version': dep.version,
+                'commit': dep.resolve()
+            })
+        return cache
+
     def deps_load(self, cache):
         for i, dep in enumerate(self.deps):
             for item in cache:
                 if item[0] == dep.name and item[1] == dep.version:
                     print item[0] + " : " + item[1] + " -> " + item[2]
                     self.deps[i].resolved_version = item[2]
+                    break
+            if not self.deps[i].resolved_version:
+                print dep.name + " : no cached version"
+
+        sys.stdout.flush()
+
+    def deps_load_json(self, cache):
+        for i, dep in enumerate(self.deps):
+            for item in cache:
+                if item['name'] == dep.name and item['version'] == dep.version:
+                    print item['name'] + " : " + item['version'] + " -> " + item['commit']
+                    self.deps[i].resolved_version = item['commit']
                     break
             if not self.deps[i].resolved_version:
                 print dep.name + " : no cached version"

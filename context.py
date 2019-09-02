@@ -25,21 +25,86 @@ class Context:
         self.context = context
         self.module = Module(self.get_project_dir())
         self.project = self.module.project()
+        self.resolved_dependencies_path = None
 
-    def resolve(self):
-        deps_cache_file = self.make_build_path('deps.cache')
-        if os.path.exists(deps_cache_file):
-            print 'Found deps.cache'
-            cache = None
-            with io.open(deps_cache_file, 'rb') as file:
-                cache = pickle.load(file)
-            self.project.deps_load(cache)
+    def load_resolved_dependencies(self):
+        if self.resolved_dependencies_path is not None:
+            return
+        
+        deps_cache_file_pickle = self.make_build_path('deps.cache')
+        deps_cache_file_json = self.make_project_path('dependencies.json')
+
+        if self.context.options.resolved_dependencies_directory is not None:
+            deps_cache_file_json = os.path.join(self.context.options.resolved_dependencies_directory, 'dependencies.json')
+
+        if os.path.exists(deps_cache_file_json):
+            print 'Found ' + str(deps_cache_file_json)
+            self.load_dependencies_json(deps_cache_file_json)
+            self.resolved_dependencies_path = deps_cache_file_json
+        elif os.path.exists(deps_cache_file_pickle):
+            print 'Found ' + str(deps_cache_file_pickle)
+            self.load_dependencies_pickle(deps_cache_file_pickle)
+            self.resolved_dependencies_path = deps_cache_file_pickle
         else:
-            print 'No deps.cache'
-            cache = self.project.deps_resolve()
-            make_directory(os.path.dirname(deps_cache_file))
-            with io.open(deps_cache_file, 'wb') as file:
-                pickle.dump(cache, file)
+            print "No dependencies cache found"
+
+    
+    def resolve_dependencies(self):
+        deps_cache_file_pickle = self.make_build_path('deps.cache')
+        deps_cache_file_json = self.make_project_path('dependencies.json')
+
+        deps_cache_file_json_build = None
+        if self.context.options.resolved_dependencies_directory is not None:
+            deps_cache_file_json_build = os.path.join(self.context.options.resolved_dependencies_directory, 'dependencies.json')
+
+        if not self.context.options.keep_resolved_dependencies:
+            if os.path.exists(deps_cache_file_pickle):
+                print "Cleaning up " + str(deps_cache_file_pickle)
+                os.remove(deps_cache_file_pickle)
+
+            if os.path.exists(deps_cache_file_json):
+                print "Cleaning up " + str(deps_cache_file_json)
+                os.remove(deps_cache_file_json)
+
+            if deps_cache_file_json_build is not None and os.path.exists(deps_cache_file_json_build):
+                print "Cleaning up " + str(deps_cache_file_json_build)
+                os.remove(deps_cache_file_json_build)
+
+        self.resolved_dependencies_path = None
+
+        self.load_resolved_dependencies()
+
+        if self.resolved_dependencies_path is None:
+            save_path = deps_cache_file_json
+            if self.context.options.resolved_dependencies_directory is not None:
+                make_directory(self.context.options.resolved_dependencies_directory)
+                save_path = os.path.join(self.context.options.resolved_dependencies_directory, 'dependencies.json')
+            print "Saving dependencies in cache " + str(save_path)
+            self.save_dependencies_json(save_path)
+            self.resolved_dependencies_path = save_path
+
+    def load_dependencies_pickle(self, path):
+        cache = None
+        with io.open(path, 'rb') as file:
+            cache = pickle.load(file)
+        self.project.deps_load(cache)
+
+    def load_dependencies_json(self, path):
+        cache = None
+        with open(path, 'r') as fp:
+            cache = json.load(fp)
+        self.project.deps_load_json(cache)
+
+    def save_dependencies_pickle(self, path):
+        cache = self.project.deps_resolve()
+        make_directory(os.path.dirname(path))
+        with io.open(path, 'wb') as file:
+            pickle.dump(cache, file)
+
+    def save_dependencies_json(self, path):
+        cache = self.project.deps_resolve_json()
+        with open(path, 'w') as fp:
+            json.dump(cache, fp, indent=4)
 
     def get_project_dir(self):
         return self.context.options.dir
@@ -341,6 +406,9 @@ class Context:
         context.add_option("--android-jdk", action="store", default='', help="JDK path to use when packaging Android app")
         context.add_option("--android-arch", action="store", default='', help="Android target architecture")
 
+        context.add_option("--keep-resolved-dependencies", action="store", default=False, help="Keep resolved dependencies when set")
+        context.add_option("--resolved-dependencies-directory", action="store", default=None, help="Resolved dependencies directory path")
+
     def configure_init(self):
         if not self.context.env.DEFINES:
             self.context.env.DEFINES=[]
@@ -531,7 +599,7 @@ class Context:
         else:
             self.context.env.CXXFLAGS.append('-O3')
 
-    def environment(self):
+    def environment(self, resolve_dependencies=False):
         
         # load all environment variables
         self.context.load_envs()
@@ -566,7 +634,10 @@ class Context:
         # copy cxxflags to cflags
         self.context.env.CFLAGS = self.context.env.CXXFLAGS
 
-        self.resolve()
+        if resolve_dependencies:
+            self.resolve_dependencies()
+        else:
+            self.load_resolved_dependencies()
 
     def dep_system(self, context, libs):
         context.env['LIB'] += libs
@@ -743,7 +814,8 @@ class Context:
             '--export=' + dep_path,
             '--cache-dir=' + self.make_writable_cache_dir(),
             '--static-cache-dir=' + self.make_static_cache_dir(),
-            '--dir=' + build_path
+            '--dir=' + build_path,
+            '--resolved-dependencies-directory=' + build_path
         ], cwd=repo_path)
 
         helpers.run_task([
@@ -1467,7 +1539,7 @@ class Context:
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
-        removeTree(self, package_directory)
+        remove_tree(self, package_directory)
 
         # Strip binaries, libraries, archives
 
@@ -1890,7 +1962,7 @@ class Context:
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
-        removeTree(self, package_directory)
+        remove_tree(self, package_directory)
 
         # Install documentation
 

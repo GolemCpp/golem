@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
+from waflib.TaskGen import feature, before_method
+from context import Context
 import sys
 sys.dont_write_bytecode = True
-
-from context import Context
 
 
 def get_context(context):
@@ -38,7 +38,7 @@ def export(context):
 
 def resolve(context):
     ctx = get_context(context)
-    ctx.environment()
+    ctx.environment(resolve_dependencies=True)
     ctx.resolve_recursively()
 
 
@@ -58,9 +58,6 @@ def dependencies(context):
     ctx = get_context(context)
     ctx.environment()
     ctx.dependencies()
-
-
-from waflib.TaskGen import feature, before_method
 
 
 @feature('*')

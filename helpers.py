@@ -39,7 +39,7 @@ def print_obj(obj, depth=5, l=""):
     return name + " {\n" + "\n".join(l + repr(k) + ": " + print_obj(v, depth=depth-1, l=l+"  ") + "," for k, v in objdict.iteritems()) + "\n" + l + "}"
 
 
-def handleRemoveReadonly(func, path, exc_info):
+def handle_remove_readonly(func, path, exc_info):
     """
     Error handler for ``shutil.rmtree``.
 
@@ -48,7 +48,7 @@ def handleRemoveReadonly(func, path, exc_info):
 
     If the error is for another reason it re-raises the error.
 
-    Usage : ``shutil.rmtree(path, onerror=handleRemoveReadonly)``
+    Usage : ``shutil.rmtree(path, onerror=handle_remove_readonly)``
     """
     import stat
     if not os.access(path, os.W_OK):
@@ -59,10 +59,10 @@ def handleRemoveReadonly(func, path, exc_info):
         raise RuntimeError("Can't access to \"{}\"".format(path))
 
 
-def removeTree(ctx, path):
+def remove_tree(ctx, path):
     if os.path.exists(path):
         if ctx.is_windows():
-            # shutil.rmtree(build_dir, ignore_errors=False, onerror=handleRemoveReadonly)
+            # shutil.rmtree(build_dir, ignore_errors=False, onerror=handle_remove_readonly)
             from time import sleep
             while os.path.exists(path):
                 os.system("rmdir /s /q %s" % path)
