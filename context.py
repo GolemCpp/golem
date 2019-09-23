@@ -536,7 +536,7 @@ class Context:
             self.context.env.LINKFLAGS.append('-pthread')
         
         if self.is_darwin():
-            self.context.env.env.CXX	= ['clang++']
+            self.context.env.CXX	= ['clang++']
             self.context.env.CXXFLAGS.append('-stdlib=libc++')
             self.context.env.LINKFLAGS.append('-stdlib=libc++')
 
@@ -1133,7 +1133,7 @@ class Context:
             if Context.is_linux():
                 linkflags += ['-Wl,--allow-shlib-undefined']
             elif Context.is_darwin():
-                linkflags += ['-Wl,-undefined,suppress']
+                linkflags += ['-flat_namespace', '-Wl,-undefined,suppress']
         else:
             print "ERROR: no options found"
             return
