@@ -1719,6 +1719,18 @@ class Context:
     def get_asked_exports(self):
         return self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.exports]
 
+    def find_dep(self, name):
+        found_dep = None
+        for dep in self.project.deps:
+            if dep.name == name:
+                found_dep = dep
+                break
+        return found_dep
+    
+    def find_dep_cache_include(self, dep):
+        cache_dir = self.find_dep_cache_dir(dep, self.make_cache_conf())
+        return self.get_dep_include_location(dep, cache_dir)
+
     def export(self):
         targets = self.get_asked_exports()
         for export in self.project.exports:
