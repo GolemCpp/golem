@@ -1,9 +1,13 @@
+import os
 import sys
 import helpers
+import json
 from target import Target
 from configuration import Configuration
+from condition_expression import ConditionExpression
 from dependency import Dependency
 from package import Package
+from helpers import *
 
 
 class Project:
@@ -18,6 +22,7 @@ class Project:
         self.qtdir = ''
 
         self.packages = []
+        self.configuration_paths = []
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -111,6 +116,9 @@ class Project:
     def export(self, **kwargs):
         return self.target(type='export', **kwargs)
 
+    def configuration(self, path):
+        self.configuration_paths.append(path)
+
     def dependency(self, **kwargs):
         dep = Dependency(**kwargs)
         self.deps.append(dep)
@@ -134,3 +142,51 @@ class Project:
         )
         self.packages.append(package)
         return package
+
+    def read_configurations(self, context):
+        resolved_paths = []
+        for path in self.configuration_paths:
+            resolved_path = context.make_project_path(path)
+            if not os.path.exists(resolved_path):
+                raise Exception(
+                    "Can't find configuration file at " + resolved_path)
+            resolved_paths.append(resolved_path)
+
+        configs = []
+        for path in resolved_paths:
+            json_conf = None
+            with open(path, 'r') as fp:
+                json_conf = byteify(json.load(fp))
+            if not json_conf:
+                raise Exception("Failed at loading " + path)
+
+            configs += Configuration.deserialize(json_conf)
+        return configs
+
+    @staticmethod
+    def deserialize(json_object):
+        project = Project()
+        for entry in json_object:
+            key = ConditionExpression.clean(entry)
+            value = json_object[entry]
+            if key == 'configurations':
+                project.configuration_paths = value
+            elif key == 'dependencies':
+                for json_obj in value:
+                    project.deps.append(Dependency.deserialize(json_obj))
+            elif key == 'targets':
+                for json_obj in value:
+                    project.targets.append(Target.deserialize(json_obj))
+            elif key == 'exports':
+                for json_obj in value:
+                    target = Target.deserialize(json_obj)
+                    target.type = 'export'
+                    project.exports.append(target)
+            elif key == 'packages':
+                for json_obj in value:
+                    project.packages.append(Package.deserialize(json_obj))
+            elif key == 'qt_enabled':
+                project.qt = value
+            elif key == 'qt_path':
+                project.qtpath = value
+        return project

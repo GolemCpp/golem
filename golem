@@ -15,12 +15,17 @@ sys.dont_write_bytecode = True
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
 
-project_path = os.path.join(os.getcwd(), 'project.glm')
-if not os.path.exists(project_path):
-    print "ERROR: no project.glm file found"
+project_path = os.path.join(os.getcwd(), 'golem.json')
+project_path_alt = os.path.join(os.getcwd(), 'golem.py')
+if not os.path.exists(project_path_alt):
+    project_path_alt = os.path.join(os.getcwd(), 'project.glm')
+
+if not os.path.exists(project_path) and not os.path.exists(project_path_alt):
+    print "ERROR: no project file found ('golem.json' or 'golem.py')"
     sys.exit(1)
 
-module = imp.load_source('__golem_project_glm__', project_path)
+if not os.path.exists(project_path):
+    module = imp.load_source('__golem_project_glm__', project_path_alt)
 
 golem_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 

@@ -11,8 +11,9 @@ class Module:
         if sys.modules.get('project_glm'):
             self.module = sys.modules.get('project_glm')
         else:
-            project_path = os.path.join(self.path, 'project.glm')
-
+            project_path = os.path.join(self.path, 'golem.py')
+            if not os.path.exists(project_path):
+                project_path = os.path.join(self.path, 'project.glm')
             if not os.path.exists(project_path):
                 print "ERROR: can't find " + project_path
                 return

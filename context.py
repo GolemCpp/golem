@@ -19,12 +19,27 @@ from configuration import Configuration
 import cache
 import helpers
 from helpers import *
+from project import Project
 
 class Context:
     def __init__(self, context):
         self.context = context
-        self.module = Module(self.get_project_dir())
-        self.project = self.module.project()
+
+        self.project_path = self.make_project_path("golem.json")
+        if os.path.exists(self.project_path):
+            json_object = None
+            with io.open(self.project_path, 'r') as file:
+                json_object = byteify(json.load(file))
+            self.project = Project.deserialize(json_object)
+            self.module = None
+
+        self.project_path = self.make_project_path("golem.py")
+        if not os.path.exists(self.project_path):
+            self.project_path = self.make_project_path("project.glm")
+        if os.path.exists(self.project_path):
+            self.module = Module(self.get_project_dir())
+            self.project = self.module.project()
+
         self.resolved_dependencies_path = None
 
     def load_resolved_dependencies(self):
@@ -92,7 +107,7 @@ class Context:
     def load_dependencies_json(self, path):
         cache = None
         with open(path, 'r') as fp:
-            cache = json.load(fp)
+            cache = byteify(json.load(fp))
         self.project.deps_load_json(cache)
 
     def save_dependencies_pickle(self, path):
@@ -159,7 +174,15 @@ class Context:
         return [self.context.root.find_dir(str(x)) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)) for x in includes]
 
     def list_files(self, source, extentions):
-        return [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('**/*.' + extention) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('**/*.' + extention) for x in source for extention in extentions] for item in sublist]
+        result = []
+        for x in source:
+            if os.path.isfile(x):
+                file_node = self.context.root.find_node(str(x)) if os.path.isabs(x) else self.context.srcnode.find_node(str(x))
+                result.append(file_node)
+            elif os.path.isdir(x):
+                file_nodes = [item for sublist in [self.context.root.find_dir(str(x)).ant_glob('**/*.' + extention) if os.path.isabs(x) else self.context.srcnode.find_dir(str(x)).ant_glob('**/*.' + extention) for x in [x] for extention in extentions] for item in sublist]
+                result += file_nodes
+        return result
 
     def list_source(self, source):
         return self.list_files(source, ['cpp', 'c', 'cxx', 'cc'])
@@ -330,6 +353,12 @@ class Context:
     def compiler(self):
         return self.context.env.CXX_NAME + '-' + '.'.join(self.context.env.CC_VERSION)
 
+    def compiler_name(self):
+        return self.context.env.CXX_NAME
+
+    def compiler_version(self):
+        return '.'.join(self.context.env.CC_VERSION)
+
     def compiler_min(self):
         return self.compiler()
 
@@ -460,144 +489,128 @@ class Context:
             self.context.env.DEFINES.append('UNICODE')
 
         if self.is_windows():
-            # Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
-            # Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
-
-            # self.context.env.MSVC_VERSIONS = ['msvc 14.0']
-            # self.context.env.CXXFLAGS.append('/MP') # compiles multiple source files by using multiple processes
-            self.context.env.CXXFLAGS.append('/Gm-') # disable minimal rebuild
-            self.context.env.CXXFLAGS.append('/Zc:inline') # compiler does not emit symbol information for unreferenced COMDAT functions or data
-            self.context.env.CXXFLAGS.append('/Zc:forScope') # implement standard C++ behavior for for loops 
-            self.context.env.CXXFLAGS.append('/Zc:wchar_t') # wchar_t as a built-in type 
-            self.context.env.CXXFLAGS.append('/fp:precise') # improves the consistency of floating-point tests for equality and inequality 
-            self.context.env.CXXFLAGS.append('/W4') # warning level 4
-            self.context.env.CXXFLAGS.append('/sdl') # enables a superset of the baseline security checks provided by /GS
-            self.context.env.CXXFLAGS.append('/GS') # detects some buffer overruns that overwrite things
-            self.context.env.CXXFLAGS.append('/EHsc') # enable exception
-            self.context.env.CXXFLAGS.append('/nologo') # suppress startup banner
-            self.context.env.CXXFLAGS.append('/Gd') # specifies default calling convention
-            self.context.env.CXXFLAGS.append('/analyze-') # disable code analysis
-            self.context.env.CXXFLAGS.append('/WX-') # warnings are not treated as errors 
-            self.context.env.CXXFLAGS.append('/FS') # serialized writes to the program database (PDB)
-            # self.context.env.CXXFLAGS.append('/Fd:testing.pdb') # file name for the program database (PDB) defaults to VCx0.pdb
-            
-            self.context.env.CXXFLAGS.append('/std:c++latest') # enable all features as they become available, including feature removals
-            self.context.env.CXXFLAGS.append('/bigobj')
-
-            self.context.env.CXXFLAGS.append('/experimental:external') # enable use of /external:I
-            
-            self.context.env.LINKFLAGS.append('/errorReport:none') # do not send CL crash reports
-            # self.context.env.LINKFLAGS.append('/OUT:"D:.dll"') # specifies the output file name
-            # self.context.env.LINKFLAGS.append('/PDB:"D:.pdb"') # creates a program database (PDB) file
-            # self.context.env.LINKFLAGS.append('/IMPLIB:"D:.lib"')
-            # self.context.env.LINKFLAGS.append('/PGD:"D:.pgd"') # specifies a .pgd file for profile-guided optimizations
-            self.context.env.LINKFLAGS.append('/NXCOMPAT') # tested to be compatible with the Windows Data Execution Prevention feature
-            self.context.env.LINKFLAGS.append('/DYNAMICBASE') # generate an executable image that can be randomly rebased at load time 
-            self.context.env.LINKFLAGS.append('/NOLOGO') # suppress startup banner
-            self.context.env.MSVC_MANIFEST = False # disable waf manifest behavior
-            # self.context.env.LINKFLAGS.append('/MANIFEST') # creates a side-by-side manifest file and optionally embeds it in the binary
-            # self.context.env.LINKFLAGS.append('/MANIFESTUAC:"level=\'asInvoker\' uiAccess=\'false\'"')
-            # self.context.env.LINKFLAGS.append('/ManifestFile:".dll.intermediate.manifest"')
-            # self.context.env.LINKFLAGS.append('/SUBSYSTEM') # how to run the .exe file
-            # self.context.env.LINKFLAGS.append('/DLL') # builds a DLL
-            # self.context.env.LINKFLAGS.append('/TLBID:1') # resource ID of the linker-generated type library
-
-            self.context.env.CXXFLAGS.append('/utf-8') # enable {source/executable/validate}-charset to utf-8
-            
-            self.context.env.ARFLAGS.append('/NOLOGO')
-
             if self.is_x86():
                 self.context.env.LINKFLAGS.append('/MACHINE:X86')
                 self.context.env.ARFLAGS.append('/MACHINE:X86')
-            else:
+            elif self.is_x64():
                 self.context.env.LINKFLAGS.append('/MACHINE:X64')
                 self.context.env.ARFLAGS.append('/MACHINE:X64')
                 
             if self.is_x86():
                 self.context.env.MSVC_TARGETS = ['x86']
-            else:
-                self.context.env.MSVC_TARGETS = ['x86_amd64'] # means x64 when using visual studio express for desktop
+            elif self.is_x64():
+                self.context.env.MSVC_TARGETS = ['x86_amd64']
+
+            self.context.env.MSVC_MANIFEST = False # disable waf manifest behavior
+
+            # Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
+            # Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
+
+            # MSVC_VERSIONS = ['msvc 14.0']
+
+            # Some compilation flags (self.context.env.CXXFLAGS)
             
+            # '/MP'             # compiles multiple source files by using multiple processes
+            # '/Gm-'            # disable minimal rebuild
+            # '/Zc:inline'      # compiler does not emit symbol information for unreferenced COMDAT functions or data
+            # '/Zc:forScope'    # implement standard C++ behavior for for loops 
+            # '/Zc:wchar_t'     # wchar_t as a built-in type 
+            # '/fp:precise'     # improves the consistency of floating-point tests for equality and inequality 
+            # '/W4'             # warning level 4
+            # '/sdl'            # enables a superset of the baseline security checks provided by /GS
+            # '/GS'             # detects some buffer overruns that overwrite things
+            # '/EHsc'           # enable exception
+            # '/nologo'         # suppress startup banner
+            # '/Gd'             # specifies default calling convention
+            # '/analyze-'       # disable code analysis
+            # '/WX-'            # warnings are not treated as errors 
+            # '/FS'             # serialized writes to the program database (PDB)
+            # '/Fd:testing.pdb' # file name for the program database (PDB) defaults to VCx0.pdb
+            # '/std:c++latest'  # enable all features as they become available, including feature removals
+            # '/bigobj'
+            # '/experimental:external'  # enable use of /external:I
+            # '/utf-8'                  # enable {source/executable/validate}-charset to utf-8
+            
+            # Some linking flags (self.context.env.LINKFLAGS)
+
+            # '/errorReport:none'   # do not send CL crash reports
+            # '/NXCOMPAT'           # tested to be compatible with the Windows Data Execution Prevention feature
+            # '/DYNAMICBASE'        # generate an executable image that can be randomly rebased at load time 
+
+            # '/OUT:"D:.dll"'   # specifies the output file name
+            # '/PDB:"D:.pdb"'   # creates a program database (PDB) file
+            # '/IMPLIB:"D:.lib"'
+            # '/PGD:"D:.pgd"'   # specifies a .pgd file for profile-guided optimizations
+
+            # '/MANIFEST'   # creates a side-by-side manifest file and optionally embeds it in the binary
+            # '/MANIFESTUAC:"level=\'asInvoker\' uiAccess=\'false\'"'
+            # '/ManifestFile:".dll.intermediate.manifest"'
+            # '/SUBSYSTEM'  # how to run the .exe file
+            # '/DLL'        # builds a DLL
+            # '/TLBID:1'    # resource ID of the linker-generated type library
         else:
             if not self.is_android():
-                if self.is_x86() == 'x86':
+                if self.is_x86():
                     self.context.env.CXXFLAGS.append('-m32')
-                else:
+                elif self.is_x64():
                     self.context.env.CXXFLAGS.append('-m64')
 
-            self.context.env.CXXFLAGS.append('-std=c++17')
-
-            self.context.env.CXXFLAGS += '-pedantic -Wall -Wextra -Wno-unused -Wcast-align -Wcast-qual -Wstrict-overflow=5 -Wlogical-op -Winit-self -Wswitch-default -Wswitch-enum -Wundef -Wredundant-decls -Wsign-conversion -Wsign-promo -Wold-style-cast -Woverloaded-virtual -Wdisabled-optimization -Wpointer-arith -Wwrite-strings -Wctor-dtor-privacy -Wformat=2 -Wmissing-declarations'.split()
-            # NOTE: -Wshadow is broken under GCC < 7.x.x
-            # Use -Wshadow or -Wshadow=local (test case, use base class with templated member function and a derived class with local variable of the same name in a function)
-            # FIX: Check the project configuration scaffolded with golem using -Wmissing-include-dirs
-
-            self.context.env.CXXFLAGS.append('-pthread')
-            self.context.env.LINKFLAGS.append('-pthread')
-        
         if self.is_darwin():
             self.context.env.CXX	= ['clang++']
-            self.context.env.CXXFLAGS.append('-stdlib=libc++')
-            self.context.env.LINKFLAGS.append('-stdlib=libc++')
-
+            
     def configure_debug(self):
+
         if self.is_windows():
-
-            self.context.env.CXXFLAGS.append('/RTC1') # run-time error checks (stack frame & uninitialized used variables)
-            # self.context.env.CXXFLAGS.append('/ZI') # produces a program database in a format that supports the Edit and Continue feature.
-            self.context.env.CXXFLAGS.append('/Z7') # embeds the program database
-            self.context.env.CXXFLAGS.append('/Od') # disable optimizations
-            self.context.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
-
             if self.is_static():
                 self.context.env.CXXFLAGS.append('/MTd')
             elif self.is_shared():
                 self.context.env.CXXFLAGS.append('/MDd')
 
-            self.context.env.LINKFLAGS.append('/MAP') # creates a mapfile
-            self.context.env.LINKFLAGS.append('/MAPINFO:EXPORTS') # includes exports information in the mapfile
-            self.context.env.LINKFLAGS.append('/DEBUG') # creates debugging information
-            self.context.env.LINKFLAGS.append('/INCREMENTAL') # incremental linking
+            # Some compilation flags (self.context.env.CXXFLAGS)
+            
+            # '/RTC1'   # run-time error checks (stack frame & uninitialized used variables)
+            # '/ZI'     # produces a program database in a format that supports the Edit and Continue feature.
+            # '/Z7'     # embeds the program database
+            # '/Od'     # disable optimizations
+            # '/Oy-'    # speeds function calls (should be specified after others /O args)
 
-        else:
-            self.context.env.CXXFLAGS.append('-g3')
-            self.context.env.CXXFLAGS.append('-O0')
+            # Some linking flags (self.context.env.LINKFLAGS)
 
-            if not self.is_android():
-                self.context.env.CXXFLAGS += '-fprofile-arcs -ftest-coverage --coverage -fno-inline -fno-inline-small-functions -fno-default-inline -fno-elide-constructors'.split()
-                self.context.env.LINKFLAGS.append('--coverage')
-
-        self.context.env.DEFINES.append('DEBUG')
+            # '/MAP'                # creates a mapfile
+            # '/MAPINFO:EXPORTS'    # includes exports information in the mapfile
+            # '/DEBUG'              # creates debugging information
+            # '/INCREMENTAL'        # incremental linking
 
     def configure_release(self):
+
+        self.context.env.DEFINES.append('NDEBUG')
+
         if self.is_windows():
-        
-            # self.context.env.CXXFLAGS.append('/Zi') # produces a program database (PDB) does not affect optimizations
-
-            # About COMDATs, linker requires that functions be packaged separately as COMDATs to EXCLUTE or ORDER individual functions in a DLL or .exe file.
-            self.context.env.CXXFLAGS.append('/Gy') # allows the compiler to package individual functions in the form of packaged functions (COMDATs)
-                                            
-            self.context.env.CXXFLAGS.append('/GL') # enables whole program optimization
-            self.context.env.CXXFLAGS.append('/O2') # generate fast code
-            self.context.env.CXXFLAGS.append('/Oi') # request to the compiler to replace some function calls with intrinsics
-            self.context.env.CXXFLAGS.append('/Oy-') # speeds function calls (should be specified after others /O args)
-
             if self.is_static():
                 self.context.env.CXXFLAGS.append('/MT')
             elif self.is_shared():
                 self.context.env.CXXFLAGS.append('/MD')
+        
+            # Some compilation flags (self.context.env.CXXFLAGS)
+            
+            # About COMDATs, linker requires that functions be packaged separately as COMDATs to EXCLUTE or ORDER individual functions in a DLL or .exe file.
 
-            # self.context.env.LINKFLAGS.append('/DEF:"D:.def"')
-            self.context.env.LINKFLAGS.append('/LTCG') # perform whole-program optimization
-            # self.context.env.LINKFLAGS.append('/LTCG:incremental') # perform incremental whole-program optimization
-            self.context.env.ARFLAGS.append('/LTCG')
-            self.context.env.LINKFLAGS.append('/OPT:REF') # eliminates functions and data that are never referenced
-            self.context.env.LINKFLAGS.append('/OPT:ICF') # to perform identical COMDAT folding
-            if self.is_x86():
-                self.context.env.LINKFLAGS.append('/SAFESEH') # image will contain a table of safe exception handlers
+            # '/Zi'     # produces a program database (PDB) does not affect optimizations
+            # '/Gy'     # allows the compiler to package individual functions in the form of packaged functions (COMDATs)                         
+            # '/GL'     # enables whole program optimization
+            # '/O2'     # generate fast code
+            # '/Oi'     # request to the compiler to replace some function calls with intrinsics
+            # '/Oy-'    # speeds function calls (should be specified after others /O args)
 
-        else:
-            self.context.env.CXXFLAGS.append('-O3')
+            # Some linking flags (self.context.env.LINKFLAGS)
+
+            # '/DEF:"D:.def"'
+            # '/LTCG'               # perform whole-program optimization
+            # '/LTCG:incremental'   # perform incremental whole-program optimization
+            # '/OPT:REF'            # eliminates functions and data that are never referenced
+            # '/OPT:ICF'            # to perform identical COMDAT folding
+            # '/SAFESEH'            # image will contain a table of safe exception handlers
+
 
     def environment(self, resolve_dependencies=False):
         
@@ -630,9 +643,6 @@ class Context:
         self.append_android_cxxflags()
         self.append_android_linkflags()
         self.append_android_ldflags()
-
-        # copy cxxflags to cflags
-        self.context.env.CFLAGS = self.context.env.CXXFLAGS
 
         if resolve_dependencies:
             self.resolve_dependencies()
@@ -738,7 +748,7 @@ class Context:
         
         if config is not None:
             config_targets = config.targets
-            config.merge(self.context, [depconfig])
+            config.merge(self, [depconfig])
             config.targets = config_targets
 
             if dep.targets:
@@ -910,7 +920,7 @@ class Context:
             dep_configs.targets = dep.targets
         
         config = Configuration()
-        config.merge(self.context, [dep_configs])
+        config.merge(self, [dep_configs])
         return expected_files + self.make_target_from_context(config, dep)
 
     def is_header_only(self, dep, cache_dir):
@@ -1084,9 +1094,11 @@ class Context:
 
         return version_major + "." + version_minor + "." + version_patch
 
-    def build_target(self, target):
+    def build_target(self, target, static_configs):
 
         config = Configuration()
+
+        config.merge(self, static_configs)
         config.merge(self, target.configs)
 
         for use_name in config.use:
@@ -1116,8 +1128,8 @@ class Context:
         
         build_fun = None
 
-        linkflags = config.linkflags
-        
+        target_type = 'library' if target.type == 'program' and self.is_android() or target.type == 'library' else 'program'
+
         if target.type == 'program' and self.is_android():
             build_fun = self.context.shlib
         elif target.type == 'library':
@@ -1130,10 +1142,6 @@ class Context:
                 return
         elif target.type == 'program':
             build_fun = self.context.program
-            if Context.is_linux():
-                linkflags += ['-Wl,--allow-shlib-undefined']
-            elif Context.is_darwin():
-                linkflags += ['-flat_namespace', '-Wl,-undefined,suppress']
         else:
             print "ERROR: no options found"
             return
@@ -1173,7 +1181,10 @@ class Context:
 
         if os.path.exists(self.make_build_path('vscode_compile_commands.json')):
             with open(self.make_build_path('vscode_compile_commands.json'), 'r') as fp:
-                compile_commands = json.load(fp)
+                compile_commands = byteify(json.load(fp))
+
+        target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
+        target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
 
         for source in listsource + version_source + self.list_moc(self.make_project_path_array(config.includes + config.source)):
             env_cxxflags = self.context.env.CXXFLAGS
@@ -1191,7 +1202,7 @@ class Context:
             file = {
                 "directory": self.get_build_path(),
                 "arguments": ["/usr/bin/g++"] 
-                + env_cxxflags + config.cxxflags 
+                + env_cxxflags + config.cxxflags + target_cxxflags
                 + isystemflags
                 + ['-isystem' + str(d) for d in env_isystem] 
                 + ['-I' + str(d) for d in env_include] 
@@ -1212,23 +1223,28 @@ class Context:
             source			= listsource + version_source,
             target			= os.path.join(self.make_target_out(), targetname),
             name			= target.name,
-            cxxflags		= config.cxxflags + isystemflags,
-            cflags			= config.cxxflags,
-            linkflags		= linkflags,
+            cxxflags		= config.cxxflags + target_cxxflags + isystemflags,
+            cflags			= config.cflags + target_cxxflags + isystemflags,
+            linkflags		= config.linkflags + target_linkflags,
             ldflags         = config.ldflags,
             use				= config.use + config.features,
             moc 			= listmoc,
             features 		= 'qt5' if project_qt else '',
             install_path 	= None,
             vnum			= version_short,
-            depends_on		= version_source
+            depends_on		= version_source,
+            lib = config.lib + config.system,
+            libpath= config.libpath,
+            stlib = config.stlib,
+            stlibpath=config.stlibpath,
+            cppflags = config.cppflags,
+            framework = config.framework,
+            frameworkpath = config.frameworkpath,
+            rpath = config.rpath,
+            cxxdeps = config.cxxdeps,
+            ccdeps = config.ccdeps,
+            linkdeps = config.linkdeps
         )
-
-        if config.system:
-            self.dep_system(
-                context		= ttarget,
-                libs	= config.system
-            )
         
         if self.context.options.vscode:
             from collections import OrderedDict
@@ -1451,7 +1467,7 @@ class Context:
         if not self.is_android():
             return
 
-        self.context.env.CXXFLAGS += [
+        flags = [
             "-D__ANDROID_API__=" + self.make_android_ndk_platform(),
             "-target", self.make_android_toolchain_target(),
             "-gcc-toolchain", self.make_android_toolchain_path(),
@@ -1466,9 +1482,12 @@ class Context:
         ]
 
         if self.project.qt and os.path.exists(self.context.options.qtdir):
-            self.context.env.CXXFLAGS += [
+            flags += [
                 "-I" + os.path.join(self.context.options.qtdir, "mkspecs/android-clang")
             ]
+
+        self.context.env.CXXFLAGS += flags
+        self.context.env.CFLAGS += flags
 
     def append_android_linkflags(self):
         if not self.is_android():
@@ -1673,8 +1692,6 @@ class Context:
                             paths.append(path)
                     self.context.env[key] = paths
 
-        self.context.load('clang_compilation_database')
-
     def build_path(self, dep = None):
         return self.osname() + '-' + self.arch_min() + '-' + self.compiler_min() + '-' + self.runtime_min() + '-' + self.link_min(dep) + '-' + self.variant_min()
 
@@ -1700,14 +1717,17 @@ class Context:
         if os.path.exists(self.make_build_path('vscode_compile_commands.json')):
             os.remove(self.make_build_path('vscode_compile_commands.json'))
 
+        static_configs = self.project.read_configurations(self)
+
         requested_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
         
         for targetname in requested_targets:
             for target in self.project.targets:
                 if targetname == target.name:
-                    self.build_target(target)
+                    self.build_target(target, static_configs)
 
-        self.module.script(self)
+        if self.module is not None:
+            self.module.script(self)
 
         for targetname in self.context.options.targets.split(','):
             if targetname and not targetname in [target.name for target in self.project.targets]:

@@ -8,6 +8,7 @@ from distutils import dir_util
 from cache import CacheConf
 # from context import Context
 from configuration import Configuration
+from condition_expression import ConditionExpression
 from helpers import *
 
 
@@ -73,3 +74,25 @@ class Dependency:
     def configure(self, context, config):
         context.dep_command(
             config, self, context.make_cache_conf(), 'resolve', False)
+
+    @staticmethod
+    def deserialize(json_object):
+        dep = Dependency()
+        for entry in json_object:
+            key = ConditionExpression.clean(entry)
+            value = json_object[entry]
+            if key == 'name':
+                dep.name = value
+            elif key == 'targets':
+                dep.targets = value
+            elif key == 'repository':
+                dep.repository = value
+            elif key == 'version':
+                dep.version = value
+            elif key == 'resolved_version':
+                dep.resolved_version = value
+            elif key == 'type':
+                dep.type = value
+            elif key == 'link':
+                dep.link = value
+        return dep
