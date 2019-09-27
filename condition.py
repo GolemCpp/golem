@@ -20,7 +20,7 @@ class Condition:
         return helpers.print_obj(self)
 
     def __nonzero__(self):
-        if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release:
+        if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release or self.target_type:
             return True
         return False
 

@@ -1799,6 +1799,15 @@ class Context:
             configs[target.name] = config
         return configs
 
+    def resolve_target_deps(self, target):
+        configs = self.resolve_local_configs([target])
+        config = configs[target.name]
+        for dep_name in config.deps:
+            for dep in self.project.deps:
+                if dep_name == dep.name:
+                    dep.configure(self, config)
+
+
     def resolve_configs_recursively(self, targets):
         configs = self.resolve_local_configs(targets)
         for target in targets:
@@ -1808,6 +1817,12 @@ class Context:
                 for dep in self.project.deps:
                     if dep_name == dep.name:
                         dep.configure(self, config)
+            
+            if target.type == 'export' and self.context.options.export:
+                for project_target in self.project.targets:
+                    if target.name == project_target.name:
+                        self.resolve_target_deps(project_target)
+
         return configs
 
     def build_local_dependencies(self, targets):

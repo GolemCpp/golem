@@ -182,7 +182,8 @@ class Configuration:
                 if value:
                     raw_value = ConditionExpression.remove_modifiers(value)
                     has_negation = ConditionExpression.has_negation(value)
-                    return expected != raw_value if has_negation else expected == raw_value
+                    if expected != raw_value if has_negation else expected == raw_value:
+                        return True
 
             return False
 
@@ -380,7 +381,7 @@ class Configuration:
             elif raw_entry in ['debian', 'opensuse', 'ubuntu', 'centos', 'redhat']:
                 condition.distribution.append(entry)
                 is_empty = False
-            elif raw_entry in ['jessie' 'stretch', 'buster']:
+            elif raw_entry in ['jessie', 'stretch', 'buster']:
                 condition.release.append(entry)
                 is_empty = False
             elif raw_entry in ['program', 'library']:
