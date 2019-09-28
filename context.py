@@ -270,11 +270,15 @@ class Context:
                     return ['.lib']
                 else:
                     return ['.a']
-        else:
+        elif config.type == 'program':
             if self.is_windows():
                 return ['.exe']
             else:
                 return []
+        elif config.type == 'objects':
+            return ['.o']
+        else:
+            return []
 
     def artifact_suffix(self, config, target):
         has_link = hasattr(target, 'link') and target.link is not None
@@ -552,8 +556,10 @@ class Context:
             if not self.is_android():
                 if self.is_x86():
                     self.context.env.CXXFLAGS.append('-m32')
+                    self.context.env.CFLAGS.append('-m32')
                 elif self.is_x64():
                     self.context.env.CXXFLAGS.append('-m64')
+                    self.context.env.CFLAGS.append('-m64')
 
         if self.is_darwin():
             self.context.env.CXX	= ['clang++']
@@ -563,8 +569,10 @@ class Context:
         if self.is_windows():
             if self.is_static():
                 self.context.env.CXXFLAGS.append('/MTd')
+                self.context.env.CFLAGS.append('/MTd')
             elif self.is_shared():
                 self.context.env.CXXFLAGS.append('/MDd')
+                self.context.env.CFLAGS.append('/MDd')
 
             # Some compilation flags (self.context.env.CXXFLAGS)
             
@@ -588,8 +596,10 @@ class Context:
         if self.is_windows():
             if self.is_static():
                 self.context.env.CXXFLAGS.append('/MT')
+                self.context.env.CFLAGS.append('/MT')
             elif self.is_shared():
                 self.context.env.CXXFLAGS.append('/MD')
+                self.context.env.CFLAGS.append('/MD')
         
             # Some compilation flags (self.context.env.CXXFLAGS)
             
@@ -1128,7 +1138,11 @@ class Context:
         
         build_fun = None
 
-        target_type = 'library' if target.type == 'program' and self.is_android() or target.type == 'library' else 'program'
+        target_type = None
+        if target.type == 'program' and self.is_android():
+            target_type = 'library'
+        else:
+            target_type = target.type
 
         if target.type == 'program' and self.is_android():
             build_fun = self.context.shlib
@@ -1142,6 +1156,8 @@ class Context:
                 return
         elif target.type == 'program':
             build_fun = self.context.program
+        elif target.type == 'objects':
+            build_fun = self.context.objects
         else:
             print "ERROR: no options found"
             return

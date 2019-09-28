@@ -113,6 +113,9 @@ class Project:
     def program(self, **kwargs):
         return self.target(type='program', **kwargs)
 
+    def objects(self, **kwargs):
+        return self.target(type='objects', **kwargs)
+
     def export(self, **kwargs):
         return self.target(type='export', **kwargs)
 
