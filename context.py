@@ -404,7 +404,7 @@ class Context:
 
     @staticmethod
     def options(context):
-        context.load('compiler_cxx qt5')
+        context.load('compiler_c compiler_cxx qt5')
         context.add_option("--dir", action="store", default='.', help="Project location")
         context.add_option("--variant", action="store", default='debug', help="Runtime Linking")
         context.add_option("--runtime", action="store", default='shared', help="Runtime Linking")
@@ -1643,7 +1643,7 @@ class Context:
     def configure(self):
 
         # features list
-        features_to_load = ['compiler_cxx']
+        features_to_load = ['compiler_c', 'compiler_cxx']
 
         # qt check
         if self.project.qt:
