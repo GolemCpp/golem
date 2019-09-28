@@ -24,24 +24,33 @@ class Condition:
             return True
         return False
 
-    def append(self, condition):
-        self.variant += condition.variant
-        self.linking += condition.linking
-        self.runtime += condition.runtime
-        self.osystem += condition.osystem
-        self.arch += condition.arch
-        self.compiler += condition.compiler
-        self.distribution += condition.distribution
-        self.release += condition.release
-        self.target_type += condition.target_type
+    @staticmethod
+    def intersection_expression(cond1, cond2):
+        if not cond1 and not cond2:
+            return []
+        elif not cond1:
+            return cond2
+        elif not cond2:
+            return cond1
+        else:
+            return ['(' + '+'.join(cond1) + ')(' + '+'.join(cond2) + ')']
 
-    def prepend(self, condition):
-        self.variant = condition.variant + self.variant
-        self.linking = condition.linking + self.linking
-        self.runtime = condition.runtime + self.runtime
-        self.osystem = condition.osystem + self.osystem
-        self.arch = condition.arch + self.arch
-        self.compiler = condition.compiler + self.compiler
-        self.distribution = condition.distribution + self.distribution
-        self.release = condition.release + self.release
-        self.target_type = condition.target_type + self.target_type
+    def intersection(self, condition):
+        self.variant = Condition.intersection_expression(
+            condition.variant, self.variant)
+        self.linking = Condition.intersection_expression(
+            condition.linking, self.linking)
+        self.runtime = Condition.intersection_expression(
+            condition.runtime, self.runtime)
+        self.osystem = Condition.intersection_expression(
+            condition.osystem, self.osystem)
+        self.arch = Condition.intersection_expression(
+            condition.arch, self.arch)
+        self.compiler = Condition.intersection_expression(
+            condition.compiler, self.compiler)
+        self.distribution = Condition.intersection_expression(
+            condition.distribution, self.distribution)
+        self.release = Condition.intersection_expression(
+            condition.release, self.release)
+        self.target_type = Condition.intersection_expression(
+            condition.target_type, self.target_type)

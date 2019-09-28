@@ -177,12 +177,61 @@ class Configuration:
 
     def merge(self, context, configs, exporting=False, target_type=None):
         def evaluate_condition(expected, conditions):
-            for value in conditions:
-                value = ConditionExpression.clean(value)
-                if value:
-                    raw_value = ConditionExpression.remove_modifiers(value)
-                    has_negation = ConditionExpression.has_negation(value)
-                    if expected != raw_value if has_negation else expected == raw_value:
+            for expression in conditions:
+                expression = ConditionExpression.clean(expression)
+                if expression:
+                    def parse_paren(s):
+                        def parse_paren_helper(level=0):
+                            try:
+                                token = next(tokens)
+                            except StopIteration:
+                                if level != 0:
+                                    raise Exception('missing closing paren')
+                                else:
+                                    return []
+                            if token == ')':
+                                if level == 0:
+                                    raise Exception('missing opening paren')
+                                else:
+                                    return []
+                            elif token == '(':
+                                return [parse_paren_helper(level+1)] + parse_paren_helper(level)
+                            else:
+                                b = parse_paren_helper(level)
+                                if b:
+                                    if type(b[0]) is str:
+                                        b[0] = token + b[0]
+                                        return b
+                                    else:
+                                        return [token] + b
+                                else:
+                                    return [token]
+                        tokens = iter(s)
+                        return parse_paren_helper()
+
+                    expression_array = parse_paren(expression)
+
+                    def evaluate_array(a):
+                        result = True
+                        for item in a:
+                            if type(item) is list:
+                                i_result = evaluate_array(item)
+                                result = result and i_result
+                            else:
+                                parsed = ConditionExpression.parse_members(
+                                    item)
+                                i_result = False
+                                for i in parsed:
+                                    raw_value = ConditionExpression.remove_modifiers(
+                                        i)
+                                    has_negation = ConditionExpression.has_negation(
+                                        i)
+                                    if expected != raw_value if has_negation else expected == raw_value:
+                                        i_result = True
+                                result = result and i_result
+                        return result
+
+                    if evaluate_array(expression_array):
                         return True
 
             return False
@@ -347,7 +396,7 @@ class Configuration:
         if raw_entry == "when":
             configs = Configuration.deserialize(value)
             for config in configs:
-                config.condition.prepend(self.condition)
+                config.condition.intersection(self.condition)
             return configs
         return []
 
@@ -391,8 +440,8 @@ class Configuration:
         if not is_empty:
             configs = Configuration.deserialize(value)
             for config in configs:
-                config.condition.prepend(self.condition)
-                config.condition.append(condition)
+                config.condition.intersection(self.condition)
+                config.condition.intersection(condition)
             return configs
         return []
 
