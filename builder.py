@@ -60,6 +60,18 @@ def dependencies(context):
     ctx.dependencies()
 
 
+def cppcheck(context):
+    ctx = get_context(context)
+    ctx.environment()
+    ctx.cppcheck()
+
+
+def clang_tidy(context):
+    ctx = get_context(context)
+    ctx.environment()
+    ctx.clang_tidy()
+
+
 @feature('*')
 @before_method('process_rule')
 def post_the_other(self):

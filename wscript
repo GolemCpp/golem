@@ -1,20 +1,23 @@
 #!/usr/bin/env python
 
+from waflib.TaskGen import feature, before_method, after_method
+from waflib.Build import BuildContext, CleanContext, \
+    InstallContext, UninstallContext
+from waflib.Configure import conf, ConfigurationContext
+from waflib.Context import Context
+from waflib import Configure
+import waflib
+import os
+import imp
 import sys
 sys.dont_write_bytecode = True
 
-import imp
 builder = imp.load_source('builder', '$builder_path')
 
-import os
 top = ''
 out = 'obj'
 
-import waflib
 
-from waflib import Configure
-from waflib.Context import Context
-from waflib.Configure import conf, ConfigurationContext
 Configure.autoconfig = False
 
 
@@ -53,11 +56,7 @@ def build(bld):
     builder.build(bld)
 
 
-from waflib.Build import BuildContext, CleanContext, \
-    InstallContext, UninstallContext
-
 # All build combinations
-
 all_build = []
 
 for arch in 'x86 x64'.split():
@@ -151,10 +150,29 @@ class tmp(BuildContext):
     cmd = 'dependencies'
     fun = 'dependencies'
 
+# CppCheck
+
+
+def cppcheck(bld):
+    builder.cppcheck(bld)
+
+
+class tmp(BuildContext):
+    cmd = 'cppcheck'
+    fun = 'cppcheck'
+
+# clang-tidy
+
+
+def clang_tidy(bld):
+    builder.clang_tidy(bld)
+
+
+class tmp(BuildContext):
+    cmd = 'clang-tidy'
+    fun = 'clang_tidy'
+
 # Qt stuff
-
-
-from waflib.TaskGen import feature, before_method, after_method
 
 
 @feature('cxx')

@@ -20,6 +20,8 @@ import cache
 import helpers
 from helpers import *
 from project import Project
+from build_target import BuildTarget
+import waflib
 
 class Context:
     def __init__(self, context):
@@ -53,15 +55,15 @@ class Context:
             deps_cache_file_json = os.path.join(self.context.options.resolved_dependencies_directory, 'dependencies.json')
 
         if os.path.exists(deps_cache_file_json):
-            print 'Found ' + str(deps_cache_file_json)
+            print('Found ' + str(deps_cache_file_json))
             self.load_dependencies_json(deps_cache_file_json)
             self.resolved_dependencies_path = deps_cache_file_json
         elif os.path.exists(deps_cache_file_pickle):
-            print 'Found ' + str(deps_cache_file_pickle)
+            print('Found ' + str(deps_cache_file_pickle))
             self.load_dependencies_pickle(deps_cache_file_pickle)
             self.resolved_dependencies_path = deps_cache_file_pickle
         else:
-            print "No dependencies cache found"
+            print("No dependencies cache found")
 
     
     def resolve_dependencies(self):
@@ -74,15 +76,15 @@ class Context:
 
         if not self.context.options.keep_resolved_dependencies:
             if os.path.exists(deps_cache_file_pickle):
-                print "Cleaning up " + str(deps_cache_file_pickle)
+                print("Cleaning up " + str(deps_cache_file_pickle))
                 os.remove(deps_cache_file_pickle)
 
             if os.path.exists(deps_cache_file_json):
-                print "Cleaning up " + str(deps_cache_file_json)
+                print("Cleaning up " + str(deps_cache_file_json))
                 os.remove(deps_cache_file_json)
 
             if deps_cache_file_json_build is not None and os.path.exists(deps_cache_file_json_build):
-                print "Cleaning up " + str(deps_cache_file_json_build)
+                print("Cleaning up " + str(deps_cache_file_json_build))
                 os.remove(deps_cache_file_json_build)
 
         self.resolved_dependencies_path = None
@@ -94,7 +96,7 @@ class Context:
             if self.context.options.resolved_dependencies_directory is not None:
                 make_directory(self.context.options.resolved_dependencies_directory)
                 save_path = os.path.join(self.context.options.resolved_dependencies_directory, 'dependencies.json')
-            print "Saving dependencies in cache " + str(save_path)
+            print("Saving dependencies in cache " + str(save_path))
             self.save_dependencies_json(save_path)
             self.resolved_dependencies_path = save_path
 
@@ -458,6 +460,7 @@ class Context:
         settings_path = self.make_project_path('settings.glm')
         if not os.path.exists(settings_path):
             return None
+        raise Exception("Not implemented")
 
         config = ConfigParser.RawConfigParser()
         config.read(settings_path)
@@ -1111,7 +1114,7 @@ class Context:
 
         return version_major + "." + version_minor + "." + version_patch
 
-    def build_target(self, target, static_configs):
+    def build_target_gather_config(self, target, static_configs):
 
         config = Configuration()
 
@@ -1141,33 +1144,13 @@ class Context:
 
         listinclude = self.list_include(self.make_project_path_array(config.includes))
         listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
-        listmoc = self.list_moc(self.make_project_path_array(config.moc)) if project_qt else []
-        
-        build_fun = None
+        listmoc = self.list_moc(self.make_project_path_array(config.moc)) if project_qt else []    
 
         target_type = None
         if target.type == 'program' and self.is_android():
             target_type = 'library'
         else:
             target_type = target.type
-
-        if target.type == 'program' and self.is_android():
-            build_fun = self.context.shlib
-        elif target.type == 'library':
-            if self.is_shared():
-                build_fun = self.context.shlib
-            elif self.is_static():
-                build_fun = self.context.stlib
-            else:
-                print "ERROR: no options found"
-                return
-        elif target.type == 'program':
-            build_fun = self.context.program
-        elif target.type == 'objects':
-            build_fun = self.context.objects
-        else:
-            print "ERROR: no options found"
-            return
 
         version_short = None
         version_source = []
@@ -1200,45 +1183,8 @@ class Context:
         if self.is_windows():
             version_short = None
 
-        compile_commands = []
-
-        if os.path.exists(self.make_build_path('vscode_compile_commands.json')):
-            with open(self.make_build_path('vscode_compile_commands.json'), 'r') as fp:
-                compile_commands = byteify(json.load(fp))
-
         target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
         target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
-
-        for source in listsource + version_source + self.list_moc(self.make_project_path_array(config.includes + config.source)):
-            env_cxxflags = self.context.env.CXXFLAGS
-            env_defines = self.context.env.DEFINES
-            env_include = []
-            for key in self.context.env.keys():
-					if key.startswith("INCLUDES_"):
-						for path in self.context.env[key]:
-							env_include.append(str(path))
-            env_isystem = []
-            for key in self.context.env.keys():
-					if key.startswith("ISYSTEM_"):
-						for path in self.context.env[key]:
-							env_isystem.append(str(path))
-            file = {
-                "directory": self.get_build_path(),
-                "arguments": ["/usr/bin/g++"] 
-                + env_cxxflags + config.cxxflags + target_cxxflags
-                + isystemflags
-                + ['-isystem' + str(d) for d in env_isystem] 
-                + ['-I' + str(d) for d in env_include] 
-                + ['-I' + str(d) for d in listinclude] 
-                + ['-D' + d for d in env_defines] 
-                + ['-D' + d for d in config.defines]
-                + [str(source), '-c'],
-                "file": str(source)
-            }
-            compile_commands.append(file)
-
-        with open(self.make_build_path('vscode_compile_commands.json'), 'w') as fp:
-            json.dump(compile_commands, fp, indent=4)
 
         unique_set = set(config.stlib)
         config.stlib = list(unique_set)
@@ -1251,7 +1197,23 @@ class Context:
         if stlibflags:
             stlibflags = ['-Wl,-Bstatic'] + ['-l' + name for name in stlibflags] + ['-Wl,-Bdynamic'] 
             
-        ttarget = build_fun(
+        env_cxxflags = self.context.env.CXXFLAGS
+        env_defines = self.context.env.DEFINES
+        env_includes = []
+        for key in self.context.env.keys():
+            if key.startswith("INCLUDES_"):
+                for path in self.context.env[key]:
+                    if not path.startswith('/usr'):
+                        env_includes.append(str(path))
+        env_isystem = []
+        for key in self.context.env.keys():
+            if key.startswith("ISYSTEM_"):
+                for path in self.context.env[key]:
+                    env_isystem.append(str(path))
+        
+        return BuildTarget(
+            config = config,
+
             defines			= config.defines,
             includes		= listinclude,
             source			= listsource + version_source,
@@ -1276,9 +1238,41 @@ class Context:
             rpath = config.rpath,
             cxxdeps = config.cxxdeps,
             ccdeps = config.ccdeps,
-            linkdeps = config.linkdeps
-        )
+            linkdeps = config.linkdeps,
+
+            env_defines = env_defines,
+            env_cxxflags = env_cxxflags,
+            env_includes = env_includes,
+            env_isystem = env_isystem)
+
+    def generate_compiler_commands(self, build_target, path):
+
+        compile_commands = []
+
+        if os.path.exists(path):
+            with open(path, 'r') as fp:
+                compile_commands = byteify(json.load(fp))
         
+        for source in build_target.source + self.list_moc(self.make_project_path_array(build_target.config.includes + build_target.config.source)):
+            file = {
+                "directory": self.get_build_path(),
+                "arguments": [ "cl.exe" if Context.is_windows() else "/usr/bin/" + self.context.env.CXX_NAME ] 
+                + build_target.env_cxxflags + build_target.cxxflags
+                + [('/external:I' if Context.is_windows() else '-isystem') + str(d) for d in build_target.env_isystem] 
+                + ['-I' + str(d) for d in build_target.env_includes] 
+                + ['-I' + str(d) for d in build_target.includes] 
+                + ['-D' + d for d in build_target.env_defines] 
+                + ['-D' + d for d in build_target.defines]
+                + [str(source), '-c'],
+                "file": str(source)
+            }
+            compile_commands.append(file)
+
+        with open(path, 'w') as fp:
+            json.dump(compile_commands, fp, indent=4)
+
+    def generate_vscode_config(self, compiler_commands_path):
+
         if self.context.options.vscode:
             from collections import OrderedDict
             data = OrderedDict({
@@ -1288,7 +1282,7 @@ class Context:
                         "intelliSenseMode": "msvc-x64" if Context.is_windows() else "clang-x64",
                         "includePath": [],
                         "defines": [],
-                        "compileCommands": self.make_build_path("vscode_compile_commands.json"),
+                        "compileCommands": self.make_build_path("compile_commands.json"),
                         "browse": {
                             "path": [],
                             "limitSymbolsToIncludedHeaders": True,
@@ -1300,6 +1294,126 @@ class Context:
             properties_path = os.path.join(self.get_project_dir(), '.vscode', 'c_cpp_properties.json')
             with open(properties_path, 'w') as outfile:
                 json.dump(data, outfile, indent=4, sort_keys=True)
+
+
+    def build_target(self, target, static_configs):
+
+        build_target = self.build_target_gather_config(target, static_configs)
+
+        compiler_commands_path = self.make_build_path("compile_commands.json")
+        self.generate_compiler_commands(build_target, compiler_commands_path)
+        self.generate_vscode_config(compiler_commands_path)
+
+        build_fun = None
+
+        if target.type == 'program' and self.is_android():
+            build_fun = self.context.shlib
+        elif target.type == 'library':
+            if self.is_shared():
+                build_fun = self.context.shlib
+            elif self.is_static():
+                build_fun = self.context.stlib
+            else:
+                print("ERROR: no options found")
+                return
+        elif target.type == 'program':
+            build_fun = self.context.program
+        elif target.type == 'objects':
+            build_fun = self.context.objects
+        else:
+            print("ERROR: no options found")
+            return
+
+        build_fun(
+            defines = build_target.defines,
+            includes = build_target.includes,
+            source = build_target.source,
+            target = build_target.target,
+            name = build_target.name,
+            cxxflags = build_target.cxxflags,
+            cflags = build_target.cflags,
+            linkflags = build_target.linkflags,
+            ldflags = build_target.ldflags,
+            use = build_target.use,
+            moc = build_target.moc,
+            features = build_target.features,
+            install_path = build_target.install_path,
+            vnum = build_target.vnum,
+            depends_on = build_target.depends_on,
+            lib = build_target.lib,
+            libpath = build_target.libpath,
+            stlibpath = build_target.stlibpath,
+            cppflags = build_target.cppflags,
+            framework = build_target.framework,
+            frameworkpath = build_target.frameworkpath,
+            rpath = build_target.rpath,
+            cxxdeps = build_target.cxxdeps,
+            ccdeps = build_target.ccdeps,
+            linkdeps = build_target.linkdeps
+        )
+
+    def cppcheck_target(self, target, static_configs):
+
+        build_target = self.build_target_gather_config(target, static_configs)
+
+        all_includes = build_target.env_isystem + build_target.env_includes + build_target.includes
+        all_includes = ['-I' + str(d) for d in all_includes]
+
+        all_defines = build_target.env_defines + build_target.defines
+        all_defines = ['-D' + str(d) for d in all_defines]
+
+        all_sources = build_target.source
+        all_sources = [str(d) for d in all_sources]
+
+        cppcheck_dir = self.make_build_path("cppcheck")
+        helpers.make_directory(cppcheck_dir)
+
+        command = [
+            'cppcheck',
+            '--enable=all',
+            '--suppress=missingIncludeSystem',
+            '--quiet'
+        ] + all_defines + all_includes + all_sources
+
+        self.context(rule=' '.join(command), always=True, name=target.name, cwd=cppcheck_dir)
+            
+    def call_build_target(self, build_target_fun):
+        static_configs = self.project.read_configurations(self)
+
+        requested_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
+        
+        for targetname in requested_targets:
+            for target in self.project.targets:
+                if targetname == target.name:
+                    build_target_fun(target, static_configs)
+
+    def cppcheck(self):
+        self.call_build_target(self.cppcheck_target)
+
+    def clang_tidy_target(self, target, static_configs):
+
+        build_target = self.build_target_gather_config(target, static_configs)
+
+        clang_tidy_dir = self.make_build_path("clang-tidy")
+        helpers.make_directory(clang_tidy_dir)
+
+        compiler_commands_path = os.path.join(clang_tidy_dir, "compile_commands.json")
+        self.generate_compiler_commands(build_target, compiler_commands_path)
+
+        command = [
+            'clang-tidy',
+            '--checks=*',
+            '-p=' + str(clang_tidy_dir)
+        ]
+
+        command += [str(s) for s in build_target.source]
+
+        self.context(rule=' '.join(command), always=True, name=target.name, cwd=clang_tidy_dir)
+
+
+    def clang_tidy(self):
+        self.call_build_target(self.clang_tidy_target)
+        
 
     def save_options(self):
         self.context.env.OPTIONS = json.dumps(self.context.options.__dict__)
@@ -1747,17 +1861,10 @@ class Context:
 
     def build(self):
 
-        if os.path.exists(self.make_build_path('vscode_compile_commands.json')):
-            os.remove(self.make_build_path('vscode_compile_commands.json'))
+        if os.path.exists(self.make_build_path('compile_commands.json')):
+            os.remove(self.make_build_path('compile_commands.json'))
 
-        static_configs = self.project.read_configurations(self)
-
-        requested_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
-        
-        for targetname in requested_targets:
-            for target in self.project.targets:
-                if targetname == target.name:
-                    self.build_target(target, static_configs)
+        self.call_build_target(self.build_target)
 
         if self.module is not None:
             self.module.script(self)
