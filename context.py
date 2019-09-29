@@ -775,8 +775,15 @@ class Context:
                     self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I' + dep_path_include]
                 self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
                 if not depconfig.header_only:
-                    self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-                    self.context.env['LIB_' + dep.name]				= self.make_target_name_from_context(depconfig, dep)
+                    is_static = self.is_static()
+                    if dep.link is not None:
+                        is_static = dep.link == 'static'
+                    if is_static:
+                        self.context.env['STLIBPATH_' + dep.name]			= self.list_include([dep_path_build])
+                        self.context.env['STLIB_' + dep.name]				= self.make_target_name_from_context(depconfig, dep)
+                    else:
+                        self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
+                        self.context.env['LIB_' + dep.name]				= self.make_target_name_from_context(depconfig, dep)
             
             config.use.append(dep.name)
 
@@ -1232,6 +1239,17 @@ class Context:
 
         with open(self.make_build_path('vscode_compile_commands.json'), 'w') as fp:
             json.dump(compile_commands, fp, indent=4)
+
+        unique_set = set(config.stlib)
+        config.stlib = list(unique_set)
+        
+        unique_set = set(config.system)
+        config.system = list(unique_set)
+
+        stlibflags = config.stlib + (config.system if self.is_static() else [])
+
+        if stlibflags:
+            stlibflags = ['-Wl,-Bstatic'] + ['-l' + name for name in stlibflags] + ['-Wl,-Bdynamic'] 
             
         ttarget = build_fun(
             defines			= config.defines,
@@ -1242,16 +1260,15 @@ class Context:
             cxxflags		= config.cxxflags + target_cxxflags + isystemflags,
             cflags			= config.cflags + target_cxxflags + isystemflags,
             linkflags		= config.linkflags + target_linkflags,
-            ldflags         = config.ldflags,
+            ldflags         = stlibflags + config.ldflags,
             use				= config.use + config.features,
             moc 			= listmoc,
             features 		= 'qt5' if project_qt else '',
             install_path 	= None,
             vnum			= version_short,
             depends_on		= version_source,
-            lib = config.lib + config.system,
+            lib = config.lib + (config.system if self.is_shared() else []),
             libpath= config.libpath,
-            stlib = config.stlib,
             stlibpath=config.stlibpath,
             cppflags = config.cppflags,
             framework = config.framework,
