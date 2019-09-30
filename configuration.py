@@ -22,6 +22,7 @@ class Configuration:
                  features=None,
                  deps=None,
                  use=None,
+                 uselib=None,
                  header_only=None,
                  dlls=None,
                  ldflags=None,
@@ -90,6 +91,7 @@ class Configuration:
         self.features = [] if features is None else features
         self.deps = [] if deps is None else deps
         self.use = [] if use is None else use
+        self.uselib = [] if uselib is None else uselib
 
         self.header_only = False if header_only is None else header_only
 
@@ -174,6 +176,8 @@ class Configuration:
         self.features += config.features
         self.deps += config.deps
         self.use += config.use
+        if hasattr(config, 'uselib'):
+            self.uselib += config.uselib
 
     def merge(self, context, configs, exporting=False, target_type=None):
         def evaluate_condition(expected, conditions):
@@ -337,6 +341,9 @@ class Configuration:
                 has_entry = True
             elif raw_entry == "use":
                 self.use += value
+                has_entry = True
+            elif raw_entry == "uselib":
+                self.uselib += value
                 has_entry = True
             elif raw_entry == "targets":
                 self.targets += value

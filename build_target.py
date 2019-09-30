@@ -12,6 +12,7 @@ class BuildTarget:
                  linkflags,
                  ldflags,
                  use,
+                 uselib,
                  moc,
                  features,
                  install_path,
@@ -45,6 +46,7 @@ class BuildTarget:
         self.linkflags = linkflags
         self.ldflags = ldflags
         self.use = use
+        self.uselib = uselib
         self.moc = moc
         self.features = features
         self.install_path = install_path

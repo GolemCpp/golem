@@ -1212,7 +1212,7 @@ class Context:
                     env_isystem.append(str(path))
         
         return BuildTarget(
-            config = config,
+            config          = config,
 
             defines			= config.defines,
             includes		= listinclude,
@@ -1224,26 +1224,27 @@ class Context:
             linkflags		= config.linkflags + target_linkflags,
             ldflags         = stlibflags + config.ldflags,
             use				= config.use + config.features,
+            uselib			= config.uselib,
             moc 			= listmoc,
             features 		= 'qt5' if project_qt else '',
             install_path 	= None,
             vnum			= version_short,
             depends_on		= version_source,
-            lib = config.lib + (config.system if self.is_shared() else []),
-            libpath= config.libpath,
-            stlibpath=config.stlibpath,
-            cppflags = config.cppflags,
-            framework = config.framework,
-            frameworkpath = config.frameworkpath,
-            rpath = config.rpath,
-            cxxdeps = config.cxxdeps,
-            ccdeps = config.ccdeps,
-            linkdeps = config.linkdeps,
+            lib             = config.lib + (config.system if self.is_shared() else []),
+            libpath         = config.libpath,
+            stlibpath       = config.stlibpath,
+            cppflags        = config.cppflags,
+            framework       = config.framework,
+            frameworkpath   = config.frameworkpath,
+            rpath           = config.rpath,
+            cxxdeps         = config.cxxdeps,
+            ccdeps          = config.ccdeps,
+            linkdeps        = config.linkdeps,
 
-            env_defines = env_defines,
-            env_cxxflags = env_cxxflags,
-            env_includes = env_includes,
-            env_isystem = env_isystem)
+            env_defines     = env_defines,
+            env_cxxflags    = env_cxxflags,
+            env_includes    = env_includes,
+            env_isystem     = env_isystem)
 
     def generate_compiler_commands(self, build_target, path):
 
@@ -1335,6 +1336,7 @@ class Context:
             linkflags = build_target.linkflags,
             ldflags = build_target.ldflags,
             use = build_target.use,
+            uselib = build_target.uselib,
             moc = build_target.moc,
             features = build_target.features,
             install_path = build_target.install_path,
