@@ -46,54 +46,63 @@ class Configuration:
                  **kwargs):
         self.condition = Condition(**kwargs)
 
-        self.targets = [] if target is None else [target]
-        self.targets = self.targets if targets is None else targets
-
-        self.static_targets = [] if static_targets is None else static_targets
-        self.shared_targets = [] if shared_targets is None else shared_targets
-
-        self.dlls = [] if dlls is None else dlls
-
         self.type = 'library' if type is None else type
-
-        self.defines = [] if defines is None else defines
-        self.includes = [] if includes is None else includes
-        self.source = [] if source is None else source
-        self.moc = [] if moc is None else moc
-
-        self.lib = [] if lib is None else lib
-        self.libpath = [] if libpath is None else libpath
-        self.stlib = [] if stlib is None else stlib
-        self.stlibpath = [] if stlibpath is None else stlibpath
-        self.rpath = [] if rpath is None else rpath
-        self.cflags = [] if cflags is None else cflags
-        self.cppflags = [] if cppflags is None else cppflags
-        self.cxxdeps = [] if cxxdeps is None else cxxdeps
-        self.ccdeps = [] if ccdeps is None else ccdeps
-        self.linkdeps = [] if linkdeps is None else linkdeps
-        self.framework = [] if framework is None else framework
-        self.frameworkpath = [] if frameworkpath is None else frameworkpath
-
-        self.program_cxxflags = [] if program_cxxflags is None else program_cxxflags
-        self.program_linkflags = [] if program_linkflags is None else program_linkflags
-        self.library_cxxflags = [] if library_cxxflags is None else library_cxxflags
-        self.library_linkflags = [] if library_linkflags is None else library_linkflags
-
-        self.cxxflags = [] if cxxflags is None else cxxflags
-        self.linkflags = [] if linkflags is None else linkflags
-        self.ldflags = [] if ldflags is None else ldflags
-        self.system = [] if system is None else system
-
-        self.packages = [] if packages is None else packages
-        self.packages_dev = [] if packages_dev is None else packages_dev
         self.packages_tool = '' if packages_tool is None else packages_tool
-
-        self.features = [] if features is None else features
-        self.deps = [] if deps is None else deps
-        self.use = [] if use is None else use
-        self.uselib = [] if uselib is None else uselib
-
         self.header_only = False if header_only is None else header_only
+
+        def filter_list_params(input):
+            if input is None:
+                return []
+            elif input is not list:
+                return [input]
+            else:
+                return input
+
+        self.targets = filter_list_params(targets)
+
+        if target is not None and not self.targets:
+            self.targets = [target]
+
+        self.static_targets = filter_list_params(static_targets)
+        self.shared_targets = filter_list_params(shared_targets)
+
+        self.dlls = filter_list_params(dlls)
+
+        self.defines = filter_list_params(defines)
+        self.includes = filter_list_params(includes)
+        self.source = filter_list_params(source)
+        self.moc = filter_list_params(moc)
+
+        self.lib = filter_list_params(lib)
+        self.libpath = filter_list_params(libpath)
+        self.stlib = filter_list_params(stlib)
+        self.stlibpath = filter_list_params(stlibpath)
+        self.rpath = filter_list_params(rpath)
+        self.cflags = filter_list_params(cflags)
+        self.cppflags = filter_list_params(cppflags)
+        self.cxxdeps = filter_list_params(cxxdeps)
+        self.ccdeps = filter_list_params(ccdeps)
+        self.linkdeps = filter_list_params(linkdeps)
+        self.framework = filter_list_params(framework)
+        self.frameworkpath = filter_list_params(frameworkpath)
+
+        self.program_cxxflags = filter_list_params(program_cxxflags)
+        self.program_linkflags = filter_list_params(program_linkflags)
+        self.library_cxxflags = filter_list_params(library_cxxflags)
+        self.library_linkflags = filter_list_params(library_linkflags)
+
+        self.cxxflags = filter_list_params(cxxflags)
+        self.linkflags = filter_list_params(linkflags)
+        self.ldflags = filter_list_params(ldflags)
+        self.system = filter_list_params(system)
+
+        self.packages = filter_list_params(packages)
+        self.packages_dev = filter_list_params(packages_dev)
+
+        self.features = filter_list_params(features)
+        self.deps = filter_list_params(deps)
+        self.use = filter_list_params(use)
+        self.uselib = filter_list_params(uselib)
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -108,11 +117,14 @@ class Configuration:
 
     def append(self, config):
 
+        if config.packages_tool:
+            self.packages_tool = config.packages_tool
+
         if config.targets:
-            self.targets = config.targets
+            self.targets += config.targets
 
         if hasattr(config, 'dlls') and config.dlls:
-            self.dlls = config.dlls
+            self.dlls += config.dlls
 
         if hasattr(config, 'static_targets'):
             self.static_targets += config.static_targets
@@ -170,8 +182,6 @@ class Configuration:
 
         self.packages += config.packages
         self.packages_dev += config.packages_dev
-        if config.packages_tool:
-            self.packages_tool = config.packages_tool
 
         self.features += config.features
         self.deps += config.deps
