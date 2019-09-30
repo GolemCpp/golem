@@ -1416,6 +1416,192 @@ class Context:
     def clang_tidy(self):
         self.call_build_target(self.clang_tidy_target)
         
+    def run_command_with_msvisualcpp(self, command, cwd):
+        cmd = ['cmd', '/c', 'vswhere', '-latest',
+            '-products', '*', '-property', 'installationPath']
+        print ' '.join(cmd)
+        ret = subprocess.Popen(cmd, cwd='C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer',
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = ret.communicate()
+        if ret.returncode:
+            print "ERROR: " + ' '.join(cmd)
+            return -1
+        lines = out.splitlines()
+        if not lines[0]:
+            return 1
+        msvc_path = lines[0]
+        print msvc_path
+
+        vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
+        call_msvc = ['call', '"' + vcvars + '"',
+                     self.context.env['MSVC_TARGETS'][0], '&&']
+        print call_msvc
+
+        cmd = call_msvc + command
+
+        build_cmd = ' '.join(cmd)
+        if subprocess.call(build_cmd, cwd=cwd, shell=True):
+            return 1
+    
+    def run_command(self, command, cwd):
+        if subprocess.call(command, cwd=cwd, shell=self.is_windows()):
+            return 1
+    
+    def run_build_command(self, command, cwd):
+        if self.is_windows():
+            ret = self.run_command_with_msvisualcpp(command=command, cwd=cwd)
+        else:
+            ret = self.run_command(command=command, cwd=cwd)
+        if ret:
+            print("Error when running command \"" + ' '.join(command) + "\" in directory \"" + str(cwd) + "\"")
+            return 1
+
+    def find_artifacts(self, path):
+
+        types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*', '*.dylib', '*.dylib.*')
+        files_grabbed = []
+        for files in types:
+            files_grabbed.extend(
+                glob.glob(os.path.join(path, files)))
+        
+        return files_grabbed
+
+    def copy_binary_artifacts(self, source_path, destination_path):
+
+        files = self.find_artifacts(source_path)
+
+        for file in files:
+            print("Copy file " + str(file))
+            helpers.copy_file(file, destination_path)
+
+    def export_binaries(self, build_path=None):
+        print("Exporting binary files")
+
+        if build_path is None:
+            build_path = self.get_build_path()
+
+        out_path = self.make_out_path()
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
+
+        self.copy_binary_artifacts(build_path, out_path)
+
+    def prepare_include_export(self):
+        include_dir = self.make_project_path('include')
+        if not os.path.exists(include_dir):
+            os.makedirs(include_dir)
+        return include_dir
+
+    def export_headers(self, source_path):
+        print("Exporting headers")
+
+        include_dir = self.prepare_include_export()
+        
+        if not os.path.isdir(source_path):
+            raise Exception("Error: Can't find directory " + str(source_path))
+        print("Copy directory " + str(source_path))
+        distutils.dir_util.copy_tree(source_path, os.path.join(include_dir, helpers.directory_basename(source_path)), preserve_symlinks=1)
+
+    def export_file_to_headers(self, file_path, relative_header_path):
+        print("Exporting header file")
+
+        include_dir = self.prepare_include_export()
+
+        if not os.path.exists(file_path):
+            raise Exception("Error: Can't find header " + str(file_path))
+
+        destination_directory = os.path.join(include_dir, relative_header_path)
+        if not os.path.exists(destination_directory):
+            os.makedirs(destination_directory)
+
+        print("Copy file " + str(file_path))
+        helpers.copy_file(file_path, destination_directory)
+
+    def cmake_build(self, source_path=None, build_path=None, targets=None, variant=None, link=None, arch=None, options=None, install_prefix=None, prefix_path=None):
+        if source_path is None:
+            source_path = self.get_project_dir()
+
+        if build_path is None:
+            build_path = self.get_build_path()
+
+        if not os.path.exists(build_path):
+            os.makedirs(build_path)
+
+        if variant is None:
+            if self.is_debug():
+                variant = 'Debug'
+            else:
+                variant = 'Release'
+        opt_variant = '-DCMAKE_BUILD_TYPE=' + variant
+
+        opt_link = '-DBUILD_SHARED_LIBS='
+        if link is not None:
+            if link == 'shared':
+                opt_link += 'ON'
+            elif link == 'static':
+                opt_link += 'OFF'
+            else:
+                raise Exception("Error: Bad argument link=" + str(link))
+        elif self.is_static():
+            opt_link += 'OFF'
+        else:
+            opt_link += 'ON'
+
+        opt_arch = ['-A']
+        if self.is_x64():
+            opt_arch.append('x64')
+        else:
+            opt_arch.append('x86')
+
+        if not self.is_windows():
+            opt_arch = []
+
+        prefix_dir = os.path.join(build_path, 'install')
+        if not os.path.exists(prefix_dir):
+            os.makedirs(prefix_dir)
+
+        opt_install_prefix = []
+        if install_prefix is not None:
+            opt_install_prefix += ['-DCMAKE_INSTALL_PREFIX=' + install_prefix]
+
+        opt_prefix_path = []
+        if prefix_path is not None:
+            opt_prefix_path += ['-DCMAKE_PREFIX_PATH=' + prefix_path]
+
+        opt_options = []
+        if options is not None:
+            opt_options += options
+
+        cmake_command = ['cmake', source_path] + opt_arch + [opt_variant, opt_link] + opt_install_prefix + opt_prefix_path + opt_options
+
+        print("Run CMake command: " + ' '.join(cmake_command))
+
+        ret = self.run_build_command(command=cmake_command, cwd=build_path)
+        if ret:
+            raise RuntimeError("Error when running CMake command: " + ' '.join(cmake_command))
+
+        if targets is None:
+            targets = []
+        else:
+            targets = ['--target'] + targets
+
+        cmake_command = ['cmake', '--build', '.', '--config', variant] + targets
+        print("Run build command: " + ' '.join(cmake_command))
+
+        ret = self.run_command(command=cmake_command, cwd=build_path)
+        if ret:
+            raise RuntimeError("Error when running CMake command: " + ' '.join(cmake_command))
+
+        if install_prefix is not None:
+            if not self.is_windows():
+                cmake_command = ['make', 'install']
+                print("Run install command: " + ' '.join(cmake_command))
+
+                ret = self.run_command(command=cmake_command, cwd=build_path)
+                if ret:
+                    raise RuntimeError("Error when running CMake command: " + ' '.join(cmake_command))
+            else:
+                raise Exception("CMake install command not implemented on Windows")
 
     def save_options(self):
         self.context.env.OPTIONS = json.dumps(self.context.options.__dict__)
@@ -1844,7 +2030,7 @@ class Context:
     def build_path(self, dep = None):
         return self.osname() + '-' + self.arch_min() + '-' + self.compiler_min() + '-' + self.runtime_min() + '-' + self.link_min(dep) + '-' + self.variant_min()
 
-    def find_dep_include_dir(self, dep_name):
+    def find_dependency_includes(self, dep_name):
         dep_include = []
         cache_conf = self.make_cache_conf()
         for dep in self.project.deps:
@@ -1853,7 +2039,7 @@ class Context:
                 dep_include.append(self.get_dep_include_location(dep, cache_dir))
         return dep_include
 
-    def build_dep(self, dep_name):
+    def build_dependency(self, dep_name):
         config = Configuration()
         cache_conf = self.make_cache_conf()
         for dep in self.project.deps:
@@ -1869,7 +2055,12 @@ class Context:
         self.call_build_target(self.build_target)
 
         if self.module is not None:
-            self.module.script(self)
+            out_path = self.make_out_path()
+            if os.path.exists(out_path):
+                shutil.rmtree(out_path)
+            ret = self.module.script(self)
+            if ret:
+                raise Exception("Build fail!")
 
         for targetname in self.context.options.targets.split(','):
             if targetname and not targetname in [target.name for target in self.project.targets]:

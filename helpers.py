@@ -100,11 +100,17 @@ def copy_tree(source_path, destination_path):
         break
 
 
+def directory_basename(path):
+    clean_path = path.rstrip('\\') if sys.platform.startswith(
+        'win32') else path.rstrip('/')
+    return os.path.basename(clean_path)
+
+
 def copy_file(source_path, destination_path):
     if os.path.isdir(destination_path):
         destination_directory = destination_path
         destination_path = os.path.join(
-            destination_path, os.path.basename(source_path))
+            destination_path, directory_basename(source_path))
     else:
         destination_directory = os.path.dirname(destination_path)
 

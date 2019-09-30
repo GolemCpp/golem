@@ -50,59 +50,59 @@ class Configuration:
         self.packages_tool = '' if packages_tool is None else packages_tool
         self.header_only = False if header_only is None else header_only
 
-        def filter_list_params(input):
+        def parameter_to_list(input):
             if input is None:
                 return []
-            elif input is not list:
+            elif not isinstance(input, list):
                 return [input]
             else:
                 return input
 
-        self.targets = filter_list_params(targets)
+        self.targets = parameter_to_list(targets)
 
         if target is not None and not self.targets:
             self.targets = [target]
 
-        self.static_targets = filter_list_params(static_targets)
-        self.shared_targets = filter_list_params(shared_targets)
+        self.static_targets = parameter_to_list(static_targets)
+        self.shared_targets = parameter_to_list(shared_targets)
 
-        self.dlls = filter_list_params(dlls)
+        self.dlls = parameter_to_list(dlls)
 
-        self.defines = filter_list_params(defines)
-        self.includes = filter_list_params(includes)
-        self.source = filter_list_params(source)
-        self.moc = filter_list_params(moc)
+        self.defines = parameter_to_list(defines)
+        self.includes = parameter_to_list(includes)
+        self.source = parameter_to_list(source)
+        self.moc = parameter_to_list(moc)
 
-        self.lib = filter_list_params(lib)
-        self.libpath = filter_list_params(libpath)
-        self.stlib = filter_list_params(stlib)
-        self.stlibpath = filter_list_params(stlibpath)
-        self.rpath = filter_list_params(rpath)
-        self.cflags = filter_list_params(cflags)
-        self.cppflags = filter_list_params(cppflags)
-        self.cxxdeps = filter_list_params(cxxdeps)
-        self.ccdeps = filter_list_params(ccdeps)
-        self.linkdeps = filter_list_params(linkdeps)
-        self.framework = filter_list_params(framework)
-        self.frameworkpath = filter_list_params(frameworkpath)
+        self.lib = parameter_to_list(lib)
+        self.libpath = parameter_to_list(libpath)
+        self.stlib = parameter_to_list(stlib)
+        self.stlibpath = parameter_to_list(stlibpath)
+        self.rpath = parameter_to_list(rpath)
+        self.cflags = parameter_to_list(cflags)
+        self.cppflags = parameter_to_list(cppflags)
+        self.cxxdeps = parameter_to_list(cxxdeps)
+        self.ccdeps = parameter_to_list(ccdeps)
+        self.linkdeps = parameter_to_list(linkdeps)
+        self.framework = parameter_to_list(framework)
+        self.frameworkpath = parameter_to_list(frameworkpath)
 
-        self.program_cxxflags = filter_list_params(program_cxxflags)
-        self.program_linkflags = filter_list_params(program_linkflags)
-        self.library_cxxflags = filter_list_params(library_cxxflags)
-        self.library_linkflags = filter_list_params(library_linkflags)
+        self.program_cxxflags = parameter_to_list(program_cxxflags)
+        self.program_linkflags = parameter_to_list(program_linkflags)
+        self.library_cxxflags = parameter_to_list(library_cxxflags)
+        self.library_linkflags = parameter_to_list(library_linkflags)
 
-        self.cxxflags = filter_list_params(cxxflags)
-        self.linkflags = filter_list_params(linkflags)
-        self.ldflags = filter_list_params(ldflags)
-        self.system = filter_list_params(system)
+        self.cxxflags = parameter_to_list(cxxflags)
+        self.linkflags = parameter_to_list(linkflags)
+        self.ldflags = parameter_to_list(ldflags)
+        self.system = parameter_to_list(system)
 
-        self.packages = filter_list_params(packages)
-        self.packages_dev = filter_list_params(packages_dev)
+        self.packages = parameter_to_list(packages)
+        self.packages_dev = parameter_to_list(packages_dev)
 
-        self.features = filter_list_params(features)
-        self.deps = filter_list_params(deps)
-        self.use = filter_list_params(use)
-        self.uselib = filter_list_params(uselib)
+        self.features = parameter_to_list(features)
+        self.deps = parameter_to_list(deps)
+        self.use = parameter_to_list(use)
+        self.uselib = parameter_to_list(uselib)
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -213,7 +213,7 @@ class Configuration:
                             else:
                                 b = parse_paren_helper(level)
                                 if b:
-                                    if type(b[0]) is str:
+                                    if isinstance(b[0], str):
                                         b[0] = token + b[0]
                                         return b
                                     else:
@@ -228,7 +228,7 @@ class Configuration:
                     def evaluate_array(a):
                         result = True
                         for item in a:
-                            if type(item) is list:
+                            if isinstance(item, list):
                                 i_result = evaluate_array(item)
                                 result = result and i_result
                             else:
