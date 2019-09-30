@@ -50,11 +50,11 @@ class Project:
         for i, dep in enumerate(self.deps):
             for item in cache:
                 if item[0] == dep.name and item[1] == dep.version:
-                    print item[0] + " : " + item[1] + " -> " + item[2]
+                    print(item[0] + " : " + item[1] + " -> " + item[2])
                     self.deps[i].resolved_version = item[2]
                     break
             if not self.deps[i].resolved_version:
-                print dep.name + " : no cached version"
+                print(dep.name + " : no cached version")
 
         sys.stdout.flush()
 
@@ -62,38 +62,23 @@ class Project:
         for i, dep in enumerate(self.deps):
             for item in cache:
                 if item['name'] == dep.name and item['version'] == dep.version:
-                    print item['name'] + " : " + item['version'] + " -> " + item['commit']
+                    print(item['name'] + " : " +
+                          item['version'] + " -> " + item['commit'])
                     self.deps[i].resolved_version = item['commit']
                     break
             if not self.deps[i].resolved_version:
-                print dep.name + " : no cached version"
+                print(dep.name + " : no cached version")
 
         sys.stdout.flush()
 
-    def target(self, type, name, target=None, targets=None, defines=None, includes=None, source=None, features=None, deps=None, use=None, header_only=None, version_template=None, system=None, moc=None):
+    def target(self, type, name, version_template=None, **kwargs):
         newtarget = Target()
         newtarget.type = type
         newtarget.name = name
         newtarget.version_template = version_template
 
-        config = Configuration()
-
-        config.targets = [] if target is None else [target]
-        config.targets = config.targets if targets is None else targets
+        config = Configuration(**kwargs)
         config.type = type
-
-        config.defines = [] if defines is None else defines
-        config.includes = [] if includes is None else includes
-        config.source = [] if source is None else source
-        config.moc = [] if moc is None else moc
-
-        config.system = [] if system is None else system
-
-        config.features = [] if features is None else features
-        config.deps = [] if deps is None else deps
-        config.use = [] if use is None else use
-
-        config.header_only = False if header_only is None else header_only
 
         newtarget.configs.append(config)
 
