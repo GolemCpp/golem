@@ -54,3 +54,11 @@ class Condition:
             condition.release, self.release)
         self.target_type = Condition.intersection_expression(
             condition.target_type, self.target_type)
+
+    @staticmethod
+    def unserialize_json(json_obj):
+        cond = Condition()
+        z = cond.__dict__.copy()
+        z.update(json_obj)
+        cond.__dict__ = z
+        return cond

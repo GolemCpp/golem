@@ -5,6 +5,7 @@ import sys
 import md5
 import glob
 import json
+import fnmatch
 import shutil
 import pickle
 import platform
@@ -21,7 +22,8 @@ import helpers
 from helpers import *
 from project import Project
 from build_target import BuildTarget
-import waflib
+from dependency import Dependency
+import copy
 
 class Context:
     def __init__(self, context):
@@ -713,7 +715,6 @@ class Context:
     def get_local_dep_pkl(self, dep):
         return os.path.join(self.make_out_path(), dep.name + '.pkl')
 
-
     def get_dep_version_branch(self, dep):
         dep_version_branch = dep.resolve()
         if dep.version != 'latest' and dep.resolved_version != dep.version:
@@ -743,24 +744,42 @@ class Context:
     def get_dep_artifact_pkl(self, dep, cache_dir):
         path = self.get_dep_artifact_location(dep, cache_dir)
         return os.path.join(path, dep.name + '.pkl')
+
+    def get_dep_artifact_json(self, dep, cache_dir):
+        path = self.get_dep_artifact_location(dep, cache_dir)
+        return os.path.join(path, dep.name + '.json')
         
     def use_dep(self, config, dep, cache_dir, enable_env, has_artifacts):
         dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
         dep_path_include = self.get_dep_include_location(dep, cache_dir)
-            
-        filepkl = open(os.path.join(dep_path_build, dep.name + '.pkl'), 'rb')
-        dep_export_ctx = pickle.load(filepkl)
-        depdeps = None
-        if isinstance(dep_export_ctx, Configuration):
-            depconfig = dep_export_ctx
+        
+        depdeps = []
+        depconfig = Configuration()
+
+        file_json_path = self.get_dep_artifact_json(dep, cache_dir)
+        if os.path.exists(file_json_path):
+            with open(file_json_path, 'rb') as file_json:
+                dep_export_ctx = byteify(json.load(file_json))
+                for dep_json in dep_export_ctx[0]:
+                    dep_obj = Dependency()
+                    dep_obj.__dict__ = dep_json
+                    depdeps.append(dep_obj)
+                depconfig = Configuration.unserialize_json(dep_export_ctx[1])
         else:
-            depdeps = dep_export_ctx[0]
-            depconfig = dep_export_ctx[1]
-        filepkl.close()
+            filepkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
+            with open(filepkl_path, 'rb') as filepkl:
+                dep_export_ctx = pickle.load(filepkl)
+                depdeps = None
+                if isinstance(dep_export_ctx, Configuration):
+                    depconfig = dep_export_ctx
+                else:
+                    depdeps = dep_export_ctx[0]
+                    depconfig = dep_export_ctx[1]
+
         depconfig.includes = []
         
         if config is not None:
-            config_targets = config.targets
+            config_targets = copy.deepcopy(config.targets)
             config.merge(self, [depconfig])
             config.targets = config_targets
 
@@ -796,16 +815,20 @@ class Context:
         out_path = make_directory(self.make_out_path())
         expected_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
         for file in expected_files:
-            if not os.path.exists(os.path.join(out_path, file)):
-                src_file_path = os.path.join(dep_path_build, file)
+            src_file_path = os.path.join(dep_path_build, file)
+            expected_file_path = os.path.join(out_path, file)
+            should_copy = not os.path.exists(os.path.join(out_path, file))
+            if not should_copy:
+                should_copy = os.path.getctime(expected_file_path) < os.path.getctime(src_file_path)
+            if should_copy:
+                print("Copy file {}".format(file))
                 copy_file(src_file_path, out_path)
                 if self.is_linux() and file.endswith('.so'):
                     src_file_path_glob = glob.glob(src_file_path + '.*')
                     for other_file_path in src_file_path_glob:
+                        print("Copy file {}".format(os.path.basename(other_file_path)))
                         copy_file(other_file_path, out_path)
                     
-
-
     def clean_repo(self, repo_path):
         helpers.run_task(['git', 'reset', '--hard'], cwd=repo_path)
         helpers.run_task(['git', 'clean', '-fxd'], cwd=repo_path)
@@ -876,12 +899,32 @@ class Context:
                 return pickle.load(filepkl)
         return None
 
-    def read_dep_configs(self, dep, cache_dir):
-        dep_pkl = self.read_pkl(dep, cache_dir)
-        if dep_pkl is None:
-            return None
+    def can_open_json(self, dep, cache_dir):
+        json_path = self.get_dep_artifact_json(dep, cache_dir)
+        return os.path.exists(json_path)
 
-        return dep_pkl[1]
+    def open_json(self, dep, cache_dir):
+        json_path = self.get_dep_artifact_json(dep, cache_dir)
+        return open(json_path, 'r')
+
+    def read_json(self, dep, cache_dir):
+        if self.can_open_json(dep, cache_dir):
+            with self.open_json(dep, cache_dir) as file_json:
+                return byteify(json.load(file_json))
+        return None
+
+    def read_dep_configs(self, dep, cache_dir):
+        if self.can_open_json(dep, cache_dir):
+            dep_json = self.read_json(dep, cache_dir)
+            if dep_json is None:
+                return None
+            return Configuration.unserialize_json(dep_json[1])
+        else:
+            dep_pkl = self.read_pkl(dep, cache_dir)
+            if dep_pkl is None:
+                return None
+
+            return dep_pkl[1]
     
     def make_target_name_from_context(self, config, target):
 
@@ -924,7 +967,13 @@ class Context:
 
     def get_expected_files(self, config, dep, cache_dir, has_artifacts):
 
-        expected_files = [dep.name + '.pkl']
+        expected_files = []
+
+        json_file_path = self.get_dep_artifact_json(dep, cache_dir)
+        if os.path.exists(json_file_path):
+            expected_files.append(dep.name + '.json')
+        else:
+            expected_files.append(dep.name + '.pkl')
 
         if not has_artifacts:
             return expected_files
@@ -958,6 +1007,12 @@ class Context:
         dep.resolve()
 
         cache_dir = self.find_dep_cache_dir(dep, cache_conf)
+
+        json_path = self.get_dep_artifact_json(dep, cache_dir)
+        pkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
+        if not os.path.exists(json_path) and command == "build" and not os.path.exists(pkl_path):
+            raise RuntimeError("Error: run golem resolve first! Can't find {}".format(json_path))
+
         has_artifacts = self.has_artifacts(command)
 
         expects_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
@@ -1146,11 +1201,6 @@ class Context:
         listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(self.make_project_path_array(config.source))
         listmoc = self.list_moc(self.make_project_path_array(config.moc)) if project_qt else []    
 
-        target_type = None
-        if target.type == 'program' and self.is_android():
-            target_type = 'library'
-        else:
-            target_type = target.type
 
         version_short = None
         version_source = []
@@ -1183,14 +1233,14 @@ class Context:
         if self.is_windows():
             version_short = None
 
+        target_type = None
+        if target.type == 'program' and self.is_android():
+            target_type = 'library'
+        else:
+            target_type = target.type
+            
         target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
         target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
-
-        unique_set = set(config.stlib)
-        config.stlib = list(unique_set)
-        
-        unique_set = set(config.system)
-        config.system = list(unique_set)
 
         stlibflags = config.stlib + (config.system if self.is_static() else [])
 
@@ -1430,12 +1480,10 @@ class Context:
         if not lines[0]:
             return 1
         msvc_path = lines[0]
-        print msvc_path
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
         call_msvc = ['call', '"' + vcvars + '"',
                      self.context.env['MSVC_TARGETS'][0], '&&']
-        print call_msvc
 
         cmd = call_msvc + command
 
@@ -1456,66 +1504,74 @@ class Context:
             print("Error when running command \"" + ' '.join(command) + "\" in directory \"" + str(cwd) + "\"")
             return 1
 
-    def find_artifacts(self, path):
-
-        types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*', '*.dylib', '*.dylib.*')
+    def find_artifacts(self, path, recursively=False):
         files_grabbed = []
-        for files in types:
-            files_grabbed.extend(
-                glob.glob(os.path.join(path, files)))
-        
+        types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*', '*.dylib', '*.dylib.*')
+        if recursively == False:
+            for files in types:
+                files_grabbed.extend(
+                    glob.glob(os.path.join(path, files)))
+            return files_grabbed
+        else:
+            for files in types:
+                for root, _, filenames in os.walk(path):
+                    for filename in fnmatch.filter(filenames, files):
+                        files_grabbed.append(os.path.join(root, filename))
         return files_grabbed
 
-    def copy_binary_artifacts(self, source_path, destination_path):
+    def copy_binary_artifacts(self, source_path, destination_path, recursively=False):
 
-        files = self.find_artifacts(source_path)
+        files = self.find_artifacts(source_path, recursively)
 
         for file in files:
             print("Copy file " + str(file))
             helpers.copy_file(file, destination_path)
 
-    def export_binaries(self, build_path=None):
+    def export_binaries(self, build_path=None, recursively=False):
         print("Exporting binary files")
 
         if build_path is None:
             build_path = self.get_build_path()
 
+        if not os.path.exists(build_path):
+            print("Found nothing at {}".format(build_path))
+            return
+
         out_path = self.make_out_path()
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-        self.copy_binary_artifacts(build_path, out_path)
+        self.copy_binary_artifacts(build_path, out_path, recursively)
 
-    def prepare_include_export(self):
-        include_dir = self.make_project_path('include')
+    def prepare_include_export(self, include_path=None):
+        if include_path is None:
+            include_path='include'
+        include_dir = self.make_project_path(include_path)
         if not os.path.exists(include_dir):
             os.makedirs(include_dir)
         return include_dir
 
-    def export_headers(self, source_path):
+    def export_headers(self, source_path, include_path=None):
         print("Exporting headers")
 
-        include_dir = self.prepare_include_export()
+        include_dir = self.prepare_include_export(include_path)
         
         if not os.path.isdir(source_path):
             raise Exception("Error: Can't find directory " + str(source_path))
+        
         print("Copy directory " + str(source_path))
         distutils.dir_util.copy_tree(source_path, os.path.join(include_dir, helpers.directory_basename(source_path)), preserve_symlinks=1)
 
-    def export_file_to_headers(self, file_path, relative_header_path):
+    def export_file_to_headers(self, file_path, include_path=None):
         print("Exporting header file")
 
-        include_dir = self.prepare_include_export()
+        include_dir = self.prepare_include_export(include_path)
 
         if not os.path.exists(file_path):
             raise Exception("Error: Can't find header " + str(file_path))
 
-        destination_directory = os.path.join(include_dir, relative_header_path)
-        if not os.path.exists(destination_directory):
-            os.makedirs(destination_directory)
-
-        print("Copy file " + str(file_path))
-        helpers.copy_file(file_path, destination_directory)
+        print("Copy file {}".format(file_path))
+        helpers.copy_file(file_path, include_dir)
 
     def cmake_build(self, source_path=None, build_path=None, targets=None, variant=None, link=None, arch=None, options=None, install_prefix=None, prefix_path=None):
         if source_path is None:
@@ -2055,9 +2111,6 @@ class Context:
         self.call_build_target(self.build_target)
 
         if self.module is not None:
-            out_path = self.make_out_path()
-            if os.path.exists(out_path):
-                shutil.rmtree(out_path)
             ret = self.module.script(self)
             if ret:
                 raise Exception("Build fail!")
@@ -2198,16 +2251,16 @@ class Context:
             outpath_include = os.path.join(outpath, 'include')
             config.includes.append(outpath_include)
 
-            outpath_target = os.path.join(outpath_lib, target.name + '.pkl')
+            outpath_target = os.path.join(outpath_lib, target.name + '.json')
             outpath_directory = os.path.dirname(outpath_target)
             if not os.path.exists(outpath_directory):
                 os.makedirs(outpath_directory)
             
-            output = open(outpath_target, 'wb')
-            export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
-            export_ctx = [export_deps, config]
-            pickle.dump(export_ctx, output)
-            output.close()
+            with open(outpath_target, 'w') as output:
+                export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
+                export_ctx = [export_deps, config]
+                json.dump(export_ctx, output, default=lambda o: o.__dict__,
+                          sort_keys=True, indent=4)
 
     def get_targets_or_exports(self):
         return self.project.targets if not self.context.options.export else self.project.exports

@@ -159,3 +159,8 @@ def byteify(input):
         return input.encode('utf-8')
     else:
         return input
+
+
+def filter_unique(value):
+    unique_set = set(value)
+    return list(unique_set)

@@ -116,78 +116,112 @@ class Configuration:
         self.targets = [value] if value else []
 
     def append(self, config):
-
-        if config.packages_tool:
-            self.packages_tool = config.packages_tool
-
         if config.targets:
             self.targets += config.targets
+            self.targets = helpers.filter_unique(self.targets)
 
         if hasattr(config, 'dlls') and config.dlls:
             self.dlls += config.dlls
+            self.dlls = helpers.filter_unique(self.dlls)
 
         if hasattr(config, 'static_targets'):
             self.static_targets += config.static_targets
+            self.static_targets = helpers.filter_unique(self.static_targets)
 
         if hasattr(config, 'shared_targets'):
             self.shared_targets += config.shared_targets
+            self.shared_targets = helpers.filter_unique(self.shared_targets)
 
         if hasattr(config, 'ldflags'):
             self.ldflags += config.ldflags
+            self.ldflags = helpers.filter_unique(self.ldflags)
 
         self.defines += config.defines
+        self.defines = helpers.filter_unique(self.defines)
         self.includes += config.includes
+        self.includes = helpers.filter_unique(self.includes)
         self.source += config.source
+        self.source = helpers.filter_unique(self.source)
 
         if hasattr(config, 'moc'):
             self.moc += config.moc
+            self.moc = helpers.filter_unique(self.moc)
 
         if hasattr(config, 'lib'):
             self.lib += config.lib
+            self.lib = helpers.filter_unique(self.lib)
         if hasattr(config, 'libpath'):
             self.libpath += config.libpath
+            self.libpath = helpers.filter_unique(self.libpath)
         if hasattr(config, 'stlib'):
             self.stlib += config.stlib
+            self.stlib = helpers.filter_unique(self.stlib)
         if hasattr(config, 'stlibpath'):
             self.stlibpath += config.stlibpath
+            self.stlibpath = helpers.filter_unique(self.stlibpath)
         if hasattr(config, 'rpath'):
             self.rpath += config.rpath
+            self.rpath = helpers.filter_unique(self.rpath)
         if hasattr(config, 'cflags'):
             self.cflags += config.cflags
+            self.cflags = helpers.filter_unique(self.cflags)
         if hasattr(config, 'cppflags'):
             self.cppflags += config.cppflags
+            self.cppflags = helpers.filter_unique(self.cppflags)
         if hasattr(config, 'cxxdeps'):
             self.cxxdeps += config.cxxdeps
+            self.cxxdeps = helpers.filter_unique(self.cxxdeps)
         if hasattr(config, 'ccdeps'):
             self.ccdeps += config.ccdeps
+            self.ccdeps = helpers.filter_unique(self.ccdeps)
         if hasattr(config, 'linkdeps'):
             self.linkdeps += config.linkdeps
+            self.linkdeps = helpers.filter_unique(self.linkdeps)
         if hasattr(config, 'framework'):
             self.framework += config.framework
+            self.framework = helpers.filter_unique(self.framework)
         if hasattr(config, 'frameworkpath'):
             self.frameworkpath += config.frameworkpath
+            self.frameworkpath = helpers.filter_unique(self.frameworkpath)
 
         if hasattr(config, 'program_cxxflags'):
             self.program_cxxflags += config.program_cxxflags
+            self.program_cxxflags = helpers.filter_unique(
+                self.program_cxxflags)
         if hasattr(config, 'program_linkflags'):
             self.program_linkflags += config.program_linkflags
+            self.program_linkflags = helpers.filter_unique(
+                self.program_linkflags)
         if hasattr(config, 'library_cxxflags'):
             self.library_cxxflags += config.library_cxxflags
+            self.library_cxxflags = helpers.filter_unique(
+                self.library_cxxflags)
         if hasattr(config, 'library_linkflags'):
             self.library_linkflags += config.library_linkflags
+            self.library_linkflags = helpers.filter_unique(
+                self.library_linkflags)
 
         self.cxxflags += config.cxxflags
+        self.cxxflags = helpers.filter_unique(self.cxxflags)
         self.linkflags += config.linkflags
+        self.linkflags = helpers.filter_unique(self.linkflags)
         self.system += config.system
+        self.system = helpers.filter_unique(self.system)
 
         self.packages += config.packages
+        self.packages = helpers.filter_unique(self.packages)
         self.packages_dev += config.packages_dev
+        self.packages_dev = helpers.filter_unique(self.packages_dev)
 
         self.features += config.features
+        self.features = helpers.filter_unique(self.features)
         self.deps += config.deps
+        self.deps = helpers.filter_unique(self.deps)
         self.use += config.use
+        self.use = helpers.filter_unique(self.use)
         if hasattr(config, 'uselib'):
             self.uselib += config.uselib
+            self.uselib = helpers.filter_unique(self.uselib)
 
     def merge(self, context, configs, exporting=False, target_type=None):
         def evaluate_condition(expected, conditions):
@@ -265,8 +299,9 @@ class Configuration:
                     and (not c.condition.release or evaluate_condition(context.release(), c.condition.release))):
                 self.append(c)
 
-                if exporting and not self.header_only and c.header_only is not None:
-                    self.header_only = c.header_only
+                if exporting:
+                    if not self.header_only and c.header_only is not None:
+                        self.header_only = c.header_only
 
     def parse_entry(self, key, value):
         entries = ConditionExpression.parse_members(key)
@@ -477,3 +512,13 @@ class Configuration:
         if not is_empty:
             configs = [config] + configs
         return configs
+
+    @staticmethod
+    def unserialize_json(json_obj):
+        config = Configuration()
+        z = config.__dict__.copy()
+        z.update(json_obj)
+        config.__dict__ = z
+
+        config.condition = Condition.unserialize_json(config.condition)
+        return config
