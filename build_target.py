@@ -49,7 +49,7 @@ class BuildTarget:
         self.includes = includes
         self.includes = helpers.filter_unique(self.includes)
         self.source = source
-        self.source = helpers.filter_unique(self.source)
+        # self.source = helpers.filter_unique(self.source)
         self.cxxflags = cxxflags
         self.cxxflags = helpers.filter_unique(self.cxxflags)
         self.cflags = cflags
