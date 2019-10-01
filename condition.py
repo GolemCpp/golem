@@ -3,18 +3,20 @@ import helpers
 
 class Condition:
     def __init__(self, variant=None, linking=None, runtime=None, osystem=None, arch=None, compiler=None, distribution=None, release=None, target_type=None):
-        self.variant = [] if variant is None else variant 	# debug, release
-        self.linking = [] if linking is None else linking 	# shared, static
-        self.runtime = [] if runtime is None else runtime 	# shared, static
-        self.osystem = [] if osystem is None else osystem 	# linux, windows, osx
-        self.arch = [] if arch is None else arch			# x86, x64
-        self.compiler = [] if compiler is None else compiler 	# gcc, clang, msvc
+
+        self.variant = helpers.parameter_to_list(variant) 	# debug, release
+        self.linking = helpers.parameter_to_list(linking) 	# shared, static
+        self.runtime = helpers.parameter_to_list(runtime) 	# shared, static
+        self.osystem = helpers.parameter_to_list(
+            osystem) 	# linux, windows, osx
+        self.arch = helpers.parameter_to_list(arch)			# x86, x64
+        self.compiler = helpers.parameter_to_list(compiler) 	# gcc, clang, msvc
 
         # debian, ubuntu, etc.
-        self.distribution = [] if distribution is None else distribution
+        self.distribution = helpers.parameter_to_list(distribution)
         # jessie, stretch, etc.
-        self.release = [] if release is None else release
-        self.target_type = [] if target_type is None else target_type
+        self.release = helpers.parameter_to_list(release)
+        self.target_type = helpers.parameter_to_list(target_type)
 
     def __str__(self):
         return helpers.print_obj(self)

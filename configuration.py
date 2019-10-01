@@ -50,59 +50,51 @@ class Configuration:
         self.packages_tool = '' if packages_tool is None else packages_tool
         self.header_only = False if header_only is None else header_only
 
-        def parameter_to_list(input):
-            if input is None:
-                return []
-            elif not isinstance(input, list):
-                return [input]
-            else:
-                return input
-
-        self.targets = parameter_to_list(targets)
+        self.targets = helpers.parameter_to_list(targets)
 
         if target is not None and not self.targets:
             self.targets = [target]
 
-        self.static_targets = parameter_to_list(static_targets)
-        self.shared_targets = parameter_to_list(shared_targets)
+        self.static_targets = helpers.parameter_to_list(static_targets)
+        self.shared_targets = helpers.parameter_to_list(shared_targets)
 
-        self.dlls = parameter_to_list(dlls)
+        self.dlls = helpers.parameter_to_list(dlls)
 
-        self.defines = parameter_to_list(defines)
-        self.includes = parameter_to_list(includes)
-        self.source = parameter_to_list(source)
-        self.moc = parameter_to_list(moc)
+        self.defines = helpers.parameter_to_list(defines)
+        self.includes = helpers.parameter_to_list(includes)
+        self.source = helpers.parameter_to_list(source)
+        self.moc = helpers.parameter_to_list(moc)
 
-        self.lib = parameter_to_list(lib)
-        self.libpath = parameter_to_list(libpath)
-        self.stlib = parameter_to_list(stlib)
-        self.stlibpath = parameter_to_list(stlibpath)
-        self.rpath = parameter_to_list(rpath)
-        self.cflags = parameter_to_list(cflags)
-        self.cppflags = parameter_to_list(cppflags)
-        self.cxxdeps = parameter_to_list(cxxdeps)
-        self.ccdeps = parameter_to_list(ccdeps)
-        self.linkdeps = parameter_to_list(linkdeps)
-        self.framework = parameter_to_list(framework)
-        self.frameworkpath = parameter_to_list(frameworkpath)
+        self.lib = helpers.parameter_to_list(lib)
+        self.libpath = helpers.parameter_to_list(libpath)
+        self.stlib = helpers.parameter_to_list(stlib)
+        self.stlibpath = helpers.parameter_to_list(stlibpath)
+        self.rpath = helpers.parameter_to_list(rpath)
+        self.cflags = helpers.parameter_to_list(cflags)
+        self.cppflags = helpers.parameter_to_list(cppflags)
+        self.cxxdeps = helpers.parameter_to_list(cxxdeps)
+        self.ccdeps = helpers.parameter_to_list(ccdeps)
+        self.linkdeps = helpers.parameter_to_list(linkdeps)
+        self.framework = helpers.parameter_to_list(framework)
+        self.frameworkpath = helpers.parameter_to_list(frameworkpath)
 
-        self.program_cxxflags = parameter_to_list(program_cxxflags)
-        self.program_linkflags = parameter_to_list(program_linkflags)
-        self.library_cxxflags = parameter_to_list(library_cxxflags)
-        self.library_linkflags = parameter_to_list(library_linkflags)
+        self.program_cxxflags = helpers.parameter_to_list(program_cxxflags)
+        self.program_linkflags = helpers.parameter_to_list(program_linkflags)
+        self.library_cxxflags = helpers.parameter_to_list(library_cxxflags)
+        self.library_linkflags = helpers.parameter_to_list(library_linkflags)
 
-        self.cxxflags = parameter_to_list(cxxflags)
-        self.linkflags = parameter_to_list(linkflags)
-        self.ldflags = parameter_to_list(ldflags)
-        self.system = parameter_to_list(system)
+        self.cxxflags = helpers.parameter_to_list(cxxflags)
+        self.linkflags = helpers.parameter_to_list(linkflags)
+        self.ldflags = helpers.parameter_to_list(ldflags)
+        self.system = helpers.parameter_to_list(system)
 
-        self.packages = parameter_to_list(packages)
-        self.packages_dev = parameter_to_list(packages_dev)
+        self.packages = helpers.parameter_to_list(packages)
+        self.packages_dev = helpers.parameter_to_list(packages_dev)
 
-        self.features = parameter_to_list(features)
-        self.deps = parameter_to_list(deps)
-        self.use = parameter_to_list(use)
-        self.uselib = parameter_to_list(uselib)
+        self.features = helpers.parameter_to_list(features)
+        self.deps = helpers.parameter_to_list(deps)
+        self.use = helpers.parameter_to_list(use)
+        self.uselib = helpers.parameter_to_list(uselib)
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -225,6 +217,7 @@ class Configuration:
 
     def merge(self, context, configs, exporting=False, target_type=None):
         def evaluate_condition(expected, conditions):
+            conditions = helpers.parameter_to_list(conditions)
             for expression in conditions:
                 expression = ConditionExpression.clean(expression)
                 if expression:

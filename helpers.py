@@ -164,3 +164,12 @@ def byteify(input):
 def filter_unique(value):
     unique_set = set(value)
     return list(unique_set)
+
+
+def parameter_to_list(input):
+    if input is None:
+        return []
+    elif not isinstance(input, list):
+        return [input]
+    else:
+        return input
