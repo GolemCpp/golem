@@ -1169,6 +1169,22 @@ class Context:
 
         return version_major + "." + version_minor + "." + version_patch
 
+    def recursively_link_dependencies(self, config):
+        self.recursively_apply_to_deps(config, self.link_dependency)
+
+    def recursively_apply_to_deps(self, config, callback):
+        deps_linked=[]
+        deps_count=0
+        while len(self.project.deps) != deps_count:
+            deps_count = len(self.project.deps)
+            for dep_name in config.deps:
+                if dep_name in deps_linked:
+                    continue
+                for dep in self.project.deps:
+                    if dep_name == dep.name:
+                        callback(config, dep)
+                        deps_linked.append(dep.name)
+
     def build_target_gather_config(self, target, static_configs):
 
         config = Configuration()
@@ -1181,10 +1197,7 @@ class Context:
                 if use_name == export.name:
                     config.merge(self, export.configs)
 
-        for dep_name in config.deps:
-            for dep in self.project.deps:
-                if dep_name == dep.name:
-                    self.link_dependency(config, dep)
+        self.recursively_link_dependencies(config)
         
         targetname = self.make_target_name_from_context(config, target)[0]
 
@@ -2097,10 +2110,8 @@ class Context:
 
     def build_dependency(self, dep_name):
         config = Configuration()
-        cache_conf = self.make_cache_conf()
-        for dep in self.project.deps:
-            if dep_name == dep.name:
-                self.link_dependency(config, dep)
+        config.deps = [dep_name]
+        self.recursively_link_dependencies(config)
         return config
 
     def build(self):
@@ -2188,10 +2199,9 @@ class Context:
     def resolve_target_deps(self, target):
         configs = self.resolve_local_configs([target])
         config = configs[target.name]
-        for dep_name in config.deps:
-            for dep in self.project.deps:
-                if dep_name == dep.name:
-                    dep.configure(self, config)
+        def callback(config, dep):
+            dep.configure(self, config)
+        self.recursively_apply_to_deps(config, callback)
 
 
     def resolve_configs_recursively(self, targets):
@@ -2199,10 +2209,9 @@ class Context:
         for target in targets:
             config = configs[target.name]
 
-            for dep_name in config.deps:
-                for dep in self.project.deps:
-                    if dep_name == dep.name:
-                        dep.configure(self, config)
+            def callback(config, dep):
+                dep.configure(self, config)
+            self.recursively_apply_to_deps(config, callback)
             
             if target.type == 'export' and self.context.options.export:
                 for project_target in self.project.targets:
@@ -2217,13 +2226,12 @@ class Context:
         for target in targets:
             config = configs[target.name]
 
-            for dep_name in config.deps:
-                for dep in self.project.deps:
-                    if dep_name == dep.name:
-                        dep.build(self, config)
-                        if target.name not in dependencies:
-                            dependencies[target.name] = list()
-                        dependencies[target.name].append(dep)
+            def callback(config, dep):
+                dep.build(self, config)
+                if target.name not in dependencies:
+                    dependencies[target.name] = list()
+                dependencies[target.name].append(dep)
+            self.recursively_apply_to_deps(config, callback)
 
         return dependencies
 
