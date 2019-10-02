@@ -289,8 +289,11 @@ class Context:
         is_shared = self.is_shared() if not has_link else target.link == 'shared'
         return self.artifact_suffix_mode(config, is_shared)
 
-    def dev_artifact_suffix(self):
-        if self.is_shared():
+    def dev_artifact_suffix(self, is_shared=None):
+        if is_shared is None:
+            is_shared = self.is_shared()
+
+        if is_shared:
             if self.is_windows():
                 return '.lib'
             elif self.is_darwin():
@@ -302,6 +305,11 @@ class Context:
                 return '.lib'
             else:
                 return '.a'
+
+    def artifact_suffix_dev(self, target):
+        has_link = hasattr(target, 'link') and target.link is not None
+        is_shared = self.is_shared() if not has_link else target.link == 'shared'
+        return self.dev_artifact_suffix(is_shared)
 
     def is_debug(self):
         return self.context.options.variant == self.variant_debug()
@@ -802,10 +810,13 @@ class Context:
                         is_static = dep.link == 'static'
                     if is_static:
                         self.context.env['STLIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-                        self.context.env['STLIB_' + dep.name]				= self.make_target_name_from_context(depconfig, dep)
+                        if self.is_darwin():
+                            self.context.env['LDFLAGS_' + dep.name]			= [os.path.join(dep_path_build, 'lib' + libname + self.artifact_suffix_dev(dep)) for libname in self.make_target_name_from_context(depconfig, dep)]
+                        else:
+                            self.context.env['STLIB_' + dep.name]			= self.make_target_name_from_context(depconfig, dep)
                     else:
                         self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-                        self.context.env['LIB_' + dep.name]				= self.make_target_name_from_context(depconfig, dep)
+                        self.context.env['LIB_' + dep.name]			= self.make_target_name_from_context(depconfig, dep)
             
             config.use.append(dep.name)
 
