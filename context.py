@@ -1258,7 +1258,9 @@ class Context:
         stlibflags = config.stlib + (config.system if self.is_static() else [])
 
         if stlibflags:
-            stlibflags = ['-Wl,-Bstatic'] + ['-l' + name for name in stlibflags] + ['-Wl,-Bdynamic'] 
+            stlibflags = ['-l' + name for name in stlibflags]
+            if not self.is_darwin() and self.compiler() != 'msvc':
+                stlibflags = ['-Wl,-Bstatic'] + stlibflags + ['-Wl,-Bdynamic']
             
         env_cxxflags = self.context.env.CXXFLAGS
         env_defines = self.context.env.DEFINES
