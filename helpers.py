@@ -162,8 +162,11 @@ def byteify(input):
 
 
 def filter_unique(value):
-    unique_set = set(value)
-    return list(unique_set)
+    new_list = []
+    for item in value:
+        if item not in new_list:
+            new_list.append(item)
+    return new_list
 
 
 def parameter_to_list(input):
