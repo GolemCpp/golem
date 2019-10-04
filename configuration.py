@@ -280,8 +280,11 @@ class Configuration:
         for c in configs:
             if not hasattr(c.condition, 'target_type'):
                 c.condition.target_type = []
+            if not hasattr(c.condition, 'link'):
+                c.condition.link = []
 
             if (	(not c.condition.variant or evaluate_condition(context.variant(), c.condition.variant))
+                    and (not c.condition.link or evaluate_condition(context.link(), c.condition.link))
                     and (not c.condition.linking or evaluate_condition(context.link(), c.condition.linking))
                     and (not c.condition.runtime or evaluate_condition(context.runtime(), c.condition.runtime))
                     and (not c.condition.osystem or evaluate_condition(context.osname(), c.condition.osystem))
@@ -422,6 +425,8 @@ class Configuration:
                 self.condition.compiler += value
             elif raw_entry == "osystem":
                 self.condition.osystem += value
+            elif raw_entry == "link":
+                self.condition.link += value
             elif raw_entry == "linking":
                 self.condition.linking += value
             elif raw_entry == "runtime":
@@ -430,6 +435,9 @@ class Configuration:
                 self.condition.distribution += value
             elif raw_entry == "release":
                 self.condition.release += value
+
+            if not self.condition.link and self.condition.linking:
+                self.condition.link = self.condition.linking
 
         return has_entry
 
@@ -467,7 +475,7 @@ class Configuration:
                 condition.osystem.append(entry)
                 is_empty = False
             elif raw_entry in ['shared', 'static']:
-                condition.linking.append(entry)
+                condition.link.append(entry)
                 is_empty = False
             elif raw_entry in ['rshared', 'rstatic']:
                 condition.runtime.append(entry)

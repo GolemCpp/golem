@@ -548,7 +548,7 @@ class Context:
             # '/experimental:external'  # enable use of /external:I
             # '/utf-8'                  # enable {source/executable/validate}-charset to utf-8
             
-            # Some linking flags (self.context.env.LINKFLAGS)
+            # Some link flags (self.context.env.LINKFLAGS)
 
             # '/errorReport:none'   # do not send CL crash reports
             # '/NXCOMPAT'           # tested to be compatible with the Windows Data Execution Prevention feature
@@ -595,7 +595,7 @@ class Context:
             # '/Od'     # disable optimizations
             # '/Oy-'    # speeds function calls (should be specified after others /O args)
 
-            # Some linking flags (self.context.env.LINKFLAGS)
+            # Some link flags (self.context.env.LINKFLAGS)
 
             # '/MAP'                # creates a mapfile
             # '/MAPINFO:EXPORTS'    # includes exports information in the mapfile
@@ -625,7 +625,7 @@ class Context:
             # '/Oi'     # request to the compiler to replace some function calls with intrinsics
             # '/Oy-'    # speeds function calls (should be specified after others /O args)
 
-            # Some linking flags (self.context.env.LINKFLAGS)
+            # Some link flags (self.context.env.LINKFLAGS)
 
             # '/DEF:"D:.def"'
             # '/LTCG'               # perform whole-program optimization

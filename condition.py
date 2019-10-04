@@ -2,9 +2,10 @@ import helpers
 
 
 class Condition:
-    def __init__(self, variant=None, linking=None, runtime=None, osystem=None, arch=None, compiler=None, distribution=None, release=None, target_type=None):
+    def __init__(self, variant=None, link=None, linking=None, runtime=None, osystem=None, arch=None, compiler=None, distribution=None, release=None, target_type=None):
 
         self.variant = helpers.parameter_to_list(variant) 	# debug, release
+        self.link = helpers.parameter_to_list(link) 	# shared, static
         self.linking = helpers.parameter_to_list(linking) 	# shared, static
         self.runtime = helpers.parameter_to_list(runtime) 	# shared, static
         self.osystem = helpers.parameter_to_list(
@@ -18,11 +19,14 @@ class Condition:
         self.release = helpers.parameter_to_list(release)
         self.target_type = helpers.parameter_to_list(target_type)
 
+        if not self.link and self.linking:
+            self.link = self.linking
+
     def __str__(self):
         return helpers.print_obj(self)
 
     def __nonzero__(self):
-        if self.variant or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release or self.target_type:
+        if self.variant or self.link or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release or self.target_type:
             return True
         return False
 
@@ -40,6 +44,8 @@ class Condition:
     def intersection(self, condition):
         self.variant = Condition.intersection_expression(
             condition.variant, self.variant)
+        self.link = Condition.intersection_expression(
+            condition.link, self.link)
         self.linking = Condition.intersection_expression(
             condition.linking, self.linking)
         self.runtime = Condition.intersection_expression(
@@ -56,6 +62,8 @@ class Condition:
             condition.release, self.release)
         self.target_type = Condition.intersection_expression(
             condition.target_type, self.target_type)
+        if not self.link and self.linking:
+            self.link = self.linking
 
     @staticmethod
     def unserialize_json(json_obj):
