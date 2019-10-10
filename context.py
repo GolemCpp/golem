@@ -38,7 +38,9 @@ class Context:
             self.project = Project.unserialize_from_json(json_object)
             self.module = None
 
-        self.project_path = self.make_project_path("golem.py")
+        self.project_path = self.make_project_path("golemfile.py")
+        if not os.path.exists(self.project_path):
+            self.project_path = self.make_project_path("golem.py")
         if not os.path.exists(self.project_path):
             self.project_path = self.make_project_path("project.glm")
         if os.path.exists(self.project_path):

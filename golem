@@ -16,12 +16,14 @@ print "=== Golem C++ Build System ==="
 sys.stdout.flush()
 
 project_path = os.path.join(os.getcwd(), 'golem.json')
-project_path_alt = os.path.join(os.getcwd(), 'golem.py')
+project_path_alt = os.path.join(os.getcwd(), 'golemfile.py')
+if not os.path.exists(project_path_alt):
+    project_path_alt = os.path.join(os.getcwd(), 'golem.py')
 if not os.path.exists(project_path_alt):
     project_path_alt = os.path.join(os.getcwd(), 'project.glm')
 
 if not os.path.exists(project_path) and not os.path.exists(project_path_alt):
-    print "ERROR: no project file found ('golem.json' or 'golem.py')"
+    print "ERROR: no project file found ('golem.json' or 'golemfile.py')"
     sys.exit(1)
 
 if not os.path.exists(project_path):
