@@ -12,15 +12,14 @@ from condition_expression import ConditionExpression
 from helpers import *
 
 
-class Dependency:
+class Dependency(Configuration):
     def __init__(self, name=None, targets=None, repository=None, version=None, link=None):
+        super(Dependency, self).__init__(
+            targets=targets, type='library', link=link)
         self.name = '' if name is None else name
-        self.targets = [] if targets is None else targets
         self.repository = '' if repository is None else repository
         self.version = '' if version is None else version
         self.resolved_version = ''
-        self.type = 'library'
-        self.link = link
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -76,23 +75,34 @@ class Dependency:
             config, self, context.make_cache_conf(), 'resolve', False)
 
     @staticmethod
-    def deserialize(json_object):
-        dep = Dependency()
-        for entry in json_object:
-            key = ConditionExpression.clean(entry)
-            value = json_object[entry]
-            if key == 'name':
-                dep.name = value
-            elif key == 'targets':
-                dep.targets = value
-            elif key == 'repository':
-                dep.repository = value
-            elif key == 'version':
-                dep.version = value
-            elif key == 'resolved_version':
-                dep.resolved_version = value
-            elif key == 'type':
-                dep.type = value
-            elif key == 'link':
-                dep.link = value
-        return dep
+    def serialized_members():
+        return [
+            'name',
+            'repository',
+            'version',
+            'resolved_version'
+        ]
+
+    @staticmethod
+    def serialize_to_json(o):
+        json_obj = Configuration.serialize_to_json(o)
+
+        for key in o.__dict__:
+            if key in Dependency.serialized_members():
+                if o.__dict__[key]:
+                    json_obj[key] = o.__dict__[key]
+
+        return json_obj
+
+    def read_json(self, o):
+        Configuration.read_json(self, o)
+
+        for key, value in o.iteritems():
+            if key in Dependency.serialized_members():
+                self.__dict__[key] = value
+
+    @staticmethod
+    def unserialize_from_json(o):
+        dependency = Dependency()
+        dependency.read_json(o)
+        return dependency

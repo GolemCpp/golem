@@ -27,13 +27,6 @@ class Project:
     def __str__(self):
         return helpers.print_obj(self)
 
-    def deps_resolve(self):
-        cache = []
-        for dep in self.deps:
-            dep.resolve()
-            cache.append([dep.name, dep.version, dep.resolve()])
-        return cache
-
     def deps_resolve_json(self):
         cache = []
         for dep in self.deps:
@@ -45,18 +38,6 @@ class Project:
                 'commit': dep.resolve()
             })
         return cache
-
-    def deps_load(self, cache):
-        for i, dep in enumerate(self.deps):
-            for item in cache:
-                if item[0] == dep.name and item[1] == dep.version:
-                    print(item[0] + " : " + item[1] + " -> " + item[2])
-                    self.deps[i].resolved_version = item[2]
-                    break
-            if not self.deps[i].resolved_version:
-                print(dep.name + " : no cached version")
-
-        sys.stdout.flush()
 
     def deps_load_json(self, cache):
         for i, dep in enumerate(self.deps):
@@ -71,38 +52,35 @@ class Project:
 
         sys.stdout.flush()
 
-    def target(self, type, name, version_template=None, **kwargs):
-        newtarget = Target()
-        newtarget.type = type
-        newtarget.name = name
-        newtarget.version_template = version_template
+    def target(self, type, name, link=None, version_template=None, **kwargs):
+        new_target = Target(
+            name=name, version_template=version_template, type=type, link=link, **kwargs)
 
-        config = Configuration(**kwargs)
-        config.type = type
-
-        newtarget.configs.append(config)
-
-        if type == 'export':
-            self.exports.append(newtarget)
-            return newtarget
-
-        if any([feature.startswith("QT5") for feature in config.features]):
+        if any([feature.startswith("QT5") for feature in new_target.features]):
             self.enable_qt()
 
-        self.targets.append(newtarget)
-        return newtarget
+        self.targets.append(new_target)
+        return new_target
 
-    def library(self, **kwargs):
+    def library(self, type=None, **kwargs):
         return self.target(type='library', **kwargs)
 
-    def program(self, **kwargs):
+    def shared_library(self, type=None, link=None, **kwargs):
+        return self.target(type='library', link='shared', **kwargs)
+
+    def static_library(self, type=None, link=None, **kwargs):
+        return self.target(type='library', link='static', **kwargs)
+
+    def program(self, type=None, **kwargs):
         return self.target(type='program', **kwargs)
 
-    def objects(self, **kwargs):
+    def objects(self, type=None, **kwargs):
         return self.target(type='objects', **kwargs)
 
-    def export(self, **kwargs):
-        return self.target(type='export', **kwargs)
+    def export(self, type=None, **kwargs):
+        new_target = Target(type=None, export=True, **kwargs)
+        self.exports.append(new_target)
+        return new_target
 
     def configuration(self, path):
         self.configuration_paths.append(path)
@@ -148,11 +126,11 @@ class Project:
             if not json_conf:
                 raise Exception("Failed at loading " + path)
 
-            configs += Configuration.deserialize(json_conf)
+            configs.append(Configuration.unserialize_from_json(json_conf))
         return configs
 
     @staticmethod
-    def deserialize(json_object):
+    def unserialize_from_json(json_object):
         project = Project()
         for entry in json_object:
             key = ConditionExpression.clean(entry)
@@ -161,18 +139,21 @@ class Project:
                 project.configuration_paths = value
             elif key == 'dependencies':
                 for json_obj in value:
-                    project.deps.append(Dependency.deserialize(json_obj))
+                    project.deps.append(
+                        Dependency.unserialize_from_json(json_obj))
             elif key == 'targets':
                 for json_obj in value:
-                    project.targets.append(Target.deserialize(json_obj))
+                    project.targets.append(
+                        Target.unserialize_from_json(json_obj))
             elif key == 'exports':
                 for json_obj in value:
-                    target = Target.deserialize(json_obj)
-                    target.type = 'export'
+                    target = Target.unserialize_from_json(json_obj)
+                    target.export = True
                     project.exports.append(target)
             elif key == 'packages':
                 for json_obj in value:
-                    project.packages.append(Package.deserialize(json_obj))
+                    project.packages.append(
+                        Package.unserialize_from_json(json_obj))
             elif key == 'qt_enabled':
                 project.qt = value
             elif key == 'qt_path':

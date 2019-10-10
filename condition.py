@@ -1,34 +1,60 @@
 import helpers
+import json
+from condition_expression import ConditionExpression
 
 
-class Condition:
-    def __init__(self, variant=None, link=None, linking=None, runtime=None, osystem=None, arch=None, compiler=None, distribution=None, release=None, target_type=None):
+class Condition(object):
+    def __init__(self, variant=None, link=None, runtime=None, osystem=None, arch=None, compiler=None, distribution=None, release=None, type=None):
 
-        self.variant = helpers.parameter_to_list(variant) 	# debug, release
-        self.link = helpers.parameter_to_list(link) 	# shared, static
-        self.linking = helpers.parameter_to_list(linking) 	# shared, static
-        self.runtime = helpers.parameter_to_list(runtime) 	# shared, static
-        self.osystem = helpers.parameter_to_list(
-            osystem) 	# linux, windows, osx
-        self.arch = helpers.parameter_to_list(arch)			# x86, x64
-        self.compiler = helpers.parameter_to_list(compiler) 	# gcc, clang, msvc
+        # debug, release
+        self.variant = helpers.parameter_to_list(variant)
+
+        # shared, static
+        self.link = helpers.parameter_to_list(link)
+
+        # shared, static
+        self.runtime = helpers.parameter_to_list(runtime)
+
+        # linux, windows, osx
+        self.osystem = helpers.parameter_to_list(osystem)
+
+        # x86, x64
+        self.arch = helpers.parameter_to_list(arch)
+
+        # gcc, clang, msvc
+        self.compiler = helpers.parameter_to_list(compiler)
 
         # debian, ubuntu, etc.
         self.distribution = helpers.parameter_to_list(distribution)
+
         # jessie, stretch, etc.
         self.release = helpers.parameter_to_list(release)
-        self.target_type = helpers.parameter_to_list(target_type)
 
-        if not self.link and self.linking:
-            self.link = self.linking
+        # program, library
+        self.type = helpers.parameter_to_list(type)
 
     def __str__(self):
         return helpers.print_obj(self)
 
-    def __nonzero__(self):
-        if self.variant or self.link or self.linking or self.runtime or self.osystem or self.arch or self.compiler or self.distribution or self.release or self.target_type:
-            return True
-        return False
+    @property
+    def type_unique(self):
+        if not isinstance(self.type, list):
+            return self.type
+        elif len(self.type) == 1:
+            return self.type[0]
+        else:
+            raise Exception(
+                "Can't have a unique value from {}".format(self.type))
+
+    @property
+    def link_unique(self):
+        if not isinstance(self.link, list):
+            return self.link
+        elif len(self.link) == 1:
+            return self.link[0]
+        else:
+            raise Exception(
+                "Can't have a unique value from {}".format(self.link))
 
     @staticmethod
     def intersection_expression(cond1, cond2):
@@ -46,8 +72,6 @@ class Condition:
             condition.variant, self.variant)
         self.link = Condition.intersection_expression(
             condition.link, self.link)
-        self.linking = Condition.intersection_expression(
-            condition.linking, self.linking)
         self.runtime = Condition.intersection_expression(
             condition.runtime, self.runtime)
         self.osystem = Condition.intersection_expression(
@@ -60,15 +84,62 @@ class Condition:
             condition.distribution, self.distribution)
         self.release = Condition.intersection_expression(
             condition.release, self.release)
-        self.target_type = Condition.intersection_expression(
-            condition.target_type, self.target_type)
-        if not self.link and self.linking:
-            self.link = self.linking
+        self.type = Condition.intersection_expression(
+            condition.type, self.type)
 
     @staticmethod
-    def unserialize_json(json_obj):
-        cond = Condition()
-        z = cond.__dict__.copy()
-        z.update(json_obj)
-        cond.__dict__ = z
-        return cond
+    def serialized_members():
+        return [
+            'variant',
+            'link',
+            'runtime',
+            'osystem',
+            'arch',
+            'compiler',
+            'distribution',
+            'release',
+            'type'
+        ]
+
+    @staticmethod
+    def serialize_to_json(o):
+        json_obj = {}
+
+        for key in o.__dict__:
+            if key in Condition.serialized_members():
+                if o.__dict__[key]:
+                    json_obj[key] = o.__dict__[key]
+
+        return json_obj
+
+    def parse_entry(self, key, value):
+        entries = ConditionExpression.parse_members(key)
+        has_entry = False
+        for entry in entries:
+            raw_entry = ConditionExpression.remove_modifiers(entry)
+
+            if raw_entry in Condition.serialized_members():
+                if not isinstance(value, list):
+                    self.__dict__[raw_entry] += [value]
+                else:
+                    self.__dict__[raw_entry] += value
+                self.__dict__[raw_entry] = helpers.filter_unique(
+                    self.__dict__[raw_entry])
+                has_entry = True
+
+        return has_entry
+
+    def read_json(self, o):
+        has_entry = False
+
+        for entry in o:
+            if Condition.parse_entry(self, entry, o[entry]):
+                has_entry = True
+
+        return has_entry
+
+    @staticmethod
+    def unserialize_from_json(o):
+        condition = Condition()
+        condition.read_json(o)
+        return condition

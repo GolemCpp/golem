@@ -24,6 +24,7 @@ from project import Project
 from build_target import BuildTarget
 from dependency import Dependency
 import copy
+from target import TargetConfigurationFile
 
 class Context:
     def __init__(self, context):
@@ -34,7 +35,7 @@ class Context:
             json_object = None
             with io.open(self.project_path, 'r') as file:
                 json_object = byteify(json.load(file))
-            self.project = Project.deserialize(json_object)
+            self.project = Project.unserialize_from_json(json_object)
             self.module = None
 
         self.project_path = self.make_project_path("golem.py")
@@ -60,10 +61,6 @@ class Context:
             print('Found ' + str(deps_cache_file_json))
             self.load_dependencies_json(deps_cache_file_json)
             self.resolved_dependencies_path = deps_cache_file_json
-        elif os.path.exists(deps_cache_file_pickle):
-            print('Found ' + str(deps_cache_file_pickle))
-            self.load_dependencies_pickle(deps_cache_file_pickle)
-            self.resolved_dependencies_path = deps_cache_file_pickle
         else:
             print("No dependencies cache found")
 
@@ -102,23 +99,11 @@ class Context:
             self.save_dependencies_json(save_path)
             self.resolved_dependencies_path = save_path
 
-    def load_dependencies_pickle(self, path):
-        cache = None
-        with io.open(path, 'rb') as file:
-            cache = pickle.load(file)
-        self.project.deps_load(cache)
-
     def load_dependencies_json(self, path):
         cache = None
         with open(path, 'r') as fp:
             cache = byteify(json.load(fp))
         self.project.deps_load_json(cache)
-
-    def save_dependencies_pickle(self, path):
-        cache = self.project.deps_resolve()
-        make_directory(os.path.dirname(path))
-        with io.open(path, 'wb') as file:
-            pickle.dump(cache, file)
 
     def save_dependencies_json(self, path):
         cache = self.project.deps_resolve_json()
@@ -209,7 +194,7 @@ class Context:
         return 'shared'
         
     def link(self, dep = None):
-        return self.context.options.link if dep is None or not hasattr(dep, 'link') or dep.link is None else dep.link
+        return self.context.options.link if dep is None or not dep.link else dep.link_unique
 
     def distribution(self):
         if self.is_linux():
@@ -261,7 +246,15 @@ class Context:
         return variant
         
     def artifact_suffix_mode(self, config, is_shared):
-        if config.type == 'library':
+        is_library = not config.type or config.type_unique == 'library'
+        
+        if is_library:
+            if config.link:
+                if config.link_unique == 'shared':
+                    is_shared = True
+                elif config.link_unique == 'static':
+                    is_shared = False
+            
             if is_shared:
                 if self.is_windows():
                     return ['.dll', '.lib']
@@ -274,19 +267,18 @@ class Context:
                     return ['.lib']
                 else:
                     return ['.a']
-        elif config.type == 'program':
+        elif config.type_unique == 'program':
             if self.is_windows():
                 return ['.exe']
             else:
                 return []
-        elif config.type == 'objects':
+        elif config.type_unique == 'objects':
             return ['.o']
         else:
             return []
 
     def artifact_suffix(self, config, target):
-        has_link = hasattr(target, 'link') and target.link is not None
-        is_shared = self.is_shared() if not has_link else target.link == 'shared'
+        is_shared = self.is_shared() if not target.link else target.link_unique == 'shared'
         return self.artifact_suffix_mode(config, is_shared)
 
     def dev_artifact_suffix(self, is_shared=None):
@@ -307,8 +299,7 @@ class Context:
                 return '.a'
 
     def artifact_suffix_dev(self, target):
-        has_link = hasattr(target, 'link') and target.link is not None
-        is_shared = self.is_shared() if not has_link else target.link == 'shared'
+        is_shared = self.is_shared() if not target.link else target.link_unique == 'shared'
         return self.dev_artifact_suffix(is_shared)
 
     def is_debug(self):
@@ -749,10 +740,6 @@ class Context:
         path = self.get_dep_artifact_location(dep, cache_dir)
         return path + '-build'
 
-    def get_dep_artifact_pkl(self, dep, cache_dir):
-        path = self.get_dep_artifact_location(dep, cache_dir)
-        return os.path.join(path, dep.name + '.pkl')
-
     def get_dep_artifact_json(self, dep, cache_dir):
         path = self.get_dep_artifact_location(dep, cache_dir)
         return os.path.join(path, dep.name + '.json')
@@ -761,41 +748,28 @@ class Context:
         dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
         dep_path_include = self.get_dep_include_location(dep, cache_dir)
         
-        depdeps = []
-        depconfig = Configuration()
+        dependency_dependencies = []
+        dependency_configuration = Configuration()
 
         file_json_path = self.get_dep_artifact_json(dep, cache_dir)
-        if os.path.exists(file_json_path):
-            with open(file_json_path, 'rb') as file_json:
-                dep_export_ctx = byteify(json.load(file_json))
-                for dep_json in dep_export_ctx[0]:
-                    dep_obj = Dependency()
-                    dep_obj.__dict__ = dep_json
-                    depdeps.append(dep_obj)
-                depconfig = Configuration.unserialize_json(dep_export_ctx[1])
-        else:
-            filepkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
-            with open(filepkl_path, 'rb') as filepkl:
-                dep_export_ctx = pickle.load(filepkl)
-                depdeps = None
-                if isinstance(dep_export_ctx, Configuration):
-                    depconfig = dep_export_ctx
-                else:
-                    depdeps = dep_export_ctx[0]
-                    depconfig = dep_export_ctx[1]
-
-        depconfig.includes = []
+        with open(file_json_path, 'r') as file_json:
+            dep_export_ctx = byteify(json.load(file_json))
+            target_configuration_file = TargetConfigurationFile.unserialize_from_json(dep_export_ctx)
+            dependency_dependencies = target_configuration_file.dependencies
+            dependency_configuration = target_configuration_file.configuration
         
         if config is not None:
+            dependency_configuration.includes = []
+            
             config_targets = copy.deepcopy(config.targets)
-            config.merge(self, [depconfig])
+            config.merge(self, [dependency_configuration])
             config.targets = config_targets
 
             if dep.targets:
                 for target in dep.targets:
-                    if not target in depconfig.targets:
+                    if not target in dependency_configuration.targets:
                         raise RuntimeError("Cannot find target: " + target)
-                depconfig.targets = dep.targets
+                dependency_configuration.targets = dep.targets
                 
             if enable_env:
                 # use cache :)
@@ -804,24 +778,24 @@ class Context:
                 else:
                     self.context.env['CXXFLAGS_' + dep.name]			= ['/external:I' + dep_path_include]
                 self.context.env['ISYSTEM_' + dep.name]				= self.list_include([dep_path_include])
-                if not depconfig.header_only:
+                if not dependency_configuration.header_only:
                     is_static = self.is_static()
-                    if dep.link is not None:
-                        is_static = dep.link == 'static'
+                    if dep.link:
+                        is_static = dep.link_unique == 'static'
                     if is_static:
                         self.context.env['STLIBPATH_' + dep.name]			= self.list_include([dep_path_build])
                         if self.is_darwin():
-                            self.context.env['LDFLAGS_' + dep.name]			= [os.path.join(dep_path_build, 'lib' + libname + self.artifact_suffix_dev(dep)) for libname in self.make_target_name_from_context(depconfig, dep)]
+                            self.context.env['LDFLAGS_' + dep.name]			= [os.path.join(dep_path_build, 'lib' + libname + self.artifact_suffix_dev(dep)) for libname in self.make_target_name_from_context(dependency_configuration, dep)]
                         else:
-                            self.context.env['STLIB_' + dep.name]			= self.make_target_name_from_context(depconfig, dep)
+                            self.context.env['STLIB_' + dep.name]			= self.make_target_name_from_context(dependency_configuration, dep)
                     else:
                         self.context.env['LIBPATH_' + dep.name]			= self.list_include([dep_path_build])
-                        self.context.env['LIB_' + dep.name]			= self.make_target_name_from_context(depconfig, dep)
+                        self.context.env['LIB_' + dep.name]			= self.make_target_name_from_context(dependency_configuration, dep)
             
             config.use.append(dep.name)
 
-        if depdeps is not None:
-            self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + depdeps)).values()
+        if dependency_dependencies is not None:
+            self.project.deps = dict((obj.name, obj) for obj in (self.project.deps + dependency_dependencies)).values()
 
         out_path = make_directory(self.make_out_path())
         expected_files = self.get_expected_files(config, dep, cache_dir, has_artifacts)
@@ -849,6 +823,7 @@ class Context:
         # NOTE: Can't use ['--depth', '1'] because of git describe --tags
 
         os.makedirs(repo_path)
+        print("Cloning repository {} into {}".format(dep.repository, repo_path))
         helpers.run_task(['git', 'clone', '--recursive', '--branch', version_branch, '--', dep.repository, '.'], cwd=repo_path)
 
     def make_repo_ready(self, dep, cache_dir):
@@ -861,7 +836,6 @@ class Context:
 
         return repo_path
 
-
     def run_dep_command(self, dep, cache_dir, command):
         dep_path = self.get_dep_location(dep, cache_dir)
         repo_path = self.make_repo_ready(dep, cache_dir)
@@ -872,7 +846,7 @@ class Context:
             'configure',
             '--targets=' + dep.name,
             '--runtime=' + self.context.options.runtime,
-            '--link=' + (self.context.options.link if dep.link is None else dep.link),
+            '--link=' + (self.context.options.link if not dep.link else dep.link_unique),
             '--arch=' + self.context.options.arch,
             '--variant=' + self.context.options.variant,
             '--export=' + dep_path,
@@ -896,20 +870,6 @@ class Context:
             ], cwd=repo_path)
 
 
-    def can_open_pkl(self, dep, cache_dir):
-        pkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
-        return os.path.exists(pkl_path)
-
-    def open_pkl(self, dep, cache_dir):
-        pkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
-        return open(pkl_path, 'r')
-
-    def read_pkl(self, dep, cache_dir):
-        if self.can_open_pkl(dep, cache_dir):
-            with self.open_pkl(dep, cache_dir) as filepkl:
-                return pickle.load(filepkl)
-        return None
-
     def can_open_json(self, dep, cache_dir):
         json_path = self.get_dep_artifact_json(dep, cache_dir)
         return os.path.exists(json_path)
@@ -925,17 +885,10 @@ class Context:
         return None
 
     def read_dep_configs(self, dep, cache_dir):
-        if self.can_open_json(dep, cache_dir):
-            dep_json = self.read_json(dep, cache_dir)
-            if dep_json is None:
-                return None
-            return Configuration.unserialize_json(dep_json[1])
-        else:
-            dep_pkl = self.read_pkl(dep, cache_dir)
-            if dep_pkl is None:
-                return None
-
-            return dep_pkl[1]
+        dep_json = self.read_json(dep, cache_dir)
+        if dep_json is None:
+            return None
+        return TargetConfigurationFile.unserialize_from_json(dep_json).configuration
     
     def make_target_name_from_context(self, config, target):
 
@@ -944,7 +897,7 @@ class Context:
         else:
             target_name = target.name + self.variant_suffix()
 
-            if target.type == 'library':
+            if target.type_unique == 'library':
                 if self.is_windows():
                     target_name = 'lib' + target_name
 
@@ -999,8 +952,7 @@ class Context:
                     raise RuntimeError("Cannot find target: " + target)
             dep_configs.targets = dep.targets
         
-        config = Configuration()
-        config.merge(self, [dep_configs])
+        config = dep.merge_copy(self, [dep_configs])
         return expected_files + self.make_target_from_context(config, dep)
 
     def is_header_only(self, dep, cache_dir):
@@ -1020,8 +972,7 @@ class Context:
         cache_dir = self.find_dep_cache_dir(dep, cache_conf)
 
         json_path = self.get_dep_artifact_json(dep, cache_dir)
-        pkl_path = self.get_dep_artifact_pkl(dep, cache_dir)
-        if not os.path.exists(json_path) and command == "build" and not os.path.exists(pkl_path):
+        if not os.path.exists(json_path) and command == "build":
             raise RuntimeError("Error: run golem resolve first! Can't find {}".format(json_path))
 
         has_artifacts = self.has_artifacts(command)
@@ -1039,7 +990,6 @@ class Context:
             self.run_dep_command(dep, cache_dir, command)
 
         self.use_dep(config, dep, cache_dir, enable_env, has_artifacts)
-
 
     def is_in_dep_artifact_in_cache_dir(self, dep, cache_dir, expects_files):
         path = self.get_dep_artifact_location(dep, cache_dir)
@@ -1198,15 +1148,15 @@ class Context:
 
     def build_target_gather_config(self, target, static_configs):
 
-        config = Configuration()
+        config = target.merge_configs(self)
 
         config.merge(self, static_configs)
-        config.merge(self, target.configs)
 
         for use_name in config.use:
             for export in self.project.exports:
                 if use_name == export.name:
-                    config.merge(self, export.configs)
+                    export_config = self.merge_export_config_against_build_condition(export)
+                    config.merge(self, [export_config])
 
         self.recursively_link_dependencies(config)
         
@@ -1258,7 +1208,7 @@ class Context:
             version_short = None
 
         target_type = None
-        if target.type == 'program' and self.is_android():
+        if target.type_unique == 'program' and self.is_android():
             target_type = 'library'
         else:
             target_type = target.type
@@ -1383,23 +1333,28 @@ class Context:
 
         build_fun = None
 
-        if target.type == 'program' and self.is_android():
+        if target.type_unique == 'program' and self.is_android():
             build_fun = self.context.shlib
-        elif target.type == 'library':
-            if self.is_shared():
+        elif target.type_unique == 'library':
+            if target.link:
+                if target.link_unique == 'shared':
+                    build_fun = self.context.shlib
+                elif target.link_unique == 'static':
+                    build_fun = self.context.stlib
+                else:   
+                    raise Exception("ERROR: Bad link option {}".format(target.link_unique))
+            elif self.is_shared():
                 build_fun = self.context.shlib
             elif self.is_static():
                 build_fun = self.context.stlib
             else:
-                print("ERROR: no options found")
-                return
-        elif target.type == 'program':
+                raise Exception("ERROR: Bad link option {}".format(self.context.options.link))
+        elif target.type_unique == 'program':
             build_fun = self.context.program
-        elif target.type == 'objects':
+        elif target.type_unique == 'objects':
             build_fun = self.context.objects
         else:
-            print("ERROR: no options found")
-            return
+            raise Exception("ERROR: Bad target type {}".format(target.type_unique))
 
         build_fun(
             defines = build_target.defines,
@@ -1457,13 +1412,9 @@ class Context:
             
     def call_build_target(self, build_target_fun):
         static_configs = self.project.read_configurations(self)
-
-        requested_targets = self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.project.targets]
         
-        for targetname in requested_targets:
-            for target in self.project.targets:
-                if targetname == target.name:
-                    build_target_fun(target, static_configs)
+        for target in self.project.targets:
+            build_target_fun(target, static_configs)
 
     def cppcheck(self):
         self.call_build_target(self.cppcheck_target)
@@ -1687,15 +1638,15 @@ class Context:
 
     def save_options(self):
         self.context.env.OPTIONS = json.dumps(self.context.options.__dict__)
-        if hasattr(self.context.options, 'targets'):
-            self.context.env.TARGETS = self.context.options.targets
     
     def restore_options_env(self, env):
         def ascii_encode_dict(data):
             ascii_encode = lambda x: x.encode('ascii') if isinstance(x, unicode) else x
             return dict(map(ascii_encode, pair) for pair in data.items())
         options = json.loads(env.OPTIONS, object_hook=ascii_encode_dict)
-        if hasattr(self.context, 'targets') and self.context.targets:
+        if not self.context.targets:
+            self.context.targets = options['targets']
+        else:
             options['targets'] = self.context.targets
         return options
     
@@ -2161,13 +2112,19 @@ class Context:
         cache_dir = self.find_dep_cache_dir(dep, self.make_cache_conf())
         return self.get_dep_include_location(dep, cache_dir)
 
+    def merge_export_config_against_build_condition(self, export, exporting=False):
+        found_build_target = None
+        for build_target in self.project.targets:
+            if build_target.name == export.name:
+                found_build_target = build_target
+        return export.merge_configs(self, condition=found_build_target, exporting=exporting)
+
     def export(self):
         targets = self.get_asked_exports()
         for export in self.project.exports:
             if export.name in targets:
-                
-                config = Configuration()
-                config.merge(self, export.configs, exporting = True)
+
+                config = self.merge_export_config_against_build_condition(export, exporting=True)
 
                 outpath = self.context.options.export
 
@@ -2198,13 +2155,13 @@ class Context:
         configs = dict()
         for target in targets:
 
-            config = Configuration()
-            config.merge(self, target.configs, exporting=True)
+            config = target.merge_configs(self, exporting=True)
 
             for use_name in config.use:
                 for export in self.project.exports:
                     if use_name == export.name:
-                        config.merge(self, export.configs, exporting=True)
+                        export_config = self.merge_export_config_against_build_condition(export)
+                        config.merge(self, [export_config], exporting=True)
 
             configs[target.name] = config
         return configs
@@ -2226,7 +2183,7 @@ class Context:
                 dep.configure(self, config)
             self.recursively_apply_to_deps(config, callback)
             
-            if target.type == 'export' and self.context.options.export:
+            if target.export and self.context.options.export:
                 for project_target in self.project.targets:
                     if target.name == project_target.name:
                         self.resolve_target_deps(project_target)
@@ -2252,7 +2209,7 @@ class Context:
         configs = self.resolve_configs_recursively(targets)
 
         master_config = Configuration()
-        for target_name, config in configs.items():
+        for _, config in configs.items():
             master_config.merge(self, [config], exporting=True)
         return master_config
 
@@ -2276,11 +2233,10 @@ class Context:
             outpath_directory = os.path.dirname(outpath_target)
             if not os.path.exists(outpath_directory):
                 os.makedirs(outpath_directory)
-            
+
             with open(outpath_target, 'w') as output:
-                export_deps = [obj for n in config.deps for obj in self.project.deps if obj.name == n]
-                export_ctx = [export_deps, config]
-                json.dump(export_ctx, output, default=lambda o: o.__dict__,
+                target_configuration_file = TargetConfigurationFile(project=self.project, configuration=config)
+                json.dump(target_configuration_file, output, default=TargetConfigurationFile.serialize_to_json,
                           sort_keys=True, indent=4)
 
     def get_targets_or_exports(self):

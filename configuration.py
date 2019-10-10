@@ -1,15 +1,14 @@
 import helpers
 from condition import Condition
 from condition_expression import ConditionExpression
+from copy import deepcopy
 
 
-class Configuration:
+class Configuration(Condition):
     def __init__(self,
-                 target=None,
                  targets=None,
                  static_targets=None,
                  shared_targets=None,
-                 type=None,
                  defines=None,
                  includes=None,
                  source=None,
@@ -44,16 +43,12 @@ class Configuration:
                  library_cxxflags=None,
                  library_linkflags=None,
                  **kwargs):
-        self.condition = Condition(**kwargs)
+        super(Configuration, self).__init__(**kwargs)
 
-        self.type = 'library' if type is None else type
         self.packages_tool = '' if packages_tool is None else packages_tool
         self.header_only = False if header_only is None else header_only
 
         self.targets = helpers.parameter_to_list(targets)
-
-        if target is not None and not self.targets:
-            self.targets = [target]
 
         self.static_targets = helpers.parameter_to_list(static_targets)
         self.shared_targets = helpers.parameter_to_list(shared_targets)
@@ -96,16 +91,13 @@ class Configuration:
         self.use = helpers.parameter_to_list(use)
         self.uselib = helpers.parameter_to_list(uselib)
 
+        self.program = []
+        self.library = []
+
+        self.when_configs = []
+
     def __str__(self):
         return helpers.print_obj(self)
-
-    @property
-    def target(self):
-        return '' if not self.targets else self.targets[0]
-
-    @target.setter
-    def target(self, value):
-        self.targets = [value] if value else []
 
     def append(self, config):
         if config.targets:
@@ -215,8 +207,14 @@ class Configuration:
             self.uselib += config.uselib
             self.uselib = helpers.filter_unique(self.uselib)
 
-    def merge(self, context, configs, exporting=False, target_type=None):
-        def evaluate_condition(expected, conditions):
+        if hasattr(config, 'program'):
+            self.program += config.program
+
+        if hasattr(config, 'library'):
+            self.library += config.library
+
+    def merge(self, context, configs, exporting=False, condition=None):
+        def evaluate_condition(expected, conditions, predicate=lambda a, b: a == b):
             conditions = helpers.parameter_to_list(conditions)
             for expression in conditions:
                 expression = ConditionExpression.clean(expression)
@@ -267,7 +265,7 @@ class Configuration:
                                         i)
                                     has_negation = ConditionExpression.has_negation(
                                         i)
-                                    if expected != raw_value if has_negation else expected == raw_value:
+                                    if (not predicate(expected, raw_value) if has_negation else predicate(expected, raw_value)):
                                         i_result = True
                                 result = result and i_result
                         return result
@@ -277,27 +275,77 @@ class Configuration:
 
             return False
 
-        for c in configs:
-            if not hasattr(c.condition, 'target_type'):
-                c.condition.target_type = []
-            if not hasattr(c.condition, 'link'):
-                c.condition.link = []
+        for c_tmp in configs:
+            c = c_tmp.merge_configs(context=context, exporting=exporting, condition=condition)
 
-            if (	(not c.condition.variant or evaluate_condition(context.variant(), c.condition.variant))
-                    and (not c.condition.link or evaluate_condition(context.link(), c.condition.link))
-                    and (not c.condition.linking or evaluate_condition(context.link(), c.condition.linking))
-                    and (not c.condition.runtime or evaluate_condition(context.runtime(), c.condition.runtime))
-                    and (not c.condition.osystem or evaluate_condition(context.osname(), c.condition.osystem))
-                    and (not c.condition.arch or evaluate_condition(context.arch(), c.condition.arch))
-                    and (not c.condition.compiler or evaluate_condition(context.compiler_name(), c.condition.compiler))
-                    and (not c.condition.distribution or evaluate_condition(context.distribution(), c.condition.distribution))
-                    and (not c.condition.target_type or target_type is None or evaluate_condition(target_type, c.condition.target_type))
-                    and (not c.condition.release or evaluate_condition(context.release(), c.condition.release))):
-                self.append(c)
+            expected_variant = self.variant
+            expected_link = self.link
+            expected_runtime = self.runtime
+            expected_osystem = self.osystem
+            expected_arch = self.arch
+            expected_compiler = self.compiler
+            expected_distribution = self.distribution
+            expected_release = self.release
+            expected_type = self.type
 
-                if exporting:
-                    if not self.header_only and c.header_only is not None:
-                        self.header_only = c.header_only
+            if condition is not None:
+                if not expected_variant: expected_variant = condition.variant
+                if not expected_link: expected_link = condition.link
+                if not expected_runtime: expected_runtime = condition.runtime
+                if not expected_osystem: expected_osystem = condition.osystem
+                if not expected_arch: expected_arch = condition.arch
+                if not expected_compiler: expected_compiler = condition.compiler
+                if not expected_distribution: expected_distribution = condition.distribution
+                if not expected_release: expected_release = condition.release
+                if not expected_type: expected_type = condition.type
+
+            if not expected_variant: expected_variant = context.variant()
+            if not expected_link: expected_link = context.link()
+            if not expected_runtime: expected_runtime = context.runtime()
+            if not expected_osystem: expected_osystem = context.osname()
+            if not expected_arch: expected_arch = context.arch()
+            if not expected_compiler: expected_compiler = context.compiler_name()
+            if not expected_distribution: expected_distribution = context.distribution()
+            if not expected_release: expected_release = context.release()
+
+            other_type = c.type
+
+            if (other_type and expected_type and not evaluate_condition(expected_type, other_type)):
+                continue
+
+            if (	(c.variant and not evaluate_condition(expected_variant, c.variant))
+                    or (c.link and not evaluate_condition(expected_link, c.link))
+                    or (c.runtime and not evaluate_condition(expected_runtime, c.runtime))
+                    or (c.osystem and not evaluate_condition(expected_osystem, c.osystem))
+                    or (c.arch and not evaluate_condition(expected_arch, c.arch))
+                    or (c.compiler and not evaluate_condition(expected_compiler, c.compiler))
+                    or (c.distribution and not evaluate_condition(expected_distribution, c.distribution))
+                    or (c.release and not evaluate_condition(expected_release, c.release))):
+                continue
+
+            self.append(c)
+
+            if exporting:
+                if not self.header_only and c.header_only is not None:
+                    self.header_only = c.header_only
+
+    def when(self, **kwargs):
+        config = Configuration(**kwargs)
+        self.when_configs.append(config)
+        return config
+
+    def merge_configs(self, context, exporting=False, condition=None):
+        config = Configuration.copy(self)
+        config.merge(context=context, configs=self.when_configs,
+                     exporting=exporting, condition=condition)
+        config.when_configs = []
+        return config
+
+    def merge_copy(self, context, configs, exporting=False, condition=None):
+        config = Configuration.copy(self)
+        config.merge(context=context, configs=configs,
+                     exporting=exporting, condition=condition)
+        return config
 
     def parse_entry(self, key, value):
         entries = ConditionExpression.parse_members(key)
@@ -305,153 +353,25 @@ class Configuration:
         for entry in entries:
             raw_entry = ConditionExpression.remove_modifiers(entry)
 
-            if raw_entry == "defines":
-                self.defines += value
+            if raw_entry in Configuration.serialized_members_list():
+                self.__dict__[raw_entry] += value
+                self.__dict__[raw_entry] = helpers.filter_unique(
+                    self.__dict__[raw_entry])
                 has_entry = True
-            elif raw_entry == "cxxflags":
-                self.cxxflags += value
+            elif raw_entry in Configuration.serialized_members():
+                self.__dict__[raw_entry] = value
                 has_entry = True
-            elif raw_entry == "linkflags":
-                self.linkflags += value
-                has_entry = True
-            elif raw_entry == "ldflags":
-                self.ldflags += value
-                has_entry = True
-            elif raw_entry == "cppflags":
-                self.cppflags += value
-                has_entry = True
-            elif raw_entry == "cflags":
-                self.cflags += value
-                has_entry = True
-            elif raw_entry == "lib":
-                self.lib += value
-                has_entry = True
-            elif raw_entry == "libpath":
-                self.libpath += value
-                has_entry = True
-            elif raw_entry == "stlib":
-                self.stlib += value
-                has_entry = True
-            elif raw_entry == "stlibpath":
-                self.stlibpath += value
-                has_entry = True
-            elif raw_entry == "rpath":
-                self.rpath += value
-                has_entry = True
-            elif raw_entry == "includes":
-                self.includes += value
-                has_entry = True
-            elif raw_entry == "source":
-                self.source += value
-                has_entry = True
-            elif raw_entry == "cxxdeps":
-                self.cxxdeps += value
-                has_entry = True
-            elif raw_entry == "ccdeps":
-                self.ccdeps += value
-                has_entry = True
-            elif raw_entry == "linkdeps":
-                self.linkdeps += value
-                has_entry = True
-            elif raw_entry == "framework":
-                self.framework += value
-                has_entry = True
-            elif raw_entry == "frameworkpath":
-                self.frameworkpath += value
-                has_entry = True
-            elif raw_entry == "dlls":
-                self.dlls += value
-                has_entry = True
-            elif raw_entry == "moc":
-                self.moc += value
-                has_entry = True
-            elif raw_entry == "system":
-                self.system += value
-                has_entry = True
-            elif raw_entry == "packages":
-                self.packages += value
-                has_entry = True
-            elif raw_entry == "packages_dev":
-                self.packages_dev += value
-                has_entry = True
-            elif raw_entry == "deps":
-                self.deps += value
-                has_entry = True
-            elif raw_entry == "features":
-                self.features += value
-                has_entry = True
-            elif raw_entry == "use":
-                self.use += value
-                has_entry = True
-            elif raw_entry == "uselib":
-                self.uselib += value
-                has_entry = True
-            elif raw_entry == "targets":
-                self.targets += value
-                has_entry = True
-            elif raw_entry == "static_targets":
-                self.static_targets += value
-                has_entry = True
-            elif raw_entry == "shared_targets":
-                self.shared_targets += value
-                has_entry = True
-            elif raw_entry == "type":
-                self.type = value
-                has_entry = True
-            elif raw_entry == "packages_tool":
-                self.packages_tool = value
-                has_entry = True
-            elif raw_entry == "header_only":
-                self.header_only = value
-                has_entry = True
-            elif raw_entry == "program_cxxflags":
-                self.program_cxxflags = value
-                has_entry = True
-            elif raw_entry == "program_linkflags":
-                self.program_linkflags = value
-                has_entry = True
-            elif raw_entry == "library_cxxflags":
-                self.library_cxxflags = value
-                has_entry = True
-            elif raw_entry == "library_linkflags":
-                self.library_linkflags = value
-                has_entry = True
-
-            elif raw_entry == "arch":
-                self.condition.arch += value
-            elif raw_entry == "variant":
-                self.condition.variant += value
-            elif raw_entry == "compiler":
-                self.condition.compiler += value
-            elif raw_entry == "osystem":
-                self.condition.osystem += value
-            elif raw_entry == "link":
-                self.condition.link += value
-            elif raw_entry == "linking":
-                self.condition.linking += value
-            elif raw_entry == "runtime":
-                self.condition.runtime += value
-            elif raw_entry == "distribution":
-                self.condition.distribution += value
-            elif raw_entry == "release":
-                self.condition.release += value
-
-            if not self.condition.link and self.condition.linking:
-                self.condition.link = self.condition.linking
 
         return has_entry
 
     def parse_condition_entry(self, key, value):
-        config = Configuration()
         raw_entry = ConditionExpression.clean(key)
-        raw_entry = ConditionExpression.remove_modifiers(key)
-
+        configs = []
         if raw_entry == "when":
-            configs = Configuration.deserialize(value)
-            for config in configs:
-                config.condition.intersection(self.condition)
-            return configs
-        return []
+            for config_tmp in value:
+                config = Configuration.unserialize_from_json(config_tmp)
+                configs.append(config)
+        return configs
 
     def parse_special_entry(self, key, value):
         entries = ConditionExpression.parse_conditions(key)
@@ -487,39 +407,113 @@ class Configuration:
                 condition.release.append(entry)
                 is_empty = False
             elif raw_entry in ['program', 'library']:
-                condition.target_type.append(entry)
+                condition.type.append(entry)
                 is_empty = False
 
-        if not is_empty:
-            configs = Configuration.deserialize(value)
-            for config in configs:
-                config.condition.intersection(self.condition)
-                config.condition.intersection(condition)
-            return configs
-        return []
-
-    @staticmethod
-    def deserialize(json_obj):
         configs = []
-        config = Configuration()
-        is_empty = True
-        for entry in json_obj:
-            if config.parse_entry(entry, json_obj[entry]):
-                is_empty = False
-        for entry in json_obj:
-            configs += config.parse_condition_entry(entry, json_obj[entry])
-        for entry in json_obj:
-            configs += config.parse_special_entry(entry, json_obj[entry])
         if not is_empty:
-            configs = [config] + configs
+            config = Configuration.unserialize_from_json(value)
+            config.intersection(condition)
+            configs.append(config)
         return configs
+        
+    @staticmethod
+    def serialized_members():
+        return [
+                'packages_tool',
+                'header_only'
+            ]
 
     @staticmethod
-    def unserialize_json(json_obj):
-        config = Configuration()
-        z = config.__dict__.copy()
-        z.update(json_obj)
-        config.__dict__ = z
+    def serialized_members_list():
+        return [
+                'targets',
 
-        config.condition = Condition.unserialize_json(config.condition)
-        return config
+                'static_targets',
+                'shared_targets',
+
+                'dlls',
+
+                'defines',
+                'includes',
+                'source',
+                'moc',
+
+                'lib',
+                'libpath',
+                'stlib',
+                'stlibpath',
+                'rpath',
+                'cflags',
+                'cppflags',
+                'cxxdeps',
+                'ccdeps',
+                'linkdeps',
+                'framework',
+                'frameworkpath',
+
+                'program_cxxflags',
+                'program_linkflags',
+                'library_cxxflags',
+                'library_linkflags',
+
+                'cxxflags',
+                'linkflags',
+                'ldflags',
+                'system',
+
+                'packages',
+                'packages_dev',
+
+                'features',
+                'deps',
+                'use',
+                'uselib'
+            ]
+
+    @staticmethod
+    def serialize_to_json(o):
+        json_obj = Condition.serialize_to_json(o)
+
+        for key in o.__dict__:
+            if key in Configuration.serialized_members():
+                if o.__dict__[key]:
+                    json_obj[key] = o.__dict__[key]
+
+        for key in o.__dict__:
+            if key in Configuration.serialized_members_list():
+                if o.__dict__[key]:
+                    json_obj[key] = o.__dict__[key]
+
+        if o.when_configs:
+            json_obj['when'] = [Configuration.serialize_to_json(obj) for obj in o.when_configs]
+
+        return json_obj
+
+    def read_json(self, o):
+        Condition.read_json(self, o)
+
+        for entry in o:
+            self.parse_entry(entry, o[entry])
+        
+        configs = []
+
+        for entry in o:
+            configs += self.parse_condition_entry(entry, o[entry])
+
+        for entry in o:
+            configs += self.parse_special_entry(entry, o[entry])
+
+        self.when_configs = configs
+
+    @staticmethod
+    def unserialize_from_json(o):
+        configuration = Configuration()
+        configuration.read_json(o)
+        return configuration
+
+    def copy(self):
+        config_tmp = Configuration()
+        for key in config_tmp.__dict__:
+            config_tmp.__dict__[key] = self.__dict__[key]
+        return deepcopy(config_tmp)

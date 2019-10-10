@@ -33,42 +33,70 @@ def build(context):
 def export(context):
     ctx = get_context(context)
     ctx.environment()
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.export()
 
 
 def resolve(context):
     ctx = get_context(context)
     ctx.environment(resolve_dependencies=True)
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.resolve_recursively()
 
 
 def package(context):
     ctx = get_context(context)
     ctx.environment()
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.package()
 
 
 def requirements(context):
     ctx = get_context(context)
     ctx.environment()
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.requirements()
 
 
 def dependencies(context):
     ctx = get_context(context)
     ctx.environment()
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.dependencies()
 
 
 def cppcheck(context):
     ctx = get_context(context)
     ctx.environment()
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.cppcheck()
 
 
 def clang_tidy(context):
     ctx = get_context(context)
     ctx.environment()
+
+    # Disable targets as there is no task generator associated with this command for the moment
+    ctx.context.targets = None
+
     ctx.clang_tidy()
 
 

@@ -133,6 +133,7 @@ def copy_file(source_path, destination_path):
 
 
 def run_task(args, cwd=None, **kwargs):
+    print("Run {}".format(' '.join(args)))
     process = subprocess.Popen(args, cwd=cwd, shell=sys.platform.startswith(
         'win32'), **kwargs)
     ret = process.wait()

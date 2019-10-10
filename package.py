@@ -17,7 +17,7 @@ class Package:
         return helpers.print_obj(self)
 
     @staticmethod
-    def deserialize(json_object):
+    def unserialize_from_json(json_object):
         package = Package()
         for entry in json_object:
             key = ConditionExpression.clean(entry)
