@@ -2380,8 +2380,6 @@ class Context:
 
         # Copy systemd unit if any
 
-        # Strip binaries, libraries, archives
-
         print("Prepare package")
         package_directory = make_directory(package_directory)
 
@@ -2391,6 +2389,14 @@ class Context:
 
         print("Copying " + str(self.make_out_path()) + " to " + str(bin_directory))
         copy_tree(self.make_out_path(), bin_directory)
+
+        # Strip binaries, libraries, archives
+
+        if self.is_release():
+            artifacts = self.find_artifacts(bin_directory, recursively=True)
+            for artifact in artifacts:
+                print("Stripping {}".format(artifact))
+                helpers.run_task(['strip', artifact], cwd=bin_directory)
 
         debian_directory = make_directory(package_directory, 'DEBIAN')
 
