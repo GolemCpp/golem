@@ -1254,7 +1254,7 @@ class Context:
             use				= config.use + config.features,
             uselib			= config.uselib,
             moc 			= listmoc,
-            features 		= 'qt5' if project_qt else '',
+            features 		= ['qt5'] if project_qt else [],
             install_path 	= None,
             vnum			= version_short,
             depends_on		= version_source,
