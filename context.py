@@ -764,8 +764,10 @@ class Context:
             dependency_configuration.includes = []
             
             config_targets = copy.deepcopy(config.targets)
+            config_dlls = copy.deepcopy(config.dlls)
             config.merge(self, [dependency_configuration])
             config.targets = config_targets
+            config.dlls = config_dlls
 
             if dep.targets:
                 for target in dep.targets:
