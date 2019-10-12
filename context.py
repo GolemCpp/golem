@@ -1039,7 +1039,10 @@ class Context:
 
     def get_build_path(self):
         # return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
-        return os.path.join(os.getcwd(), 'obj')
+        return self.make_golem_path('obj')
+
+    def make_golem_path(self, path):
+        return os.path.join(os.getcwd(), path)
 
     def make_build_path(self, path):
         return os.path.join(self.get_build_path(), path)
@@ -1313,7 +1316,7 @@ class Context:
                         "intelliSenseMode": "msvc-x64" if Context.is_windows() else "clang-x64",
                         "includePath": [],
                         "defines": [],
-                        "compileCommands": self.make_build_path("compile_commands.json"),
+                        "compileCommands": self.make_vscode_path("compile_commands.json"),
                         "browse": {
                             "path": [],
                             "limitSymbolsToIncludedHeaders": True,
@@ -1326,12 +1329,20 @@ class Context:
             with open(properties_path, 'w') as outfile:
                 json.dump(data, outfile, indent=4, sort_keys=True)
 
+    def get_vscode_path(self):
+        return self.make_golem_path('vscode')
+
+    def make_vscode_path(self, path):
+        return os.path.join(self.get_vscode_path(), path)
 
     def build_target(self, target, static_configs):
 
         build_target = self.build_target_gather_config(target, static_configs)
 
-        compiler_commands_path = self.make_build_path("compile_commands.json")
+        vscode_dir = self.get_vscode_path()
+        helpers.make_directory(vscode_dir)
+
+        compiler_commands_path = self.make_vscode_path('compile_commands.json')
         self.generate_compiler_commands(build_target, compiler_commands_path)
         self.generate_vscode_config(compiler_commands_path)
 
@@ -1421,16 +1432,20 @@ class Context:
             build_target_fun(target, static_configs)
 
     def cppcheck(self):
+        cppcheck_dir = self.make_golem_path("cppcheck")
+        if os.path.exists(cppcheck_dir):
+            helpers.remove_tree(self, cppcheck_dir)
+
         self.call_build_target(self.cppcheck_target)
 
     def clang_tidy_target(self, target, static_configs):
 
         build_target = self.build_target_gather_config(target, static_configs)
 
-        clang_tidy_dir = self.make_build_path("clang-tidy")
+        clang_tidy_dir = self.make_golem_path('clang-tidy')
         helpers.make_directory(clang_tidy_dir)
 
-        compiler_commands_path = os.path.join(clang_tidy_dir, "compile_commands.json")
+        compiler_commands_path = os.path.join(clang_tidy_dir, 'compile_commands.json')
         self.generate_compiler_commands(build_target, compiler_commands_path)
 
         command = [
@@ -1445,6 +1460,10 @@ class Context:
 
 
     def clang_tidy(self):
+        clang_tidy_dir = self.make_golem_path('clang-tidy')
+        if os.path.exists(clang_tidy_dir):
+            helpers.remove_tree(self, clang_tidy_dir)
+
         self.call_build_target(self.clang_tidy_target)
         
     def run_command_with_msvisualcpp(self, command, cwd):
