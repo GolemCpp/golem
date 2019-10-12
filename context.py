@@ -1427,8 +1427,17 @@ class Context:
             
     def call_build_target(self, build_target_fun):
         static_configs = self.project.read_configurations(self)
+
+        targets_to_process = []
+
+        if self.context.options.export:
+            exports_to_process = self.get_targets_to_process(source_targets=self.project.exports)
+            targets_to_process = self.find_corresponding_targets_to_exports(exports=exports_to_process)
+
+        else:
+            targets_to_process = self.get_targets_to_process(source_targets=self.project.targets)
         
-        for target in self.project.targets:
+        for target in targets_to_process:
             build_target_fun(target, static_configs)
 
     def cppcheck(self):
@@ -2235,51 +2244,73 @@ class Context:
         for _, config in configs.items():
             master_config.merge(self, [config], exporting=True)
         return master_config
+    
+    def find_corresponding_targets_to_exports(self, exports):
+        targets = []
+        targets_done = []
+        for export in exports:
+            for target in self.project.targets:
+                if target.name == export.name and target.name not in targets_done:
+                    targets.append(target)
+                    targets_done.append(target.name)
+        return targets
 
     def resolve_recursively(self):
-        targets_to_process = self.get_targets_to_process()
-        configs = self.resolve_configs_recursively(targets_to_process)
+        if self.context.options.export:
+            exports_to_process = self.get_targets_to_process(source_targets=self.project.exports)
+            configs = self.resolve_configs_recursively(exports_to_process)
 
-        outpath = self.context.options.export
-        outpath_lib = os.path.join(outpath, self.build_path())
-        if not os.path.exists(outpath_lib):
-            os.makedirs(outpath_lib)
-        
-        for target in targets_to_process:
-            config = configs[target.name]
+            corresponding_targets = self.find_corresponding_targets_to_exports(exports=exports_to_process)
+            corresponding_targets_configs = self.resolve_configs_recursively(corresponding_targets)
 
-            config.includes = []
-            outpath_include = os.path.join(outpath, 'include')
-            config.includes.append(outpath_include)
+            outpath = self.context.options.export
+            outpath_lib = os.path.join(outpath, self.build_path())
+            if not os.path.exists(outpath_lib):
+                os.makedirs(outpath_lib)
+            
+            for target in exports_to_process:
+                config = configs[target.name]
 
-            outpath_target = os.path.join(outpath_lib, target.name + '.json')
-            outpath_directory = os.path.dirname(outpath_target)
-            if not os.path.exists(outpath_directory):
-                os.makedirs(outpath_directory)
+                config.includes = []
+                outpath_include = os.path.join(outpath, 'include')
+                config.includes.append(outpath_include)
 
-            with open(outpath_target, 'w') as output:
-                target_configuration_file = TargetConfigurationFile(project=self.project, configuration=config)
-                json.dump(target_configuration_file, output, default=TargetConfigurationFile.serialize_to_json,
-                          sort_keys=True, indent=4)
+                outpath_target = os.path.join(outpath_lib, target.name + '.json')
+                outpath_directory = os.path.dirname(outpath_target)
+                if not os.path.exists(outpath_directory):
+                    os.makedirs(outpath_directory)
+
+                with open(outpath_target, 'w') as output:
+                    target_configuration_file = TargetConfigurationFile(project=self.project, configuration=config)
+                    json.dump(target_configuration_file, output, default=TargetConfigurationFile.serialize_to_json,
+                            sort_keys=True, indent=4)
+        else:
+            targets_to_process = self.get_targets_to_process(source_targets=self.project.targets)
+            targets_configs = self.resolve_configs_recursively(targets_to_process)
 
     def get_targets_or_exports(self):
         return self.project.targets if not self.context.options.export else self.project.exports
 
-    def get_targets_to_process(self, asked_targets = None):
+    def get_targets_to_process(self, asked_targets = None, source_targets = None):
+        if source_targets is None:
+            source_targets = self.get_targets_or_exports()
+
         if asked_targets is None:
-            asked_targets = self.get_asked_targets()
+            asked_targets = self.get_asked_targets(source_targets=source_targets)
 
         targets_to_process = []
         for asked_target in asked_targets:
-            found_targets = [available_target for available_target in self.get_targets_or_exports() if asked_target == available_target.name]
+            found_targets = [available_target for available_target in source_targets if asked_target == available_target.name]
             if found_targets:
                 targets_to_process.append(found_targets[0])
             else:
                 raise RuntimeError("Can't find any target configuration named \"{}\"".format(asked_target))
         return targets_to_process
 
-    def get_asked_targets(self):
-        return self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in self.get_targets_or_exports()]
+    def get_asked_targets(self, source_targets = None):
+        if source_targets is None:
+            source_targets = self.get_targets_or_exports()
+        return self.context.options.targets.split(',') if self.context.options.targets else [target.name for target in source_targets]
 
     def get_packages_to_process(self, asked_packages = None):
         if asked_packages is None:
