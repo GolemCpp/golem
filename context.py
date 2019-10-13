@@ -48,6 +48,7 @@ class Context:
             self.project = self.module.project()
 
         self.resolved_dependencies_path = None
+        self.compiler_commands = []
 
     def load_resolved_dependencies(self):
         if self.resolved_dependencies_path is not None:
@@ -1279,13 +1280,10 @@ class Context:
             env_includes    = env_includes,
             env_isystem     = env_isystem)
 
-    def generate_compiler_commands(self, build_target, path):
+    def initialize_compiler_commands(self):
+        self.compiler_commands = []
 
-        compile_commands = []
-
-        if os.path.exists(path):
-            with open(path, 'r') as fp:
-                compile_commands = byteify(json.load(fp))
+    def append_compiler_commands(self, build_target):
         
         for source in build_target.source + self.list_moc(self.make_project_path_array(build_target.config.includes + build_target.config.source)):
             file = {
@@ -1300,10 +1298,11 @@ class Context:
                 + [str(source), '-c'],
                 "file": str(source)
             }
-            compile_commands.append(file)
+            self.compiler_commands.append(file)
 
+    def save_compiler_commands(self, path):
         with open(path, 'w') as fp:
-            json.dump(compile_commands, fp, indent=4)
+            json.dump(self.compiler_commands, fp, indent=4)
 
     def generate_vscode_config(self, compiler_commands_path):
 
@@ -1342,9 +1341,7 @@ class Context:
         vscode_dir = self.get_vscode_path()
         helpers.make_directory(vscode_dir)
 
-        compiler_commands_path = self.make_vscode_path('compile_commands.json')
-        self.generate_compiler_commands(build_target, compiler_commands_path)
-        self.generate_vscode_config(compiler_commands_path)
+        self.append_compiler_commands(build_target)
 
         build_fun = None
 
@@ -1452,10 +1449,8 @@ class Context:
         build_target = self.build_target_gather_config(target, static_configs)
 
         clang_tidy_dir = self.make_golem_path('clang-tidy')
-        helpers.make_directory(clang_tidy_dir)
 
-        compiler_commands_path = os.path.join(clang_tidy_dir, 'compile_commands.json')
-        self.generate_compiler_commands(build_target, compiler_commands_path)
+        self.append_compiler_commands(build_target)
 
         command = [
             'clang-tidy',
@@ -1472,8 +1467,14 @@ class Context:
         clang_tidy_dir = self.make_golem_path('clang-tidy')
         if os.path.exists(clang_tidy_dir):
             helpers.remove_tree(self, clang_tidy_dir)
+        helpers.make_directory(clang_tidy_dir)
+
+        self.initialize_compiler_commands()
 
         self.call_build_target(self.clang_tidy_target)
+
+        compiler_commands_path = os.path.join(clang_tidy_dir, 'compile_commands.json')
+        self.save_compiler_commands(compiler_commands_path)
         
     def run_command_with_msvisualcpp(self, command, cwd):
         cmd = ['cmd', '/c', 'vswhere', '-latest',
@@ -2115,7 +2116,13 @@ class Context:
         if os.path.exists(self.make_build_path('compile_commands.json')):
             os.remove(self.make_build_path('compile_commands.json'))
 
+        self.initialize_compiler_commands()
+
         self.call_build_target(self.build_target)
+
+        compiler_commands_path = self.make_vscode_path('compile_commands.json')
+        self.save_compiler_commands(compiler_commands_path)
+        self.generate_vscode_config(compiler_commands_path)
 
         if self.module is not None:
             ret = self.module.script(self)
