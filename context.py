@@ -1315,7 +1315,7 @@ class Context:
                         "intelliSenseMode": "msvc-x64" if Context.is_windows() else "clang-x64",
                         "includePath": [],
                         "defines": [],
-                        "compileCommands": self.make_vscode_path("compile_commands.json"),
+                        "compileCommands": compiler_commands_path,
                         "browse": {
                             "path": [],
                             "limitSymbolsToIncludedHeaders": True,
@@ -2113,16 +2113,22 @@ class Context:
 
     def build(self):
 
-        if os.path.exists(self.make_build_path('compile_commands.json')):
-            os.remove(self.make_build_path('compile_commands.json'))
+        vscode_dir = self.get_vscode_path()
+        compiler_commands_path = self.make_vscode_path('compile_commands.json')
 
-        self.initialize_compiler_commands()
+        if self.context.options.vscode:
+            if not os.path.exists(vscode_dir):
+                helpers.make_directory(vscode_dir)
+            if os.path.exists(compiler_commands_path):
+                os.remove(compiler_commands_path)
+            self.initialize_compiler_commands()
 
         self.call_build_target(self.build_target)
 
-        compiler_commands_path = self.make_vscode_path('compile_commands.json')
-        self.save_compiler_commands(compiler_commands_path)
-        self.generate_vscode_config(compiler_commands_path)
+
+        if self.context.options.vscode:
+            self.save_compiler_commands(compiler_commands_path)
+            self.generate_vscode_config(compiler_commands_path)
 
         if self.module is not None:
             ret = self.module.script(self)
