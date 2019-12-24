@@ -2364,7 +2364,7 @@ class Context:
         found_installed_packages = []
         installed_packages = subprocess.check_output(['dpkg', '-l'])
         for package in packages:
-            if installed_packages.find(package) == -1:
+            if installed_packages.find(package + ':') == -1 and installed_packages.find(package + ' ') == -1:
                 packages_to_install.append(package)
             else:
                 found_installed_packages.append(package)
