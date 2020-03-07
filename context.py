@@ -1319,8 +1319,15 @@ class Context:
         listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + \
             self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(
                 self.make_project_path_array(config.source))
-        listmoc = self.list_moc(self.make_project_path_array(
+        moc_candidates = self.list_moc(self.make_project_path_array(
             config.moc)) if project_qt else []
+
+        listmoc = []
+        for moc_candidate in moc_candidates:
+            with open(str(moc_candidate), 'r') as file:
+                for line in file:
+                    if re.search("Q_OBJECT", line):
+                        listmoc.append(moc_candidate)
 
         version_short = None
         version_source = []
