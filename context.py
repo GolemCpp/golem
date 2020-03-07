@@ -1420,11 +1420,16 @@ class Context:
     def initialize_compiler_commands(self):
         self.compiler_commands = []
 
-    def append_compiler_commands(self, build_target):
+    def initialize_vscode_configs(self):
+        self.vscode_configs = []
 
-        for source in build_target.source + self.list_moc(
-                self.make_project_path_array(build_target.config.includes +
-                                             build_target.config.source)):
+    def append_compiler_commands(self, build_target):
+        self.compiler_commands += self.make_compiler_commands(build_target)
+
+    def make_compiler_commands(self, build_target):
+        compiler_commands = []
+
+        for source in build_target.source:
             file = {
                 "directory":
                 self.get_build_path(),
@@ -1441,39 +1446,109 @@ class Context:
                 "file":
                 str(source)
             }
-            self.compiler_commands.append(file)
+            compiler_commands.append(file)
+
+        return compiler_commands
+
+    def save_compiler_commands_list(self, path, compiler_commands):
+        with open(path, 'w') as fp:
+            json.dump(compiler_commands, fp, indent=4)
 
     def save_compiler_commands(self, path):
-        with open(path, 'w') as fp:
-            json.dump(self.compiler_commands, fp, indent=4)
+        self.save_compiler_commands_list(path, self.compiler_commands)
+
+    def append_vscode_config_target(self, compiler_commands_path, target,
+                                    static_configs):
+        if not self.context.options.vscode:
+            return
+
+        targets_includes = []
+
+        build_target = self.build_target_gather_config(target, static_configs)
+
+        targets_includes += [
+            str(item) for item in self.make_project_path_array(
+                build_target.config.includes + build_target.config.source)
+        ]
+        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_includes]
+        targets_includes += [str(item) for item in build_target.includes]
+
+        targets_includes = helpers.filter_unique(targets_includes)
+
+        self.vscode_configs.append({
+            "name":
+            target.name,
+            "intelliSenseMode":
+            "msvc-x64" if Context.is_windows() else
+            "gcc-x64" if Context.is_linux() else "clang-x64",
+            "includePath":
+            targets_includes,
+            "defines": [],
+            "compileCommands":
+            compiler_commands_path,
+            "browse": {
+                "path": targets_includes,
+                "limitSymbolsToIncludedHeaders": True,
+                "databaseFilename":
+                "${workspaceRoot}/.vscode/cache/.browse.VC.db"
+            }
+        })
 
     def generate_vscode_config(self, compiler_commands_path):
+        if not self.context.options.vscode:
+            return
 
-        if self.context.options.vscode:
-            from collections import OrderedDict
-            data = OrderedDict({
-                "configurations": [{
-                    "name":
-                    "Win32" if Context.is_windows() else "Linux",
-                    "intelliSenseMode":
-                    "msvc-x64" if Context.is_windows() else "clang-x64",
-                    "includePath": [],
-                    "defines": [],
-                    "compileCommands":
-                    compiler_commands_path,
-                    "browse": {
-                        "path": [],
-                        "limitSymbolsToIncludedHeaders":
-                        True,
-                        "databaseFilename":
-                        "${workspaceRoot}/.vscode/cache/.browse.VC.db"
-                    }
-                }]
-            })
-            properties_path = os.path.join(self.get_project_dir(), '.vscode',
-                                           'c_cpp_properties.json')
-            with open(properties_path, 'w') as outfile:
-                json.dump(data, outfile, indent=4, sort_keys=True)
+        targets_includes = []
+
+        def list_all_targets_includes(target, static_configs,
+                                      targets_includes):
+            build_target = self.build_target_gather_config(
+                target, static_configs)
+            targets_includes += [
+                str(item) for item in self.make_project_path_array(
+                    build_target.config.includes + build_target.config.source)
+            ]
+            targets_includes += [
+                str(item) for item in build_target.env_isystem
+            ]
+            targets_includes += [
+                str(item) for item in build_target.env_includes
+            ]
+            targets_includes += [str(item) for item in build_target.includes]
+
+        self.call_build_target(
+            lambda a, b: list_all_targets_includes(a, b, targets_includes))
+
+        targets_includes = helpers.filter_unique(targets_includes)
+
+        from collections import OrderedDict
+        data = OrderedDict({
+            "configurations": [{
+                "name":
+                "Default",
+                "intelliSenseMode":
+                "msvc-x64" if Context.is_windows() else
+                "gcc-x64" if Context.is_linux() else "clang-x64",
+                "includePath":
+                targets_includes,
+                "defines": [],
+                "compileCommands":
+                compiler_commands_path,
+                "browse": {
+                    "path":
+                    targets_includes,
+                    "limitSymbolsToIncludedHeaders":
+                    True,
+                    "databaseFilename":
+                    "${workspaceRoot}/.vscode/cache/.browse.VC.db"
+                }
+            }] + self.vscode_configs
+        })
+        properties_path = os.path.join(self.get_project_dir(), '.vscode',
+                                       'c_cpp_properties.json')
+        with open(properties_path, 'w') as outfile:
+            json.dump(data, outfile, indent=4, sort_keys=True)
 
     def get_vscode_path(self):
         return self.make_golem_path('vscode')
@@ -1489,6 +1564,26 @@ class Context:
         helpers.make_directory(vscode_dir)
 
         self.append_compiler_commands(build_target)
+
+        if self.context.options.vscode:
+            compile_commands_dir = os.path.dirname(
+                os.path.abspath(os.path.join(vscode_dir, target.name)))
+            helpers.make_directory(compile_commands_dir)
+
+            compiler_commands_list = self.make_compiler_commands(build_target)
+
+            vscode_dir = self.get_vscode_path()
+            compiler_commands_path = self.make_vscode_path(
+                target.name + '_compile_commands.json')
+
+            if not os.path.exists(vscode_dir):
+                helpers.make_directory(vscode_dir)
+            if os.path.exists(compiler_commands_path):
+                os.remove(compiler_commands_path)
+            self.save_compiler_commands_list(compiler_commands_path,
+                                             compiler_commands_list)
+            self.append_vscode_config_target(compiler_commands_path, target,
+                                             static_configs)
 
         build_fun = None
 
@@ -2358,6 +2453,7 @@ class Context:
             if os.path.exists(compiler_commands_path):
                 os.remove(compiler_commands_path)
             self.initialize_compiler_commands()
+            self.initialize_vscode_configs()
 
         self.call_build_target(self.build_target)
 
