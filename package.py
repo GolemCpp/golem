@@ -3,7 +3,15 @@ from condition_expression import ConditionExpression
 
 
 class Package:
-    def __init__(self, targets=None, prefix=None, name=None, section=None, priority=None, maintainer=None, description=None, homepage=None):
+    def __init__(self,
+                 targets=None,
+                 prefix=None,
+                 name=None,
+                 section=None,
+                 priority=None,
+                 maintainer=None,
+                 description=None,
+                 homepage=None):
         self.targets = targets
         self.prefix = prefix
         self.name = name

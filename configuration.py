@@ -214,11 +214,14 @@ class Configuration(Condition):
             self.library += config.library
 
     def merge(self, context, configs, exporting=False, condition=None):
-        def evaluate_condition(expected, conditions, predicate=lambda a, b: a == b):
+        def evaluate_condition(expected,
+                               conditions,
+                               predicate=lambda a, b: a == b):
             conditions = helpers.parameter_to_list(conditions)
             for expression in conditions:
                 expression = ConditionExpression.clean(expression)
                 if expression:
+
                     def parse_paren(s):
                         def parse_paren_helper(level=0):
                             try:
@@ -234,7 +237,8 @@ class Configuration(Condition):
                                 else:
                                     return []
                             elif token == '(':
-                                return [parse_paren_helper(level+1)] + parse_paren_helper(level)
+                                return [parse_paren_helper(level + 1)
+                                        ] + parse_paren_helper(level)
                             else:
                                 b = parse_paren_helper(level)
                                 if b:
@@ -245,6 +249,7 @@ class Configuration(Condition):
                                         return [token] + b
                                 else:
                                     return [token]
+
                         tokens = iter(s)
                         return parse_paren_helper()
 
@@ -265,7 +270,9 @@ class Configuration(Condition):
                                         i)
                                     has_negation = ConditionExpression.has_negation(
                                         i)
-                                    if (not predicate(expected, raw_value) if has_negation else predicate(expected, raw_value)):
+                                    if (not predicate(expected, raw_value)
+                                            if has_negation else predicate(
+                                                expected, raw_value)):
                                         i_result = True
                                 result = result and i_result
                         return result
@@ -276,7 +283,9 @@ class Configuration(Condition):
             return False
 
         for c_tmp in configs:
-            c = c_tmp.merge_configs(context=context, exporting=exporting, condition=condition)
+            c = c_tmp.merge_configs(context=context,
+                                    exporting=exporting,
+                                    condition=condition)
 
             expected_variant = self.variant
             expected_link = self.link
@@ -294,8 +303,10 @@ class Configuration(Condition):
                 if not expected_runtime: expected_runtime = condition.runtime
                 if not expected_osystem: expected_osystem = condition.osystem
                 if not expected_arch: expected_arch = condition.arch
-                if not expected_compiler: expected_compiler = condition.compiler
-                if not expected_distribution: expected_distribution = condition.distribution
+                if not expected_compiler:
+                    expected_compiler = condition.compiler
+                if not expected_distribution:
+                    expected_distribution = condition.distribution
                 if not expected_release: expected_release = condition.release
                 if not expected_type: expected_type = condition.type
 
@@ -304,23 +315,33 @@ class Configuration(Condition):
             if not expected_runtime: expected_runtime = context.runtime()
             if not expected_osystem: expected_osystem = context.osname()
             if not expected_arch: expected_arch = context.arch()
-            if not expected_compiler: expected_compiler = context.compiler_name()
-            if not expected_distribution: expected_distribution = context.distribution()
+            if not expected_compiler:
+                expected_compiler = context.compiler_name()
+            if not expected_distribution:
+                expected_distribution = context.distribution()
             if not expected_release: expected_release = context.release()
 
             other_type = c.type
 
-            if (other_type and expected_type and not evaluate_condition(expected_type, other_type)):
+            if (other_type and expected_type
+                    and not evaluate_condition(expected_type, other_type)):
                 continue
 
-            if (	(c.variant and not evaluate_condition(expected_variant, c.variant))
-                    or (c.link and not evaluate_condition(expected_link, c.link))
-                    or (c.runtime and not evaluate_condition(expected_runtime, c.runtime))
-                    or (c.osystem and not evaluate_condition(expected_osystem, c.osystem))
-                    or (c.arch and not evaluate_condition(expected_arch, c.arch))
-                    or (c.compiler and not evaluate_condition(expected_compiler, c.compiler))
-                    or (c.distribution and not evaluate_condition(expected_distribution, c.distribution))
-                    or (c.release and not evaluate_condition(expected_release, c.release))):
+            if ((c.variant
+                 and not evaluate_condition(expected_variant, c.variant)) or
+                (c.link and not evaluate_condition(expected_link, c.link)) or
+                (c.runtime
+                 and not evaluate_condition(expected_runtime, c.runtime)) or
+                (c.osystem
+                 and not evaluate_condition(expected_osystem, c.osystem)) or
+                (c.arch and not evaluate_condition(expected_arch, c.arch)) or
+                (c.compiler
+                 and not evaluate_condition(expected_compiler, c.compiler)) or
+                (c.distribution and
+                 not evaluate_condition(expected_distribution, c.distribution))
+                    or
+                (c.release
+                 and not evaluate_condition(expected_release, c.release))):
                 continue
 
             self.append(c)
@@ -336,15 +357,19 @@ class Configuration(Condition):
 
     def merge_configs(self, context, exporting=False, condition=None):
         config = Configuration.copy(self)
-        config.merge(context=context, configs=self.when_configs,
-                     exporting=exporting, condition=condition)
+        config.merge(context=context,
+                     configs=self.when_configs,
+                     exporting=exporting,
+                     condition=condition)
         config.when_configs = []
         return config
 
     def merge_copy(self, context, configs, exporting=False, condition=None):
         config = Configuration.copy(self)
-        config.merge(context=context, configs=configs,
-                     exporting=exporting, condition=condition)
+        config.merge(context=context,
+                     configs=configs,
+                     exporting=exporting,
+                     condition=condition)
         return config
 
     def parse_entry(self, key, value):
@@ -400,7 +425,9 @@ class Configuration(Condition):
             elif raw_entry in ['rshared', 'rstatic']:
                 condition.runtime.append(entry)
                 is_empty = False
-            elif raw_entry in ['debian', 'opensuse', 'ubuntu', 'centos', 'redhat']:
+            elif raw_entry in [
+                    'debian', 'opensuse', 'ubuntu', 'centos', 'redhat'
+            ]:
                 condition.distribution.append(entry)
                 is_empty = False
             elif raw_entry in ['jessie', 'stretch', 'buster']:
@@ -416,60 +443,22 @@ class Configuration(Condition):
             config.intersection(condition)
             configs.append(config)
         return configs
-        
+
     @staticmethod
     def serialized_members():
-        return [
-                'packages_tool',
-                'header_only'
-            ]
+        return ['packages_tool', 'header_only']
 
     @staticmethod
     def serialized_members_list():
         return [
-                'targets',
-
-                'static_targets',
-                'shared_targets',
-
-                'dlls',
-
-                'defines',
-                'includes',
-                'source',
-                'moc',
-
-                'lib',
-                'libpath',
-                'stlib',
-                'stlibpath',
-                'rpath',
-                'cflags',
-                'cppflags',
-                'cxxdeps',
-                'ccdeps',
-                'linkdeps',
-                'framework',
-                'frameworkpath',
-
-                'program_cxxflags',
-                'program_linkflags',
-                'library_cxxflags',
-                'library_linkflags',
-
-                'cxxflags',
-                'linkflags',
-                'ldflags',
-                'system',
-
-                'packages',
-                'packages_dev',
-
-                'features',
-                'deps',
-                'use',
-                'uselib'
-            ]
+            'targets', 'static_targets', 'shared_targets', 'dlls', 'defines',
+            'includes', 'source', 'moc', 'lib', 'libpath', 'stlib',
+            'stlibpath', 'rpath', 'cflags', 'cppflags', 'cxxdeps', 'ccdeps',
+            'linkdeps', 'framework', 'frameworkpath', 'program_cxxflags',
+            'program_linkflags', 'library_cxxflags', 'library_linkflags',
+            'cxxflags', 'linkflags', 'ldflags', 'system', 'packages',
+            'packages_dev', 'features', 'deps', 'use', 'uselib'
+        ]
 
     @staticmethod
     def serialize_to_json(o):
@@ -486,7 +475,9 @@ class Configuration(Condition):
                     json_obj[key] = o.__dict__[key]
 
         if o.when_configs:
-            json_obj['when'] = [Configuration.serialize_to_json(obj) for obj in o.when_configs]
+            json_obj['when'] = [
+                Configuration.serialize_to_json(obj) for obj in o.when_configs
+            ]
 
         return json_obj
 
@@ -495,7 +486,7 @@ class Configuration(Condition):
 
         for entry in o:
             self.parse_entry(entry, o[entry])
-        
+
         configs = []
 
         for entry in o:

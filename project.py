@@ -43,8 +43,8 @@ class Project:
         for i, dep in enumerate(self.deps):
             for item in cache:
                 if item['name'] == dep.name and item['version'] == dep.version:
-                    print(item['name'] + " : " +
-                          item['version'] + " -> " + item['commit'])
+                    print(item['name'] + " : " + item['version'] + " -> " +
+                          item['commit'])
                     self.deps[i].resolved_version = item['commit']
                     break
             if not self.deps[i].resolved_version:
@@ -53,8 +53,11 @@ class Project:
         sys.stdout.flush()
 
     def target(self, type, name, link=None, version_template=None, **kwargs):
-        new_target = Target(
-            name=name, version_template=version_template, type=type, link=link, **kwargs)
+        new_target = Target(name=name,
+                            version_template=version_template,
+                            type=type,
+                            link=link,
+                            **kwargs)
 
         if any([feature.startswith("QT5") for feature in new_target.features]):
             self.enable_qt()
@@ -95,17 +98,23 @@ class Project:
         if path:
             self.qtdir = path
 
-    def package(self, targets, name, section, priority, maintainer, description, homepage, prefix=None):
-        package = Package(
-            targets=targets,
-            prefix=prefix,
-            name=name,
-            section=section,
-            priority=priority,
-            maintainer=maintainer,
-            description=description,
-            homepage=homepage
-        )
+    def package(self,
+                targets,
+                name,
+                section,
+                priority,
+                maintainer,
+                description,
+                homepage,
+                prefix=None):
+        package = Package(targets=targets,
+                          prefix=prefix,
+                          name=name,
+                          section=section,
+                          priority=priority,
+                          maintainer=maintainer,
+                          description=description,
+                          homepage=homepage)
         self.packages.append(package)
         return package
 
@@ -114,8 +123,8 @@ class Project:
         for path in self.configuration_paths:
             resolved_path = context.make_project_path(path)
             if not os.path.exists(resolved_path):
-                raise Exception(
-                    "Can't find configuration file at " + resolved_path)
+                raise Exception("Can't find configuration file at " +
+                                resolved_path)
             resolved_paths.append(resolved_path)
 
         configs = []

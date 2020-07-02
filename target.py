@@ -6,7 +6,11 @@ from dependency import Dependency
 
 
 class Target(Configuration):
-    def __init__(self, name=None, version_template=None, export=False, ** kwargs):
+    def __init__(self,
+                 name=None,
+                 version_template=None,
+                 export=False,
+                 **kwargs):
         super(Target, self).__init__(**kwargs)
         self.name = name
         self.version_template = version_template
@@ -17,10 +21,7 @@ class Target(Configuration):
 
     @staticmethod
     def serialized_members():
-        return [
-            'name',
-            'version_template'
-        ]
+        return ['name', 'version_template']
 
     @staticmethod
     def serialize_to_json(o):
@@ -53,12 +54,16 @@ class TargetConfigurationFile(object):
         self.dependencies = []
         if self.configuration and project:
             self.dependencies = [
-                obj for n in configuration.deps for obj in project.deps if obj.name == n]
+                obj for n in configuration.deps for obj in project.deps
+                if obj.name == n
+            ]
 
     @staticmethod
     def serialize_to_json(o):
         json_obj = {
-            "dependencies": [Dependency.serialize_to_json(dep) for dep in o.dependencies],
+            "dependencies": [
+                Dependency.serialize_to_json(dep) for dep in o.dependencies
+            ],
             "configuration": Configuration.serialize_to_json(o.configuration)
         }
         return json_obj

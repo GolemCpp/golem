@@ -15,8 +15,10 @@ def print_obj(obj, depth=5, l=""):
         objdict = obj
     else:
         # if basic type, or list thereof, just print
-        def canprint(o): return isinstance(
-            o, (int, float, str, unicode, bool, types.NoneType, types.LambdaType))
+        def canprint(o):
+            return isinstance(o, (int, float, str, unicode, bool,
+                                  types.NoneType, types.LambdaType))
+
         try:
             if canprint(obj) or sum(not canprint(o) for o in obj) == 0:
                 return repr(obj)
@@ -24,19 +26,24 @@ def print_obj(obj, depth=5, l=""):
             pass
         # try to iterate as if obj were a list
         try:
-            return "[\n" + "\n".join(l + print_obj(k, depth=depth-1, l=l+"  ") + "," for k in obj) + "\n" + l + "]"
+            return "[\n" + "\n".join(
+                l + print_obj(k, depth=depth - 1, l=l + "  ") + ","
+                for k in obj) + "\n" + l + "]"
         except TypeError, e:
             # else, expand/recurse object attribs
-            name = (hasattr(obj, '__class__')
-                    and obj.__class__.__name__ or type(obj).__name__)
+            name = (hasattr(obj, '__class__') and obj.__class__.__name__
+                    or type(obj).__name__)
             objdict = {}
             for a in dir(obj):
-                if a[:2] != "__" and (not hasattr(obj, a) or not hasattr(getattr(obj, a), '__call__')):
+                if a[:2] != "__" and (not hasattr(obj, a) or not hasattr(
+                        getattr(obj, a), '__call__')):
                     try:
                         objdict[a] = getattr(obj, a)
                     except Exception, e:
                         objdict[a] = str(e)
-    return name + " {\n" + "\n".join(l + repr(k) + ": " + print_obj(v, depth=depth-1, l=l+"  ") + "," for k, v in objdict.iteritems()) + "\n" + l + "}"
+    return name + " {\n" + "\n".join(
+        l + repr(k) + ": " + print_obj(v, depth=depth - 1, l=l + "  ") + ","
+        for k, v in objdict.iteritems()) + "\n" + l + "}"
 
 
 def handle_remove_readonly(func, path, exc_info):
@@ -81,7 +88,8 @@ def make_directory(base, path=None):
 
 
 def make_dep_base(dep):
-    return dep.name + "-" + str(dep.resolved_version if dep.resolved_version else dep.version)
+    return dep.name + "-" + str(
+        dep.resolved_version if dep.resolved_version else dep.version)
 
 
 def copy_tree(source_path, destination_path):
@@ -95,8 +103,7 @@ def copy_tree(source_path, destination_path):
             copy_file(os.path.join(dirName, fname), destination_path)
         for dname in subdirList:
             dname_destination = make_directory(destination_path, dname)
-            copy_tree(os.path.join(dirName, dname),
-                      dname_destination)
+            copy_tree(os.path.join(dirName, dname), dname_destination)
         break
 
 
@@ -109,8 +116,8 @@ def directory_basename(path):
 def copy_file(source_path, destination_path):
     if os.path.isdir(destination_path):
         destination_directory = destination_path
-        destination_path = os.path.join(
-            destination_path, directory_basename(source_path))
+        destination_path = os.path.join(destination_path,
+                                        directory_basename(source_path))
     else:
         destination_directory = os.path.dirname(destination_path)
 
@@ -121,8 +128,8 @@ def copy_file(source_path, destination_path):
             link_path_relative = os.path.basename(link_path_absolute)
         else:
             link_path_relative = link_path
-            link_path_absolute = os.path.join(
-                os.path.dirname(source_path), link_path_relative)
+            link_path_absolute = os.path.join(os.path.dirname(source_path),
+                                              link_path_relative)
 
         copy_file(link_path_absolute, destination_directory)
         if os.path.exists(destination_path):
@@ -134,12 +141,16 @@ def copy_file(source_path, destination_path):
 
 def run_task(args, cwd=None, **kwargs):
     print("Run {}".format(' '.join(args)))
-    process = subprocess.Popen(args, cwd=cwd, shell=sys.platform.startswith(
-        'win32'), **kwargs)
+    process = subprocess.Popen(args,
+                               cwd=cwd,
+                               shell=sys.platform.startswith('win32'),
+                               **kwargs)
     ret = process.wait()
     if ret != 0:
         raise RuntimeError(
-            "Return code {} when running \"{}\" from \"{}\"".format(ret, ' '.join(args), os.getcwd() if cwd is None else cwd))
+            "Return code {} when running \"{}\" from \"{}\"".format(
+                ret, ' '.join(args),
+                os.getcwd() if cwd is None else cwd))
 
 
 def RepresentsInt(s):
@@ -152,8 +163,10 @@ def RepresentsInt(s):
 
 def byteify(input):
     if isinstance(input, dict):
-        return {byteify(key): byteify(value)
-                for key, value in input.iteritems()}
+        return {
+            byteify(key): byteify(value)
+            for key, value in input.iteritems()
+        }
     elif isinstance(input, list):
         return [byteify(element) for element in input]
     elif isinstance(input, unicode):

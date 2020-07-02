@@ -17,7 +17,6 @@ builder = imp.load_source('builder', '$builder_path')
 top = ''
 out = 'obj'
 
-
 Configure.autoconfig = False
 
 
@@ -62,12 +61,14 @@ all_build = []
 for arch in 'x86 x64'.split():
     for link in 'shared static'.split():
         for variant in 'debug release'.split():
+
             class tmp(BuildContext):
                 cmd = arch + '_' + link + '_' + variant
                 opt_arch = arch
                 opt_link = link
                 opt_variant = variant
                 all_build.append(cmd)
+
 
 # Everything
 
@@ -82,18 +83,20 @@ class tmp(Context):
     cmd = 'everything'
     fun = 'everything'
 
+
 # Rebuild
 
 
 def rebuild(bld):
     import waflib.Options
-    waflib.Options.commands = ['distclean',
-                               'configure', 'build'] + waflib.Options.commands
+    waflib.Options.commands = ['distclean', 'configure', 'build'
+                               ] + waflib.Options.commands
 
 
 class tmp(Context):
     cmd = 'rebuild'
     fun = 'rebuild'
+
 
 # Package
 
@@ -106,6 +109,7 @@ class tmp(BuildContext):
     cmd = 'package'
     fun = 'package'
 
+
 # Requirements
 
 
@@ -116,6 +120,7 @@ def requirements(bld):
 class tmp(BuildContext):
     cmd = 'requirements'
     fun = 'requirements'
+
 
 # Export
 
@@ -128,6 +133,7 @@ class tmp(BuildContext):
     cmd = 'export'
     fun = 'export'
 
+
 # Resolve
 
 
@@ -138,6 +144,7 @@ def resolve(bld):
 class tmp(BuildContext):
     cmd = 'resolve'
     fun = 'resolve'
+
 
 # Dependencies
 
@@ -150,6 +157,7 @@ class tmp(BuildContext):
     cmd = 'dependencies'
     fun = 'dependencies'
 
+
 # CppCheck
 
 
@@ -161,6 +169,7 @@ class tmp(BuildContext):
     cmd = 'cppcheck'
     fun = 'cppcheck'
 
+
 # clang-tidy
 
 
@@ -171,6 +180,7 @@ def clang_tidy(bld):
 class tmp(BuildContext):
     cmd = 'clang-tidy'
     fun = 'clang_tidy'
+
 
 # Qt stuff
 

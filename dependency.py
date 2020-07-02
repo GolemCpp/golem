@@ -13,9 +13,15 @@ from helpers import *
 
 
 class Dependency(Configuration):
-    def __init__(self, name=None, targets=None, repository=None, version=None, link=None):
-        super(Dependency, self).__init__(
-            targets=targets, type='library', link=link)
+    def __init__(self,
+                 name=None,
+                 targets=None,
+                 repository=None,
+                 version=None,
+                 link=None):
+        super(Dependency, self).__init__(targets=targets,
+                                         type='library',
+                                         link=link)
         self.name = '' if name is None else name
         self.repository = '' if repository is None else repository
         self.version = '' if version is None else version
@@ -56,8 +62,10 @@ class Dependency(Configuration):
             # dep_version = hash[:8]
             dep_version = last
         else:
-            hash = subprocess.check_output(
-                ['git', 'ls-remote', '--heads', self.repository, str(self.version)])
+            hash = subprocess.check_output([
+                'git', 'ls-remote', '--heads', self.repository,
+                str(self.version)
+            ])
             if hash:
                 dep_version = hash[:8]
             else:
@@ -67,21 +75,16 @@ class Dependency(Configuration):
         return self.resolved_version
 
     def build(self, context, config):
-        context.dep_command(
-            config, self, context.make_cache_conf(), 'build', False)
+        context.dep_command(config, self, context.make_cache_conf(), 'build',
+                            False)
 
     def configure(self, context, config):
-        context.dep_command(
-            config, self, context.make_cache_conf(), 'resolve', False)
+        context.dep_command(config, self, context.make_cache_conf(), 'resolve',
+                            False)
 
     @staticmethod
     def serialized_members():
-        return [
-            'name',
-            'repository',
-            'version',
-            'resolved_version'
-        ]
+        return ['name', 'repository', 'version', 'resolved_version']
 
     @staticmethod
     def serialize_to_json(o):

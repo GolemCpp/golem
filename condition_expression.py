@@ -1,6 +1,4 @@
-
 class ConditionExpression:
-
     @staticmethod
     def clean(expression):
         expression = expression.lower()

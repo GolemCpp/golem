@@ -11,7 +11,6 @@ import os
 import sys
 sys.dont_write_bytecode = True
 
-
 print "=== Golem C++ Build System ==="
 sys.stdout.flush()
 
@@ -50,8 +49,8 @@ build_dir = os.path.join(os.getcwd(), golem_out, 'golem')
 filein = open(os.path.join(golem_path, 'wscript'))
 src = Template(filein.read())
 filein.close()
-out = src.substitute(builder_path=string.replace(os.path.join(
-    golem_path, 'builder.py'), '\\', '\\\\'))
+out = src.substitute(builder_path=string.replace(
+    os.path.join(golem_path, 'builder.py'), '\\', '\\\\'))
 
 if not os.path.exists(build_dir):
     os.makedirs(build_dir)

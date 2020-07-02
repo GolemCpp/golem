@@ -1438,8 +1438,7 @@ class Context:
 
         for source in build_target.source:
             file = {
-                "directory":
-                self.get_build_path(),
+                "directory": self.get_build_path(),
                 "arguments": [
                     "cl.exe" if Context.is_windows() else "/usr/bin/" +
                     self.context.env.CXX_NAME
@@ -1450,8 +1449,7 @@ class Context:
                 ['-I' + str(d) for d in build_target.includes] +
                 ['-D' + d for d in build_target.env_defines] +
                 ['-D' + d for d in build_target.defines] + [str(source), '-c'],
-                "file":
-                str(source)
+                "file": str(source)
             }
             compiler_commands.append(file)
 
@@ -1484,21 +1482,16 @@ class Context:
         targets_includes = helpers.filter_unique(targets_includes)
 
         self.vscode_configs.append({
-            "name":
-            target.name,
-            "intelliSenseMode":
-            "msvc-x64" if Context.is_windows() else
+            "name": target.name,
+            "intelliSenseMode": "msvc-x64" if Context.is_windows() else
             "gcc-x64" if Context.is_linux() else "clang-x64",
-            "includePath":
-            targets_includes,
+            "includePath": targets_includes,
             "defines": [],
-            "compileCommands":
-            compiler_commands_path,
+            "compileCommands": compiler_commands_path,
             "browse": {
                 "path": targets_includes,
                 "limitSymbolsToIncludedHeaders": True,
-                "databaseFilename":
-                "${workspaceRoot}/.vscode/cache/.browse.VC.db"
+                "databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
             }
         })
 
@@ -1532,23 +1525,16 @@ class Context:
         from collections import OrderedDict
         data = OrderedDict({
             "configurations": [{
-                "name":
-                "Default",
-                "intelliSenseMode":
-                "msvc-x64" if Context.is_windows() else
+                "name": "Default",
+                "intelliSenseMode": "msvc-x64" if Context.is_windows() else
                 "gcc-x64" if Context.is_linux() else "clang-x64",
-                "includePath":
-                targets_includes,
+                "includePath": targets_includes,
                 "defines": [],
-                "compileCommands":
-                compiler_commands_path,
+                "compileCommands": compiler_commands_path,
                 "browse": {
-                    "path":
-                    targets_includes,
-                    "limitSymbolsToIncludedHeaders":
-                    True,
-                    "databaseFilename":
-                    "${workspaceRoot}/.vscode/cache/.browse.VC.db"
+                    "path": targets_includes,
+                    "limitSymbolsToIncludedHeaders": True,
+                    "databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
                 }
             }] + self.vscode_configs
         })
@@ -2321,36 +2307,23 @@ class Context:
 
         from collections import OrderedDict
         data = OrderedDict({
-            "description":
-            package_description,  # One sentence description
-            "qt":
-            qt_path,
-            "sdk":
-            sdk_path,
-            "sdkBuildToolsRevision":
-            self.make_android_sdk_build_tools_version(),
-            "ndk":
-            ndk_path,
-            "toolchain-prefix":
-            "llvm",
-            "tool-prefix":
-            "llvm",
-            "toolchain-version":
-            self.make_android_toolchain_version(),
-            "ndk-host":
-            self.make_android_ndk_host(),
-            "target-architecture":
-            self.make_android_arch_hyphens(),
-            "android-extra-libs":
-            ",".join(extra_libs),
-            "stdcpp-path":
-            self.make_android_ndk_path("sources/cxx-stl/llvm-libc++/libs/" +
-                                       self.make_android_arch_hyphens() +
-                                       "/libc++_shared.so"),
-            "useLLVM":
-            True,
-            "application-binary":
-            target_binary
+            "description": package_description,  # One sentence description
+            "qt": qt_path,
+            "sdk": sdk_path,
+            "sdkBuildToolsRevision": self.
+            make_android_sdk_build_tools_version(),
+            "ndk": ndk_path,
+            "toolchain-prefix": "llvm",
+            "tool-prefix": "llvm",
+            "toolchain-version": self.make_android_toolchain_version(),
+            "ndk-host": self.make_android_ndk_host(),
+            "target-architecture": self.make_android_arch_hyphens(),
+            "android-extra-libs": ",".join(extra_libs),
+            "stdcpp-path": self.make_android_ndk_path(
+                "sources/cxx-stl/llvm-libc++/libs/" +
+                self.make_android_arch_hyphens() + "/libc++_shared.so"),
+            "useLLVM": True,
+            "application-binary": target_binary
         })
 
         qml_enabled = False

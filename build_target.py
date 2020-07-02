@@ -2,39 +2,11 @@ import helpers
 
 
 class BuildTarget:
-    def __init__(self,
-                 config,
-
-                 defines,
-                 includes,
-                 source,
-                 target,
-                 name,
-                 cxxflags,
-                 cflags,
-                 linkflags,
-                 ldflags,
-                 use,
-                 uselib,
-                 moc,
-                 features,
-                 install_path,
-                 vnum,
-                 depends_on,
-                 lib,
-                 libpath,
-                 stlibpath,
-                 cppflags,
-                 framework,
-                 frameworkpath,
-                 rpath,
-                 cxxdeps,
-                 ccdeps,
-                 linkdeps,
-
-                 env_defines,
-                 env_cxxflags,
-                 env_includes,
+    def __init__(self, config, defines, includes, source, target, name,
+                 cxxflags, cflags, linkflags, ldflags, use, uselib, moc,
+                 features, install_path, vnum, depends_on, lib, libpath,
+                 stlibpath, cppflags, framework, frameworkpath, rpath, cxxdeps,
+                 ccdeps, linkdeps, env_defines, env_cxxflags, env_includes,
                  env_isystem):
 
         self.config = config

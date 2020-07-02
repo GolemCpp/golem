@@ -4,7 +4,16 @@ from condition_expression import ConditionExpression
 
 
 class Condition(object):
-    def __init__(self, variant=None, link=None, runtime=None, osystem=None, arch=None, compiler=None, distribution=None, release=None, type=None):
+    def __init__(self,
+                 variant=None,
+                 link=None,
+                 runtime=None,
+                 osystem=None,
+                 arch=None,
+                 compiler=None,
+                 distribution=None,
+                 release=None,
+                 type=None):
 
         # debug, release
         self.variant = helpers.parameter_to_list(variant)
@@ -43,8 +52,8 @@ class Condition(object):
         elif len(self.type) == 1:
             return self.type[0]
         else:
-            raise Exception(
-                "Can't have a unique value from {}".format(self.type))
+            raise Exception("Can't have a unique value from {}".format(
+                self.type))
 
     @property
     def link_unique(self):
@@ -53,8 +62,8 @@ class Condition(object):
         elif len(self.link) == 1:
             return self.link[0]
         else:
-            raise Exception(
-                "Can't have a unique value from {}".format(self.link))
+            raise Exception("Can't have a unique value from {}".format(
+                self.link))
 
     @staticmethod
     def intersection_expression(cond1, cond2):
@@ -70,35 +79,28 @@ class Condition(object):
     def intersection(self, condition):
         self.variant = Condition.intersection_expression(
             condition.variant, self.variant)
-        self.link = Condition.intersection_expression(
-            condition.link, self.link)
+        self.link = Condition.intersection_expression(condition.link,
+                                                      self.link)
         self.runtime = Condition.intersection_expression(
             condition.runtime, self.runtime)
         self.osystem = Condition.intersection_expression(
             condition.osystem, self.osystem)
-        self.arch = Condition.intersection_expression(
-            condition.arch, self.arch)
+        self.arch = Condition.intersection_expression(condition.arch,
+                                                      self.arch)
         self.compiler = Condition.intersection_expression(
             condition.compiler, self.compiler)
         self.distribution = Condition.intersection_expression(
             condition.distribution, self.distribution)
         self.release = Condition.intersection_expression(
             condition.release, self.release)
-        self.type = Condition.intersection_expression(
-            condition.type, self.type)
+        self.type = Condition.intersection_expression(condition.type,
+                                                      self.type)
 
     @staticmethod
     def serialized_members():
         return [
-            'variant',
-            'link',
-            'runtime',
-            'osystem',
-            'arch',
-            'compiler',
-            'distribution',
-            'release',
-            'type'
+            'variant', 'link', 'runtime', 'osystem', 'arch', 'compiler',
+            'distribution', 'release', 'type'
         ]
 
     @staticmethod
