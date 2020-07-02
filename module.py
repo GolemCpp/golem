@@ -17,7 +17,7 @@ class Module:
             if not os.path.exists(project_path):
                 project_path = os.path.join(self.path, 'project.glm')
             if not os.path.exists(project_path):
-                print "ERROR: can't find " + project_path
+                print("ERROR: can't find " + project_path)
                 return
             self.module = imp.load_source('project_glm', project_path)
 
@@ -25,7 +25,7 @@ class Module:
 
         if not hasattr(self.module, 'configure'):
             print(self.module)
-            print "ERROR: no configure function found"
+            print("ERROR: no configure function found")
             return
 
         project = Project()
@@ -35,7 +35,7 @@ class Module:
     def script(self, context):
 
         # if not hasattr(self.module, 'script'):
-        #	print "ERROR: no script function found"
+        #	print("ERROR: no script function found")
         #	return
 
         if hasattr(self.module, 'script'):

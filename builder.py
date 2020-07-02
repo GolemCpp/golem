@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from waflib.TaskGen import feature, before_method
 from context import Context

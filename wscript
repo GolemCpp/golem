@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from waflib.TaskGen import feature, before_method, after_method
 from waflib.Build import BuildContext, CleanContext, \
@@ -49,7 +49,7 @@ def build(bld):
         if os.path.exists(bld.options.export):
             bld.add_post_fun(builder.export)
         else:
-            print "ERROR: export path doesn't exist"
+            print("ERROR: export path doesn't exist")
             return
 
     builder.build(bld)
@@ -192,4 +192,5 @@ def add_includes_paths(self):
     incs = set(self.to_list(getattr(self, 'includes', '')))
     for x in self.compiled_tasks:
         incs.add(x.inputs[0].parent.path_from(self.path))
+    incs = [str(inc) for inc in incs]
     self.includes = sorted(incs)

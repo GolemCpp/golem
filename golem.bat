@@ -1,1 +1,1 @@
-python %~dp0golem %*
+python3 %~dp0golem %*

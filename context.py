@@ -2,7 +2,7 @@ import os
 import io
 import re
 import sys
-import md5
+import hashlib
 import glob
 import json
 import fnmatch
@@ -10,7 +10,7 @@ import shutil
 import pickle
 import platform
 import subprocess
-import ConfigParser
+import configparser
 import distutils
 from distutils import dir_util
 from copy import deepcopy
@@ -35,7 +35,7 @@ class Context:
         if os.path.exists(self.project_path):
             json_object = None
             with io.open(self.project_path, 'r') as file:
-                json_object = byteify(json.load(file))
+                json_object = json.load(file)
             self.project = Project.unserialize_from_json(json_object)
             self.module = None
 
@@ -113,7 +113,7 @@ class Context:
     def load_dependencies_json(self, path):
         cache = None
         with open(path, 'r') as fp:
-            cache = byteify(json.load(fp))
+            cache = json.load(fp)
         self.project.deps_load_json(cache)
 
     def save_dependencies_json(self, path):
@@ -168,9 +168,7 @@ class Context:
 
     @staticmethod
     def hash_identifier(flags):
-        m = md5.new()
-        m.update(''.join(flags))
-        return m.hexdigest()[:8]
+        return hashlib.md5(''.join(flags)).hexdigest()[:8]
 
     def list_include(self, includes):
         return [
@@ -561,7 +559,7 @@ class Context:
             return None
         raise Exception("Not implemented")
 
-        config = ConfigParser.RawConfigParser()
+        config = configparser.RawConfigParser()
         config.read(settings_path)
 
         if not config.has_section('GOLEM'):
@@ -856,7 +854,7 @@ class Context:
 
         file_json_path = self.get_dep_artifact_json(dep, cache_dir)
         with open(file_json_path, 'r') as file_json:
-            dep_export_ctx = byteify(json.load(file_json))
+            dep_export_ctx = json.load(file_json)
             target_configuration_file = TargetConfigurationFile.unserialize_from_json(
                 dep_export_ctx)
             dependency_dependencies = target_configuration_file.dependencies
@@ -922,9 +920,10 @@ class Context:
             config.use.append(dep.name)
 
         if dependency_dependencies is not None:
-            self.project.deps = dict(
-                (obj.name, obj) for obj in (self.project.deps +
-                                            dependency_dependencies)).values()
+            self.project.deps = list(
+                dict((obj.name, obj)
+                     for obj in (self.project.deps +
+                                 dependency_dependencies)).values())
 
         out_path = make_directory(self.make_out_path())
         expected_files = self.get_expected_files(config, dep, cache_dir,
@@ -1008,7 +1007,7 @@ class Context:
     def read_json(self, dep, cache_dir):
         if self.can_open_json(dep, cache_dir):
             with self.open_json(dep, cache_dir) as file_json:
-                return byteify(json.load(file_json))
+                return json.load(file_json)
         return None
 
     def read_dep_configs(self, dep, cache_dir):
@@ -1196,7 +1195,7 @@ class Context:
         try:
             version_string = subprocess.check_output(
                 ['git', 'describe', '--long', '--tags', '--dirty=-d'],
-                cwd=self.get_project_dir())
+                cwd=self.get_project_dir()).decode(sys.stdout.encoding)
             version_string = version_string.splitlines()[0]
             if version_string[0] == 'v':
                 version_string = version_string[1:]
@@ -1352,7 +1351,7 @@ class Context:
                     version_source.append(version_template_dst)
 
         isystemflags = []
-        for key in self.context.env.keys():
+        for key in list(self.context.env.keys()):
             if key.startswith("INCLUDES_"):
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
@@ -1380,13 +1379,13 @@ class Context:
         env_cxxflags = self.context.env.CXXFLAGS
         env_defines = self.context.env.DEFINES
         env_includes = []
-        for key in self.context.env.keys():
+        for key in list(self.context.env.keys()):
             if key.startswith("INCLUDES_"):
                 for path in self.context.env[key]:
                     if not path.startswith('/usr'):
                         env_includes.append(str(path))
         env_isystem = []
-        for key in self.context.env.keys():
+        for key in list(self.context.env.keys()):
             if key.startswith("ISYSTEM_"):
                 for path in self.context.env[key]:
                     env_isystem.append(str(path))
@@ -1721,7 +1720,7 @@ class Context:
             'cmd', '/c', 'vswhere', '-latest', '-products', '*', '-property',
             'installationPath'
         ]
-        print ' '.join(cmd)
+        print(' '.join(cmd))
         ret = subprocess.Popen(
             cmd,
             cwd='C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer',
@@ -1729,7 +1728,7 @@ class Context:
             stderr=subprocess.PIPE)
         out, err = ret.communicate()
         if ret.returncode:
-            print "ERROR: " + ' '.join(cmd)
+            print("ERROR: " + ' '.join(cmd))
             return -1
         lines = out.splitlines()
         if not lines[0]:
@@ -1943,17 +1942,12 @@ class Context:
         self.context.env.OPTIONS = json.dumps(self.context.options.__dict__)
 
     def restore_options_env(self, env):
-        def ascii_encode_dict(data):
-            def ascii_encode(x):
-                return x.encode('ascii') if isinstance(x, unicode) else x
 
-            return dict(map(ascii_encode, pair) for pair in data.items())
-
-        options = json.loads(env.OPTIONS, object_hook=ascii_encode_dict)
-        if not self.context.targets:
-            self.context.targets = options['targets']
+        options = json.loads(env.OPTIONS)
+        if not self.context.options.targets:
+            self.context.options.targets = options['targets']
         else:
-            options['targets'] = self.context.targets
+            options['targets'] = self.context.options.targets
         return options
 
     def restore_options(self):
@@ -2370,7 +2364,7 @@ class Context:
         self.save_options()
 
         if self.is_debug() and self.is_windows():
-            for key in self.context.env.keys():
+            for key in list(self.context.env.keys()):
                 if key.startswith("INCLUDES_QT5"):
                     paths = []
                     for path in self.context.env[key]:
@@ -2391,7 +2385,7 @@ class Context:
         self.save_options()
 
         if self.is_debug() and self.is_windows():
-            for key in self.context.env.keys():
+            for key in list(self.context.env.keys()):
                 if key.startswith("INCLUDES_QT5"):
                     paths = []
                     for path in self.context.env[key]:
@@ -2580,7 +2574,7 @@ class Context:
         configs = self.resolve_configs_recursively(targets)
 
         master_config = Configuration()
-        for _, config in configs.items():
+        for _, config in list(configs.items()):
             master_config.merge(self, [config], exporting=True)
         return master_config
 
@@ -2717,7 +2711,8 @@ class Context:
 
         packages_to_install = []
         found_installed_packages = []
-        installed_packages = subprocess.check_output(['dpkg', '-l'])
+        installed_packages = subprocess.check_output(['dpkg', '-l']).decode(
+            sys.stdout.encoding)
         for package in packages:
             if installed_packages.find(package +
                                        ':') == -1 and installed_packages.find(

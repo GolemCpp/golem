@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import helpers
 from shutil import copytree
@@ -6,12 +6,12 @@ from string import Template
 import subprocess
 import shutil
 import string
-import imp
+import importlib.util
 import os
 import sys
 sys.dont_write_bytecode = True
 
-print "=== Golem C++ Build System ==="
+print("=== Golem C++ Build System ===")
 sys.stdout.flush()
 
 project_path = os.path.join(os.getcwd(), 'golem.json')
@@ -22,11 +22,14 @@ if not os.path.exists(project_path_alt):
     project_path_alt = os.path.join(os.getcwd(), 'project.glm')
 
 if not os.path.exists(project_path) and not os.path.exists(project_path_alt):
-    print "ERROR: no project file found ('golem.json' or 'golemfile.py')"
+    print("ERROR: no project file found ('golem.json' or 'golemfile.py')")
     sys.exit(1)
 
 if not os.path.exists(project_path):
-    module = imp.load_source('__golem_project_glm__', project_path_alt)
+    spec = importlib.util.spec_from_file_location('__golem_project_glm__',
+                                                  project_path_alt)
+    foo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(foo)
 
 golem_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
@@ -41,7 +44,7 @@ golem_out = os.path.join('build')
 if user_defined_dir:
     golem_out = user_defined_dir
 
-argv = ['python', 'waf/waf-light'] + sys.argv[1:] + \
+argv = ['python3', 'waf/waf-light'] + sys.argv[1:] + \
     ([] if user_defined_dir else ['--dir=' + os.getcwd()])
 
 build_dir = os.path.join(os.getcwd(), golem_out, 'golem')
@@ -49,8 +52,8 @@ build_dir = os.path.join(os.getcwd(), golem_out, 'golem')
 filein = open(os.path.join(golem_path, 'wscript'))
 src = Template(filein.read())
 filein.close()
-out = src.substitute(builder_path=string.replace(
-    os.path.join(golem_path, 'builder.py'), '\\', '\\\\'))
+out = src.substitute(
+    builder_path=os.path.join(golem_path, 'builder.py').replace('\\', '\\\\'))
 
 if not os.path.exists(build_dir):
     os.makedirs(build_dir)

@@ -131,7 +131,7 @@ class Project:
         for path in resolved_paths:
             json_conf = None
             with open(path, 'r') as fp:
-                json_conf = byteify(json.load(fp))
+                json_conf = json.load(fp)
             if not json_conf:
                 raise Exception("Failed at loading " + path)
 

@@ -35,9 +35,10 @@ class Dependency(Configuration):
             return self.resolved_version
 
         dep_version = ''
-        if str(self.version) == 'latest':
+        if self.version == 'latest':
             tags = subprocess.check_output(
-                ['git', 'ls-remote', '--tags', self.repository])
+                ['git', 'ls-remote', '--tags',
+                 self.repository]).decode(sys.stdout.encoding)
             tags = tags.split('\n')
             badtag = ['^{}']
             tmp = ''
@@ -48,28 +49,28 @@ class Dependency(Configuration):
             versions_list = re.findall('refs\/tags\/v(\d*(?:\.\d*)*)', tags)
             versions_list = set(versions_list)
             versions_list = list(versions_list)
-            versions_list.sort(key=lambda s: map(int, s.split('.')))
+            versions_list.sort(key=lambda s: list(map(int, s.split('.'))))
             last = versions_list[-1:]
             if not last:
                 print("ERROR: no latest version")
                 return
             last = 'v' + last[0]
             hash = subprocess.check_output(
-                ['git', 'ls-remote', '--tags', self.repository, last])
+                ['git', 'ls-remote', '--tags', self.repository,
+                 last]).decode(sys.stdout.encoding)
             if not hash:
                 print("ERROR: can't find " + last)
                 return
             # dep_version = hash[:8]
             dep_version = last
         else:
-            hash = subprocess.check_output([
-                'git', 'ls-remote', '--heads', self.repository,
-                str(self.version)
-            ])
+            hash = subprocess.check_output(
+                ['git', 'ls-remote', '--heads', self.repository,
+                 self.version]).decode(sys.stdout.encoding)
             if hash:
                 dep_version = hash[:8]
             else:
-                dep_version = str(self.version)
+                dep_version = self.version
 
         self.resolved_version = dep_version
         return self.resolved_version
@@ -100,7 +101,7 @@ class Dependency(Configuration):
     def read_json(self, o):
         Configuration.read_json(self, o)
 
-        for key, value in o.iteritems():
+        for key, value in o.items():
             if key in Dependency.serialized_members():
                 self.__dict__[key] = value
 

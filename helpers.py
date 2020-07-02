@@ -16,20 +16,20 @@ def print_obj(obj, depth=5, l=""):
     else:
         # if basic type, or list thereof, just print
         def canprint(o):
-            return isinstance(o, (int, float, str, unicode, bool,
-                                  types.NoneType, types.LambdaType))
+            return isinstance(
+                o, (int, float, str, bool, type(None), types.LambdaType))
 
         try:
             if canprint(obj) or sum(not canprint(o) for o in obj) == 0:
                 return repr(obj)
-        except TypeError, e:
+        except TypeError as e:
             pass
         # try to iterate as if obj were a list
         try:
             return "[\n" + "\n".join(
                 l + print_obj(k, depth=depth - 1, l=l + "  ") + ","
                 for k in obj) + "\n" + l + "]"
-        except TypeError, e:
+        except TypeError as e:
             # else, expand/recurse object attribs
             name = (hasattr(obj, '__class__') and obj.__class__.__name__
                     or type(obj).__name__)
@@ -39,11 +39,11 @@ def print_obj(obj, depth=5, l=""):
                         getattr(obj, a), '__call__')):
                     try:
                         objdict[a] = getattr(obj, a)
-                    except Exception, e:
+                    except Exception as e:
                         objdict[a] = str(e)
     return name + " {\n" + "\n".join(
         l + repr(k) + ": " + print_obj(v, depth=depth - 1, l=l + "  ") + ","
-        for k, v in objdict.iteritems()) + "\n" + l + "}"
+        for k, v in objdict.items()) + "\n" + l + "}"
 
 
 def handle_remove_readonly(func, path, exc_info):
@@ -140,7 +140,7 @@ def copy_file(source_path, destination_path):
 
 
 def run_task(args, cwd=None, **kwargs):
-    print("Run {}".format(' '.join(args)))
+    print(("Run {}".format(' '.join(args))))
     process = subprocess.Popen(args,
                                cwd=cwd,
                                shell=sys.platform.startswith('win32'),
@@ -163,13 +163,10 @@ def RepresentsInt(s):
 
 def byteify(input):
     if isinstance(input, dict):
-        return {
-            byteify(key): byteify(value)
-            for key, value in input.iteritems()
-        }
+        return {byteify(key): byteify(value) for key, value in input.items()}
     elif isinstance(input, list):
         return [byteify(element) for element in input]
-    elif isinstance(input, unicode):
+    elif isinstance(input, str):
         return input.encode('utf-8')
     else:
         return input

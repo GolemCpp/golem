@@ -37,7 +37,7 @@ class Target(Configuration):
     def read_json(self, o):
         Configuration.read_json(self, o)
 
-        for key, value in o.iteritems():
+        for key, value in o.items():
             if key in Target.serialized_members():
                 self.__dict__[key] = value
 
@@ -71,7 +71,7 @@ class TargetConfigurationFile(object):
     @staticmethod
     def unserialize_from_json(o):
         target_configuration_file = TargetConfigurationFile()
-        for key, value in o.iteritems():
+        for key, value in o.items():
             if key == 'dependencies':
                 for dep in value:
                     target_configuration_file.dependencies.append(
