@@ -2635,6 +2635,19 @@ class Context:
     def get_targets_or_exports(self):
         return self.project.targets if not self.context.options.export else self.project.exports
 
+    def map_name_to_objects(self, names, objects, object_name):
+        mapped_objects = []
+        for name in names:
+            found_objects = [obj for obj in objects if name == obj.name]
+            if found_objects:
+                mapped_objects.append(found_objects[0])
+            else:
+                raise RuntimeError(
+                    "Can't find any {} configuration named \"{}\"".format(
+                        object_name, name))
+
+        return mapped_objects
+
     def get_targets_to_process(self, asked_targets=None, source_targets=None):
         if source_targets is None:
             source_targets = self.get_targets_or_exports()
@@ -2643,18 +2656,30 @@ class Context:
             asked_targets = self.get_asked_targets(
                 source_targets=source_targets)
 
+        targets_to_find = asked_targets
         targets_to_process = []
-        for asked_target in asked_targets:
-            found_targets = [
-                available_target for available_target in source_targets
-                if asked_target == available_target.name
-            ]
-            if found_targets:
-                targets_to_process.append(found_targets[0])
-            else:
-                raise RuntimeError(
-                    "Can't find any target configuration named \"{}\"".format(
-                        asked_target))
+
+        while True:
+            found_targets = self.map_name_to_objects(targets_to_find,
+                                                     source_targets, 'target')
+
+            targets_to_find = []
+            targets_to_process = found_targets + targets_to_process
+
+            for target in found_targets:
+                for target_use in target.use:
+                    if target_use not in targets_to_find:
+                        already_in_process = False
+                        for t in targets_to_process:
+                            if target_use == t.name:
+                                already_in_process = True
+                                break
+                        if not already_in_process:
+                            targets_to_find.append(target_use)
+
+            if not targets_to_find:
+                break
+
         return targets_to_process
 
     def get_asked_targets(self, source_targets=None):
@@ -2669,19 +2694,9 @@ class Context:
         if asked_packages is None:
             asked_packages = self.get_asked_packages()
 
-        packages_to_process = []
-        for asked_package in asked_packages:
-            found_packages = [
-                available_package
-                for available_package in self.project.packages
-                if asked_package == available_package.name
-            ]
-            if found_packages:
-                packages_to_process.append(found_packages[0])
-            else:
-                raise RuntimeError(
-                    "Can't find any package configuration named \"{}\"".format(
-                        asked_package))
+        packages_to_process = self.map_name_to_objects(asked_packages,
+                                                       self.project.packages,
+                                                       'package')
         return packages_to_process
 
     def get_asked_packages(self):
