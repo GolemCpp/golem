@@ -1315,11 +1315,32 @@ class Context:
 
         listinclude = self.list_include(
             self.make_project_path_array(config.includes))
-        listsource = self.list_source(self.make_project_path_array(config.source)) + self.list_qt_qrc(self.make_project_path_array(config.source)) + \
+        qrc_sources = self.list_qt_qrc(
+            self.make_project_path_array(config.source))
+        listsource = self.list_source(self.make_project_path_array(config.source)) + qrc_sources + \
             self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(
                 self.make_project_path_array(config.source))
         moc_candidates = self.list_moc(self.make_project_path_array(
             config.moc)) if project_qt else []
+
+        for source in qrc_sources:
+            cmd = [self.context.env['QT_RCC'][0], '-list', source.abspath()]
+            stdout = subprocess.check_output(cmd).decode(sys.stdout.encoding)
+            out = stdout.splitlines()
+            for path in out:
+                if os.path.basename(path) == "qmldir":
+                    qmldir_path = self.context.root.find_or_declare(path)
+                    qmldir_template_path = self.context.root.find_or_declare(
+                        os.path.join(os.path.dirname(path), 'qmldir.template'))
+                    if os.path.exists(str(qmldir_template_path)):
+                        print("Generating {} from {}".format(
+                            qmldir_path, qmldir_template_path))
+                        self.context(name=qmldir_path,
+                                     features='subst',
+                                     source=qmldir_template_path,
+                                     target=qmldir_path,
+                                     PLUGIN_NAME=targetname,
+                                     before='create_rcc_task')
 
         listmoc = []
         for moc_candidate in moc_candidates:
