@@ -25,6 +25,7 @@ from build_target import BuildTarget
 from dependency import Dependency
 import copy
 from target import TargetConfigurationFile
+from waflib import TaskGen
 
 
 class Context:
@@ -1323,24 +1324,25 @@ class Context:
         moc_candidates = self.list_moc(self.make_project_path_array(
             config.moc)) if project_qt else []
 
-        for source in qrc_sources:
-            cmd = [self.context.env['QT_RCC'][0], '-list', source.abspath()]
-            stdout = subprocess.check_output(cmd).decode(sys.stdout.encoding)
-            out = stdout.splitlines()
-            for path in out:
-                if os.path.basename(path) == "qmldir":
-                    qmldir_path = self.context.root.find_or_declare(path)
-                    qmldir_template_path = self.context.root.find_or_declare(
-                        os.path.join(os.path.dirname(path), 'qmldir.template'))
-                    if os.path.exists(str(qmldir_template_path)):
-                        print("Generating {} from {}".format(
-                            qmldir_path, qmldir_template_path))
-                        self.context(name=qmldir_path,
-                                     features='subst',
-                                     source=qmldir_template_path,
-                                     target=qmldir_path,
-                                     PLUGIN_NAME=targetname,
-                                     before='create_rcc_task')
+        qmldir_template_files = self.list_files(
+            self.make_project_path_array(config.source), ['template'])
+        for path in qmldir_template_files:
+            if os.path.basename(path.abspath()) == "qmldir.template":
+                qmldir_template_path = path
+                qmldir_path = self.context.root.find_or_declare(
+                    os.path.join(os.path.dirname(path.abspath()), 'qmldir'))
+                print("Generating {} from {}".format(qmldir_path,
+                                                     qmldir_template_path))
+                self.context(name=qmldir_path,
+                             features='subst',
+                             source=qmldir_template_path,
+                             target=qmldir_path,
+                             PLUGIN_NAME=targetname,
+                             before=[
+                                 'create_rcc_task', 'process_source',
+                                 'process_rule'
+                             ])
+                self.context.add_group()
 
         listmoc = []
         for moc_candidate in moc_candidates:
