@@ -59,9 +59,6 @@ class Project:
                             link=link,
                             **kwargs)
 
-        if any([feature.startswith("QT5") for feature in new_target.features]):
-            self.enable_qt()
-
         self.targets.append(new_target)
         return new_target
 

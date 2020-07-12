@@ -26,6 +26,7 @@ from dependency import Dependency
 import copy
 from target import TargetConfigurationFile
 from waflib import TaskGen
+from version import Version
 
 
 class Context:
@@ -1189,89 +1190,6 @@ class Context:
     def get_output_path(self):
         return self.make_output_path(".")
 
-    def get_long_version(self, default=None):
-
-        version_string = None
-
-        try:
-            version_string = subprocess.check_output(
-                ['git', 'describe', '--long', '--tags', '--dirty=-d'],
-                cwd=self.get_project_dir()).decode(sys.stdout.encoding)
-            version_string = version_string.splitlines()[0]
-            if version_string[0] == 'v':
-                version_string = version_string[1:]
-        except:
-            version_string = default
-
-        return version_string
-
-    def get_version_major(self, version_string=None):
-
-        if version_string is None:
-            version_string = self.get_long_version()
-
-        if version_string is None:
-            return None
-
-        return re.search('^([0-9]+)\\..*', version_string).group(1)
-
-    def get_version_minor(self, version_string=None):
-
-        if version_string is None:
-            version_string = self.get_long_version()
-
-        if version_string is None:
-            return None
-
-        return re.search('^[0-9]+\\.([0-9]+).*', version_string).group(1)
-
-    def get_version_patch(self, version_string=None):
-
-        if version_string is None:
-            version_string = self.get_long_version()
-
-        if version_string is None:
-            return None
-
-        return re.search('^[0-9]+\\.[0-9]+\\.([0-9]+).*',
-                         version_string).group(1)
-
-    def get_version_revision(self, version_string=None):
-
-        if version_string is None:
-            version_string = self.get_long_version()
-
-        if version_string is None:
-            return None
-
-        return re.search('^[0-9]+\\.[0-9]+\\.[0-9]+.(.*)',
-                         version_string).group(1)
-
-    def get_version_hash(self, version_string=None):
-
-        if version_string is None:
-            version_string = self.get_long_version()
-
-        if version_string is None:
-            return None
-
-        return re.search('^[0-9]+\\.[0-9]+\\.[0-9]+.(.*)',
-                         version_string).group(1)
-
-    def get_short_version(self, version_string=None):
-
-        if version_string is None:
-            version_string = self.get_long_version()
-
-        if version_string is None:
-            return None
-
-        version_major = self.get_version_major(version_string)
-        version_minor = self.get_version_minor(version_string)
-        version_patch = self.get_version_patch(version_string)
-
-        return version_major + "." + version_minor + "." + version_patch
-
     def recursively_link_dependencies(self, config):
         self.recursively_apply_to_deps(config, self.link_dependency)
 
@@ -1309,6 +1227,10 @@ class Context:
         if any([feature.startswith("QT5") for feature in config.features]):
             project_qt = True
 
+        wfeatures = []
+        if project_qt and 'qt5' not in config.wfeatures:
+            wfeatures.append('qt5')
+
         if self.is_debug() and self.is_windows():
             for i, feature in enumerate(config.features):
                 if feature.startswith("QT5"):
@@ -1337,11 +1259,7 @@ class Context:
                              features='subst',
                              source=qmldir_template_path,
                              target=qmldir_path,
-                             PLUGIN_NAME=targetname,
-                             before=[
-                                 'create_rcc_task', 'process_source',
-                                 'process_rule'
-                             ])
+                             PLUGIN_NAME=targetname)
                 self.context.add_group()
 
         listmoc = []
@@ -1354,24 +1272,21 @@ class Context:
         version_short = None
         version_source = []
         if target.version_template is not None:
-            version_string = self.get_long_version(default='0.0.0')
-            if version_string is not None:
-                version_hash = self.get_version_hash(version_string)
-                version_short = self.get_short_version(version_string)
-                for version_template in target.version_template:
-                    version_template_src = self.context.root.find_node(
-                        self.make_project_path(version_template))
-                    version_template_dst = self.context.root.find_or_declare(
-                        self.make_build_path(
-                            os.path.basename(version_template) + '.cpp'))
-                    self.context(name=version_template_dst,
-                                 features='subst',
-                                 source=version_template_src,
-                                 target=version_template_dst,
-                                 VERSION=version_string,
-                                 VERSION_SHORT=version_short,
-                                 VERSION_HASH=version_hash)
-                    version_source.append(version_template_dst)
+            version = Version(working_dir=self.get_project_dir())
+            for version_template in target.version_template:
+                version_template_src = self.context.root.find_node(
+                    self.make_project_path(version_template))
+                version_template_dst = self.context.root.find_or_declare(
+                    self.make_build_path(
+                        os.path.basename(version_template) + '.cpp'))
+                self.context(name=version_template_dst,
+                             features='subst',
+                             source=version_template_src,
+                             target=version_template_dst,
+                             VERSION=version.gitlong_semver,
+                             VERSION_SHORT=version.semver,
+                             VERSION_HASH=version.githash)
+                version_source.append(version_template_dst)
 
         isystemflags = []
         for key in list(self.context.env.keys()):
@@ -1427,7 +1342,7 @@ class Context:
             use=config.use + config.features,
             uselib=config.uselib,
             moc=listmoc,
-            features=['qt5'] if project_qt else [],
+            features=config.wfeatures + wfeatures,
             install_path=None,
             vnum=version_short,
             depends_on=version_source,
@@ -2367,6 +2282,17 @@ class Context:
 
     def configure(self):
 
+        targets_to_process = self.get_targets_to_process(
+            source_targets=self.project.targets)
+
+        for target in targets_to_process:
+            if any([feature.startswith("QT5") for feature in target.features]):
+                self.project.enable_qt()
+
+        for target in targets_to_process:
+            if 'qt5' in target.wfeatures:
+                self.project.enable_qt()
+
         # features list
         features_to_load = ['compiler_c', 'compiler_cxx']
 
@@ -2827,7 +2753,9 @@ class Context:
         package_description = package.description
         package_homepage = package.homepage
 
-        package_version = self.get_long_version(default='0.0.0')
+        version = Version(working_dir=self.get_project_dir())
+
+        package_version = version.gitlong_semver
         package_arch = self.get_arch_for_linux()
         package_depends = ', '.join(depends)
 
@@ -2854,8 +2782,8 @@ class Context:
 
         # Strip binaries, libraries, archives
 
+        artifacts = self.find_artifacts(bin_directory, recursively=True)
         if self.is_release():
-            artifacts = self.find_artifacts(bin_directory, recursively=True)
             for artifact in artifacts:
                 print("Stripping {}".format(artifact))
                 helpers.run_task(['strip', artifact], cwd=bin_directory)
@@ -2886,3 +2814,54 @@ class Context:
             output_filename + '.deb'
         ],
                          cwd=self.get_output_path())
+
+        system_name = self.osname()
+        distribution_name = self.distribution()
+        release_name = self.release()
+
+        class File:
+            def __init__(self, path, absolute_path):
+                self.path = path
+                self.absolute_path = absolute_path
+
+        class System:
+            def __init__(self):
+                self.name = system_name
+                self.distribution = distribution_name
+                self.release = release_name
+                self.version = platform.platform()
+                self.architecture = package_arch
+
+        artifacts = [os.path.realpath(path) for path in artifacts]
+
+        files = []
+        for artifact in artifacts:
+            path = os.path.relpath(artifact, bin_directory)
+            absolute_path = artifact
+            artifact_file = File(path, absolute_path)
+            files.append(artifact_file)
+
+        package_filename = output_filename + '.deb'
+
+        package_path = os.path.realpath(
+            os.path.join(self.get_output_path(), package_filename))
+
+        package_file = File(package_filename, package_path)
+
+        class Context:
+            def __init__(self):
+                self.name = package_name
+                self.targets = package.targets
+                self.files = files
+                self.version = package_version
+                self.major = version.major
+                self.minor = version.minor
+                self.patch = version.patch
+                self.hash = version.githash
+                self.system = System()
+                self.message = version.gitmessage
+                self.package = package_file
+
+        ctx = Context()
+        for hook in package.hooks:
+            hook(ctx)

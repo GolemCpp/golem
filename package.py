@@ -20,6 +20,7 @@ class Package:
         self.maintainer = maintainer
         self.description = description
         self.homepage = homepage
+        self.hooks = []
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -47,3 +48,6 @@ class Package:
             elif key == 'homepage':
                 package.homepage = value
         return package
+
+    def hook(self, callback):
+        self.hooks.append(callback)

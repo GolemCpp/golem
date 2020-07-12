@@ -42,6 +42,7 @@ class Configuration(Condition):
                  program_linkflags=None,
                  library_cxxflags=None,
                  library_linkflags=None,
+                 wfeatures=None,
                  **kwargs):
         super(Configuration, self).__init__(**kwargs)
 
@@ -90,6 +91,7 @@ class Configuration(Condition):
         self.deps = helpers.parameter_to_list(deps)
         self.use = helpers.parameter_to_list(use)
         self.uselib = helpers.parameter_to_list(uselib)
+        self.wfeatures = helpers.parameter_to_list(wfeatures)
 
         self.program = []
         self.library = []
@@ -206,6 +208,9 @@ class Configuration(Condition):
         if hasattr(config, 'uselib'):
             self.uselib += config.uselib
             self.uselib = helpers.filter_unique(self.uselib)
+        if hasattr(config, 'wfeatures'):
+            self.wfeatures += config.wfeatures
+            self.wfeatures = helpers.filter_unique(self.wfeatures)
 
         if hasattr(config, 'program'):
             self.program += config.program
@@ -457,7 +462,7 @@ class Configuration(Condition):
             'linkdeps', 'framework', 'frameworkpath', 'program_cxxflags',
             'program_linkflags', 'library_cxxflags', 'library_linkflags',
             'cxxflags', 'linkflags', 'ldflags', 'system', 'packages',
-            'packages_dev', 'features', 'deps', 'use', 'uselib'
+            'packages_dev', 'features', 'deps', 'use', 'uselib', 'wfeatures'
         ]
 
     @staticmethod
