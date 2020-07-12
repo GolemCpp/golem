@@ -7,6 +7,7 @@ import subprocess
 import shutil
 import string
 import importlib.util
+import importlib.machinery
 import os
 import sys
 sys.dont_write_bytecode = True
@@ -26,10 +27,12 @@ if not os.path.exists(project_path) and not os.path.exists(project_path_alt):
     sys.exit(1)
 
 if not os.path.exists(project_path):
+    importlib.machinery.SOURCE_SUFFIXES.append('')
     spec = importlib.util.spec_from_file_location('__golem_project_glm__',
                                                   project_path_alt)
     foo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(foo)
+    importlib.machinery.SOURCE_SUFFIXES.pop()
 
 golem_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
