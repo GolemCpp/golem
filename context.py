@@ -2282,8 +2282,7 @@ class Context:
 
     def configure(self):
 
-        targets_to_process = self.get_targets_to_process(
-            source_targets=self.project.targets)
+        targets_to_process = self.get_targets_to_process()
 
         for target in targets_to_process:
             if any([feature.startswith("QT5") for feature in target.features]):
