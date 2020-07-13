@@ -1271,8 +1271,9 @@ class Context:
 
         version_short = None
         version_source = []
+        version = Version(working_dir=self.get_project_dir())
+        version_short = version.semver
         if target.version_template is not None:
-            version = Version(working_dir=self.get_project_dir())
             for version_template in target.version_template:
                 version_template_src = self.context.root.find_node(
                     self.make_project_path(version_template))
