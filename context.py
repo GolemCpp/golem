@@ -2591,9 +2591,11 @@ class Context:
             if found_objects:
                 mapped_objects.append(found_objects[0])
             else:
-                raise RuntimeError(
-                    "Can't find any {} configuration named \"{}\"".format(
-                        object_name, name))
+                found_objects = [obj for obj in self.project.exports if name == obj.name]
+                if not found_objects:
+                    raise RuntimeError(
+                        "Can't find any {} configuration named \"{}\"".format(
+                            object_name, name))
 
         return mapped_objects
 
