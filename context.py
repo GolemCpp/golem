@@ -27,6 +27,8 @@ import copy
 from target import TargetConfigurationFile
 from waflib import TaskGen
 from version import Version
+from functools import partial
+from pathlib import Path
 
 
 class Context:
@@ -299,7 +301,7 @@ class Context:
             if self.is_windows():
                 return ['.exe']
             else:
-                return []
+                return ['']
         elif config.type_unique == 'objects':
             return ['.o']
         else:
@@ -900,7 +902,8 @@ class Context:
                         if self.is_darwin():
                             self.context.env['LDFLAGS_' + dep.name] = [
                                 os.path.join(
-                                    dep_path_build, 'lib' + libname +
+                                    dep_path_build,
+                                    Context.make_windows_target_name(libname) +
                                     self.artifact_suffix_dev(dep)) for libname
                                 in self.make_target_name_from_context(
                                     dependency_configuration, dep)
@@ -946,6 +949,59 @@ class Context:
                         print("Copy file {}".format(
                             os.path.basename(other_file_path)))
                         copy_file(other_file_path, out_path)
+
+    class Artifact:
+        def __init__(self, absolute_path, path, absolute_dir_path):
+            self.absolute_path = absolute_path
+            self.path = path
+            self.absolute_dir_path = absolute_dir_path
+
+    def list_dep_binary_artifacts(self, config, dep, cache_dir):
+        artifacts_list = []
+        dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
+        expected_files = self.get_expected_files(config,
+                                                 dep,
+                                                 cache_dir,
+                                                 True,
+                                                 only_binaries=True,
+                                                 allow_executable=True,
+                                                 only_dlls=True)
+        for file in expected_files:
+            dep_path_build = os.path.abspath(dep_path_build)
+            src_file_path = os.path.join(dep_path_build, file)
+            artifacts_list.append(
+                Context.Artifact(os.path.abspath(src_file_path), file,
+                                 dep_path_build))
+            if self.is_linux() and file.endswith('.so'):
+                src_file_path_glob = glob.glob(src_file_path + '.*')
+                for other_file_path in src_file_path_glob:
+                    abspath = os.path.abspath(other_file_path)
+                    relpath = os.path.relpath(other_file_path, dep_path_build)
+                    artifacts_list.append(
+                        Context.Artifact(abspath, relpath, dep_path_build))
+        return artifacts_list
+
+    def list_target_binary_artifacts(self, config, target):
+        artifacts_list = []
+        path_build = make_directory(self.make_out_path())
+        expected_files = self.make_target_from_context(config,
+                                                       target,
+                                                       allow_executable=True,
+                                                       only_dlls=True)
+        for file in expected_files:
+            path_build = os.path.abspath(path_build)
+            src_file_path = os.path.join(path_build, file)
+            artifacts_list.append(
+                Context.Artifact(os.path.abspath(src_file_path), file,
+                                 path_build))
+            if self.is_linux() and file.endswith('.so'):
+                src_file_path_glob = glob.glob(src_file_path + '.*')
+                for other_file_path in src_file_path_glob:
+                    abspath = os.path.abspath(other_file_path)
+                    relpath = os.path.relpath(other_file_path, path_build)
+                    artifacts_list.append(
+                        Context.Artifact(abspath, relpath, path_build))
+        return artifacts_list
 
     def clean_repo(self, repo_path):
         helpers.run_task(['git', 'reset', '--hard'], cwd=repo_path)
@@ -1028,18 +1084,31 @@ class Context:
 
             if target.type_unique == 'library':
                 if self.is_windows():
-                    target_name = 'lib' + target_name
+                    target_name = Context.make_windows_target_name(target_name)
 
             return [target_name]
 
-    def make_target_from_context(self, config, target):
+    @staticmethod
+    def make_windows_target_name(target_name):
+        return os.path.join(os.path.dirname(target_name),
+                            'lib' + os.path.basename(target_name))
+
+    def make_target_from_context(self,
+                                 config,
+                                 target,
+                                 allow_executable=False,
+                                 only_dlls=False):
         target_name = self.make_target_name_from_context(config, target)
-        if not self.is_windows():
-            target_name = ['lib' + t for t in target_name]
+        is_program = config.type_unique == 'program'
+        if not self.is_windows() and not is_program:
+            target_name = [
+                Context.make_windows_target_name(t) for t in target_name
+            ]
+
         result = list()
         for filename in target_name:
             for suffix in self.artifact_suffix(config, target):
-                if suffix != '.dll' or not config.dlls:
+                if (suffix != '.dll' or not config.dlls) and not is_program:
                     result.append(filename + suffix)
         if '.dll' in self.artifact_suffix(config, target) and config.dlls:
             result += [dll + '.dll' for dll in config.dlls]
@@ -1047,27 +1116,43 @@ class Context:
         for filename in config.static_targets:
             for suffix in self.artifact_suffix_mode(config=config,
                                                     is_shared=False):
-                if not self.is_windows():
-                    filename = 'lib' + filename
+                if not self.is_windows() and not is_program:
+                    filename = Context.make_windows_target_name(filename)
                 result.append(filename + suffix)
         for filename in config.shared_targets:
             for suffix in self.artifact_suffix_mode(config=config,
                                                     is_shared=True):
-                if not self.is_windows():
-                    filename = 'lib' + filename
+                if not self.is_windows() and not is_program:
+                    filename = Context.make_windows_target_name(filename)
                 if suffix != '.dll' or not config.dlls:
                     result.append(filename + suffix)
+
+        if allow_executable and is_program:
+            for filename in target_name:
+                for suffix in self.artifact_suffix(config, target):
+                    result.append(filename + suffix)
+
+        if only_dlls:
+            result = [r for r in result if os.path.splitext(r)[1] != 'lib']
         return result
 
-    def get_expected_files(self, config, dep, cache_dir, has_artifacts):
+    def get_expected_files(self,
+                           config,
+                           dep,
+                           cache_dir,
+                           has_artifacts,
+                           only_binaries=False,
+                           allow_executable=False,
+                           only_dlls=False):
 
         expected_files = []
 
-        json_file_path = self.get_dep_artifact_json(dep, cache_dir)
-        if os.path.exists(json_file_path):
-            expected_files.append(dep.name + '.json')
-        else:
-            expected_files.append(dep.name + '.pkl')
+        if not only_binaries:
+            json_file_path = self.get_dep_artifact_json(dep, cache_dir)
+            if os.path.exists(json_file_path):
+                expected_files.append(dep.name + '.json')
+            else:
+                expected_files.append(dep.name + '.pkl')
 
         if not has_artifacts:
             return expected_files
@@ -1083,7 +1168,8 @@ class Context:
             dep_configs.targets = dep.targets
 
         config = dep.merge_copy(self, [dep_configs])
-        return expected_files + self.make_target_from_context(config, dep)
+        return expected_files + self.make_target_from_context(
+            config, dep, allow_executable, only_dlls)
 
     def is_header_only(self, dep, cache_dir):
 
@@ -2591,7 +2677,9 @@ class Context:
             if found_objects:
                 mapped_objects.append(found_objects[0])
             else:
-                found_objects = [obj for obj in self.project.exports if name == obj.name]
+                found_objects = [
+                    obj for obj in self.project.exports if name == obj.name
+                ]
                 if not found_objects:
                     raise RuntimeError(
                         "Can't find any {} configuration named \"{}\"".format(
@@ -2735,6 +2823,21 @@ class Context:
     def package_darwin(self, package):
         raise RuntimeError("Not implemented yet")
 
+    def get_target_artifacts(self, target):
+        config = target.merge_configs(self)
+        cache_conf = self.make_cache_conf()
+        artifacts_list = []
+
+        def internal(config, dep, artifacts_list=artifacts_list):
+            cache_dir = self.find_dep_cache_dir(dep, cache_conf)
+            artifacts_list += self.list_dep_binary_artifacts(
+                config, dep, cache_dir)
+
+        self.recursively_apply_to_deps(config, internal)
+
+        return artifacts_list + self.list_target_binary_artifacts(
+            config, target)
+
     def package_debian(self, package):
 
         print("Check package's targets")
@@ -2778,17 +2881,28 @@ class Context:
 
         bin_directory = make_directory(prefix_directory, 'bin')
 
-        print("Copying " + str(self.make_out_path()) + " to " +
-              str(bin_directory))
-        copy_tree(self.make_out_path(), bin_directory)
+        artifacts = []
+        for target in targets_to_process:
+            artifacts += self.get_target_artifacts(target)
+
+        for artifact in artifacts:
+            src = artifact.absolute_path
+            dst = os.path.abspath(os.path.join(bin_directory, artifact.path))
+            dst_dir = os.path.dirname(dst)
+            if not os.path.exists(dst_dir):
+                print("Creating directories {}".format(dst_dir))
+                os.makedirs(dst_dir)
+            print("Copying {} to {}".format(src, dst))
+            copy_file(src, dst)
+            artifact.absolute_path = dst
+            artifact.absolute_dir_path = os.path.abspath(bin_directory)
 
         # Strip binaries, libraries, archives
 
-        artifacts = self.find_artifacts(bin_directory, recursively=True)
         if self.is_release():
             for artifact in artifacts:
-                print("Stripping {}".format(artifact))
-                helpers.run_task(['strip', artifact], cwd=bin_directory)
+                print("Stripping {}".format(artifact.absolute_path))
+                helpers.run_task(['strip', artifact.absolute_path], cwd=bin_directory)
 
         debian_directory = make_directory(package_directory, 'DEBIAN')
 
@@ -2834,13 +2948,9 @@ class Context:
                 self.version = platform.platform()
                 self.architecture = package_arch
 
-        artifacts = [os.path.realpath(path) for path in artifacts]
-
         files = []
         for artifact in artifacts:
-            path = os.path.relpath(artifact, bin_directory)
-            absolute_path = artifact
-            artifact_file = File(path, absolute_path)
+            artifact_file = File(artifact.path, artifact.absolute_path)
             files.append(artifact_file)
 
         package_filename = output_filename + '.deb'
