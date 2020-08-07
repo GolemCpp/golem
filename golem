@@ -22,18 +22,6 @@ if not os.path.exists(project_path_alt):
 if not os.path.exists(project_path_alt):
     project_path_alt = os.path.join(os.getcwd(), 'project.glm')
 
-if not os.path.exists(project_path) and not os.path.exists(project_path_alt):
-    print("ERROR: no project file found ('golem.json' or 'golemfile.py')")
-    sys.exit(1)
-
-if not os.path.exists(project_path):
-    importlib.machinery.SOURCE_SUFFIXES.append('')
-    spec = importlib.util.spec_from_file_location('__golem_project_glm__',
-                                                  project_path_alt)
-    foo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(foo)
-    importlib.machinery.SOURCE_SUFFIXES.pop()
-
 golem_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
 user_defined_dir = None
@@ -47,7 +35,10 @@ golem_out = os.path.join('build')
 if user_defined_dir:
     golem_out = user_defined_dir
 
-argv = ['python3', 'waf/waf-light'] + sys.argv[1:] + \
+waf_filename = 'waf/waf-light'
+waf_path = os.path.join(golem_path, waf_filename)
+
+argv = ['python3', os.path.join(golem_path, waf_filename)] + sys.argv[1:] + \
     ([] if user_defined_dir else ['--dir=' + os.getcwd()])
 
 build_dir = os.path.join(os.getcwd(), golem_out, 'golem')
@@ -64,11 +55,6 @@ if not os.path.exists(build_dir):
 fileout = open(os.path.join(build_dir, 'wscript'), 'w+')
 fileout.write(out)
 fileout.close()
-
-src_waf_dir = os.path.join(golem_path, 'waf')
-dst_waf_dir = os.path.join(build_dir, 'waf')
-if not os.path.exists(dst_waf_dir):
-    copytree(src_waf_dir, dst_waf_dir)
 
 custom_env = os.environ
 custom_env['PYTHONPATH'] = golem_path

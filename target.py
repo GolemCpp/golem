@@ -3,6 +3,7 @@ import helpers
 from configuration import Configuration
 from condition_expression import ConditionExpression
 from dependency import Dependency
+import json
 
 
 class Target(Configuration):
@@ -50,8 +51,8 @@ class Target(Configuration):
 
 class TargetConfigurationFile(object):
     def __init__(self, project=None, configuration=None):
-        self.configuration = configuration
         self.dependencies = []
+        self.configuration = configuration
         if self.configuration and project:
             self.dependencies = [
                 obj for n in configuration.deps for obj in project.deps
@@ -80,3 +81,61 @@ class TargetConfigurationFile(object):
                 target_configuration_file.configuration = Configuration.unserialize_from_json(
                     value)
         return target_configuration_file
+
+    @staticmethod
+    def load_file(path, context):
+
+        json_content = None
+        with open(path, 'r') as file_json:
+            json_content = json.load(file_json)
+
+        conf_file = TargetConfigurationFile.unserialize_from_json(json_content)
+
+        for dependency in conf_file.dependencies:
+            dependency.update_cache_dir(context=context)
+
+        conf_file.configuration.artifacts_dev = context.translate_cache_dir_paths(
+            conf_file.configuration.artifacts_dev)
+        conf_file.configuration.artifacts_run = context.translate_cache_dir_paths(
+            conf_file.configuration.artifacts_run)
+        conf_file.configuration.licenses = context.translate_cache_dir_paths(
+            conf_file.configuration.licenses)
+        conf_file.configuration.rpath_link = context.translate_cache_dir_paths(
+            conf_file.configuration.rpath_link)
+        conf_file.configuration.libpath = context.translate_cache_dir_paths(
+            conf_file.configuration.libpath)
+        conf_file.configuration.stlibpath = context.translate_cache_dir_paths(
+            conf_file.configuration.stlibpath)
+        conf_file.configuration.isystem = context.translate_cache_dir_paths(
+            conf_file.configuration.isystem)
+
+        return conf_file
+
+    @staticmethod
+    def save_file(path, project, configuration, context):
+
+        conf_file = TargetConfigurationFile(project=project,
+                                            configuration=configuration)
+
+        conf_file.configuration.artifacts_dev = context.make_cache_dir_paths(
+            conf_file.configuration.artifacts_dev)
+        conf_file.configuration.artifacts_run = context.make_cache_dir_paths(
+            conf_file.configuration.artifacts_run)
+        conf_file.configuration.licenses = context.make_cache_dir_paths(
+            conf_file.configuration.licenses)
+        conf_file.configuration.rpath_link = context.make_cache_dir_paths(
+            conf_file.configuration.rpath_link)
+        conf_file.configuration.libpath = context.make_cache_dir_paths(
+            conf_file.configuration.libpath)
+        conf_file.configuration.stlibpath = context.make_cache_dir_paths(
+            conf_file.configuration.stlibpath)
+        conf_file.configuration.isystem = context.make_cache_dir_paths(
+            conf_file.configuration.isystem)
+
+        json_content = json.dumps(
+            conf_file,
+            default=TargetConfigurationFile.serialize_to_json,
+            sort_keys=True,
+            indent=4)
+        with open(path, 'w') as output:
+            output.write(json_content)

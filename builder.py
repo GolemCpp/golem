@@ -26,6 +26,7 @@ def configure(context):
 
 def build(context):
     ctx = get_context(context)
+    ctx.build_on = True
     ctx.environment()
     ctx.build()
 
@@ -42,6 +43,10 @@ def export(context):
 
 def resolve(context):
     ctx = get_context(context)
+
+    ctx.deps_to_resolve = []
+    ctx.deps_resolve = True
+
     ctx.environment(resolve_dependencies=True)
 
     # Disable targets as there is no task generator associated with this command for the moment
@@ -72,6 +77,7 @@ def requirements(context):
 
 def dependencies(context):
     ctx = get_context(context)
+    ctx.deps_build = True
     ctx.environment()
 
     # Disable targets as there is no task generator associated with this command for the moment

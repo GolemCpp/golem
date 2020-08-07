@@ -3,6 +3,7 @@ import sys
 import types
 import shutil
 import subprocess
+from urllib.parse import urlparse
 
 
 def print_obj(obj, depth=5, l=""):
@@ -87,9 +88,43 @@ def make_directory(base, path=None):
     return directory
 
 
+def generate_recipe_id(url):
+    url = url.replace('file:///', 'file://')
+    o = urlparse(url)
+    host = o.hostname.split('.')
+    host.reverse()
+    path = list(filter(None, o.path.split('/')))
+
+    if len(path) > 0 and path[-1].endswith('.git'):
+        path[-1] = path[-1][:-4]
+
+    path = list(filter(None, path))
+
+    identifier = host + path
+    for index, s in enumerate(identifier):
+        identifier[index] = ''.join(
+            filter(
+                lambda x: x in
+                "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_",
+                s)).lower()
+
+    name = identifier[-1]
+    host = identifier[:-1]
+
+    host = '.'.join(host)
+
+    if not host:
+        host = '_no_host_'
+
+    repo_id = name + '@' + host
+
+    return ''.join(repo_id)
+
+
 def make_dep_base(dep):
-    return dep.name + "-" + str(
-        dep.resolved_version if dep.resolved_version else dep.version)
+    dep_id = generate_recipe_id(dep.repository)
+    return dep_id + '+' + str(
+        dep.resolved_hash[:8] if dep.resolved_hash else dep.resolved_version)
 
 
 def copy_tree(source_path, destination_path):
@@ -139,8 +174,27 @@ def copy_file(source_path, destination_path):
         shutil.copy(source_path, destination_path)
 
 
-def run_task(args, cwd=None, **kwargs):
-    print(("Run {}".format(' '.join(args))))
+def copy_file_if_recent(source_path, destination_directory, callback=None):
+    filename = os.path.basename(source_path)
+    destination_path = os.path.join(destination_directory, filename)
+    if os.path.exists(destination_path) and (
+            os.path.getmtime(source_path) <=
+            os.path.getmtime(destination_path)):
+        return False
+
+    if not os.path.exists(destination_directory):
+        os.makedirs(destination_directory)
+
+    if callback:
+        callback(filename)
+
+    copy_file(source_path=source_path, destination_path=destination_path)
+    return True
+
+
+def run_task(args, cwd=None, debug=False, **kwargs):
+    if debug:
+        print("Run {}".format(' '.join(args)))
     process = subprocess.Popen(args,
                                cwd=cwd,
                                shell=sys.platform.startswith('win32'),

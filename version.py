@@ -4,7 +4,15 @@ import subprocess
 
 
 class Version:
-    def __init__(self, working_dir):
+    def __init__(self, working_dir=None):
+        if not working_dir:
+            self.gitlong = 'v0.0.0'
+            self.gitshort = 'v0.0.0'
+            self.githash = ''
+            self.gitmessage = ''
+            self.update_semver()
+            return
+
         self.gitlong = Version.retrieve_gitlong(working_dir=working_dir,
                                                 default='v0.0.0')
         self.gitshort = Version.retrieve_gitshort(working_dir=working_dir,
@@ -12,6 +20,11 @@ class Version:
         self.githash = Version.retrieve_githash(working_dir=working_dir)
         self.gitmessage = Version.retrieve_gitmessage(working_dir=working_dir,
                                                       commit_hash=self.githash)
+        self.update_semver()
+
+    def force_version(self, version):
+        self.gitlong = version
+        self.gitshort = version
         self.update_semver()
 
     def update_semver(self):
@@ -25,14 +38,47 @@ class Version:
         if self.semver[0] == 'v':
             self.semver = self.semver[1:]
 
-        regex = r'^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
-        matches = re.search(regex, self.semver)
+        pair = Version.parse_semver(self.semver)
+
+        if not pair:
+            self.semver = '0.0.0'
+            version, matches = Version.parse_semver(self.semver)
+        else:
+            version = pair[0]
+            matches = pair[1]
+
+        self.semver = version
 
         self.major = int(matches.group('major'))
         self.minor = int(matches.group('minor'))
         self.patch = int(matches.group('patch'))
         self.prerelease = matches.group('prerelease')
         self.buildmetadata = matches.group('buildmetadata')
+        self.semver_short = str(self.major) + '.' + str(
+            self.minor) + '.' + str(self.patch)
+
+    @staticmethod
+    def parse_semver(version):
+        semver_regex = r'^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+        matches = re.search(semver_regex, version)
+        if matches:
+            return (version, matches)
+
+        semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._](?P<minor>0|[1-9]\d*)[\._](?P<patch>0|[1-9]\d*)(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?'
+        matches = re.search(semver_regex_like, version)
+        if matches:
+            new_version = matches.group('major')
+            if matches.group('minor'):
+                new_version += '.' + matches.group('minor')
+                if matches.group('patch'):
+                    new_version += '.' + matches.group('patch')
+            if matches.group('prerelease'):
+                new_version += '-' + matches.group('prerelease')
+            if matches.group('buildmetadata'):
+                new_version += '+' + matches.group('buildmetadata')
+            return (new_version, matches)
+
+        return None
 
     @staticmethod
     def retrieve_gitlong(working_dir, default=None):

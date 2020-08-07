@@ -8,6 +8,8 @@ from condition_expression import ConditionExpression
 from dependency import Dependency
 from package import Package
 from helpers import *
+from waflib import Logs
+import copy
 
 
 class Project:
@@ -27,28 +29,64 @@ class Project:
     def __str__(self):
         return helpers.print_obj(self)
 
+    def resolve(self, global_config_file):
+        cached_dependencies = []
+
+        if global_config_file and os.path.exists(global_config_file):
+            cache = None
+            with open(global_config_file, 'r') as fp:
+                cache = json.load(fp)
+            cached_dependencies = Dependency.load_cache(cache=cache)
+
+        for dependency in self.deps:
+            cached_deps = [
+                dep for dep in cached_dependencies
+                if dep.repository == dependency.repository
+                and dep.version == dependency.version
+            ]
+            if not cached_deps:
+                Logs.debug("Querying Git for {} at {}".format(
+                    dependency.version, dependency.repository))
+                dependency.resolve()
+
+                cached_dep = copy.deepcopy(dependency)
+                cached_dependencies.append(cached_dep)
+            else:
+                dependency.resolved_version = cached_deps[0].resolved_version
+                dependency.resolved_hash = cached_deps[0].resolved_hash
+
+            Logs.debug("Found {}: {} -> {} ({})".format(
+                dependency.name, dependency.version,
+                dependency.resolved_version, dependency.resolved_hash))
+
+        for dependency in cached_dependencies:
+            dependency.name = None
+
+        if global_config_file:
+            cache = Dependency.save_cache(cached_dependencies)
+            with open(global_config_file, 'w') as fp:
+                json.dump(cache, fp, indent=4)
+
     def deps_resolve_json(self):
-        cache = []
-        for dep in self.deps:
-            dep.resolve()
-            cache.append({
-                'name': dep.name,
-                'repository': dep.repository,
-                'version': dep.version,
-                'commit': dep.resolve()
-            })
-        return cache
+        return Dependency.save_cache(dependencies=self.deps)
 
     def deps_load_json(self, cache):
-        for i, dep in enumerate(self.deps):
-            for item in cache:
-                if item['name'] == dep.name and item['version'] == dep.version:
-                    print(item['name'] + " : " + item['version'] + " -> " +
-                          item['commit'])
-                    self.deps[i].resolved_version = item['commit']
+        cached_dependencies = Dependency.load_cache(cache=cache)
+
+        for i, dependency in enumerate(self.deps):
+            for cached_dependency in cached_dependencies:
+                if cached_dependency.name == dependency.name and cached_dependency.version == dependency.version:
+                    print("{}: {} -> {} ({})".format(
+                        cached_dependency.name, cached_dependency.version,
+                        cached_dependency.resolved_version,
+                        cached_dependency.resolved_hash))
+                    self.deps[
+                        i].resolved_version = cached_dependency.resolved_version
+                    self.deps[
+                        i].resolved_hash = cached_dependency.resolved_hash
                     break
-            if not self.deps[i].resolved_version:
-                print(dep.name + " : no cached version")
+            if not self.deps[i].resolved_hash:
+                print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()
 

@@ -27,6 +27,7 @@ class CacheConf:
     def __init__(self):
         self.remote = ''
         self.locations = [default_cached_dir()]
+        self.location = ''
 
     def __str__(self):
         return helpers.print_obj(self)
