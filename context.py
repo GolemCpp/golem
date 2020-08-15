@@ -1962,7 +1962,7 @@ class Context:
     def make_dependencies_slug(self, dependencies):
         string = ''
         for dependency in dependencies:
-            string += dependency.resolved_hash
+            string += json.dumps(Dependency.serialize_to_json(dependency))
         return hashlib.sha1(string.encode('utf-8')).hexdigest()[:8]
 
     def make_binary_foldername(self, dependencies=None):
@@ -3858,7 +3858,7 @@ class Context:
         config.licenses = make_absolute_paths(config.licenses,
                                               self.get_project_dir())
         config.qmldirs = make_absolute_paths(config.qmldirs,
-                                              self.get_project_dir())
+                                             self.get_project_dir())
         config.rpath_link = replace_paths(config.rpath_link, old_out_path,
                                           new_out_path)
 
