@@ -2093,19 +2093,29 @@ class Context:
                              VERSION_HASH=version.githash)
                 version_source.append(version_template_dst)
 
+        isystem_argument = '-isystem'
+        if self.is_windows():
+            isystem_argument = '/external:I'
+
         isystemflags = []
         for include in config.isystem:
-            isystem_argument = '-isystem'
-            if self.is_windows():
-                isystem_argument = '/external:I'
-
             isystemflags.append('{}{}'.format(isystem_argument, include))
 
         for key in list(self.context.env.keys()):
-            if key.startswith("INCLUDES_"):
+            if key.startswith(
+                    "INCLUDES_") and not key.startswith("INCLUDES_QT5"):
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
                         isystemflags.append('-isystem' + str(path))
+
+        config_all_use = helpers.filter_unique(config.use + config.features)
+        for config_use in config_all_use:
+            if config_use.startswith('QT5'):
+                for key in list(self.context.env.keys()):
+                    if key.startswith("INCLUDES_QT5") and config_use in key:
+                        for path in self.context.env[key]:
+                            isystemflags.append('{}{}'.format(
+                                isystem_argument, str(path)))
 
         if self.is_windows():
             version_short = None
@@ -2126,25 +2136,30 @@ class Context:
             if not self.is_darwin() and self.compiler() != 'msvc':
                 stlibflags = ['-Wl,-Bstatic'] + stlibflags + ['-Wl,-Bdynamic']
 
-        env_cxxflags = self.context.env.CXXFLAGS
-        env_defines = self.context.env.DEFINES
+        env_cxxflags = self.context.env.CXXFLAGS.copy()
+        env_defines = self.context.env.DEFINES.copy()
+        for config_use in config_all_use:
+            if config_use.startswith('QT5'):
+                for key in list(self.context.env.keys()):
+                    if key.startswith("DEFINES_QT5") and config_use in key:
+                        env_defines += self.context.env[key].copy()
         env_includes = []
-        for key in list(self.context.env.keys()):
-            if key.startswith("INCLUDES_"):
-                for path in self.context.env[key]:
-                    if not path.startswith('/usr'):
-                        env_includes.append(str(path))
         env_isystem = []
         for key in list(self.context.env.keys()):
             if key.startswith("ISYSTEM_"):
                 for path in self.context.env[key]:
                     env_isystem.append(str(path))
 
+        for key in list(self.context.env.keys()):
+            if key.startswith("INCLUDES_QT5"):
+                self.context.env[key] = []
+
         rpath_link = []
         if not self.is_windows():
-            rpath_link += [
-                '-Wl,-rpath-link,{}'.format(':'.join(config.rpath_link))
-            ]
+            rpath_links = config.rpath_link.copy()
+            if 'QTLIBS' in self.context.env:
+                rpath_links.append(self.context.env.QTLIBS)
+            rpath_link += ['-Wl,-rpath-link,{}'.format(':'.join(rpath_links))]
 
         # TODO: Should link static library with absolute path on macOS
         #if self.is_darwin():
@@ -2159,24 +2174,28 @@ class Context:
             config=config,
             defines=config.defines,
             includes=listinclude,
-            source=listsource + version_source,
+            source=helpers.filter_unique(listsource + version_source),
             target=[
                 os.path.join(self.make_target_out(), decorated_target)
                 for decorated_target in decorated_targets
             ],
             name=task.name,
-            cxxflags=config.cxxflags + target_cxxflags + isystemflags,
-            cflags=config.cflags + target_cxxflags + isystemflags,
-            linkflags=config.linkflags + target_linkflags + rpath_link,
-            ldflags=stlibflags + config.ldflags,
-            use=config.use + config.features,
+            cxxflags=helpers.filter_unique(config.cxxflags + target_cxxflags +
+                                           isystemflags),
+            cflags=helpers.filter_unique(config.cflags + target_cxxflags +
+                                         isystemflags),
+            linkflags=helpers.filter_unique(config.linkflags +
+                                            target_linkflags + rpath_link),
+            ldflags=helpers.filter_unique(stlibflags + config.ldflags),
+            use=config_all_use,
             uselib=config.uselib,
             moc=listmoc,
-            features=config.wfeatures + wfeatures,
+            features=helpers.filter_unique(config.wfeatures + wfeatures),
             install_path=None,
             vnum=version_short,
             depends_on=version_source,
-            lib=config.lib + (config.system if self.is_shared() else []),
+            lib=helpers.filter_unique(
+                config.lib + (config.system if self.is_shared() else [])),
             libpath=config.libpath,
             stlibpath=config.stlibpath,
             cppflags=config.cppflags,
@@ -2215,7 +2234,8 @@ class Context:
                 ['-I' + str(d) for d in build_target.env_includes] +
                 ['-I' + str(d) for d in build_target.includes] +
                 ['-D' + d for d in build_target.env_defines] +
-                ['-D' + d for d in build_target.defines] + [str(source), '-c'],
+                ['-D' + d for d in build_target.defines] +
+                [str(source), '-c'] + build_target.cppflags,
                 "file": str(source)
             }
             compiler_commands.append(file)
