@@ -26,10 +26,13 @@ class Project:
         self.packages = []
         self.configuration_paths = []
 
+        self.master_dependencies_configuration = None
+        self.master_dependencies_repository = None
+
     def __str__(self):
         return helpers.print_obj(self)
 
-    def resolve(self, global_config_file):
+    def resolve(self, global_config_file, dependencies_to_keep):
         cached_dependencies = []
 
         if global_config_file and os.path.exists(global_config_file):
@@ -39,15 +42,24 @@ class Project:
             cached_dependencies = Dependency.load_cache(cache=cache)
 
         for dependency in self.deps:
+            is_dependency_to_keep = False
+            for dependency_to_keep in dependencies_to_keep:
+                if dependency.repository == dependency_to_keep.repository and dependency.version == dependency_to_keep.version:
+                    dependency.resolved_version = dependency_to_keep.resolved_version
+                    dependency.resolved_hash = dependency_to_keep.resolved_hash
+                    is_dependency_to_keep = True
+                    break
+
             cached_deps = [
                 dep for dep in cached_dependencies
                 if dep.repository == dependency.repository
                 and dep.version == dependency.version
             ]
             if not cached_deps:
-                Logs.debug("Querying Git for {} at {}".format(
-                    dependency.version, dependency.repository))
-                dependency.resolve()
+                if not is_dependency_to_keep:
+                    Logs.debug("Querying Git for {} at {}".format(
+                        dependency.version, dependency.repository))
+                    dependency.resolve()
 
                 cached_dep = copy.deepcopy(dependency)
                 cached_dependencies.append(cached_dep)

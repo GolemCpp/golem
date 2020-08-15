@@ -3,9 +3,13 @@ import helpers
 
 
 class CacheDir:
-    def __init__(self, location, is_static=False):
+    def __init__(self, location, is_static=False, regex=None):
         self._location = location
         self._is_static = is_static
+        self._regex = regex
+
+    def __str__(self):
+        return self._location
 
     @property
     def location(self):
@@ -15,8 +19,9 @@ class CacheDir:
     def is_static(self):
         return self._is_static
 
-    def __str__(self):
-        return self._location
+    @property
+    def regex(self):
+        return self._regex
 
 
 def default_cached_dir():
@@ -27,7 +32,6 @@ class CacheConf:
     def __init__(self):
         self.remote = ''
         self.locations = [default_cached_dir()]
-        self.location = ''
 
     def __str__(self):
         return helpers.print_obj(self)

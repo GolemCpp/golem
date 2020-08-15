@@ -7,7 +7,6 @@ import glob
 import json
 import fnmatch
 import shutil
-import pickle
 import platform
 import subprocess
 import configparser
@@ -50,6 +49,8 @@ class Context:
         self.deps_build = False
         self.build_on = False
 
+        self.resolved_master_dependencies = ''
+
         self.cache_conf = None
 
     def load_project(self, directory=None):
@@ -79,17 +80,43 @@ class Context:
             self.module = Module(directory)
             self.project = self.module.project()
 
-    def load_resolved_dependencies(self):
-        if self.resolved_dependencies_path is not None:
-            return
+    def get_dependencies_json_path(self):
 
-        deps_cache_file_pickle = self.make_build_path('deps.cache')
         deps_cache_file_json = self.make_project_path('dependencies.json')
 
         if self.context.options.resolved_dependencies_directory:
             deps_cache_file_json = os.path.join(
                 self.context.options.resolved_dependencies_directory,
                 'dependencies.json')
+
+        return deps_cache_file_json
+
+    def load_resolved_dependencies(self):
+        master_dependencies = self.load_master_dependencies_configuration()
+        if master_dependencies:
+            for dependency in self.project.deps:
+                for master_dependency in master_dependencies:
+                    if dependency.repository == master_dependency.repository:
+                        if master_dependency.version:
+                            dependency.version = master_dependency.version
+                        if master_dependency.resolved_version:
+                            dependency.resolved_version = master_dependency.resolved_version
+                        if master_dependency.resolved_hash:
+                            dependency.resolved_hash = master_dependency.resolved_hash
+                        if master_dependency.shallow:
+                            dependency.shallow = master_dependency.shallow
+                        if master_dependency.link:
+                            dependency.link = master_dependency.link
+                        if master_dependency.variant:
+                            dependency.variant = master_dependency.variant
+                        if master_dependency.runtime:
+                            dependency.runtime = master_dependency.runtime
+                        break
+
+        if self.resolved_dependencies_path is not None:
+            return
+
+        deps_cache_file_json = self.get_dependencies_json_path()
 
         if os.path.exists(deps_cache_file_json):
             print('Found ' + str(deps_cache_file_json))
@@ -98,10 +125,35 @@ class Context:
         else:
             print("No dependencies cache found")
 
+    def load_dependencies_json_cache(self):
+        deps_cache_file_json = self.get_dependencies_json_path()
+        if not os.path.exists(deps_cache_file_json):
+            return None
+        cache = None
+        with open(deps_cache_file_json, 'r') as fp:
+            cache = json.load(fp)
+        cached_dependencies = Dependency.load_cache(cache=cache)
+        return cached_dependencies
+
+    def load_cached_dependencies_to_keep(self):
+        cached_dependencies = self.load_dependencies_json_cache()
+
+        if not cached_dependencies:
+            return []
+
+        pattern = re.compile(self.get_only_update_dependencies_regex())
+
+        dependencies_to_keep = []
+        for dependency in cached_dependencies:
+            if not pattern.match(dependency.repository):
+                dependencies_to_keep.append(dependency)
+
+        return dependencies_to_keep
+
     def resolve_dependencies(self):
-        deps_cache_file_pickle = self.make_build_path('deps.cache')
         deps_cache_file_json = self.make_project_path('dependencies.json')
-        global_dependencies_conf = self.get_global_dependencies_conf_file()
+        global_dependencies_configuration = self.get_global_dependencies_configuration_file(
+        )
 
         deps_cache_file_json_build = None
         if self.context.options.resolved_dependencies_directory:
@@ -109,11 +161,9 @@ class Context:
                 self.context.options.resolved_dependencies_directory,
                 'dependencies.json')
 
-        if not self.context.options.keep_resolved_dependencies:
-            if os.path.exists(deps_cache_file_pickle):
-                print("Cleaning up " + str(deps_cache_file_pickle))
-                os.remove(deps_cache_file_pickle)
+        cached_dependencies_to_keep = self.load_cached_dependencies_to_keep()
 
+        if not self.context.options.keep_resolved_dependencies:
             if os.path.exists(deps_cache_file_json):
                 print("Cleaning up " + str(deps_cache_file_json))
                 os.remove(deps_cache_file_json)
@@ -124,10 +174,11 @@ class Context:
                 os.remove(deps_cache_file_json_build)
 
             if os.path.exists(
-                    global_dependencies_conf
-            ) and not self.context.options.global_dependencies_conf:
-                print("Cleaning up {}".format(global_dependencies_conf))
-                os.remove(global_dependencies_conf)
+                    global_dependencies_configuration
+            ) and not self.context.options.global_dependencies_configuration:
+                print(
+                    "Cleaning up {}".format(global_dependencies_configuration))
+                os.remove(global_dependencies_configuration)
 
         self.resolved_dependencies_path = None
 
@@ -141,18 +192,23 @@ class Context:
                 save_path = os.path.join(
                     self.context.options.resolved_dependencies_directory,
                     'dependencies.json')
+
             Logs.info("Resolving versions of required dependencies")
-            self.project.resolve(global_config_file=global_dependencies_conf)
+            self.project.resolve(
+                global_config_file=global_dependencies_configuration,
+                dependencies_to_keep=cached_dependencies_to_keep)
+
             Logs.info("Saving dependencies in cache " + str(save_path))
             self.save_dependencies_json(save_path)
+
             self.resolved_dependencies_path = save_path
 
-    def get_global_dependencies_conf_file(self):
-        global_dependencies_conf = self.make_build_path(
+    def get_global_dependencies_configuration_file(self):
+        global_dependencies_configuration = self.make_build_path(
             'all_dependencies.json')
-        if self.context.options.global_dependencies_conf:
-            global_dependencies_conf = self.context.options.global_dependencies_conf
-        return global_dependencies_conf
+        if self.context.options.global_dependencies_configuration:
+            global_dependencies_configuration = self.context.options.global_dependencies_configuration
+        return global_dependencies_configuration
 
     def load_dependencies_json(self, path):
         cache = None
@@ -168,43 +224,188 @@ class Context:
     def get_project_dir(self):
         return self.context.options.dir
 
-    def make_cache_dir(self):
+    def make_cache_dirs(self):
         cache_dir_list = []
 
-        if self.context.options.cache_dir:
-
-            cache_dir = self.context.options.cache_dir
-            if not os.path.isabs(cache_dir):
-                cache_dir = os.path.join(self.get_project_dir(), cache_dir)
-
+        cache_dir = self.make_writable_cache_dir()
+        if cache_dir:
             cache_dir_list.append(CacheDir(cache_dir, False))
 
-        if self.context.options.static_cache_dir:
-            static_cache_dir = self.context.options.static_cache_dir
-            if not os.path.isabs(static_cache_dir):
-                static_cache_dir = os.path.join(self.get_project_dir(),
-                                                static_cache_dir)
+        defined_cached_directories = self.make_define_cache_directories_list()
+        cache_dir_list += defined_cached_directories
+
+        static_cache_dir = self.make_static_cache_dir()
+        if static_cache_dir:
             cache_dir_list.append(CacheDir(static_cache_dir, True))
 
         return cache_dir_list
 
     def make_writable_cache_dir(self):
-        if self.context.options.cache_dir:
-            cache_dir = self.context.options.cache_dir
-            if not os.path.isabs(cache_dir):
-                cache_dir = os.path.join(self.get_project_dir(), cache_dir)
-        else:
-            cache_dir = cache.default_cached_dir().location
+        cache_dir = self.make_local_path_absolute(
+            path=self.context.options.cache_dir)
+        if cache_dir:
+            return cache_dir
+
+        cache_dir = cache.default_cached_dir().location
+
         return cache_dir
 
-    def make_static_cache_dir(self):
+    def get_static_cache_dir_option(self):
         static_cache_dir = self.context.options.static_cache_dir
-        if not static_cache_dir:
-            return ''
-        if not os.path.isabs(static_cache_dir):
-            static_cache_dir = os.path.join(self.get_project_dir(),
-                                            static_cache_dir)
+        if not static_cache_dir and 'GOLEM_STATIC_CACHE_DIRECTORY' in os.environ and os.environ[
+                'GOLEM_STATIC_CACHE_DIRECTORY']:
+            static_cache_dir = os.environ['GOLEM_STATIC_CACHE_DIRECTORY']
         return static_cache_dir
+
+    def get_master_dependencies_configuration(self):
+        master_dependencies_configuration = self.context.options.master_dependencies_configuration
+        if not master_dependencies_configuration and self.project.master_dependencies_configuration:
+            master_dependencies_configuration = self.project.master_dependencies_configuration
+        if not master_dependencies_configuration and 'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION' in os.environ and os.environ[
+                'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION']:
+            master_dependencies_configuration = os.environ[
+                'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION']
+        return master_dependencies_configuration
+
+    def make_master_dependencies_configuration(self):
+        return self.make_local_path_absolute(
+            path=self.get_master_dependencies_configuration())
+
+    def get_master_dependencies_repository(self):
+        master_dependencies_repository = self.project.master_dependencies_repository
+        if not self.project.master_dependencies_repository and 'GOLEM_MASTER_DEPENDENCIES_REPOSITORY' in os.environ and os.environ[
+                'GOLEM_MASTER_DEPENDENCIES_REPOSITORY']:
+            master_dependencies_repository = os.environ[
+                'GOLEM_MASTER_DEPENDENCIES_REPOSITORY']
+        return master_dependencies_repository
+
+    def load_master_dependencies_configuration(self):
+
+        if not self.resolved_master_dependencies:
+            master_dependencies_configuration = self.make_master_dependencies_configuration(
+            )
+            master_dependencies_repository = self.get_master_dependencies_repository(
+            )
+            if not master_dependencies_configuration and master_dependencies_repository:
+                repo_path = self.clone_master_dependencies_repository(
+                    master_dependencies_repository)
+                master_dependencies_json = os.path.join(
+                    repo_path, 'master_dependencies.json')
+                if os.path.exists(master_dependencies_json):
+                    master_dependencies_configuration = master_dependencies_json
+
+            if master_dependencies_configuration:
+                self.resolved_master_dependencies = master_dependencies_configuration
+
+        if not self.resolved_master_dependencies or not os.path.exists(
+                self.resolved_master_dependencies):
+            return None
+
+        if not os.path.exists(self.resolved_master_dependencies):
+            raise RuntimeError(
+                "Can't find master dependencies configuration: {}".format(
+                    self.resolved_master_dependencies))
+
+        cache = None
+        with open(self.resolved_master_dependencies, 'r') as fp:
+            cache = json.load(fp)
+
+        master_dependencies = []
+        for entry in cache:
+            cached_dependency = Dependency.unserialize_from_json(entry)
+            master_dependencies.append(cached_dependency)
+
+        return master_dependencies
+
+    def get_static_cache_dependencies_regex(self):
+        static_cache_dependencies_regex = self.context.options.static_cache_dependencies_regex
+        if not static_cache_dependencies_regex and 'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX' in os.environ and os.environ[
+                'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX']:
+            static_cache_dependencies_regex = os.environ[
+                'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX']
+        return static_cache_dependencies_regex
+
+    def get_only_update_dependencies_regex(self):
+        return self.context.options.only_update_dependencies_regex
+
+    def parse_cache_directories_string(self, string):
+
+        dirs = []
+        cache_directories_pairs = string.split('|')
+        for cache_string in cache_directories_pairs:
+            cache_definition = cache_string.split('=')
+            if len(cache_definition) != 2:
+                raise RuntimeError(
+                    "Bad cache definition: {}".format(cache_string))
+
+            cache_path = cache_definition[0]
+            cache_regex = cache_definition[1]
+
+            _ = re.compile(cache_regex)
+
+            cache_path = self.make_local_path_absolute(path=cache_path)
+
+            cache = CacheDir(location=cache_path,
+                             is_static=False,
+                             regex=cache_regex)
+            dirs.append(cache)
+
+        return dirs
+
+    def get_define_cache_directories_string(self):
+        cache_directories_string = self.context.options.define_cache_directories
+        if not cache_directories_string and 'GOLEM_DEFINE_CACHE_DIRECTORIES' in os.environ and os.environ[
+                'GOLEM_DEFINE_CACHE_DIRECTORIES']:
+            cache_directories_string = os.environ[
+                'GOLEM_DEFINE_CACHE_DIRECTORIES']
+        return cache_directories_string
+
+    def make_define_cache_directories_list(self):
+        cache_directories_string = self.get_define_cache_directories_string()
+        if not cache_directories_string:
+            return []
+
+        return self.parse_cache_directories_string(
+            string=cache_directories_string)
+
+    def get_define_cache_directories(self):
+        cache_directories_string = self.get_define_cache_directories_string()
+
+        if not cache_directories_string:
+            return ''
+
+        dirs = self.parse_cache_directories_string(
+            string=cache_directories_string)
+
+        new_string = []
+        for cache_dir in dirs:
+            string = '{}={}'.format(cache_dir.location,
+                                    cache_dir.regex if cache_dir.regex else '')
+            new_string.append(string)
+
+        cache_directories_string = '|'.join(new_string)
+
+        return cache_directories_string
+
+    def get_options_static_cache_dir(self):
+        return self.make_local_path_absolute(
+            path=self.context.options.static_cache_dir)
+
+    def get_options_master_dependencies_configuration(self):
+        return self.make_local_path_absolute(
+            path=self.context.options.master_dependencies_configuration)
+
+    def make_static_cache_dir(self):
+        return self.make_local_path_absolute(
+            path=self.get_static_cache_dir_option())
+
+    def make_local_path_absolute(self, path):
+        abolute_path = path
+        if not abolute_path:
+            return ''
+        if not os.path.isabs(abolute_path):
+            abolute_path = os.path.join(self.get_project_dir(), abolute_path)
+        return abolute_path
 
     def make_project_path(self, path):
         return os.path.join(self.get_project_dir(), path)
@@ -606,11 +807,18 @@ class Context:
                            help="Resolved dependencies directory path")
 
         context.add_option(
-            "--global-dependencies-conf",
+            "--global-dependencies-configuration",
             action="store",
             default='',
             help="Configuration file of all required dependencies for the build"
         )
+
+        context.add_option(
+            "--master-dependencies-configuration",
+            action="store",
+            default='',
+            help=
+            "Master configuration file to resolve dependencies for the build")
 
         context.add_option("--recipe",
                            action="store",
@@ -647,6 +855,22 @@ class Context:
             "Store all dependencies with an URL matching the regex in the static cache (if defined)"
         )
 
+        context.add_option(
+            "--only-update-dependencies-regex",
+            action="store",
+            default='',
+            help=
+            "Select only dependencies with an URL matching the regex to resolve new versions"
+        )
+
+        context.add_option(
+            "--define-cache-directories",
+            action="store",
+            default='',
+            help=
+            "Define cache directories by specifying a string such as <path>=<regex>|<path>=(...) where regex is selecting dependencies with a matching repository URL"
+        )
+
     def configure_init(self):
         if not self.context.env.DEFINES:
             self.context.env.DEFINES = []
@@ -672,7 +896,7 @@ class Context:
             return None
 
         cacheconf = CacheConf()
-        cacheconf.locations = self.make_cache_dir()
+        cacheconf.locations = self.make_cache_dirs()
 
         # cache remote
         if not config.has_option('GOLEM', 'cache.remote'):
@@ -689,8 +913,8 @@ class Context:
         # if config.has_option('GOLEM', 'cache.location'):
         #	location = config.get('GOLEM', 'cache.location')
 
-        if cacheconf.location:
-            cacheconf.locations = [CacheDir(cacheconf.location.strip('\'"'))]
+        #if cacheconf.location:
+        #    cacheconf.locations = [CacheDir(cacheconf.location.strip('\'"'))]
 
         # return cache configuration
         return cacheconf
@@ -710,7 +934,7 @@ class Context:
             if self.is_x86():
                 self.context.env.MSVC_TARGETS = ['x86']
             elif self.is_x64():
-                self.context.env.MSVC_TARGETS = ['x86_amd64']
+                self.context.env.MSVC_TARGETS = ['amd64']
 
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
@@ -911,7 +1135,7 @@ class Context:
         cache_conf = self.find_cache_conf()
         if not cache_conf:
             cache_conf = CacheConf()
-            cache_conf.locations = self.make_cache_dir()
+            cache_conf.locations = self.make_cache_dirs()
 
         if len(cache_conf.locations) == 0:
             cache_conf.locations.append(cache.default_cached_dir())
@@ -1205,7 +1429,8 @@ class Context:
         repo_path = self.make_repo_ready(dep, cache_dir)
         build_path = self.get_dep_build_location(dep, cache_dir)
 
-        global_dependencies_conf = self.get_global_dependencies_conf_file()
+        global_dependencies_configuration = self.get_global_dependencies_configuration_file(
+        )
 
         helpers.run_task([
             'golem', 'configure', '--targets=' + dep.name, '--runtime=' +
@@ -1215,16 +1440,27 @@ class Context:
             '--arch=' + self.context.options.arch, '--variant=' +
             (self.context.options.variant
              if not dep.variant else dep.variant[0]), '--export=' + dep_path,
-            '--no-copy-artifacts', '--no-copy-licenses', '--cache-dir=' +
-            self.make_writable_cache_dir(), '--static-cache-dir=' +
-            self.make_static_cache_dir(), '--static-cache-dependencies-regex='
-            + self.context.options.static_cache_dependencies_regex, '--dir=' +
-            build_path, '--resolved-dependencies-directory=' + build_path,
+            '--no-copy-artifacts', '--no-copy-licenses',
+            '--cache-dir=' + self.make_writable_cache_dir(),
+            '--static-cache-dir=' + self.make_static_cache_dir(),
+            '--static-cache-dependencies-regex=' +
+            self.get_static_cache_dependencies_regex(), '--dir=' + build_path,
+            '--resolved-dependencies-directory=' + build_path,
             '--no-recipes-repositories-fetch',
-            '--global-dependencies-conf=' + global_dependencies_conf
+            '--only-update-dependencies-regex=' +
+            self.get_only_update_dependencies_regex(),
+            '--master-dependencies-configuration=' +
+            self.resolved_master_dependencies,
+            '--global-dependencies-configuration=' +
+            global_dependencies_configuration, "--define-cache-directories=" +
+            self.get_define_cache_directories()
         ] + (['--force-version=' +
               dep.resolved_version] if dep.shallow else []),
                          cwd=repo_path)
+
+        if command == 'build':
+            helpers.run_task(['golem', 'dependencies', '--dir=' + build_path],
+                             cwd=repo_path)
 
         helpers.run_task(['golem', command, '--dir=' + build_path],
                          cwd=repo_path)
@@ -1669,9 +1905,8 @@ class Context:
 
     def find_dep_cache_dir(self, dep, cache_conf):
         static_cache_dir = self.make_static_cache_dir()
-        if self.context.options.static_cache_dependencies_regex and static_cache_dir:
-            pattern = re.compile(
-                self.context.options.static_cache_dependencies_regex)
+        if self.get_static_cache_dependencies_regex() and static_cache_dir:
+            pattern = re.compile(self.get_static_cache_dependencies_regex())
             if pattern.match(dep.repository):
                 return CacheDir(location=static_cache_dir, is_static=True)
 
@@ -1693,9 +1928,19 @@ class Context:
         return None
 
     def find_writable_cache_dir(self, dep, cache_conf):
+
+        for cache_dir in cache_conf.locations:
+            if not cache_dir.regex or cache_dir.is_static:
+                continue
+
+            pattern = re.compile(cache_dir.regex)
+            if pattern.match(dep.repository):
+                return cache_dir
+
         for cache_dir in cache_conf.locations:
             if not cache_dir.is_static:
                 return cache_dir
+
         raise RuntimeError("Can't find any writable cache location")
 
     def export_dependency(self, config, dep):
@@ -1730,6 +1975,12 @@ class Context:
         if self.context.options.export:
             return foldername + '-' + self.make_dependencies_slug(
                 dependencies=self.project.deps)
+
+        # NOTE: 'conf' and 'bin-HASH' can conflict with use of master
+        # dependencies configurations which bypass "default" dependencies
+        # resolution process using versions declared in project file
+        # TODO: Find a solution to tamper the conflict of master dependencies
+        # configuration with "default" caching process of dependencies
 
         return foldername
 
@@ -2470,6 +2721,14 @@ class Context:
             self.context.options.targets = options['targets']
         else:
             options['targets'] = self.context.options.targets
+
+        if not self.context.options.only_update_dependencies_regex:
+            self.context.options.only_update_dependencies_regex = options[
+                'only_update_dependencies_regex']
+        else:
+            options[
+                'only_update_dependencies_regex'] = self.context.options.only_update_dependencies_regex
+
         return options
 
     def restore_options(self):
@@ -2864,32 +3123,51 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
+    def make_basic_dependency_repo_path(self, name, url, branch='master'):
+        dependency = Dependency(name=name,
+                                targets=None,
+                                repository=url,
+                                version=branch)
+        dependency.resolved_version = branch
+        dependency.update_cache_dir(context=self)
+        repo_path = os.path.join(
+            dependency.cache_dir.location,
+            helpers.generate_recipe_id(dependency.repository))
+        return repo_path
+
+    def clone_repository(self, path, url, branch):
+        if not os.path.exists(path):
+            os.makedirs(path)
+            helpers.run_task(['git', 'clone', '--', url, '.'], cwd=path)
+        else:
+            helpers.run_task(['git', 'fetch', 'origin'], cwd=path)
+
+        helpers.run_task(['git', 'reset', '--hard', 'origin/' + branch],
+                         cwd=path)
+
+    def clone_master_dependencies_repository(self, url):
+        branch_version = 'master'
+        repo_path = self.make_basic_dependency_repo_path(name='master',
+                                                         url=url,
+                                                         branch=branch_version)
+
+        if not self.deps_resolve:
+            return repo_path
+
+        self.clone_repository(path=repo_path, url=url, branch=branch_version)
+
+        return repo_path
+
     def clone_recipes_repository(self, url):
         branch_version = 'master'
-        recipe_dependency = Dependency(name='recipes',
-                                       targets=None,
-                                       repository=url,
-                                       version=branch_version)
-        recipe_dependency.resolved_version = branch_version
-        recipe_dependency.update_cache_dir(context=self)
-        repo_path = os.path.join(
-            recipe_dependency.cache_dir.location,
-            helpers.generate_recipe_id(recipe_dependency.repository))
+        repo_path = self.make_basic_dependency_repo_path(name='recipes',
+                                                         url=url,
+                                                         branch=branch_version)
 
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
             return repo_path
 
-        if not os.path.exists(repo_path):
-            os.makedirs(repo_path)
-            helpers.run_task(
-                ['git', 'clone', '--', recipe_dependency.repository, '.'],
-                cwd=repo_path)
-        else:
-            helpers.run_task(['git', 'fetch', 'origin'], cwd=repo_path)
-
-        helpers.run_task(
-            ['git', 'reset', '--hard', 'origin/' + branch_version],
-            cwd=repo_path)
+        self.clone_repository(path=repo_path, url=url, branch=branch_version)
 
         return repo_path
 
@@ -2976,7 +3254,9 @@ class Context:
         self.context.setenv('main')
         self.configure_compiler()
         if self.is_windows():
-            self.context.env.MSVC_TARGETS = [self.get_arch()]
+            self.context.env.MSVC_TARGETS = [
+                'x86' if self.get_arch() == 'x86' else 'amd64'
+            ]
         self.context.load(features_to_load)
         self.save_options()
 
