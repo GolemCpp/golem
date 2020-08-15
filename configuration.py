@@ -49,6 +49,7 @@ class Configuration(Condition):
                  artifacts_dev=None,
                  artifacts_run=None,
                  licenses=None,
+                 qmldirs=None,
                  artifacts_generators=None,
                  target_decorators=None,
                  **kwargs):
@@ -106,6 +107,7 @@ class Configuration(Condition):
         self.artifacts_dev = helpers.parameter_to_list(artifacts_dev)
         self.artifacts_run = helpers.parameter_to_list(artifacts_run)
         self.licenses = helpers.parameter_to_list(licenses)
+        self.qmldirs = helpers.parameter_to_list(qmldirs)
 
         self.artifacts_generators = helpers.parameter_to_list(
             artifacts_generators)
@@ -223,6 +225,9 @@ class Configuration(Condition):
         if hasattr(config, 'licenses'):
             self.licenses = helpers.filter_unique(self.licenses +
                                                   config.licenses)
+
+        if hasattr(config, 'qmldirs'):
+            self.qmldirs = helpers.filter_unique(self.qmldirs + config.qmldirs)
 
         if hasattr(config, 'artifacts_generators'):
             self.artifacts_generators = self.artifacts_generators + config.artifacts_generators
@@ -489,7 +494,8 @@ class Configuration(Condition):
             'program_cxxflags', 'program_linkflags', 'library_cxxflags',
             'library_linkflags', 'cxxflags', 'linkflags', 'ldflags', 'system',
             'packages', 'packages_dev', 'features', 'deps', 'use', 'uselib',
-            'wfeatures', 'artifacts_dev', 'artifacts_run', 'licenses'
+            'wfeatures', 'artifacts_dev', 'artifacts_run', 'licenses',
+            'qmldirs'
         ]
 
     @staticmethod

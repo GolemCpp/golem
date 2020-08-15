@@ -3693,6 +3693,7 @@ class Context:
             export_target_config.packages += build_config.packages
             export_target_config.packages_dev += build_config.packages_dev
             export_target_config.licenses += build_config.licenses
+            export_target_config.qmldirs += build_config.qmldirs
 
             if not export_target_config.header_only:
                 export_target_config.rpath_link.append(out_path)
@@ -3855,6 +3856,8 @@ class Context:
         config.artifacts_run = make_absolute_paths(config.artifacts_run,
                                                    new_out_path)
         config.licenses = make_absolute_paths(config.licenses,
+                                              self.get_project_dir())
+        config.qmldirs = make_absolute_paths(config.qmldirs,
                                               self.get_project_dir())
         config.rpath_link = replace_paths(config.rpath_link, old_out_path,
                                           new_out_path)
