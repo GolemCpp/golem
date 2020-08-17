@@ -47,6 +47,7 @@ class Context:
 
         self.deps_resolve = False
         self.deps_build = False
+        self.built_tasks = []
         self.build_on = False
 
         self.resolved_master_dependencies = ''
@@ -2012,17 +2013,9 @@ class Context:
                         callback(config, dep)
                         deps_linked.append(dep.name)
 
-    def build_target_gather_config(self, task, targets, static_configs):
+    def build_target_gather_config(self, task, targets, config):
 
-        config, _ = self.iterate_over_task(task=task, targets=targets)
-        available_targets = self.get_targets_from_task(task)
-        targets = targets if targets else available_targets
-
-        config.merge(self, static_configs)
-
-        self.merge_local_dependent_used_target_configs(config)
-
-        self.recursively_link_dependencies(config)
+        config = config.copy()
 
         decorated_targets = self.make_decorated_target_list_from_context(
             config=config, target_names=targets)
@@ -2250,14 +2243,15 @@ class Context:
         self.save_compiler_commands_list(path, self.compiler_commands)
 
     def append_vscode_config_target(self, compiler_commands_path, task,
-                                    targets, static_configs):
+                                    targets, config):
         if not self.context.options.vscode:
             return
 
         targets_includes = []
 
-        build_target = self.build_target_gather_config(task, targets,
-                                                       static_configs)
+        build_target = self.build_target_gather_config(task=task,
+                                                       targets=targets,
+                                                       config=config)
 
         targets_includes += [
             str(item) for item in self.make_project_path_array(
@@ -2289,10 +2283,10 @@ class Context:
 
         targets_includes = []
 
-        def list_all_targets_includes(task, targets, static_configs,
-                                      targets_includes):
-            build_target = self.build_target_gather_config(
-                task=task, targets=targets, static_configs=static_configs)
+        def list_all_targets_includes(task, targets, config, targets_includes):
+            build_target = self.build_target_gather_config(task=task,
+                                                           targets=targets,
+                                                           config=config)
             targets_includes += [
                 str(item) for item in self.make_project_path_array(
                     build_target.config.includes + build_target.config.source)
@@ -2305,11 +2299,12 @@ class Context:
             ]
             targets_includes += [str(item) for item in build_target.includes]
 
-        self.call_build_target(lambda a, b, c: list_all_targets_includes(
-            task=a,
-            targets=b,
-            static_configs=c,
-            targets_includes=targets_includes))
+        self.call_build_target(
+            lambda task, targets, config: list_all_targets_includes(
+                task=task,
+                targets=targets,
+                config=config,
+                targets_includes=targets_includes))
 
         targets_includes = helpers.filter_unique(targets_includes)
 
@@ -2339,10 +2334,10 @@ class Context:
     def make_vscode_path(self, path):
         return os.path.join(self.get_vscode_path(), path)
 
-    def build_target(self, task, targets, static_configs):
-
-        build_target = self.build_target_gather_config(task, targets,
-                                                       static_configs)
+    def build_target(self, task, targets, config):
+        build_target = self.build_target_gather_config(task=task,
+                                                       targets=targets,
+                                                       config=config)
 
         vscode_dir = self.get_vscode_path()
         helpers.make_directory(vscode_dir)
@@ -2370,7 +2365,7 @@ class Context:
                 compiler_commands_path=compiler_commands_path,
                 task=task,
                 targets=targets,
-                static_configs=static_configs)
+                config=config)
 
         build_fun = None
 
@@ -2432,10 +2427,11 @@ class Context:
                   ccdeps=build_target.ccdeps,
                   linkdeps=build_target.linkdeps)
 
-    def cppcheck_target(self, task, targets, static_configs):
+    def cppcheck_target(self, task, targets, config):
 
-        build_target = self.build_target_gather_config(task, targets,
-                                                       static_configs)
+        build_target = self.build_target_gather_config(task=task,
+                                                       targets=targets,
+                                                       config=config)
 
         all_includes = build_target.env_isystem + \
             build_target.env_includes + build_target.includes
@@ -2460,14 +2456,16 @@ class Context:
                      name=task.name,
                      cwd=cppcheck_dir)
 
-    def call_build_target(self, build_target_fun):
-        static_configs = self.project.read_configurations(self)
-
+    def call_build_target(self, build_target_fun, build_recursively=False):
+        self.built_tasks = []
         tasks_and_targets = self.get_tasks_and_targets_to_process()
         for task, targets in tasks_and_targets:
             if task.header_only:
                 continue
-            build_target_fun(task, targets, static_configs)
+            _, _ = self.iterate_over_task(task=task,
+                                          targets=targets,
+                                          build_method=build_target_fun,
+                                          build_recursively=build_recursively)
 
     def cppcheck(self):
         cppcheck_dir = self.make_golem_path("cppcheck")
@@ -2476,10 +2474,11 @@ class Context:
 
         self.call_build_target(self.cppcheck_target)
 
-    def clang_tidy_target(self, task, targets, static_configs):
+    def clang_tidy_target(self, task, targets, config):
 
-        build_target = self.build_target_gather_config(task, targets,
-                                                       static_configs)
+        build_target = self.build_target_gather_config(task=task,
+                                                       targets=targets,
+                                                       config=config)
 
         clang_tidy_dir = self.make_golem_path('clang-tidy')
 
@@ -3366,7 +3365,7 @@ class Context:
             self.initialize_compiler_commands()
             self.initialize_vscode_configs()
 
-        self.call_build_target(self.build_target)
+        self.call_build_target(self.build_target, build_recursively=True)
 
         if self.context.options.vscode:
             self.save_compiler_commands(compiler_commands_path)
@@ -3641,11 +3640,18 @@ class Context:
             raise RuntimeError("Ambiguous build task {}".format(task.name))
         return build_tasks[0] if build_tasks else None
 
-    def process_internal_deps(self, config):
+    def process_internal_deps(self,
+                              config,
+                              build_method=None,
+                              build_recursively=False):
         tasks_use = self.get_tasks_from_names(
             names=config.use, tasks_source=self.project.exports)
         for export_task in tasks_use:
-            export_task_config, _ = self.process_export_task(task=export_task)
+            export_task_config, _ = self.process_export_task(
+                task=export_task,
+                targets=None,
+                build_method=build_method,
+                build_recursively=build_recursively)
             export_task_config.type = []
             config.merge(context=self, configs=[export_task_config])
 
@@ -3755,8 +3761,14 @@ class Context:
 
         self.recursively_apply_to_deps(config, callback)
 
-    def process_export_task(self, task, targets=None):
+    def process_export_task(self,
+                            task,
+                            targets=None,
+                            build_method=None,
+                            build_recursively=False):
         config = task.merge_configs(self)
+        static_configs = self.project.read_configurations(self)
+        config.merge(context=self, configs=static_configs)
         config.targets = self.get_targets_from_task(task)
 
         config_targets = []
@@ -3766,34 +3778,66 @@ class Context:
         if related_build_task:
             required_targets = targets if targets else config.targets
             related_build_config = self.process_build_task(
-                task=related_build_task, targets=required_targets)
+                task=related_build_task,
+                targets=required_targets,
+                build_method=build_method,
+                build_recursively=build_recursively)
 
             config, config_targets = self.update_export_config_from_build_config(
                 export_config=config, build_config=related_build_config)
 
         for c in [config] + config_targets:
-            self.process_internal_deps(c)
+            self.process_internal_deps(
+                config=c,
+                build_method=build_method if build_recursively else None,
+                build_recursively=build_recursively)
 
         for c in [config] + config_targets:
-            self.process_external_deps(c)
+            self.process_external_deps(config=c)
 
         return config, config_targets
 
-    def process_build_task(self, task, targets=None):
+    def process_build_task(self,
+                           task,
+                           targets=None,
+                           build_method=None,
+                           build_recursively=False):
         config = task.merge_configs(self)
+        static_configs = self.project.read_configurations(self)
+        config.merge(context=self, configs=static_configs)
         config.targets = self.get_targets_from_task(task)
 
-        self.process_internal_deps(config)
+        self.process_internal_deps(
+            config=config,
+            build_method=build_method if build_recursively else None,
+            build_recursively=build_recursively)
 
-        self.process_external_deps(config)
+        self.process_external_deps(config=config)
+
+        if build_method and task.name not in self.built_tasks:
+            self.built_tasks.append(task.name)
+            asked_targets = targets if targets else config.targets
+            build_method(task=task, targets=asked_targets, config=config)
 
         return config
 
-    def iterate_over_task(self, task, targets=None):
+    def iterate_over_task(self,
+                          task,
+                          targets=None,
+                          build_method=None,
+                          build_recursively=False):
         if task.export:
-            return self.process_export_task(task=task, targets=targets)
+            return self.process_export_task(
+                task=task,
+                targets=targets,
+                build_method=build_method,
+                build_recursively=build_recursively)
         else:
-            return self.process_build_task(task=task, targets=targets), []
+            return self.process_build_task(
+                task=task,
+                targets=targets,
+                build_method=build_method,
+                build_recursively=build_recursively), []
 
     def make_cache_prefix(self):
         return "${GOLEM_CACHE_DIR}"
