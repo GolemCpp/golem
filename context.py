@@ -137,6 +137,9 @@ class Context:
         return cached_dependencies
 
     def load_cached_dependencies_to_keep(self):
+        if not self.get_only_update_dependencies_regex():
+            return []
+            
         cached_dependencies = self.load_dependencies_json_cache()
 
         if not cached_dependencies:
