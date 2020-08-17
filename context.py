@@ -2150,10 +2150,6 @@ class Context:
                         env_defines += self.context.env[key].copy()
         env_includes = []
 
-        for key in list(self.context.env.keys()):
-            if key.startswith("INCLUDES_QT5"):
-                self.context.env[key] = []
-
         rpath_link = []
         if not self.is_windows():
             rpath_links = config.rpath_link.copy()
