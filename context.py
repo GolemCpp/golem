@@ -139,7 +139,7 @@ class Context:
     def load_cached_dependencies_to_keep(self):
         if not self.get_only_update_dependencies_regex():
             return []
-            
+
         cached_dependencies = self.load_dependencies_json_cache()
 
         if not cached_dependencies:
@@ -2089,6 +2089,12 @@ class Context:
                              VERSION_HASH=version.githash)
                 version_source.append(version_template_dst)
 
+        env_isystem = []
+        for key in list(self.context.env.keys()):
+            if key.startswith("ISYSTEM_"):
+                for path in self.context.env[key]:
+                    env_isystem.append(str(path))
+
         isystem_argument = '-isystem'
         if self.is_windows():
             isystem_argument = '/external:I'
@@ -2096,6 +2102,7 @@ class Context:
         isystemflags = []
         for include in config.isystem:
             isystemflags.append('{}{}'.format(isystem_argument, include))
+            env_isystem.append(include)
 
         for key in list(self.context.env.keys()):
             if key.startswith(
@@ -2103,6 +2110,7 @@ class Context:
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
                         isystemflags.append('-isystem' + str(path))
+                        env_isystem.append(str(path))
 
         config_all_use = helpers.filter_unique(config.use + config.features)
         for config_use in config_all_use:
@@ -2112,6 +2120,7 @@ class Context:
                         for path in self.context.env[key]:
                             isystemflags.append('{}{}'.format(
                                 isystem_argument, str(path)))
+                            env_isystem.append(str(path))
 
         if self.is_windows():
             version_short = None
@@ -2140,11 +2149,6 @@ class Context:
                     if key.startswith("DEFINES_QT5") and config_use in key:
                         env_defines += self.context.env[key].copy()
         env_includes = []
-        env_isystem = []
-        for key in list(self.context.env.keys()):
-            if key.startswith("ISYSTEM_"):
-                for path in self.context.env[key]:
-                    env_isystem.append(str(path))
 
         for key in list(self.context.env.keys()):
             if key.startswith("INCLUDES_QT5"):
