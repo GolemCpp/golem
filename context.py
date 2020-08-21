@@ -11,6 +11,7 @@ import platform
 import subprocess
 import configparser
 import distutils
+import stat
 from distutils import dir_util
 from copy import deepcopy
 from module import Module
@@ -30,6 +31,8 @@ import importlib.util
 import importlib.machinery
 from waflib import Logs
 from collections import OrderedDict
+from target import Target
+from artifact import Artifact
 
 
 class Context:
@@ -53,6 +56,7 @@ class Context:
         self.resolved_master_dependencies = ''
 
         self.cache_conf = None
+        self.repository = None
 
     def load_project(self, directory=None):
         if directory is None:
@@ -1262,6 +1266,9 @@ class Context:
                 dependency_configuration.type = []
                 dependency_configuration.isystem += dependency_configuration.includes
                 dependency_configuration.includes = []
+                dependency_configuration.licenses = []
+                dependency_configuration.artifacts_dev = []
+                dependency_configuration.artifacts_run = []
 
                 config_targets = copy.deepcopy(config.targets)
                 config.merge(self, [dependency_configuration])
@@ -1282,22 +1289,26 @@ class Context:
                                          dependency_dependencies)).values())
 
             if not self.context.options.no_copy_artifacts and self.deps_build:
-                artifacts = dependency_configuration.artifacts_run + dependency_configuration.artifacts_dev
-                artifacts = helpers.filter_unique(artifacts)
-                for artifact in artifacts:
-                    if not os.path.exists(artifact):
+                for artifact_binary in dependency_configuration.artifacts:
+                    if not os.path.exists(artifact_binary.absolute_path):
                         continue
+                    if artifact_binary.type not in ['library', 'program']:
+                        continue
+                    artifact_path_dir = os.path.dirname(artifact_binary.path)
                     helpers.copy_file_if_recent(
-                        source_path=artifact,
-                        destination_directory=self.make_out_path(),
+                        source_path=artifact_binary.absolute_path,
+                        destination_directory=os.path.join(
+                            self.make_out_path(), artifact_path_dir),
                         callback=lambda filename: print("Copy binary {}".
                                                         format(filename)))
 
             if not self.context.options.no_copy_licenses and self.deps_build:
-                for lic in dependency_configuration.licenses:
-                    dep_id = self.find_dependency_id(lic)
+                for artifact_license in dependency_configuration.artifacts:
+                    if artifact_license.type != 'license':
+                        continue
+                    dep_id = self.find_dependency_id(artifact_license.location)
                     helpers.copy_file_if_recent(
-                        source_path=lic,
+                        source_path=artifact_license.absolute_path,
                         destination_directory=self.make_output_path(
                             os.path.join('licenses', dep_id)),
                         callback=lambda filename: print(
@@ -1321,12 +1332,6 @@ class Context:
         new_path = Path(os.path.relpath(path=path, start=common_path))
         return new_path.parts[0]
 
-    class Artifact:
-        def __init__(self, absolute_path, path, absolute_dir_path):
-            self.absolute_path = absolute_path
-            self.path = path
-            self.absolute_dir_path = absolute_dir_path
-
     def list_dep_binary_artifacts(self, config, dep, cache_dir):
         artifacts_list = []
         dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
@@ -1341,15 +1346,14 @@ class Context:
             dep_path_build = os.path.abspath(dep_path_build)
             src_file_path = os.path.join(dep_path_build, file)
             artifacts_list.append(
-                Context.Artifact(os.path.abspath(src_file_path), file,
-                                 dep_path_build))
+                Artifact(os.path.abspath(src_file_path), file, dep_path_build))
             if self.is_linux() and file.endswith('.so'):
                 src_file_path_glob = glob.glob(src_file_path + '.*')
                 for other_file_path in src_file_path_glob:
                     abspath = os.path.abspath(other_file_path)
                     relpath = os.path.relpath(other_file_path, dep_path_build)
                     artifacts_list.append(
-                        Context.Artifact(abspath, relpath, dep_path_build))
+                        Artifact(abspath, relpath, dep_path_build))
         return artifacts_list
 
     def list_target_binary_artifacts(self, config, target):
@@ -1361,15 +1365,14 @@ class Context:
             path_build = os.path.abspath(path_build)
             src_file_path = os.path.join(path_build, file)
             artifacts_list.append(
-                Context.Artifact(os.path.abspath(src_file_path), file,
-                                 path_build))
+                Artifact(os.path.abspath(src_file_path), file, path_build))
             if self.is_linux() and file.endswith('.so'):
                 src_file_path_glob = glob.glob(src_file_path + '.*')
                 for other_file_path in src_file_path_glob:
                     abspath = os.path.abspath(other_file_path)
                     relpath = os.path.relpath(other_file_path, path_build)
                     artifacts_list.append(
-                        Context.Artifact(abspath, relpath, path_build))
+                        Artifact(abspath, relpath, path_build))
         return artifacts_list
 
     def clean_repo(self, repo_path):
@@ -1619,15 +1622,17 @@ class Context:
 
     def make_decorated_target_from_context(self, config, target_name):
 
-        decorated_target = target_name
+        decorated_target_path = os.path.dirname(target_name)
+        decorated_target_base = os.path.basename(target_name)
 
         target_decorators = config.target_decorators if config.target_decorators else [
             Context.default_target_decorator
         ]
         for target_decorator in target_decorators:
-            decorated_target = target_decorator(decorated_target, config, self)
+            decorated_target_base = target_decorator(decorated_target_base,
+                                                     config, self)
 
-        return decorated_target
+        return os.path.join(decorated_target_path, decorated_target_base)
 
     def make_decorated_target_list_from_context(self, config, target_names):
 
@@ -1685,6 +1690,9 @@ class Context:
                                           enable_run_libs=True,
                                           enable_exes=True):
 
+        decorated_target_path = os.path.dirname(decorated_target)
+        decorated_target_base = os.path.basename(decorated_target)
+
         if not enable_exes and config.type_unique == 'program':
             return []
 
@@ -1705,7 +1713,11 @@ class Context:
             artifacts_generators = [Context.internal_artifacts_generator]
 
         for artifact_generator in artifacts_generators:
-            artifacts += artifact_generator(decorated_target, config, self)
+            artifacts += [
+                os.path.join(decorated_target_path,
+                             result) for result in artifact_generator(
+                                 decorated_target_base, config, self)
+            ]
 
         if not enable_dev_libs:
             artifacts = [
@@ -1761,12 +1773,9 @@ class Context:
         for config in dep_configs:
             if not config:
                 return None
-            for artifact in config.artifacts_dev:
-                if artifact not in artifacts:
-                    artifacts.append(artifact)
-            for artifact in config.artifacts_run:
-                if artifact not in artifacts:
-                    artifacts.append(artifact)
+            for artifact in config.artifacts:
+                if artifact.absolute_path not in artifacts:
+                    artifacts.append(artifact.absolute_path)
         return artifacts
 
     def get_expected_files(self,
@@ -2266,7 +2275,7 @@ class Context:
 
         targets_includes = helpers.filter_unique(targets_includes)
 
-        self.vscode_configs.append({
+        vscode_config = OrderedDict({
             "name": task.name,
             "intelliSenseMode": "msvc-x64" if Context.is_windows() else
             "gcc-x64" if Context.is_linux() else "clang-x64",
@@ -2280,13 +2289,27 @@ class Context:
             }
         })
 
+        cxx_standard = ''
+        for cxxflag in config.cxxflags:
+            if cxxflag.startswith('-std=') or (cxxflag.startswith('/std:') and
+                                               cxxflag != '/std:c++latest'):
+                cxx_standard = cxxflag[5:]
+                break
+
+        if cxx_standard:
+            vscode_config.update({"cppStandard": cxx_standard})
+
+        self.vscode_configs.append(vscode_config)
+
     def generate_vscode_config(self, compiler_commands_path):
         if not self.context.options.vscode:
             return
 
+        targets_cxxflags = []
         targets_includes = []
 
-        def list_all_targets_includes(task, targets, config, targets_includes):
+        def list_all_targets_includes(task, targets, config, targets_includes,
+                                      targets_cxxflags):
             build_target = self.build_target_gather_config(task=task,
                                                            targets=targets,
                                                            config=config)
@@ -2301,31 +2324,44 @@ class Context:
                 str(item) for item in build_target.env_includes
             ]
             targets_includes += [str(item) for item in build_target.includes]
+            targets_cxxflags += config.cxxflags
 
         self.call_build_target(
             lambda task, targets, config: list_all_targets_includes(
                 task=task,
                 targets=targets,
                 config=config,
-                targets_includes=targets_includes))
+                targets_includes=targets_includes,
+                targets_cxxflags=targets_cxxflags))
 
         targets_includes = helpers.filter_unique(targets_includes)
 
-        data = OrderedDict({
-            "configurations": [{
-                "name": "Default",
-                "intelliSenseMode": "msvc-x64" if Context.is_windows() else
-                "gcc-x64" if Context.is_linux() else "clang-x64",
-                "includePath": targets_includes,
-                "defines": [],
-                "compileCommands": compiler_commands_path,
-                "browse": {
-                    "path": targets_includes,
-                    "limitSymbolsToIncludedHeaders": True,
-                    "databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
-                }
-            }] + self.vscode_configs
+        vscode_config = OrderedDict({
+            "name": "Default",
+            "intelliSenseMode": "msvc-x64" if Context.is_windows() else
+            "gcc-x64" if Context.is_linux() else "clang-x64",
+            "includePath": targets_includes,
+            "defines": [],
+            "compileCommands": compiler_commands_path,
+            "browse": {
+                "path": targets_includes,
+                "limitSymbolsToIncludedHeaders": True,
+                "databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
+            }
         })
+
+        cxx_standard = ''
+        for cxxflag in targets_cxxflags:
+            if cxxflag.startswith('-std=') or (cxxflag.startswith('/std:') and
+                                               cxxflag != '/std:c++latest'):
+                cxx_standard = cxxflag[5:]
+                break
+
+        if cxx_standard:
+            vscode_config.update({"cppStandard": cxx_standard})
+
+        data = OrderedDict(
+            {"configurations": [vscode_config] + self.vscode_configs})
         properties_path = os.path.join(self.get_project_dir(), '.vscode',
                                        'c_cpp_properties.json')
         with open(properties_path, 'w') as outfile:
@@ -2556,16 +2592,18 @@ class Context:
                   "\" in directory \"" + str(cwd) + "\"")
             return 1
 
-    def find_artifacts(self, path, recursively=False):
+    def find_artifacts(self, path, recursively=False, types=None):
         files_grabbed = []
-        types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*', '*.dylib',
-                 '*.dylib.*')
+        file_types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*',
+                      '*.dylib', '*.dylib.*')
+        if types:
+            file_types = types
         if recursively == False:
-            for files in types:
+            for files in file_types:
                 files_grabbed.extend(glob.glob(os.path.join(path, files)))
             return files_grabbed
         else:
-            for files in types:
+            for files in file_types:
                 for root, _, filenames in os.walk(path):
                     for filename in fnmatch.filter(filenames, files):
                         files_grabbed.append(os.path.join(root, filename))
@@ -3009,7 +3047,7 @@ class Context:
                          "libc++.so." + self.make_android_ndk_platform()),
         ]
 
-    def package_android(self, package):
+    def package_android(self, package, task, targets, config):
 
         self.check_android_sdk_path()
         self.check_android_sdk_platform()
@@ -3018,14 +3056,13 @@ class Context:
             self.context.options.qtdir)
 
         print("Check package's targets")
-        targets_to_process = self.get_targets_to_process(package.targets)
-        config = self.resolve_global_config(targets_to_process)
+
         depends = config.packages
 
-        assert len(targets_to_process) == 1
+        assert len(targets) == 1
 
         target_binaries = []
-        for target in targets_to_process:
+        for target in targets:
             target_binaries += self.make_artifacts_from_context(config, target)
 
         target_binary = None
@@ -3241,11 +3278,18 @@ class Context:
                 "ERROR: unable to use recipe from {}".format(found_recipe_dir))
 
     def load_git_remote_origin_url(self):
-        remote_url = subprocess.check_output(
-            ['git', 'config', '--get', 'remote.origin.url'],
-            cwd=self.get_project_dir()).decode(sys.stdout.encoding)
-        remote_url = remote_url.split('\n')
-        return remote_url[0] if remote_url else None
+        if self.repository is not None:
+            return self.repository
+        self.repository = ''
+        try:
+            remote_url = subprocess.check_output(
+                ['git', 'config', '--get', 'remote.origin.url'],
+                cwd=self.get_project_dir()).decode(sys.stdout.encoding)
+            remote_url = remote_url.split('\n')
+            self.repository = remote_url[0] if remote_url else None
+        except Exception:
+            pass
+        return self.repository
 
     def configure(self):
 
@@ -3656,6 +3700,7 @@ class Context:
                 build_method=build_method,
                 build_recursively=build_recursively)
             export_task_config.type = []
+            export_task_config.targets = []
             config.merge(context=self, configs=[export_task_config])
 
     def make_outpath(self):
@@ -3716,43 +3761,78 @@ class Context:
             decorated_target = self.make_decorated_target_from_context(
                 export_target_config, target_name)
 
-            export_target_config.artifacts_dev += build_config.artifacts_dev
-            export_target_config.artifacts_run += build_config.artifacts_run
-            export_target_config.rpath_link += build_config.rpath_link
-            export_target_config.packages += build_config.packages
-            export_target_config.packages_dev += build_config.packages_dev
-            export_target_config.licenses += build_config.licenses
-            export_target_config.qmldirs += build_config.qmldirs
+            decorated_target_path = os.path.dirname(decorated_target)
+            decorated_target_base = os.path.basename(decorated_target)
+
+            out_libpath = os.path.join(out_path, decorated_target_path)
 
             if not export_target_config.header_only:
-                export_target_config.rpath_link.append(out_path)
+                export_target_config.rpath_link.append(out_libpath)
 
             if self.is_config_shared(export_target_config):
-                if decorated_target not in export_target_config.lib:
-                    export_target_config.lib.append(decorated_target)
-                if out_path not in export_target_config.libpath:
-                    export_target_config.libpath.append(out_path)
+                if decorated_target_base not in export_target_config.lib:
+                    export_target_config.lib.append(decorated_target_base)
+                if out_libpath not in export_target_config.libpath:
+                    export_target_config.libpath.append(out_libpath)
             else:
-                if decorated_target not in export_target_config.stlib:
-                    export_target_config.stlib.append(decorated_target)
-                if out_path not in export_target_config.stlibpath:
-                    export_target_config.stlibpath.append(out_path)
+                if decorated_target_base not in export_target_config.stlib:
+                    export_target_config.stlib.append(decorated_target_base)
+                if out_libpath not in export_target_config.stlibpath:
+                    export_target_config.stlibpath.append(out_libpath)
 
-            export_target_config.artifacts_dev += self.make_binary_artifact_from_context(
+            artifacts_dev = self.make_binary_artifact_from_context(
                 export_target_config,
                 decorated_target,
                 enable_dev_libs=True,
                 enable_run_libs=True,
                 enable_exes=False)
-            export_target_config.artifacts_run += self.make_binary_artifact_from_context(
+
+            artifacts_run = self.make_binary_artifact_from_context(
                 export_target_config,
                 decorated_target,
                 enable_dev_libs=False,
                 enable_run_libs=True,
                 enable_exes=True)
 
+            for artifact in helpers.filter_unique(artifacts_run +
+                                                  artifacts_dev):
+                export_target_config.artifacts.append(
+                    self.create_artifact(
+                        path=artifact,
+                        location='',
+                        type=build_config.type[0],
+                        scope='dev' if artifact not in artifacts_run else None,
+                        target=target_name,
+                        decorated_target=decorated_target))
+
+            export_target_config.artifacts_dev = helpers.filter_unique(
+                build_config.artifacts_dev +
+                export_target_config.artifacts_dev)
+            export_target_config.artifacts_run = helpers.filter_unique(
+                build_config.artifacts_run +
+                export_target_config.artifacts_run)
+            export_target_config.rpath_link = helpers.filter_unique(
+                build_config.rpath_link + export_target_config.rpath_link)
+            export_target_config.packages = helpers.filter_unique(
+                build_config.packages + export_target_config.packages)
+            export_target_config.packages_dev = helpers.filter_unique(
+                build_config.packages_dev + export_target_config.packages_dev)
+            export_target_config.licenses = helpers.filter_unique(
+                build_config.licenses + export_target_config.licenses)
+            export_target_config.qmldirs = helpers.filter_unique(
+                build_config.qmldirs + export_target_config.qmldirs)
+            export_target_config.artifacts_dev = helpers.filter_unique(
+                artifacts_dev + export_target_config.artifacts_dev)
+            export_target_config.artifacts_run = helpers.filter_unique(
+                artifacts_run + export_target_config.artifacts_run)
+            export_target_config.artifacts = helpers.filter_unique(
+                build_config.artifacts + export_target_config.artifacts)
+            export_target_config.wfeatures = helpers.filter_unique(
+                build_config.wfeatures + export_target_config.wfeatures)
+
             export_config.merge(context=self, configs=[export_target_config])
             export_target_configs.append(export_target_config)
+
         return export_config, export_target_configs
 
     def process_external_deps(self, config):
@@ -3764,15 +3844,48 @@ class Context:
 
         self.recursively_apply_to_deps(config, callback)
 
+    def create_artifact(self,
+                        path,
+                        location,
+                        type,
+                        scope=None,
+                        target=None,
+                        decorated_target=None):
+        repository = self.load_git_remote_origin_url()
+
+        return Artifact(
+            path=path,
+            location=location,
+            type=type,
+            scope=scope,
+            repository=repository,
+            target=None,
+            decorated_target=decorated_target,
+            resolved_version=self.context.options.force_version
+            if self.context.options.force_version else self.version.gitlong,
+            resolved_hash=self.version.githash)
+
+    def generate_configuration(self, task, targets):
+        config = task.merge_configs(self)
+        static_configs = self.project.read_configurations(self)
+        config.merge(context=self, configs=static_configs)
+        config.targets = self.get_targets_from_task(task)
+
+        for license_path in config.licenses:
+            license_artifact = self.create_artifact(path=license_path,
+                                                    location='',
+                                                    type='license')
+            if license_artifact not in config.artifacts:
+                config.artifacts.append(license_artifact)
+
+        return config
+
     def process_export_task(self,
                             task,
                             targets=None,
                             build_method=None,
                             build_recursively=False):
-        config = task.merge_configs(self)
-        static_configs = self.project.read_configurations(self)
-        config.merge(context=self, configs=static_configs)
-        config.targets = self.get_targets_from_task(task)
+        config = self.generate_configuration(task=task, targets=targets)
 
         config_targets = []
 
@@ -3805,10 +3918,7 @@ class Context:
                            targets=None,
                            build_method=None,
                            build_recursively=False):
-        config = task.merge_configs(self)
-        static_configs = self.project.read_configurations(self)
-        config.merge(context=self, configs=static_configs)
-        config.targets = self.get_targets_from_task(task)
+        config = self.generate_configuration(task=task, targets=targets)
 
         self.process_internal_deps(
             config=config,
@@ -3897,6 +4007,18 @@ class Context:
             results.append(new_path)
         return results
 
+    @staticmethod
+    def make_absolute_artifacts(artifacts, repo_path, out_path):
+        results = []
+        for artifact in artifacts:
+            if not artifact.location:
+                if artifact.type == 'license':
+                    artifact.location = repo_path
+                else:
+                    artifact.location = out_path
+            results.append(artifact)
+        return results
+
     def make_config_absolute(self, config, old_out_path, new_out_path):
         def make_absolute_paths(paths, base_path):
             results = []
@@ -3933,6 +4055,10 @@ class Context:
                                        new_out_path)
         config.stlibpath = replace_paths(config.stlibpath, old_out_path,
                                          new_out_path)
+        config.artifacts = Context.make_absolute_artifacts(
+            artifacts=config.artifacts,
+            repo_path=self.get_project_dir(),
+            out_path=new_out_path)
 
     def cleanup_old_build_files(self, config):
         if not self.context.options.export:
@@ -3993,8 +4119,7 @@ class Context:
         return targets
 
     def resolve_recursively(self):
-        targets = self.resolve_asked_targets()
-        task_targets_list = self.get_tasks_from_targets(targets)
+        task_targets_list = self.get_tasks_and_targets_to_process()
         for task, targets in task_targets_list:
             config, config_targets = self.iterate_over_task(task=task,
                                                             targets=targets)
@@ -4030,9 +4155,10 @@ class Context:
 
         return mapped_objects
 
-    def get_tasks_and_targets_to_process(self):
-        targets = self.resolve_asked_targets()
-        task_targets_list = self.get_tasks_from_targets(targets)
+    def get_tasks_and_targets_to_process(self, tasks_source=None):
+        targets = self.resolve_asked_targets(tasks_source=tasks_source)
+        task_targets_list = self.get_tasks_from_targets(
+            targets, tasks_source=tasks_source)
         return task_targets_list
 
     def get_targets_to_process(self, asked_targets=None, source_targets=None):
@@ -4078,12 +4204,28 @@ class Context:
             ]
 
     def get_packages_to_process(self, asked_packages=None):
-        if asked_packages is None:
-            asked_packages = self.get_asked_packages()
 
-        packages_to_process = self.map_name_to_objects(asked_packages,
-                                                       self.project.packages,
-                                                       'package')
+        found_packages = []
+        packages_to_process = []
+        tasks_and_targets = self.get_tasks_and_targets_to_process(
+            tasks_source=self.project.targets)
+        for task, targets in tasks_and_targets:
+            for package in self.project.packages:
+                if task.name == package.name and task.name not in found_packages:
+                    found_export_task = None
+                    for export_task in self.project.exports:
+                        if task.name == export_task.name:
+                            found_export_task = export_task
+                            break
+
+                    if not found_export_task:
+                        found_export_task = Target(type=None,
+                                                   export=True,
+                                                   name=task.name)
+
+                    packages_to_process.append(
+                        (package, found_export_task, targets))
+
         return packages_to_process
 
     def get_asked_packages(self):
@@ -4163,20 +4305,30 @@ class Context:
 
         packages_to_process = self.get_packages_to_process()
 
-        for package in packages_to_process:
-            if self.is_android():
-                self.package_android(package)
-            elif self.is_windows():
-                self.package_windows(package)
-            elif self.is_darwin():
-                self.package_darwin(package)
-            elif self.is_linux():
-                self.package_debian(package)
+        if not packages_to_process:
+            raise RuntimeError(
+                "Can't find any package associated to the targets: {}".format(
+                    self.context.options.targets))
 
-    def package_windows(self, package):
+        for package, task, targets in packages_to_process:
+            config, _ = self.iterate_over_task(task=task, targets=targets)
+            config.artifacts = Context.make_absolute_artifacts(
+                artifacts=config.artifacts,
+                repo_path=os.path.abspath(self.get_project_dir()),
+                out_path=os.path.abspath(self.make_out_path()))
+            if self.is_android():
+                self.package_android(package, task, targets, config)
+            elif self.is_windows():
+                self.package_windows(package, task, targets, config)
+            elif self.is_darwin():
+                self.package_darwin(package, task, targets, config)
+            elif self.is_linux():
+                self.package_debian(package, task, targets, config)
+
+    def package_windows(self, package, task, targets, config):
         raise RuntimeError("Not implemented yet")
 
-    def package_darwin(self, package):
+    def package_darwin(self, package, task, targets, config):
         raise RuntimeError("Not implemented yet")
 
     def get_target_artifacts(self, target):
@@ -4193,12 +4345,10 @@ class Context:
         return artifacts_list + self.list_target_binary_artifacts(
             config, target)
 
-    def package_debian(self, package):
+    def package_debian(self, package, task, targets, config):
 
         print("Check package's targets")
 
-        targets_to_process = self.get_targets_to_process(package.targets)
-        config = self.resolve_global_config(targets_to_process)
         depends = config.packages
 
         # Don't run this script as root
@@ -4232,34 +4382,106 @@ class Context:
         print("Prepare package")
         package_directory = helpers.make_directory(package_directory)
 
-        prefix_directory = helpers.make_directory(package_directory,
-                                                  '.' + prefix)
+        prefix_directory = os.path.realpath(
+            helpers.make_directory(package_directory, '.' + prefix))
 
-        bin_directory = helpers.make_directory(prefix_directory, 'bin')
-
-        artifacts = []
-        for target in targets_to_process:
-            artifacts += self.get_target_artifacts(target)
+        artifacts = config.artifacts.copy()
 
         for artifact in artifacts:
+            local_dir = 'bin'
+            if artifact.type == 'library':
+                local_dir = 'lib'
+            elif artifact.type == 'program':
+                local_dir = 'bin'
+            elif artifact.type == 'license':
+                local_dir = os.path.join('share', 'licenses')
+            else:
+                local_dir = 'share'
+
+            dst_directory = os.path.realpath(
+                helpers.make_directory(prefix_directory, local_dir))
+
             src = artifact.absolute_path
-            dst = os.path.abspath(os.path.join(bin_directory, artifact.path))
+            dst = os.path.abspath(os.path.join(dst_directory, artifact.path))
             dst_dir = os.path.dirname(dst)
             if not os.path.exists(dst_dir):
                 print("Creating directories {}".format(dst_dir))
                 os.makedirs(dst_dir)
             print("Copying {} to {}".format(src, dst))
             helpers.copy_file(src, dst)
-            artifact.absolute_path = dst
-            artifact.absolute_dir_path = os.path.abspath(bin_directory)
+            artifact.path = os.path.join(local_dir, artifact.path)
+            artifact.location = os.path.realpath(prefix_directory)
 
         # Strip binaries, libraries, archives
 
-        if self.is_release():
+        if (self.is_release() and package.stripping is None) or (
+                package.stripping is not None and package.stripping):
             for artifact in artifacts:
+                if artifact.type not in ['library', 'program']:
+                    continue
                 print("Stripping {}".format(artifact.absolute_path))
                 helpers.run_task(['strip', artifact.absolute_path],
-                                 cwd=bin_directory)
+                                 cwd=prefix_directory)
+
+        if not package.rpath:
+            for artifact in artifacts:
+                if artifact.type not in ['library', 'program']:
+                    continue
+                print("Remove rpath {}".format(artifact.absolute_path))
+                helpers.run_task(['chrpath', '-d', artifact.absolute_path],
+                                 cwd=prefix_directory)
+
+        repository = self.load_git_remote_origin_url()
+        targets_binaries = []
+        targets_libpaths = ['lib']
+        for artifact in artifacts:
+            if artifact.type in ['library', 'program']:
+                if artifact.target in package.targets and artifact.repository == repository:
+                    targets_binaries.append(artifact.path)
+
+            if artifact.type in ['library']:
+                target_path = os.path.dirname(artifact.path)
+                if target_path:
+                    targets_libpaths.append(target_path)
+
+        targets_binaries = helpers.filter_unique(targets_binaries)
+        targets_libpaths = helpers.filter_unique(targets_libpaths)
+
+        if 'qt5' in config.wfeatures:
+            if not self.context.env.QMAKE:
+                raise RuntimeError("Can't find path to qmake")
+            if not self.context.env.QTLIBS:
+                raise RuntimeError("Can't find path to Qt libraries")
+            for binary in targets_binaries:
+                print("Run linuxdeployqt {}".format(binary))
+                command_env = os.environ.copy()
+                ld_lib_path = 'LD_LIBRARY_PATH'
+                if ld_lib_path not in command_env:
+                    command_env[ld_lib_path] = ''
+                command_env[ld_lib_path] = ':'.join([
+                    os.path.join(prefix_directory, path)
+                    for path in targets_libpaths
+                ] + [self.context.env.QTLIBS]) + (
+                    ':' + command_env[ld_lib_path]
+                    if command_env[ld_lib_path] else '')
+                helpers.run_task([
+                    'linuxdeployqt', binary,
+                    '-qmake=' + self.context.env.QMAKE[0]
+                ] + [
+                    '-qmldir={}'.format(
+                        os.path.realpath(
+                            os.path.join(self.get_project_dir(), qmldir)))
+                    for qmldir in config.qmldirs
+                ],
+                                 cwd=prefix_directory,
+                                 env=command_env)
+
+        all_prefix_files = []
+        for (dirpath, dirnames, filenames) in os.walk(prefix_directory):
+            all_prefix_files.extend([
+                os.path.realpath(os.path.join(dirpath, filename))
+                for filename in filenames
+            ])
 
         debian_directory = helpers.make_directory(package_directory, 'DEBIAN')
 
@@ -4293,9 +4515,10 @@ class Context:
         release_name = self.release()
 
         class File:
-            def __init__(self, path, absolute_path):
+            def __init__(self, path, absolute_path, type='file'):
                 self.path = path
                 self.absolute_path = absolute_path
+                self.type = type
 
         class System:
             def __init__(self):
@@ -4305,9 +4528,13 @@ class Context:
                 self.version = platform.platform()
                 self.architecture = package_arch
 
+        files_absolute_paths = []
         files = []
         for artifact in artifacts:
-            artifact_file = File(artifact.path, artifact.absolute_path)
+            artifact_file = File(path=artifact.path,
+                                 absolute_path=artifact.absolute_path,
+                                 type=artifact.type)
+            files_absolute_paths.append(artifact.absolute_path)
             files.append(artifact_file)
 
         package_filename = output_filename + '.deb'
@@ -4315,11 +4542,38 @@ class Context:
         package_path = os.path.realpath(
             os.path.join(self.get_output_path(), package_filename))
 
-        package_file = File(package_filename, package_path)
+        package_file = File(path=package_filename,
+                            absolute_path=package_path,
+                            type='package')
+
+        libraries_list = self.find_artifacts(path=prefix_directory,
+                                             recursively=True,
+                                             types=('*.so', '*.so.*',
+                                                    '*.dylib', '*.dylib.*'))
+
+        for file_path in all_prefix_files:
+            if file_path in files_absolute_paths:
+                continue
+
+            file_type = 'library' if file_path in libraries_list else 'file'
+
+            if file_type == 'library':
+                is_executable = (os.stat(file_path).st_mode & stat.S_IXUSR) > 0
+                file_type = file_type if is_executable else 'file'
+
+            artifact_file = File(path=os.path.relpath(path=file_path,
+                                                      start=prefix_directory),
+                                 absolute_path=file_path,
+                                 type=file_type)
+
+            files_absolute_paths.append(artifact.absolute_path)
+            files.append(artifact_file)
 
         class Context:
             def __init__(self):
                 self.name = package_name
+                self.binaries = targets_binaries
+                self.libpaths = targets_libpaths
                 self.targets = package.targets
                 self.files = files
                 self.version = package_version
@@ -4334,3 +4588,5 @@ class Context:
         ctx = Context()
         for hook in package.hooks:
             hook(ctx)
+
+        # TODO: add package options licences_path, application desktop file, icon file

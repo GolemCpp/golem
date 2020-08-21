@@ -153,7 +153,9 @@ class Project:
                 maintainer,
                 description,
                 homepage,
-                prefix=None):
+                prefix=None,
+                stripping=None,
+                rpath=None):
         package = Package(targets=targets,
                           prefix=prefix,
                           name=name,
@@ -161,7 +163,9 @@ class Project:
                           priority=priority,
                           maintainer=maintainer,
                           description=description,
-                          homepage=homepage)
+                          homepage=homepage,
+                          stripping=stripping,
+                          rpath=rpath)
         self.packages.append(package)
         return package
 

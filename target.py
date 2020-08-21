@@ -109,6 +109,12 @@ class TargetConfigurationFile(object):
         conf_file.configuration.isystem = context.translate_cache_dir_paths(
             conf_file.configuration.isystem)
 
+        artifacts = conf_file.configuration.artifacts.copy()
+        for artifact in artifacts:
+            artifact.location = context.translate_cache_dir_paths(
+                paths=[artifact.location])[0]
+        conf_file.configuration.artifacts = artifacts
+
         return conf_file
 
     @staticmethod
@@ -131,6 +137,12 @@ class TargetConfigurationFile(object):
             conf_file.configuration.stlibpath)
         conf_file.configuration.isystem = context.make_cache_dir_paths(
             conf_file.configuration.isystem)
+
+        artifacts = conf_file.configuration.artifacts.copy()
+        for artifact in artifacts:
+            artifact.location = context.make_cache_dir_paths(
+                paths=[artifact.location])[0]
+        conf_file.configuration.artifacts = artifacts
 
         json_content = json.dumps(
             conf_file,

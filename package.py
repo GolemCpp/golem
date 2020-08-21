@@ -11,7 +11,9 @@ class Package:
                  priority=None,
                  maintainer=None,
                  description=None,
-                 homepage=None):
+                 homepage=None,
+                 stripping=None,
+                 rpath=None):
         self.targets = targets
         self.prefix = prefix
         self.name = name
@@ -20,6 +22,8 @@ class Package:
         self.maintainer = maintainer
         self.description = description
         self.homepage = homepage
+        self.stripping = stripping
+        self.rpath = rpath
         self.hooks = []
 
     def __str__(self):

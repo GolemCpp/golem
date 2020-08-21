@@ -2,6 +2,7 @@ import helpers
 from condition import Condition
 from condition_expression import ConditionExpression
 from copy import deepcopy
+from artifact import Artifact
 
 
 class Configuration(Condition):
@@ -108,6 +109,8 @@ class Configuration(Condition):
         self.artifacts_run = helpers.parameter_to_list(artifacts_run)
         self.licenses = helpers.parameter_to_list(licenses)
         self.qmldirs = helpers.parameter_to_list(qmldirs)
+
+        self.artifacts = []
 
         self.artifacts_generators = helpers.parameter_to_list(
             artifacts_generators)
@@ -225,6 +228,10 @@ class Configuration(Condition):
         if hasattr(config, 'licenses'):
             self.licenses = helpers.filter_unique(self.licenses +
                                                   config.licenses)
+
+        if hasattr(config, 'artifacts'):
+            self.artifacts = helpers.filter_unique(self.artifacts +
+                                                   config.artifacts)
 
         if hasattr(config, 'qmldirs'):
             self.qmldirs = helpers.filter_unique(self.qmldirs + config.qmldirs)
@@ -425,6 +432,15 @@ class Configuration(Condition):
 
         return has_entry
 
+    def parse_artifacts_entry(self, key, value):
+        raw_entry = ConditionExpression.clean(key)
+        artifacts = []
+        if raw_entry == "artifacts":
+            for artifact_entry in value:
+                artifact = Artifact.unserialize_from_json(artifact_entry)
+                artifacts.append(artifact)
+        return artifacts
+
     def parse_condition_entry(self, key, value):
         raw_entry = ConditionExpression.clean(key)
         configs = []
@@ -512,6 +528,11 @@ class Configuration(Condition):
                 if o.__dict__[key]:
                     json_obj[key] = o.__dict__[key]
 
+        if o.artifacts:
+            json_obj['artifacts'] = [
+                Artifact.serialize_to_json(obj) for obj in o.artifacts
+            ]
+
         if o.when_configs:
             json_obj['when'] = [
                 Configuration.serialize_to_json(obj) for obj in o.when_configs
@@ -524,6 +545,11 @@ class Configuration(Condition):
 
         for entry in o:
             self.parse_entry(entry, o[entry])
+
+        artifacts = []
+        for entry in o:
+            artifacts += self.parse_artifacts_entry(entry, o[entry])
+        self.artifacts = artifacts
 
         configs = []
 
