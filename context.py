@@ -3859,7 +3859,7 @@ class Context:
             type=type,
             scope=scope,
             repository=repository,
-            target=None,
+            target=target,
             decorated_target=decorated_target,
             resolved_version=self.context.options.force_version
             if self.context.options.force_version else self.version.gitlong,
