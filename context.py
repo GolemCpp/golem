@@ -1379,7 +1379,7 @@ class Context:
         helpers.run_task(['git', 'reset', '--hard'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
-        helpers.run_task(['git', 'clean', '-fxd'],
+        helpers.run_task(['git', 'clean', '-ffxd'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
 
@@ -3302,7 +3302,7 @@ class Context:
             cwd='C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
-        out, err = ret.communicate()
+        out, _ = ret.communicate()
         if ret.returncode:
             print("ERROR: " + ' '.join(cmd))
             return -1
