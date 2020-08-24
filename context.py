@@ -3291,6 +3291,33 @@ class Context:
             pass
         return self.repository
 
+    def msvc_vcvars_cmd(self):
+        cmd = [
+            'cmd', '/c', 'vswhere', '-latest', '-products', '*', '-property',
+            'installationPath'
+        ]
+        print(' '.join(cmd))
+        ret = subprocess.Popen(
+            cmd,
+            cwd='C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer',
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        out, err = ret.communicate()
+        if ret.returncode:
+            print("ERROR: " + ' '.join(cmd))
+            return -1
+        lines = out.splitlines()
+        if not lines[0]:
+            return 1
+        msvc_path = lines[0]
+        print(msvc_path)
+
+        vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
+        call_msvc = 'call "' + vcvars + '" ' + \
+            self.context.env['MSVC_TARGETS'][0] + ' && '
+        print(call_msvc)
+        return call_msvc
+
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
