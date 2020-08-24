@@ -3321,7 +3321,7 @@ class Context:
         self.configure_compiler()
         if self.is_windows():
             self.context.env.MSVC_TARGETS = [
-                'x86' if self.get_arch() == 'x86' else 'amd64'
+                'x86' if self.get_arch() == 'x86' else 'x64'
             ]
         self.context.load(features_to_load)
         self.save_options()
