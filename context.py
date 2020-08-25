@@ -2176,7 +2176,7 @@ class Context:
         env_includes = []
 
         rpath_link = []
-        if not self.is_windows():
+        if not self.is_windows() and not self.is_darwin():
             rpath_links = config.rpath_link.copy()
             if 'QTLIBS' in self.context.env:
                 rpath_links.append(self.context.env.QTLIBS)
