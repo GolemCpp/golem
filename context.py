@@ -2577,7 +2577,7 @@ class Context:
         if ret.returncode:
             print("ERROR: " + ' '.join(cmd))
             return -1
-        lines = out.splitlines()
+        lines = out.decode(sys.stdout.encoding).splitlines()
         if not lines[0]:
             return 1
         msvc_path = lines[0]
