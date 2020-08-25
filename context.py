@@ -1582,7 +1582,7 @@ class Context:
     @staticmethod
     def make_windows_target_name(target_name):
         return os.path.join(os.path.dirname(target_name),
-                            'lib' + os.path.basename(target_name))
+                            os.path.basename(target_name))
 
     def make_target_from_context(self,
                                  config,
@@ -2162,9 +2162,13 @@ class Context:
         stlibflags = config.stlib + (config.system if self.is_static() else [])
 
         if stlibflags:
-            stlibflags = ['-l' + name for name in stlibflags]
-            if not self.is_darwin() and self.compiler() != 'msvc':
-                stlibflags = ['-Wl,-Bstatic'] + stlibflags + ['-Wl,-Bdynamic']
+            if self.compiler_name() != 'msvc':
+                stlibflags = ['-l' + name for name in stlibflags]
+                if not self.is_darwin():
+                    stlibflags = ['-Wl,-Bstatic'
+                                  ] + stlibflags + ['-Wl,-Bdynamic']
+            else:
+                stlibflags = [name + '.lib' for name in stlibflags]
 
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
