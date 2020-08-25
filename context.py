@@ -1376,12 +1376,28 @@ class Context:
         return artifacts_list
 
     def clean_repo(self, repo_path):
-        helpers.run_task(['git', 'reset', '--hard'],
-                         cwd=repo_path,
-                         stdout=subprocess.DEVNULL)
         helpers.run_task(['git', 'clean', '-ffxd'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
+        helpers.run_task([
+            'git', 'submodule', 'foreach', '--recursive', 'git', 'clean',
+            '-ffxd'
+        ],
+                         cwd=repo_path,
+                         stdout=subprocess.DEVNULL)
+        helpers.run_task(['git', 'reset', '--hard'],
+                         cwd=repo_path,
+                         stdout=subprocess.DEVNULL)
+        helpers.run_task([
+            'git', 'submodule', 'foreach', '--recursive', 'git', 'reset',
+            '--hard'
+        ],
+                         cwd=repo_path,
+                         stdout=subprocess.DEVNULL)
+        helpers.run_task(
+            ['git', 'submodule', 'update', '--init', '--recursive'],
+            cwd=repo_path,
+            stdout=subprocess.DEVNULL)
 
     def clone_repo(self, dep, repo_path):
         dep.resolve()
