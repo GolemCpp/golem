@@ -3532,7 +3532,7 @@ class Context:
             raise RuntimeError(
                 "Cannot find any files for target {} from dependency {}".
                 format(dep_name, target_name))
-        file_types = ['*.lib', '*.a', '*.so']
+        file_types = ['.lib', '.a', '.so', '.dylib']
         for artifact in artifacts_dev:
             _, extension = os.path.splitext(artifact)
             if extension in file_types:
