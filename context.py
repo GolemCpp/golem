@@ -3505,6 +3505,35 @@ class Context:
                     self.get_dep_artifact_location(dep, cache_dir))
         return dep_lib_paths
 
+    def find_dependency_artifacts_dev(self, dep_name, target_name=None):
+        results = []
+        for dep in self.project.deps:
+            if dep_name == dep.name:
+                dep_config = self.read_dep_configs(dep=dep,
+                                                   cache_dir=dep.cache_dir,
+                                                   target_name=target_name)
+                results.append(dep_config.artifacts_dev)
+
+        if not results:
+            return None
+
+        return results[0]
+
+    def find_dependency_libraries_files(self, dep_name, target_name=None):
+        lib_paths = []
+        artifacts_dev = self.find_dependency_artifacts_dev(
+            dep_name=dep_name, target_name=target_name)
+        if not artifacts_dev:
+            raise RuntimeError(
+                "Cannot find any files for target {} from dependency {}".
+                format(dep_name, target_name))
+        file_types = ['*.lib', '*.a', '*.so']
+        for artifact in artifacts_dev:
+            _, extension = os.path.splitext(artifact)
+            if extension in file_types:
+                lib_paths.append(artifact)
+        return lib_paths
+
     def build_dependency(self, dep_name):
         config = Configuration()
         config.deps = [dep_name]
