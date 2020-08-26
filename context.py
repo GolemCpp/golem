@@ -455,7 +455,8 @@ class Context:
         return result
 
     def list_source(self, source):
-        return self.list_files(source, ['cpp', 'c', 'cxx', 'cc'])
+        return self.list_files(source, ['cpp', 'c', 'cxx', 'cc'] +
+                               (['mm'] if self.is_darwin() else []))
 
     def list_moc(self, source):
         return self.list_files(source, ['hpp', 'h', 'hxx', 'hh'])

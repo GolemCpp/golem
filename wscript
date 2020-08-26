@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-from waflib.TaskGen import feature, before_method, after_method
+from waflib.TaskGen import feature, before_method, after_method, extension
 from waflib.Build import BuildContext, CleanContext, \
     InstallContext, UninstallContext
 from waflib.Configure import conf, ConfigurationContext
 from waflib.Context import Context
 from waflib import Configure
+from waflib import Task, TaskGen
 import waflib
 import os
 import imp
@@ -194,3 +195,8 @@ def add_includes_paths(self):
         incs.add(x.inputs[0].parent.path_from(self.path))
     incs = [str(inc) for inc in incs]
     self.includes = sorted(incs)
+
+
+@TaskGen.extension('.mm')
+def create_objc_task(self, node):
+    return self.create_compiled_task('cxx', node)
