@@ -2200,6 +2200,21 @@ class Context:
         #    if stlib_filename not in config.ldflags:
         #        config.ldflags.append(stlib_filename)
 
+        final_cxxflags = helpers.filter_unique(config.cxxflags +
+                                               target_cxxflags + isystemflags)
+
+        for flag in final_cxxflags:
+            if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
+                if 'CXXFLAGS_qt5' in self.context.env:
+                    copy_flags = self.context.env.CXXFLAGS_qt5.copy()
+                    copy_flags = [
+                        f for f in copy_flags
+                        if (not f.startswith('-std=c++')
+                            and not f.startswith('/std:c++'))
+                    ]
+                    self.context.env.CXXFLAGS_qt5 = copy_flags
+                break
+
         return BuildTarget(
             config=config,
             defines=config.defines,
@@ -2210,8 +2225,7 @@ class Context:
                 for decorated_target in decorated_targets
             ],
             name=task.name,
-            cxxflags=helpers.filter_unique(config.cxxflags + target_cxxflags +
-                                           isystemflags),
+            cxxflags=final_cxxflags,
             cflags=helpers.filter_unique(config.cflags + target_cxxflags +
                                          isystemflags),
             linkflags=helpers.filter_unique(config.linkflags +
