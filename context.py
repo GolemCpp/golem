@@ -2612,6 +2612,77 @@ class Context:
                   "\" in directory \"" + str(cwd) + "\"")
             return 1
 
+    def get_vs_version(self):
+        return self.context.env.MSVC_VERSION
+
+    def find_msvc_toolset(self, vs_version):
+        toolsets = {
+            "16": "v142",
+            "15": "v141",
+            "14": "v140",
+            "12": "v120",
+            "11": "v110",
+            "10": "v100",
+            "9": "v90",
+            "8": "v80"
+        }
+        if vs_version is None:
+            vs_version = self.get_vs_version()
+
+        vs_version = str(vs_version)
+
+        if len(vs_version) < 2:
+            raise RuntimeError("Bad vs version")
+
+        vs_version = vs_version[:2]
+
+        if vs_version not in toolsets:
+            raise RuntimeError(
+                "Cannot find any platform toolset for vs version: {}".format(
+                    vs_version))
+
+        return toolsets[vs_version]
+
+    def get_current_msvc_toolset(self):
+        return self.find_msvc_toolset(vs_version=self.get_vs_version())
+
+    def run_msbuild_command(self,
+                            project_path,
+                            configuration=None,
+                            platform=None,
+                            target='Rebuild',
+                            toolset=None,
+                            build_path=None):
+
+        if not os.path.exists(project_path):
+            raise RuntimeError(
+                "Cannot find any project or solution file at: {}".format(
+                    project_path))
+
+        if configuration is None:
+            configuration = 'Release' if self.is_release() else 'Debug'
+        if platform is None:
+            platform = self.get_arch()
+        if toolset is None:
+            toolset = self.get_current_msvc_toolset()
+
+        commands = [
+            'msbuild', project_path,
+            '-p:Configuration={}'.format(configuration),
+            '-p:Platform={}'.format(platform),
+            '-p:PlatformToolset={}'.format(toolset), '-t:{}'.format(target)
+        ]
+
+        if build_path is None:
+            build_path = self.get_build_path()
+
+        print("Run build command: " + ' '.join(commands))
+
+        ret = self.run_build_command(command=commands, cwd=build_path)
+        if ret:
+            raise RuntimeError("Error when msbuild command: " +
+                               ' '.join(commands))
+
     def find_artifacts(self, path, recursively=False, types=None):
         files_grabbed = []
         file_types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*',
