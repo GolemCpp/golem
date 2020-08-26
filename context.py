@@ -1428,11 +1428,12 @@ class Context:
         ],
                          cwd=repo_path)
 
-    def make_repo_ready(self, dep, cache_dir):
+    def make_repo_ready(self, dep, cache_dir, should_clean=False):
         repo_path = self.get_dep_repo_location(dep, cache_dir)
 
         if os.path.exists(repo_path):
-            self.clean_repo(repo_path)
+            if should_clean:
+                self.clean_repo(repo_path)
         else:
             self.clone_repo(dep, repo_path)
 
@@ -1440,16 +1441,20 @@ class Context:
 
     def run_dep_command(self, dep, cache_dir, command):
 
+        should_clean_repo = False
         if command == 'resolve':
             Logs.info("Resolving {} ({})...".format(dep.name, dep.version))
         elif command == 'build':
             Logs.info("Building {} ({})...".format(dep.name, dep.version))
+            should_clean_repo = True
         else:
             Logs.info("Running {} on {} ({})...".format(
                 command, dep.name, dep.version))
 
         dep_path = self.get_dep_location(dep, cache_dir)
-        repo_path = self.make_repo_ready(dep, cache_dir)
+        repo_path = self.make_repo_ready(dep,
+                                         cache_dir,
+                                         should_clean=should_clean_repo)
         build_path = self.get_dep_build_location(dep, cache_dir)
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file(
