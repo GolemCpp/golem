@@ -29,7 +29,7 @@ from functools import partial
 from pathlib import Path
 import importlib.util
 import importlib.machinery
-from waflib import Logs
+from waflib import Logs, Task
 from collections import OrderedDict
 from target import Target
 from artifact import Artifact
@@ -4516,19 +4516,27 @@ class Context:
 
         print("Check package's targets")
 
-        depends = config.packages
+        depends = config.packages.copy()
+        depends = helpers.filter_unique(depends)
+
+        deb_package = package.deb_package
 
         # Don't run this script as root
 
         print("Gather package metadata")
-        prefix = "/usr/local" if package.prefix is None else package.prefix
+        prefix = "/usr/local" if deb_package.prefix is None else deb_package.prefix
+
+        subdirectory = prefix
+
+        if deb_package.subdirectory:
+            subdirectory = os.path.join(prefix, deb_package.subdirectory)
 
         package_name = package.name
-        package_section = package.section
-        package_priority = package.priority
-        package_maintainer = package.maintainer
-        package_description = package.description
-        package_homepage = package.homepage
+        package_section = deb_package.section
+        package_priority = deb_package.priority
+        package_maintainer = deb_package.maintainer
+        package_description = deb_package.description
+        package_homepage = deb_package.homepage
 
         version = Version(working_dir=self.get_project_dir())
 
@@ -4552,6 +4560,41 @@ class Context:
         prefix_directory = os.path.realpath(
             helpers.make_directory(package_directory, '.' + prefix))
 
+        subdirectory_directory = os.path.realpath(
+            helpers.make_directory(package_directory, '.' + subdirectory))
+
+        helpers.make_directory(subdirectory_directory)
+
+        package_skeleton = None
+
+        if deb_package.skeleton:
+            package_skeleton = os.path.join(self.get_project_dir(),
+                                            deb_package.skeleton)
+
+        if package_skeleton and not os.path.exists(package_skeleton):
+            raise RuntimeError(
+                "Package skeleton directory doesn't exist: {}".format(
+                    package_skeleton))
+
+        if package_skeleton:
+            helpers.copy_tree(package_skeleton, prefix_directory)
+
+        package_control = None
+
+        if deb_package.control:
+            package_control = os.path.join(self.get_project_dir(),
+                                           deb_package.control)
+
+        if package_control and not os.path.exists(package_control):
+            raise RuntimeError(
+                "Package control directory doesn't exist: {}".format(
+                    package_control))
+
+        debian_directory = helpers.make_directory(package_directory, 'DEBIAN')
+
+        if package_control:
+            helpers.copy_tree(package_control, debian_directory)
+
         artifacts = config.artifacts.copy()
 
         for artifact in artifacts:
@@ -4566,7 +4609,7 @@ class Context:
                 local_dir = 'share'
 
             dst_directory = os.path.realpath(
-                helpers.make_directory(prefix_directory, local_dir))
+                helpers.make_directory(subdirectory_directory, local_dir))
 
             src = artifact.absolute_path
             dst = os.path.abspath(os.path.join(dst_directory, artifact.path))
@@ -4577,7 +4620,7 @@ class Context:
             print("Copying {} to {}".format(src, dst))
             helpers.copy_file(src, dst)
             artifact.path = os.path.join(local_dir, artifact.path)
-            artifact.location = os.path.realpath(prefix_directory)
+            artifact.location = os.path.realpath(subdirectory_directory)
 
         # Strip binaries, libraries, archives
 
@@ -4588,15 +4631,7 @@ class Context:
                     continue
                 print("Stripping {}".format(artifact.absolute_path))
                 helpers.run_task(['strip', artifact.absolute_path],
-                                 cwd=prefix_directory)
-
-        if not package.rpath:
-            for artifact in artifacts:
-                if artifact.type not in ['library', 'program']:
-                    continue
-                print("Remove rpath {}".format(artifact.absolute_path))
-                helpers.run_task(['chrpath', '-d', artifact.absolute_path],
-                                 cwd=prefix_directory)
+                                 cwd=subdirectory_directory)
 
         repository = self.load_git_remote_origin_url()
         targets_binaries = []
@@ -4614,6 +4649,13 @@ class Context:
         targets_binaries = helpers.filter_unique(targets_binaries)
         targets_libpaths = helpers.filter_unique(targets_libpaths)
 
+        for artifact in artifacts:
+            if artifact.type not in ['library', 'program']:
+                continue
+            print("Remove rpath {}".format(artifact.absolute_path))
+            helpers.run_task(['chrpath', '-d', artifact.absolute_path],
+                             cwd=subdirectory_directory)
+
         if 'qt5' in config.wfeatures:
             if not self.context.env.QMAKE:
                 raise RuntimeError("Can't find path to qmake")
@@ -4626,7 +4668,7 @@ class Context:
                 if ld_lib_path not in command_env:
                     command_env[ld_lib_path] = ''
                 command_env[ld_lib_path] = ':'.join([
-                    os.path.join(prefix_directory, path)
+                    os.path.join(subdirectory_directory, path)
                     for path in targets_libpaths
                 ] + [self.context.env.QTLIBS]) + (
                     ':' + command_env[ld_lib_path]
@@ -4640,17 +4682,111 @@ class Context:
                             os.path.join(self.get_project_dir(), qmldir)))
                     for qmldir in config.qmldirs
                 ],
-                                 cwd=prefix_directory,
+                                 cwd=subdirectory_directory,
                                  env=command_env)
 
+        rpath = ':'.join(
+            [os.path.join(subdirectory, path) for path in targets_libpaths])
+
+        if deb_package.rpath:
+            rpath = deb_package.rpath
+
+        if rpath:
+            print("RPATH is set on {}".format(rpath))
+        else:
+            print("No RPATH defined")
+
+        if rpath:
+            for artifact in artifacts:
+                if artifact.type not in ['library', 'program']:
+                    continue
+                print("Set rpath on file {}".format(artifact.absolute_path))
+                helpers.run_task(
+                    ['patchelf', '--set-rpath', rpath, artifact.absolute_path],
+                    cwd=subdirectory_directory)
+        else:
+            for artifact in artifacts:
+                if artifact.type not in ['library', 'program']:
+                    continue
+                print("Remove rpath {}".format(artifact.absolute_path))
+                helpers.run_task(['chrpath', '-d', artifact.absolute_path],
+                                 cwd=subdirectory_directory)
+
         all_prefix_files = []
-        for (dirpath, dirnames, filenames) in os.walk(prefix_directory):
+        for (dirpath, dirnames, filenames) in os.walk(subdirectory_directory):
             all_prefix_files.extend([
                 os.path.realpath(os.path.join(dirpath, filename))
                 for filename in filenames
             ])
 
-        debian_directory = helpers.make_directory(package_directory, 'DEBIAN')
+        template_tempoary_dir = self.make_build_path('dist_templates')
+        helpers.make_directory(template_tempoary_dir)
+
+        for template in deb_package.templates:
+            template_path = os.path.join(prefix_directory, template)
+
+            if not os.path.exists(str(template_path)):
+                raise RuntimeError(
+                    "Cannot find any template file at {}".format(
+                        str(template_path)))
+
+            tmp_path = os.path.join(template_tempoary_dir, template)
+            helpers.make_directory(os.path.dirname(tmp_path))
+            helpers.copy_file(template_path, tmp_path)
+            os.remove(template_path)
+
+            template_src = self.context.root.find_node(tmp_path)
+            template_dst = self.context.root.find_or_declare(template_path)
+
+            self.context(features='subst',
+                         source=template_src,
+                         target=template_dst,
+                         LIBRARY_PATHS=rpath,
+                         BINARY_PATH=os.path.join(subdirectory,
+                                                  targets_binaries[0]),
+                         NAME=package.name,
+                         PREFIX=prefix)
+
+        class make_executable(Task.Task):
+            always_run = True
+            run_str = 'chmod +x ${SRC}'
+
+        def create_task_make_executable(path):
+            task = make_executable(env=self.context.env)
+            task.set_inputs(path)
+            self.context.add_to_group(task)
+
+        debian_template_tempoary_dir = self.make_build_path(
+            'dist_templates_debian')
+        helpers.make_directory(debian_template_tempoary_dir)
+
+        for (dirpath, dirnames, filenames) in os.walk(debian_directory):
+            for filename in filenames:
+                if filename not in ['postinst', 'postrm', 'preinst', 'prerm']:
+                    continue
+
+                template_path = os.path.join(dirpath, filename)
+                tmp_path = os.path.join(debian_template_tempoary_dir, filename)
+                helpers.make_directory(os.path.dirname(tmp_path))
+                helpers.copy_file(template_path, tmp_path)
+                os.remove(template_path)
+
+                template_src = self.context.root.find_node(tmp_path)
+                template_dst = self.context.root.find_or_declare(template_path)
+
+                self.context(features='subst',
+                             source=template_src,
+                             target=template_dst,
+                             LIBRARY_PATHS=rpath,
+                             BINARY_PATH=os.path.join(subdirectory,
+                                                      targets_binaries[0]),
+                             NAME=package.name,
+                             PREFIX=prefix)
+
+                create_task_make_executable(path=template_dst)
+            break
+
+        self.context.add_group()
 
         control_path = os.path.join(debian_directory, 'control')
         with open(control_path, 'w') as control_file:
@@ -4671,11 +4807,29 @@ class Context:
 
         print("Build package")
         output_filename = package_name + '_' + package_version + "_" + package_arch
-        helpers.run_task([
-            'fakeroot', 'dpkg-deb', '--build', package_directory,
-            output_filename + '.deb'
-        ],
-                         cwd=self.get_output_path())
+
+        class fakeroot(Task.Task):
+            always_run = True
+            run_str = 'fakeroot dpkg-deb --build ${SRC} ${TGT}'
+
+        task = fakeroot(env=self.context.env)
+        task.set_inputs(self.context.root.find_node(package_directory))
+        task.set_outputs(
+            self.context.root.find_or_declare(
+                os.path.realpath(
+                    os.path.join(self.get_output_path(),
+                                 output_filename + '.deb'))))
+        self.context.add_to_group(task)
+
+        self.context.execute_build()
+
+        if not deb_package.rpath:
+            for artifact in artifacts:
+                if artifact.type not in ['library', 'program']:
+                    continue
+                print("Remove rpath {}".format(artifact.absolute_path))
+                helpers.run_task(['chrpath', '-d', artifact.absolute_path],
+                                 cwd=subdirectory_directory)
 
         system_name = self.osname()
         distribution_name = self.distribution()
@@ -4713,7 +4867,7 @@ class Context:
                             absolute_path=package_path,
                             type='package')
 
-        libraries_list = self.find_artifacts(path=prefix_directory,
+        libraries_list = self.find_artifacts(path=subdirectory_directory,
                                              recursively=True,
                                              types=('*.so', '*.so.*',
                                                     '*.dylib', '*.dylib.*'))
@@ -4728,8 +4882,8 @@ class Context:
                 is_executable = (os.stat(file_path).st_mode & stat.S_IXUSR) > 0
                 file_type = file_type if is_executable else 'file'
 
-            artifact_file = File(path=os.path.relpath(path=file_path,
-                                                      start=prefix_directory),
+            artifact_file = File(path=os.path.relpath(
+                path=file_path, start=subdirectory_directory),
                                  absolute_path=file_path,
                                  type=file_type)
 
@@ -4755,5 +4909,3 @@ class Context:
         ctx = Context()
         for hook in package.hooks:
             hook(ctx)
-
-        # TODO: add package options licences_path, application desktop file, icon file

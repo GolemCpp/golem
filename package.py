@@ -3,55 +3,252 @@ from condition_expression import ConditionExpression
 
 
 class Package:
+    def __init__(
+        self,
+        targets=None,
+        name=None,
+        stripping=None,
+    ):
+        self.targets = helpers.parameter_to_list(targets)
+        self.name = name
+        self.stripping = stripping
+
+        self.hooks = []
+        self.deb_package = None
+        self.msi_package = None
+        self.dmg_package = None
+
+    def __str__(self):
+        return helpers.print_obj(self)
+
+    def read_json(self, json_object):
+        for entry in json_object:
+            key = ConditionExpression.clean(entry)
+            value = json_object[entry]
+            if key in Package.serialized_members():
+                self.__dict__[key] = value
+            if key in Package.serialized_members_list():
+                self.__dict__[key] += value
+                self.__dict__[key] = helpers.filter_unique(self.__dict__[key])
+
+        if 'deb' in json_object:
+            self.deb_package = DEBPackage()
+            self.deb_package.read_json(json_object['deb'])
+
+        if 'msi' in json_object:
+            self.msi_package = MSIPackage()
+            self.msi_package.read_json(json_object['msi'])
+
+        if 'dmg' in json_object:
+            self.dmg_package = DMGPackage()
+            self.dmg_package.read_json(json_object['dmg'])
+
+    def dump_json(self):
+        json_obj = {}
+        for key in self.__dict__:
+            if key in Package.serialized_members(
+            ) + Package.serialized_members_list():
+                if self.__dict__[key]:
+                    json_obj[key] = self.__dict__[key]
+
+        if self.deb_package:
+            json_obj['deb'] = self.deb_package.dump_json()
+
+        if self.msi_package:
+            json_obj['msi'] = self.msi_package.dump_json()
+
+        if self.dmg_package:
+            json_obj['dmg'] = self.dmg_package.dump_json()
+
+        return json_obj
+
+    @staticmethod
+    def serialized_members():
+        return ['name', 'stripping']
+
+    @staticmethod
+    def serialized_members_list():
+        return ['targets']
+
+    @staticmethod
+    def unserialize_from_json(o):
+        package = Package()
+        package.read_json(o)
+        return package
+
+    @staticmethod
+    def serialize_to_json(o):
+        return o.dump_json()
+
+    def hook(self, callback):
+        self.hooks.append(callback)
+
+    def deb(self, **kwargs):
+        self.deb_package = DEBPackage(**kwargs)
+
+    def msi(self, **kwargs):
+        self.msi_package = MSIPackage(**kwargs)
+
+    def dmg(self, **kwargs):
+        self.dmg_package = DMGPackage(**kwargs)
+
+
+class DEBPackage:
     def __init__(self,
-                 targets=None,
                  prefix=None,
-                 name=None,
+                 subdirectory=None,
+                 skeleton=None,
+                 control=None,
                  section=None,
                  priority=None,
                  maintainer=None,
                  description=None,
                  homepage=None,
-                 stripping=None,
-                 rpath=None):
-        self.targets = targets
+                 rpath=None,
+                 templates=None):
+
         self.prefix = prefix
-        self.name = name
+        self.subdirectory = subdirectory
+        self.skeleton = skeleton
+        self.control = control
         self.section = section
         self.priority = priority
         self.maintainer = maintainer
         self.description = description
         self.homepage = homepage
-        self.stripping = stripping
         self.rpath = rpath
-        self.hooks = []
+
+        self.templates = helpers.parameter_to_list(templates)
 
     def __str__(self):
         return helpers.print_obj(self)
 
-    @staticmethod
-    def unserialize_from_json(json_object):
-        package = Package()
+    def read_json(self, json_object):
         for entry in json_object:
             key = ConditionExpression.clean(entry)
             value = json_object[entry]
-            if key == 'targets':
-                package.targets = value
-            elif key == 'prefix':
-                package.prefix = value
-            elif key == 'name':
-                package.name = value
-            elif key == 'section':
-                package.section = value
-            elif key == 'priority':
-                package.priority = value
-            elif key == 'maintainer':
-                package.maintainer = value
-            elif key == 'description':
-                package.description = value
-            elif key == 'homepage':
-                package.homepage = value
+            if key in DEBPackage.serialized_members():
+                self.__dict__[key] = value
+            if key in DEBPackage.serialized_members_list():
+                self.__dict__[key] += value
+                self.__dict__[key] = helpers.filter_unique(self.__dict__[key])
+
+    def dump_json(self):
+        json_obj = {}
+        for key in self.__dict__:
+            if key in DEBPackage.serialized_members(
+            ) + DEBPackage.serialized_members_list():
+                if self.__dict__[key]:
+                    json_obj[key] = self.__dict__[key]
+        return json_obj
+
+    @staticmethod
+    def serialized_members():
+        return [
+            'prefix', 'subdirectory', 'skeleton', 'control', 'section',
+            'priority', 'maintainer', 'description', 'homepage', 'rpath'
+        ]
+
+    @staticmethod
+    def serialized_members_list():
+        return ['templates']
+
+    @staticmethod
+    def unserialize_from_json(o):
+        package = DEBPackage()
+        package.read_json(o)
         return package
 
-    def hook(self, callback):
-        self.hooks.append(callback)
+    @staticmethod
+    def serialize_to_json(o):
+        return o.dump_json()
+
+
+class MSIPackage:
+    def __init__(self, skeleton=None):
+        self.skeleton = skeleton
+
+    def __str__(self):
+        return helpers.print_obj(self)
+
+    def read_json(self, json_object):
+        for entry in json_object:
+            key = ConditionExpression.clean(entry)
+            value = json_object[entry]
+            if key in MSIPackage.serialized_members():
+                self.__dict__[key] = value
+            if key in MSIPackage.serialized_members_list():
+                self.__dict__[key] += value
+                self.__dict__[key] = helpers.filter_unique(self.__dict__[key])
+
+    def dump_json(self):
+        json_obj = {}
+        for key in self.__dict__:
+            if key in MSIPackage.serialized_members(
+            ) + MSIPackage.serialized_members_list():
+                if self.__dict__[key]:
+                    json_obj[key] = self.__dict__[key]
+        return json_obj
+
+    @staticmethod
+    def serialized_members():
+        return ['skeleton']
+
+    @staticmethod
+    def serialized_members_list():
+        return []
+
+    @staticmethod
+    def unserialize_from_json(o):
+        package = MSIPackage()
+        package.read_json(o)
+        return package
+
+    @staticmethod
+    def serialize_to_json(o):
+        return o.dump_json()
+
+
+class DMGPackage:
+    def __init__(self, skeleton=None):
+        self.skeleton = skeleton
+
+    def __str__(self):
+        return helpers.print_obj(self)
+
+    def read_json(self, json_object):
+        for entry in json_object:
+            key = ConditionExpression.clean(entry)
+            value = json_object[entry]
+            if key in DMGPackage.serialized_members():
+                self.__dict__[key] = value
+            if key in DMGPackage.serialized_members_list():
+                self.__dict__[key] += value
+                self.__dict__[key] = helpers.filter_unique(self.__dict__[key])
+
+    def dump_json(self):
+        json_obj = {}
+        for key in self.__dict__:
+            if key in DMGPackage.serialized_members(
+            ) + DMGPackage.serialized_members_list():
+                if self.__dict__[key]:
+                    json_obj[key] = self.__dict__[key]
+        return json_obj
+
+    @staticmethod
+    def serialized_members():
+        return ['skeleton']
+
+    @staticmethod
+    def serialized_members_list():
+        return []
+
+    @staticmethod
+    def unserialize_from_json(o):
+        package = DMGPackage()
+        package.read_json(o)
+        return package
+
+    @staticmethod
+    def serialize_to_json(o):
+        return o.dump_json()

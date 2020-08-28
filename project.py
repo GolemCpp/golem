@@ -145,27 +145,8 @@ class Project:
         if path:
             self.qtdir = path
 
-    def package(self,
-                targets,
-                name,
-                section,
-                priority,
-                maintainer,
-                description,
-                homepage,
-                prefix=None,
-                stripping=None,
-                rpath=None):
-        package = Package(targets=targets,
-                          prefix=prefix,
-                          name=name,
-                          section=section,
-                          priority=priority,
-                          maintainer=maintainer,
-                          description=description,
-                          homepage=homepage,
-                          stripping=stripping,
-                          rpath=rpath)
+    def package(self, targets, name, stripping=None):
+        package = Package(targets=targets, name=name, stripping=stripping)
         self.packages.append(package)
         return package
 
