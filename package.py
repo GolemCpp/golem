@@ -104,6 +104,7 @@ class DEBPackage:
                  maintainer=None,
                  description=None,
                  homepage=None,
+                 depends=None,
                  rpath=None,
                  templates=None):
 
@@ -116,6 +117,7 @@ class DEBPackage:
         self.maintainer = maintainer
         self.description = description
         self.homepage = homepage
+        self.depends = helpers.parameter_to_list(depends)
         self.rpath = rpath
 
         self.templates = helpers.parameter_to_list(templates)
@@ -151,7 +153,7 @@ class DEBPackage:
 
     @staticmethod
     def serialized_members_list():
-        return ['templates']
+        return ['templates', 'depends']
 
     @staticmethod
     def unserialize_from_json(o):

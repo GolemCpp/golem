@@ -1742,15 +1742,19 @@ class Context:
             ]
 
         if not enable_dev_libs:
-            artifacts = [
-                r for r in artifacts
-                if (os.path.splitext(r)[1] != 'a' or os.path.splitext(r)[1] !=
-                    'lib' or os.path.splitext(r)[1] != 'pdb')
-            ]
+            filtered_artifacts = []
+            for artifact in artifacts:
+                extension = os.path.splitext(artifact)[1]
+                if not extension or extension not in ['.a', '.lib', '.pdb']:
+                    filtered_artifacts.append(artifact)
+            artifacts = filtered_artifacts.copy()
         if not enable_run_libs:
-            artifacts = [
-                r for r in artifacts if os.path.splitext(r)[1] != 'dll'
-            ]
+            filtered_artifacts = []
+            for artifact in artifacts:
+                extension = os.path.splitext(artifact)[1]
+                if not extension or extension not in ['.dll']:
+                    filtered_artifacts.append(artifact)
+            artifacts = filtered_artifacts.copy()
 
         return artifacts
 
@@ -4520,6 +4524,7 @@ class Context:
         depends = helpers.filter_unique(depends)
 
         deb_package = package.deb_package
+        depends = helpers.filter_unique(deb_package.depends + depends)
 
         # Don't run this script as root
 
@@ -4596,6 +4601,9 @@ class Context:
             helpers.copy_tree(package_control, debian_directory)
 
         artifacts = config.artifacts.copy()
+        artifacts = [
+            artifact for artifact in artifacts if artifact.scope is None
+        ]
 
         for artifact in artifacts:
             local_dir = 'bin'
@@ -4604,7 +4612,9 @@ class Context:
             elif artifact.type == 'program':
                 local_dir = 'bin'
             elif artifact.type == 'license':
-                local_dir = os.path.join('share', 'licenses')
+                dep_id = self.find_dependency_id(artifact.location)
+                local_dir = os.path.join('share', 'doc', package.name,
+                                         'licenses', dep_id)
             else:
                 local_dir = 'share'
 
@@ -4745,7 +4755,8 @@ class Context:
                          BINARY_PATH=os.path.join(subdirectory,
                                                   targets_binaries[0]),
                          NAME=package.name,
-                         PREFIX=prefix)
+                         PREFIX=prefix,
+                         SUBDIRECTORY=subdirectory)
 
         class make_executable(Task.Task):
             always_run = True
@@ -4762,7 +4773,9 @@ class Context:
 
         for (dirpath, dirnames, filenames) in os.walk(debian_directory):
             for filename in filenames:
-                if filename not in ['postinst', 'postrm', 'preinst', 'prerm']:
+                if filename not in [
+                        'conffiles', 'postinst', 'postrm', 'preinst', 'prerm'
+                ]:
                     continue
 
                 template_path = os.path.join(dirpath, filename)
@@ -4781,7 +4794,8 @@ class Context:
                              BINARY_PATH=os.path.join(subdirectory,
                                                       targets_binaries[0]),
                              NAME=package.name,
-                             PREFIX=prefix)
+                             PREFIX=prefix,
+                             SUBDIRECTORY=subdirectory)
 
                 create_task_make_executable(path=template_dst)
             break
