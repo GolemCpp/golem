@@ -2532,7 +2532,7 @@ class Context:
         command = [
             'cppcheck', '--enable=all', '--suppress=missingIncludeSystem',
             '--quiet'
-        ] + all_defines + all_includes + all_sources
+        ] + all_defines + all_sources
 
         self.context(rule=' '.join(command),
                      always=True,
