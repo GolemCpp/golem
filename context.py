@@ -2529,9 +2529,13 @@ class Context:
         cppcheck_dir = self.make_build_path("cppcheck")
         helpers.make_directory(cppcheck_dir)
 
+        enable = 'all'
+        if self.project.cppcheck_enable:
+            enable = ','.join(self.project.cppcheck_enable)
+
         command = [
-            'cppcheck', '--enable=all', '--suppress=missingIncludeSystem',
-            '--quiet'
+            'cppcheck', '--enable=' + enable,
+            '--suppress=missingIncludeSystem', '--quiet'
         ] + all_defines + all_sources
 
         self.context(rule=' '.join(command),
@@ -2567,7 +2571,14 @@ class Context:
 
         self.append_compiler_commands(build_target)
 
-        command = ['clang-tidy', '--checks=*', '-p=' + str(clang_tidy_dir)]
+        checks = '*'
+        if self.project.clang_tidy_checks:
+            checks = ','.join(self.project.clang_tidy_checks)
+
+        command = [
+            'clang-tidy', '-quiet', '-checks=' + checks,
+            '-p=' + str(clang_tidy_dir)
+        ]
 
         command += [str(s) for s in build_target.source]
 
