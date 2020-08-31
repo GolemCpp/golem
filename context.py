@@ -880,6 +880,14 @@ class Context:
             "Define cache directories by specifying a string such as <path>=<regex>|<path>=(...) where regex is selecting dependencies with a matching repository URL"
         )
 
+        context.add_option(
+            "--output-file",
+            action="store",
+            default='',
+            help=
+            "Output file for static analysis results (e.g. cppcheck)"
+        )
+
     def configure_init(self):
         if not self.context.env.DEFINES:
             self.context.env.DEFINES = []
@@ -2533,10 +2541,18 @@ class Context:
         if self.project.cppcheck_enable:
             enable = ','.join(self.project.cppcheck_enable)
 
+        options = []
+        if self.context.options.output_file:
+            output_path = os.path.join(self.get_project_dir(),
+                                       self.context.options.output_file)
+            options += [
+                '--xml', '--xml-version=2', '--output-file=' + output_path
+            ]
+
         command = [
             'cppcheck', '--enable=' + enable,
-            '--suppress=missingIncludeSystem', '--quiet'
-        ] + all_defines + all_sources
+            '--suppress=missingIncludeSystem', '--quiet', '-v'
+        ] + options + all_defines + all_sources
 
         self.context(rule=' '.join(command),
                      always=True,
@@ -2907,6 +2923,8 @@ class Context:
             self.context.options.targets = options['targets']
         else:
             options['targets'] = self.context.options.targets
+
+        options['output_file'] = self.context.options.output_file
 
         if not self.context.options.only_update_dependencies_regex:
             self.context.options.only_update_dependencies_regex = options[
