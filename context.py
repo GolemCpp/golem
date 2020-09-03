@@ -4710,9 +4710,13 @@ class Context:
             elif artifact.type == 'program':
                 local_dir = 'bin'
             elif artifact.type == 'license':
-                dep_id = self.find_dependency_id(artifact.location)
-                local_dir = os.path.join('share', 'doc', package.name,
-                                         'licenses', dep_id)
+                if artifact.location != self.get_project_dir():
+                    dep_id = self.find_dependency_id(artifact.location)
+                    local_dir = os.path.join('share', 'doc', package.name,
+                                             'licenses', dep_id)
+                else:
+                    local_dir = os.path.join('share', 'doc', package.name,
+                                             'licenses')
             else:
                 local_dir = 'share'
 
