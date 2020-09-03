@@ -4,13 +4,14 @@ import subprocess
 
 
 class Version:
-    def __init__(self, working_dir=None):
+    def __init__(self, working_dir=None, build_number=None):
         if not working_dir:
             self.gitlong = 'v0.0.0'
             self.gitshort = 'v0.0.0'
             self.githash = ''
             self.gitmessage = ''
-            self.update_semver()
+            self.gitbranch = ''
+            self.update_semver(build_number=build_number)
             return
 
         self.gitlong = Version.retrieve_gitlong(working_dir=working_dir,
@@ -20,6 +21,8 @@ class Version:
         self.githash = Version.retrieve_githash(working_dir=working_dir)
         self.gitmessage = Version.retrieve_gitmessage(working_dir=working_dir,
                                                       commit_hash=self.githash)
+        self.gitbranch = Version.retrieve_gitbranch(working_dir=working_dir,
+                                                    default='')
         self.update_semver()
 
     def force_version(self, version):
@@ -27,7 +30,7 @@ class Version:
         self.gitshort = version
         self.update_semver()
 
-    def update_semver(self):
+    def update_semver(self, build_number=None):
         self.gitlong_semver = self.gitlong
 
         if self.gitlong_semver[0] == 'v':
@@ -52,10 +55,36 @@ class Version:
         self.major = int(matches.group('major'))
         self.minor = int(matches.group('minor'))
         self.patch = int(matches.group('patch'))
-        self.prerelease = matches.group('prerelease')
-        self.buildmetadata = matches.group('buildmetadata')
+        self.prerelease = matches.group('prerelease') if matches.group(
+            'prerelease') else ''
+        self.buildmetadata = matches.group('buildmetadata') if matches.group(
+            'buildmetadata') else ''
         self.semver_short = str(self.major) + '.' + str(
             self.minor) + '.' + str(self.patch)
+
+        if not self.buildmetadata and build_number:
+            self.buildmetadata = build_number
+
+        self.semver = Version.make_semver(major=self.major,
+                                          minor=self.minor,
+                                          patch=self.patch,
+                                          prerelease=self.prerelease,
+                                          buildmetadata=self.buildmetadata)
+
+    @staticmethod
+    def make_semver(major, minor, patch, prerelease, buildmetadata):
+        new_version = ''
+        if major is not None:
+            new_version = str(major)
+            if minor is not None:
+                new_version += '.' + str(minor)
+                if patch is not None:
+                    new_version += '.' + str(patch)
+        if prerelease:
+            new_version += '-' + prerelease
+        if buildmetadata:
+            new_version += '+' + buildmetadata
+        return new_version
 
     @staticmethod
     def parse_semver(version):
@@ -67,15 +96,12 @@ class Version:
         semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._](?P<minor>0|[1-9]\d*)[\._](?P<patch>0|[1-9]\d*)(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?'
         matches = re.search(semver_regex_like, version)
         if matches:
-            new_version = matches.group('major')
-            if matches.group('minor'):
-                new_version += '.' + matches.group('minor')
-                if matches.group('patch'):
-                    new_version += '.' + matches.group('patch')
-            if matches.group('prerelease'):
-                new_version += '-' + matches.group('prerelease')
-            if matches.group('buildmetadata'):
-                new_version += '+' + matches.group('buildmetadata')
+            new_version = Version.make_semver(
+                major=matches.group('major'),
+                minor=matches.group('minor'),
+                patch=matches.group('patch'),
+                prerelease=matches.group('prerelease'),
+                buildmetadata=matches.group('buildmetadata'))
             return (new_version, matches)
 
         return None
@@ -145,3 +171,19 @@ class Version:
             message = ''
 
         return message
+
+    @staticmethod
+    def retrieve_gitbranch(working_dir, default=None):
+
+        branch = None
+
+        try:
+            branch = subprocess.check_output(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                cwd=working_dir,
+                stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
+            branch = branch.strip()
+        except:
+            branch = default
+
+        return branch

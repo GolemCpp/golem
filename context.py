@@ -46,7 +46,8 @@ class Context:
         self.compiler_commands = []
         self.deps_to_resolve = []
 
-        self.version = Version(working_dir=self.get_project_dir())
+        self.version = Version(working_dir=self.get_project_dir(),
+                               build_number=self.get_build_number())
 
         self.deps_resolve = False
         self.deps_build = False
@@ -57,6 +58,16 @@ class Context:
 
         self.cache_conf = None
         self.repository = None
+
+    def get_build_number(self, default=None):
+        if not self.project or not self.project.enable_build_number:
+            if default is not None:
+                return default
+            return None
+        build_number_key = 'BUILD_NUMBER'
+        if build_number_key in os.environ:
+            return os.environ[build_number_key]
+        return 0
 
     def load_project(self, directory=None):
         if directory is None:
@@ -884,9 +895,7 @@ class Context:
             "--output-file",
             action="store",
             default='',
-            help=
-            "Output file for static analysis results (e.g. cppcheck)"
-        )
+            help="Output file for static analysis results (e.g. cppcheck)")
 
     def configure_init(self):
         if not self.context.env.DEFINES:
@@ -2102,7 +2111,7 @@ class Context:
                              features='subst',
                              source=qmldir_template_path,
                              target=qmldir_path,
-                             PLUGIN_NAME=decorated_targets[0])
+                             PLUGIN_NAME=str(decorated_targets[0]))
                 self.context.add_group()
 
         listmoc = []
@@ -2114,23 +2123,60 @@ class Context:
 
         version_short = None
         version_source = []
-        version = Version(working_dir=self.get_project_dir())
+        version = Version(working_dir=self.get_project_dir(),
+                          build_number=self.get_build_number())
         version_short = version.semver
         if task.version_template is not None:
             for version_template in task.version_template:
                 version_template_src = self.context.root.find_node(
                     self.make_project_path(version_template))
+                filename, filename_ext = os.path.splitext(
+                    os.path.basename(version_template))
+                if filename_ext not in ['.template']:
+                    filename = os.path.basename(version_template) + '.cpp'
+
                 version_template_dst = self.context.root.find_or_declare(
-                    self.make_build_path(
-                        os.path.basename(version_template) + '.cpp'))
-                self.context(name=version_template_dst,
-                             features='subst',
-                             source=version_template_src,
-                             target=version_template_dst,
-                             VERSION=version.gitlong_semver,
-                             VERSION_SHORT=version.semver,
-                             VERSION_HASH=version.githash)
-                version_source.append(version_template_dst)
+                    self.make_build_path(filename))
+                self.context(
+                    name=version_template_dst,
+                    features='subst',
+                    source=version_template_src,
+                    target=version_template_dst,
+                    VERSION_SEMVER=str(version.semver),
+                    VERSION_SEMVER_LONG=str(version.semver),
+                    VERSION_SEMVER_SHORT=str(version.semver_short),
+                    VERSION_SEMVER_MAJOR=str(version.major),
+                    VERSION_MAJOR=str(version.major),
+                    VERSION_SEMVER_MINOR=str(version.minor),
+                    VERSION_MINOR=str(version.minor),
+                    VERSION_SEMVER_PATCH=str(version.patch),
+                    VERSION_PATCH=str(version.patch),
+                    VERSION_SEMVER_PRERELEASE=str(version.prerelease),
+                    VERSION_PRERELEASE=str(version.prerelease),
+                    VERSION_SEMVER_BUILDMETADATA=str(version.buildmetadata),
+                    VERSION_BUILDMETADATA=str(version.buildmetadata),
+                    VERSION_BUILD_NUMBER=str(self.get_build_number(default=0)),
+                    VERSION=str(version.gitlong_semver),
+                    VERSION_GIT_DESCRIBE_LONG=str(version.gitlong),
+                    VERSION_LONG=str(version.gitlong),
+                    VERSION_GIT_DESCRIBE_SHORT=str(version.gitshort),
+                    VERSION_GIT_TAG=str(version.gitshort),
+                    VERSION_SHORT=str(version.gitshort),
+                    VERSION_GIT_REVISION=str(version.githash),
+                    VERSION_REVISION=str(version.githash),
+                    VERSION_HASH=str(version.githash),
+                    VERSION_GIT_MESSAGE=str(version.gitmessage),
+                    VERSION_MESSAGE=str(version.gitmessage),
+                    VERSION_GIT_BRANCH=str(version.gitbranch),
+                    VERSION_BRANCH=str(version.gitbranch))
+                filename, filename_ext = os.path.splitext(filename)
+                if filename_ext in ['.cpp', '.cxx', '.c', '.cc']:
+                    version_source.append(version_template_dst)
+                elif filename_ext in ['.hpp', '.hxx', '.h', '.hh']:
+                    include_path = self.make_build_path('.')
+                    if include_path not in listinclude:
+                        listinclude.append(include_path)
+                self.context.add_group()
 
         env_isystem = []
         for key in list(self.context.env.keys()):
@@ -4572,7 +4618,8 @@ class Context:
         package_description = deb_package.description
         package_homepage = deb_package.homepage
 
-        version = Version(working_dir=self.get_project_dir())
+        version = Version(working_dir=self.get_project_dir(),
+                          build_number=self.get_build_number())
 
         package_version = version.gitlong_semver
         package_arch = self.get_arch_for_linux()
@@ -4780,12 +4827,12 @@ class Context:
             self.context(features='subst',
                          source=template_src,
                          target=template_dst,
-                         LIBRARY_PATHS=rpath,
-                         BINARY_PATH=os.path.join(subdirectory,
-                                                  targets_binaries[0]),
-                         NAME=package.name,
-                         PREFIX=prefix,
-                         SUBDIRECTORY=subdirectory)
+                         LIBRARY_PATHS=str(rpath),
+                         BINARY_PATH=str(
+                             os.path.join(subdirectory, targets_binaries[0])),
+                         NAME=str(package.name),
+                         PREFIX=str(prefix),
+                         SUBDIRECTORY=str(subdirectory))
 
         class make_executable(Task.Task):
             always_run = True
@@ -4819,12 +4866,13 @@ class Context:
                 self.context(features='subst',
                              source=template_src,
                              target=template_dst,
-                             LIBRARY_PATHS=rpath,
-                             BINARY_PATH=os.path.join(subdirectory,
-                                                      targets_binaries[0]),
-                             NAME=package.name,
-                             PREFIX=prefix,
-                             SUBDIRECTORY=subdirectory)
+                             LIBRARY_PATHS=str(rpath),
+                             BINARY_PATH=str(
+                                 os.path.join(subdirectory,
+                                              targets_binaries[0])),
+                             NAME=str(package.name),
+                             PREFIX=str(prefix),
+                             SUBDIRECTORY=str(subdirectory))
 
                 create_task_make_executable(path=template_dst)
             break

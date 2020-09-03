@@ -31,6 +31,7 @@ class Project:
         self.master_dependencies_repository = None
         self.clang_tidy_checks = None
         self.cppcheck_enable = None
+        self.enable_build_number = False
 
     def __str__(self):
         return helpers.print_obj(self)
