@@ -59,6 +59,8 @@ class Context:
         self.cache_conf = None
         self.repository = None
 
+        self.context_tasks = []
+
     def get_build_number(self, default=None):
         if not self.project or not self.project.enable_build_number:
             if default is not None:
@@ -2079,6 +2081,8 @@ class Context:
         if any([feature.startswith("QT5") for feature in config.features]):
             project_qt = True
 
+        context_tasks_added = False
+
         wfeatures = []
         if project_qt and 'qt5' not in config.wfeatures:
             wfeatures.append('qt5')
@@ -2105,14 +2109,21 @@ class Context:
                 qmldir_template_path = path
                 qmldir_path = self.context.root.find_or_declare(
                     os.path.join(os.path.dirname(path.abspath()), 'qmldir'))
-                print("Generating {} from {}".format(qmldir_path,
-                                                     qmldir_template_path))
+
+                if str(qmldir_template_path) in self.context_tasks:
+                    continue
+
+                Logs.debug("Generating {} from {}".format(
+                    qmldir_path, qmldir_template_path))
+
                 self.context(name=qmldir_path,
                              features='subst',
                              source=qmldir_template_path,
                              target=qmldir_path,
                              PLUGIN_NAME=str(decorated_targets[0]))
-                self.context.add_group()
+
+                self.context_tasks.append(str(qmldir_template_path))
+                context_tasks_added = True
 
         listmoc = []
         for moc_candidate in moc_candidates:
@@ -2134,9 +2145,15 @@ class Context:
                     os.path.basename(version_template))
                 if filename_ext not in ['.template']:
                     filename = os.path.basename(version_template) + '.cpp'
-
                 version_template_dst = self.context.root.find_or_declare(
                     self.make_build_path(filename))
+
+                if str(version_template_src) in self.context_tasks:
+                    continue
+
+                Logs.debug("Generating {} from {}".format(
+                    str(version_template_dst), str(version_template_src)))
+
                 self.context(
                     name=version_template_dst,
                     features='subst',
@@ -2176,7 +2193,12 @@ class Context:
                     include_path = self.make_build_path('.')
                     if include_path not in listinclude:
                         listinclude.append(include_path)
-                self.context.add_group()
+
+                self.context_tasks.append(str(version_template_src))
+                context_tasks_added = True
+
+        if context_tasks_added:
+            self.context.add_group()
 
         env_isystem = []
         for key in list(self.context.env.keys()):
