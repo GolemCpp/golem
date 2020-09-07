@@ -5007,6 +5007,10 @@ class Context:
             files_absolute_paths.append(artifact.absolute_path)
             files.append(artifact_file)
 
+        build_number = self.get_build_number()
+        if build_number is None:
+            build_number = 0
+
         class Context:
             def __init__(self):
                 self.name = package_name
@@ -5018,6 +5022,7 @@ class Context:
                 self.major = version.major
                 self.minor = version.minor
                 self.patch = version.patch
+                self.build_number = build_number
                 self.hash = version.githash
                 self.system = System()
                 self.message = version.gitmessage
