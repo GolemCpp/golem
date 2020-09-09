@@ -4643,7 +4643,9 @@ class Context:
         version = Version(working_dir=self.get_project_dir(),
                           build_number=self.get_build_number())
 
-        package_version = version.gitlong_semver
+        build_number = self.get_build_number(default=0)
+        package_version = version.semver
+
         package_arch = self.get_arch_for_linux()
         package_depends = ', '.join(depends)
 
@@ -5006,10 +5008,6 @@ class Context:
 
             files_absolute_paths.append(artifact.absolute_path)
             files.append(artifact_file)
-
-        build_number = self.get_build_number()
-        if build_number is None:
-            build_number = 0
 
         class Context:
             def __init__(self):

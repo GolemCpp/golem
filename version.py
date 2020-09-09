@@ -11,7 +11,8 @@ class Version:
             self.githash = ''
             self.gitmessage = ''
             self.gitbranch = ''
-            self.update_semver(build_number=build_number)
+            self.build_number = build_number
+            self.update_semver()
             return
 
         self.gitlong = Version.retrieve_gitlong(working_dir=working_dir,
@@ -23,6 +24,7 @@ class Version:
                                                       commit_hash=self.githash)
         self.gitbranch = Version.retrieve_gitbranch(working_dir=working_dir,
                                                     default='')
+        self.build_number = build_number
         self.update_semver()
 
     def force_version(self, version):
@@ -30,7 +32,7 @@ class Version:
         self.gitshort = version
         self.update_semver()
 
-    def update_semver(self, build_number=None):
+    def update_semver(self):
         self.gitlong_semver = self.gitlong
 
         if self.gitlong_semver[0] == 'v':
@@ -62,8 +64,8 @@ class Version:
         self.semver_short = str(self.major) + '.' + str(
             self.minor) + '.' + str(self.patch)
 
-        if not self.buildmetadata and build_number:
-            self.buildmetadata = build_number
+        if not self.buildmetadata and self.build_number:
+            self.buildmetadata = self.build_number
 
         self.semver = Version.make_semver(major=self.major,
                                           minor=self.minor,
