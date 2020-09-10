@@ -3261,7 +3261,8 @@ class Context:
                          "libc++.so." + self.make_android_ndk_platform()),
         ]
 
-    def package_android(self, package, task, targets, config):
+    def package_android(self, package_build_context):
+        targets = list()
 
         self.check_android_sdk_path()
         self.check_android_sdk_platform()
@@ -3271,13 +3272,14 @@ class Context:
 
         print("Check package's targets")
 
-        depends = config.packages
+        depends = package_build_context.configuration.packages
 
         assert len(targets) == 1
 
         target_binaries = []
         for target in targets:
-            target_binaries += self.make_artifacts_from_context(config, target)
+            target_binaries += self.make_artifacts_from_context(
+                package_build_context.configuration, target)
 
         target_binary = None
         for target in target_binaries:
@@ -3287,16 +3289,17 @@ class Context:
         assert target_binary is not None
 
         target_dependencies = []
-        for target in self.get_targets_to_process(config.use):
+        for target in self.get_targets_to_process(
+                package_build_context.configuration.use):
             for target_name in self.make_artifacts_from_context(
-                    config, target):
+                    package_build_context.configuration, target):
                 if str(target_name).endswith('.so') or str(
                         target_name).endswith('.dll') or str(
                             target_name).endswith('.dylib'):
                     target_dependencies.append(
                         os.path.join(self.make_out_path(), target_name))
 
-        for dep_name in config.deps:
+        for dep_name in package_build_context.configuration.deps:
             for dep in self.project.deps:
                 if dep_name == dep.name:
                     if str(dep_name).endswith('.so') or str(dep_name).endswith(
@@ -3304,13 +3307,14 @@ class Context:
                         target_dependencies.append(
                             os.path.join(
                                 self.make_out_path(),
-                                self.make_artifacts_from_context(config, dep)))
+                                self.make_artifacts_from_context(
+                                    package_build_context.configuration, dep)))
 
         # Don't run this script as root
 
         print("Gather package metadata")
-        package_name = package.name
-        package_description = package.description
+        package_name = package_build_context.package.name
+        package_description = package_build_context.package.description
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
@@ -4473,30 +4477,87 @@ class Context:
                 target.name for target in source_targets
             ]
 
+    class PackageTaskTargets:
+        def __init__(self, export_task, targets):
+            self.export_task = export_task
+            self.targets = targets
+            self.config = None
+
+        def append(self, targets):
+            self.targets = helpers.filter_unique(self.targets.copy() +
+                                                 targets.copy())
+
+        def generate_config(self, context):
+            config, _ = context.iterate_over_task(task=self.export_task,
+                                                  targets=self.targets)
+            config.artifacts = Context.make_absolute_artifacts(
+                artifacts=config.artifacts,
+                repo_path=os.path.abspath(context.get_project_dir()),
+                out_path=os.path.abspath(context.make_out_path()))
+            self.config = config
+
+    class PackageBuildContext:
+        def __init__(self, context, package, task, targets):
+            self.context = context
+            self.package = package
+            self.tasks_and_targets = dict()
+            self.append(task=task, targets=targets)
+            self.configuration = Configuration()
+
+        def append(self, task, targets):
+            if task.name not in self.tasks_and_targets:
+                self.tasks_and_targets[task.name] = Context.PackageTaskTargets(
+                    export_task=self.context.make_export_task(task),
+                    targets=targets)
+            else:
+                self.tasks_and_targets[task.name].append(targets=targets)
+
+        def process_config(self):
+            for _, task_targets in self.tasks_and_targets.items():
+                task_targets.generate_config(context=self.context)
+                self.configuration.merge(context=self.context,
+                                         configs=[task_targets.config])
+
+    def make_export_task(self, task):
+        found_export_task = None
+        for export_task in self.project.exports:
+            if task.name == export_task.name:
+                found_export_task = export_task
+                break
+
+        if not found_export_task:
+            found_export_task = Target(type=None, export=True, name=task.name)
+        return found_export_task
+
     def get_packages_to_process(self, asked_packages=None):
 
-        found_packages = []
-        packages_to_process = []
+        packages_to_process = dict()
         tasks_and_targets = self.get_tasks_and_targets_to_process(
             tasks_source=self.project.targets)
         for task, targets in tasks_and_targets:
             for package in self.project.packages:
-                if task.name == package.name and task.name not in found_packages:
-                    found_export_task = None
-                    for export_task in self.project.exports:
-                        if task.name == export_task.name:
-                            found_export_task = export_task
-                            break
+                task_targets = self.get_targets_from_task(
+                    task=task) if not targets else targets
 
-                    if not found_export_task:
-                        found_export_task = Target(type=None,
-                                                   export=True,
-                                                   name=task.name)
+                intersection_targets_package_targets = list(
+                    set(task_targets) & set(package.targets))
 
-                    packages_to_process.append(
-                        (package, found_export_task, targets))
+                if not intersection_targets_package_targets:
+                    continue
 
-        return packages_to_process
+                if package.name not in packages_to_process:
+                    packages_to_process[
+                        package.name] = Context.PackageBuildContext(
+                            context=self,
+                            package=package,
+                            task=task,
+                            targets=intersection_targets_package_targets)
+                    continue
+
+                packages_to_process[package.name].append(
+                    task=task, targets=intersection_targets_package_targets)
+
+        return list(packages_to_process.values())
 
     def get_asked_packages(self):
         return self.context.options.packages.split(
@@ -4580,25 +4641,25 @@ class Context:
                 "Can't find any package associated to the targets: {}".format(
                     self.context.options.targets))
 
-        for package, task, targets in packages_to_process:
-            config, _ = self.iterate_over_task(task=task, targets=targets)
-            config.artifacts = Context.make_absolute_artifacts(
-                artifacts=config.artifacts,
-                repo_path=os.path.abspath(self.get_project_dir()),
-                out_path=os.path.abspath(self.make_out_path()))
+        for package_build_context in packages_to_process:
+            package_build_context.process_config()
             if self.is_android():
-                self.package_android(package, task, targets, config)
+                self.package_android(
+                    package_build_context=package_build_context)
             elif self.is_windows():
-                self.package_windows(package, task, targets, config)
+                self.package_windows(
+                    package_build_context=package_build_context)
             elif self.is_darwin():
-                self.package_darwin(package, task, targets, config)
+                self.package_darwin(
+                    package_build_context=package_build_context)
             elif self.is_linux():
-                self.package_debian(package, task, targets, config)
+                self.package_debian(
+                    package_build_context=package_build_context)
 
-    def package_windows(self, package, task, targets, config):
+    def package_windows(self, package_build_context):
         raise RuntimeError("Not implemented yet")
 
-    def package_darwin(self, package, task, targets, config):
+    def package_darwin(self, package_build_context):
         raise RuntimeError("Not implemented yet")
 
     def get_target_artifacts(self, target):
@@ -4615,14 +4676,14 @@ class Context:
         return artifacts_list + self.list_target_binary_artifacts(
             config, target)
 
-    def package_debian(self, package, task, targets, config):
+    def package_debian(self, package_build_context):
 
         print("Check package's targets")
 
-        depends = config.packages.copy()
+        depends = package_build_context.configuration.packages.copy()
         depends = helpers.filter_unique(depends)
 
-        deb_package = package.deb_package
+        deb_package = package_build_context.package.deb_package
         depends = helpers.filter_unique(deb_package.depends + depends)
 
         # Don't run this script as root
@@ -4635,7 +4696,7 @@ class Context:
         if deb_package.subdirectory:
             subdirectory = os.path.join(prefix, deb_package.subdirectory)
 
-        package_name = package.name
+        package_name = package_build_context.package.name
         package_section = deb_package.section
         package_priority = deb_package.priority
         package_maintainer = deb_package.maintainer
@@ -4702,7 +4763,7 @@ class Context:
         if package_control:
             helpers.copy_tree(package_control, debian_directory)
 
-        artifacts = config.artifacts.copy()
+        artifacts = package_build_context.configuration.artifacts.copy()
         artifacts = [
             artifact for artifact in artifacts if artifact.scope is None
         ]
@@ -4716,32 +4777,44 @@ class Context:
             elif artifact.type == 'license':
                 if artifact.location != self.get_project_dir():
                     dep_id = self.find_dependency_id(artifact.location)
-                    local_dir = os.path.join('share', 'doc', package.name,
-                                             'licenses', dep_id)
+                    local_dir = os.path.join(
+                        'share', 'doc', package_build_context.package.name,
+                        'licenses', dep_id)
                 else:
-                    local_dir = os.path.join('share', 'doc', package.name,
-                                             'licenses')
+                    local_dir = os.path.join(
+                        'share', 'doc', package_build_context.package.name,
+                        'licenses')
             else:
                 local_dir = 'share'
 
+            artifact_filename = os.path.basename(artifact.path)
+            artifact_dirname = os.path.dirname(artifact.path)
+            if artifact_dirname:
+                local_dir = ''
+
             dst_directory = os.path.realpath(
-                helpers.make_directory(subdirectory_directory, local_dir))
+                helpers.make_directory(
+                    subdirectory_directory,
+                    os.path.join(artifact_dirname, local_dir)))
 
             src = artifact.absolute_path
-            dst = os.path.abspath(os.path.join(dst_directory, artifact.path))
+            dst = os.path.abspath(
+                os.path.join(dst_directory, artifact_filename))
             dst_dir = os.path.dirname(dst)
             if not os.path.exists(dst_dir):
                 print("Creating directories {}".format(dst_dir))
                 os.makedirs(dst_dir)
             print("Copying {} to {}".format(src, dst))
             helpers.copy_file(src, dst)
-            artifact.path = os.path.join(local_dir, artifact.path)
+            artifact.path = os.path.join(artifact_dirname, local_dir,
+                                         artifact_filename)
             artifact.location = os.path.realpath(subdirectory_directory)
 
         # Strip binaries, libraries, archives
 
-        if (self.is_release() and package.stripping is None) or (
-                package.stripping is not None and package.stripping):
+        if (self.is_release() and package_build_context.package.stripping is
+                None) or (package_build_context.package.stripping is not None
+                          and package_build_context.package.stripping):
             for artifact in artifacts:
                 if artifact.type not in ['library', 'program']:
                     continue
@@ -4754,7 +4827,7 @@ class Context:
         targets_libpaths = ['lib']
         for artifact in artifacts:
             if artifact.type in ['library', 'program']:
-                if artifact.target in package.targets and artifact.repository == repository:
+                if artifact.target in package_build_context.package.targets and artifact.repository == repository:
                     targets_binaries.append(artifact.path)
 
             if artifact.type in ['library']:
@@ -4772,13 +4845,57 @@ class Context:
             helpers.run_task(['chrpath', '-d', artifact.absolute_path],
                              cwd=subdirectory_directory)
 
-        if 'qt5' in config.wfeatures:
+        targets_binaries_real_paths = list()
+        unique_targets_binaries = list()
+        for binary in targets_binaries:
+            real_path = os.path.realpath(
+                os.path.join(subdirectory_directory, binary))
+            if real_path in targets_binaries_real_paths:
+                continue
+            targets_binaries_real_paths.append(real_path)
+            unique_targets_binaries.append(binary)
+        targets_binaries_symlinks = list()
+
+        if 'qt5' in package_build_context.configuration.wfeatures:
             if not self.context.env.QMAKE:
                 raise RuntimeError("Can't find path to qmake")
             if not self.context.env.QTLIBS:
                 raise RuntimeError("Can't find path to Qt libraries")
-            for binary in targets_binaries:
+            for binary in unique_targets_binaries:
                 print("Run linuxdeployqt {}".format(binary))
+
+                real_path = os.path.realpath(
+                    os.path.join(subdirectory_directory, binary))
+                if not os.path.exists(real_path):
+                    raise RuntimeError(
+                        "Cannot find binary path {}".format(real_path))
+
+                binary_dir = os.path.dirname(binary)
+                binary_filename = os.path.basename(binary)
+                if os.path.basename(binary_dir) not in ['bin', 'lib']:
+                    local_dir = ''
+                    found_artifact = None
+                    for artifact in artifacts:
+                        if artifact.path == binary:
+                            found_artifact = artifact
+
+                    if not found_artifact:
+                        raise Exception(
+                            "Cannot find artifact corresponding to {}".format(
+                                binary))
+
+                    if found_artifact.type == 'library':
+                        local_dir = 'lib'
+                    else:
+                        local_dir = 'bin'
+
+                    symlink_path = os.path.join(subdirectory_directory,
+                                                local_dir, binary_filename)
+                    os.symlink(os.path.join(subdirectory_directory, binary),
+                               symlink_path)
+                    targets_binaries_symlinks.append(symlink_path)
+                    binary = symlink_path
+
                 command_env = os.environ.copy()
                 ld_lib_path = 'LD_LIBRARY_PATH'
                 if ld_lib_path not in command_env:
@@ -4789,6 +4906,7 @@ class Context:
                 ] + [self.context.env.QTLIBS]) + (
                     ':' + command_env[ld_lib_path]
                     if command_env[ld_lib_path] else '')
+
                 helpers.run_task([
                     'linuxdeployqt', binary,
                     '-qmake=' + self.context.env.QMAKE[0]
@@ -4796,10 +4914,27 @@ class Context:
                     '-qmldir={}'.format(
                         os.path.realpath(
                             os.path.join(self.get_project_dir(), qmldir)))
-                    for qmldir in config.qmldirs
+                    for qmldir in package_build_context.configuration.qmldirs
                 ],
                                  cwd=subdirectory_directory,
                                  env=command_env)
+
+                app_run_binary_dir = os.path.join(os.path.dirname(binary),
+                                                  'AppRun')
+                if os.path.exists(app_run_binary_dir):
+                    os.remove(app_run_binary_dir)
+
+                app_run_root = os.path.join(subdirectory_directory, 'AppRun')
+                if os.path.exists(app_run_root):
+                    os.remove(app_run_root)
+
+                app_run_parent = os.path.join(subdirectory_directory, '..',
+                                              'AppRun')
+                if os.path.exists(app_run_parent):
+                    os.remove(app_run_parent)
+
+        for symlink_path in targets_binaries_symlinks:
+            os.remove(symlink_path)
 
         rpath = ':'.join(
             [os.path.join(subdirectory, path) for path in targets_libpaths])
@@ -4860,7 +4995,7 @@ class Context:
                          LIBRARY_PATHS=str(rpath),
                          BINARY_PATH=str(
                              os.path.join(subdirectory, targets_binaries[0])),
-                         NAME=str(package.name),
+                         NAME=str(package_build_context.package.name),
                          PREFIX=str(prefix),
                          SUBDIRECTORY=str(subdirectory))
 
@@ -4900,7 +5035,7 @@ class Context:
                              BINARY_PATH=str(
                                  os.path.join(subdirectory,
                                               targets_binaries[0])),
-                             NAME=str(package.name),
+                             NAME=str(package_build_context.package.name),
                              PREFIX=str(prefix),
                              SUBDIRECTORY=str(subdirectory))
 
@@ -5016,7 +5151,7 @@ class Context:
                 self.name = package_name
                 self.binaries = targets_binaries
                 self.libpaths = targets_libpaths
-                self.targets = package.targets
+                self.targets = package_build_context.package.targets
                 self.files = files
                 self.version = package_version
                 self.major = version.major
@@ -5029,5 +5164,5 @@ class Context:
                 self.package = package_file
 
         ctx = Context()
-        for hook in package.hooks:
+        for hook in package_build_context.package.hooks:
             hook(ctx)
