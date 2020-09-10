@@ -1440,6 +1440,8 @@ class Context:
         else:
             helpers.run_task(['git', 'clone', '--', dep.repository, '.'],
                              cwd=repo_path)
+            helpers.run_task(['git', 'checkout', dep.resolved_version],
+                             cwd=repo_path)
             helpers.run_task(['git', 'reset', '--hard', dep.resolved_hash],
                              cwd=repo_path)
 
