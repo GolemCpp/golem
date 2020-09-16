@@ -65,7 +65,7 @@ class Version:
             self.minor) + '.' + str(self.patch)
 
         if not self.buildmetadata and self.build_number:
-            self.buildmetadata = self.build_number
+            self.buildmetadata = str(self.build_number)
 
         self.semver = Version.make_semver(major=self.major,
                                           minor=self.minor,

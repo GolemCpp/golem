@@ -33,6 +33,7 @@ from waflib import Logs, Task
 from collections import OrderedDict
 from target import Target
 from artifact import Artifact
+from package_msi import package_msi
 
 
 class Context:
@@ -68,7 +69,7 @@ class Context:
             return None
         build_number_key = 'BUILD_NUMBER'
         if build_number_key in os.environ:
-            return os.environ[build_number_key]
+            return int(os.environ[build_number_key])
         return 0
 
     def load_project(self, directory=None):
@@ -2687,25 +2688,34 @@ class Context:
                                               'compile_commands.json')
         self.save_compiler_commands(compiler_commands_path)
 
-    def run_command_with_msvisualcpp(self, command, cwd):
+    def vswhere_get_installation_path(self):
         cmd = [
             'cmd', '/c', 'vswhere', '-latest', '-products', '*', '-property',
             'installationPath'
         ]
         print(' '.join(cmd))
-        ret = subprocess.Popen(
-            cmd,
-            cwd='C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer',
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+        prg_path = os.environ.get(
+            'ProgramFiles(x86)',
+            os.environ.get('ProgramFiles', 'C:\\Program Files (x86)'))
+
+        ret = subprocess.Popen(cmd,
+                               cwd=os.path.join(prg_path,
+                                                'Microsoft Visual Studio',
+                                                'Installer'),
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
         out, _ = ret.communicate()
         if ret.returncode:
-            print("ERROR: " + ' '.join(cmd))
-            return -1
+            raise RuntimeError("ERROR: " + ' '.join(cmd))
         lines = out.decode(sys.stdout.encoding).splitlines()
         if not lines[0]:
-            return 1
+            raise RuntimeError(
+                "No result when requesting installationPath to vswhere.exe")
         msvc_path = lines[0]
+        return msvc_path
+
+    def run_command_with_msvisualcpp(self, command, cwd):
+        msvc_path = self.vswhere_get_installation_path()
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
         call_msvc = [
@@ -4647,17 +4657,14 @@ class Context:
                 self.package_android(
                     package_build_context=package_build_context)
             elif self.is_windows():
-                self.package_windows(
-                    package_build_context=package_build_context)
+                package_msi(self=self,
+                            package_build_context=package_build_context)
             elif self.is_darwin():
                 self.package_darwin(
                     package_build_context=package_build_context)
             elif self.is_linux():
                 self.package_debian(
                     package_build_context=package_build_context)
-
-    def package_windows(self, package_build_context):
-        raise RuntimeError("Not implemented yet")
 
     def package_darwin(self, package_build_context):
         raise RuntimeError("Not implemented yet")
@@ -5111,7 +5118,8 @@ class Context:
             artifact_file = File(path=artifact.path,
                                  absolute_path=artifact.absolute_path,
                                  type=artifact.type)
-            files_absolute_paths.append(artifact.absolute_path)
+            files_absolute_paths.append(
+                os.path.realpath(artifact.absolute_path))
             files.append(artifact_file)
 
         package_filename = output_filename + '.deb'
@@ -5129,7 +5137,7 @@ class Context:
                                                     '*.dylib', '*.dylib.*'))
 
         for file_path in all_prefix_files:
-            if file_path in files_absolute_paths:
+            if os.path.realpath(file_path) in files_absolute_paths:
                 continue
 
             file_type = 'library' if file_path in libraries_list else 'file'
@@ -5143,7 +5151,7 @@ class Context:
                                  absolute_path=file_path,
                                  type=file_type)
 
-            files_absolute_paths.append(artifact.absolute_path)
+            files_absolute_paths.append(file_path)
             files.append(artifact_file)
 
         class Context:
