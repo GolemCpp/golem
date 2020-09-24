@@ -231,8 +231,10 @@ class MSIPackage:
 
 
 class DMGPackage:
-    def __init__(self, skeleton=None):
+    def __init__(self, name=None, skeleton=None, background=None):
+        self.name = name
         self.skeleton = skeleton
+        self.background = background
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -258,7 +260,7 @@ class DMGPackage:
 
     @staticmethod
     def serialized_members():
-        return ['skeleton']
+        return ['name', 'skeleton', 'background']
 
     @staticmethod
     def serialized_members_list():

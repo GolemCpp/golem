@@ -34,6 +34,7 @@ from collections import OrderedDict
 from target import Target
 from artifact import Artifact
 from package_msi import package_msi
+from package_dmg import package_dmg
 
 
 class Context:
@@ -2299,6 +2300,11 @@ class Context:
                     self.context.env.CXXFLAGS_qt5 = copy_flags
                 break
 
+        filtered_wfeatures = helpers.filter_unique(config.wfeatures +
+                                                   wfeatures)
+        if 'qt5' in filtered_wfeatures and self.is_darwin():
+            env_cxxflags += ['-iframework{}'.format(self.context.env.QTLIBS)]
+
         return BuildTarget(
             config=config,
             defines=config.defines,
@@ -2318,7 +2324,7 @@ class Context:
             use=config_all_use,
             uselib=config.uselib,
             moc=listmoc,
-            features=helpers.filter_unique(config.wfeatures + wfeatures),
+            features=filtered_wfeatures,
             install_path=None,
             vnum=version_short,
             depends_on=version_source,
@@ -2350,6 +2356,8 @@ class Context:
     def make_compiler_commands(self, build_target):
         compiler_commands = []
 
+        windows_fix_external_i = '-I'  # /external:I not supported yet
+
         for source in build_target.source:
             file = {
                 "directory": self.get_build_path(),
@@ -2357,8 +2365,9 @@ class Context:
                     "cl.exe" if Context.is_windows() else "/usr/bin/" +
                     self.context.env.CXX_NAME
                 ] + build_target.env_cxxflags + build_target.cxxflags +
-                [('/external:I' if Context.is_windows() else '-isystem') +
-                 str(d) for d in build_target.env_isystem] +
+                [(windows_fix_external_i
+                  if Context.is_windows() else '-isystem') + str(d)
+                 for d in build_target.env_isystem] +
                 ['-I' + str(d) for d in build_target.env_includes] +
                 ['-I' + str(d) for d in build_target.includes] +
                 ['-D' + d for d in build_target.env_defines] +
@@ -2412,6 +2421,14 @@ class Context:
             }
         })
 
+        if self.is_darwin():
+            vscode_config.update({
+                'macFrameworkPath': [
+                    "/System/Library/Frameworks", "/Library/Frameworks"
+                ] + ([] if not 'qt5' in config.wfeatures else
+                     [self.context.env.QTLIBS])
+            })
+
         cxx_standard = ''
         for cxxflag in config.cxxflags:
             if cxxflag.startswith('-std=') or (cxxflag.startswith('/std:') and
@@ -2430,9 +2447,10 @@ class Context:
 
         targets_cxxflags = []
         targets_includes = []
+        targets_wfeatures = []
 
         def list_all_targets_includes(task, targets, config, targets_includes,
-                                      targets_cxxflags):
+                                      targets_cxxflags, targets_wfeatures):
             build_target = self.build_target_gather_config(task=task,
                                                            targets=targets,
                                                            config=config)
@@ -2448,6 +2466,7 @@ class Context:
             ]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
+            targets_wfeatures += config.wfeatures
 
         self.call_build_target(
             lambda task, targets, config: list_all_targets_includes(
@@ -2455,7 +2474,8 @@ class Context:
                 targets=targets,
                 config=config,
                 targets_includes=targets_includes,
-                targets_cxxflags=targets_cxxflags))
+                targets_cxxflags=targets_cxxflags,
+                targets_wfeatures=targets_wfeatures))
 
         targets_includes = helpers.filter_unique(targets_includes)
 
@@ -2472,6 +2492,14 @@ class Context:
                 "databaseFilename": "${workspaceRoot}/.vscode/cache/.browse.VC.db"
             }
         })
+
+        if self.is_darwin():
+            vscode_config.update({
+                'macFrameworkPath': [
+                    "/System/Library/Frameworks", "/Library/Frameworks"
+                ] + ([] if not 'qt5' in targets_wfeatures else
+                     [self.context.env.QTLIBS])
+            })
 
         cxx_standard = ''
         for cxxflag in targets_cxxflags:
@@ -4660,8 +4688,8 @@ class Context:
                 package_msi(self=self,
                             package_build_context=package_build_context)
             elif self.is_darwin():
-                self.package_darwin(
-                    package_build_context=package_build_context)
+                package_dmg(self=self,
+                            package_build_context=package_build_context)
             elif self.is_linux():
                 self.package_debian(
                     package_build_context=package_build_context)

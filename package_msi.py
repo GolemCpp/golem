@@ -168,24 +168,13 @@ def package_msi(self, package_build_context):
                 raise RuntimeError(
                     "Cannot find binary path {}".format(real_path))
 
-            command_env = os.environ.copy()
-            ld_lib_path = 'LD_LIBRARY_PATH'
-            if ld_lib_path not in command_env:
-                command_env[ld_lib_path] = ''
-            command_env[ld_lib_path] = ':'.join([
-                os.path.join(subdirectory_directory, path)
-                for path in targets_libpaths
-            ] + [self.context.env.QTLIBS]) + (':' + command_env[ld_lib_path] if
-                                              command_env[ld_lib_path] else '')
-
             helpers.run_task(['windeployqt', binary] + [
                 '-qmldir={}'.format(
                     os.path.realpath(
                         os.path.join(self.get_project_dir(), qmldir)))
                 for qmldir in package_build_context.configuration.qmldirs
             ],
-                             cwd=subdirectory_directory,
-                             env=command_env)
+                             cwd=subdirectory_directory)
 
     for symlink_path in targets_binaries_symlinks:
         os.remove(symlink_path)
