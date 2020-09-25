@@ -1311,18 +1311,52 @@ class Context:
                                          dependency_dependencies)).values())
 
             if not self.context.options.no_copy_artifacts and self.deps_build:
+                binary_artifact_paths = list()
                 for artifact_binary in dependency_configuration.artifacts:
                     if not os.path.exists(artifact_binary.absolute_path):
                         continue
                     if artifact_binary.type not in ['library', 'program']:
                         continue
                     artifact_path_dir = os.path.dirname(artifact_binary.path)
+                    dest_dir = os.path.join(self.make_out_path(),
+                                            artifact_path_dir)
                     helpers.copy_file_if_recent(
                         source_path=artifact_binary.absolute_path,
-                        destination_directory=os.path.join(
-                            self.make_out_path(), artifact_path_dir),
+                        destination_directory=dest_dir,
                         callback=lambda filename: print("Copy binary {}".
                                                         format(filename)))
+
+                    dest_artifact = os.path.join(
+                        dest_dir,
+                        os.path.basename(artifact_binary.absolute_path))
+                    if dest_artifact not in binary_artifact_paths and artifact_binary.type in [
+                            'library'
+                    ]:
+                        binary_artifact_paths.append(dest_artifact)
+
+                if self.is_darwin():
+                    path_patched = list()
+                    for binary_artifact_path in binary_artifact_paths:
+                        real_path_artifact = os.path.realpath(
+                            binary_artifact_path)
+                        _, extension = os.path.splitext(real_path_artifact)
+                        if extension in ['.a']:
+                            continue
+                        if real_path_artifact in path_patched:
+                            continue
+                        print("Patch artifact: {}".format(real_path_artifact))
+                        if not os.path.exists(real_path_artifact):
+                            print("Cannot find artifact: {}".format(
+                                real_path_artifact))
+                            continue
+                        dirname_artifact = os.path.dirname(real_path_artifact)
+                        helpers.run_task([
+                            'install_name_tool', '-id', '@executable_path/' +
+                            os.path.basename(real_path_artifact),
+                            real_path_artifact
+                        ],
+                                         cwd=dirname_artifact)
+                        path_patched.append(real_path_artifact)
 
             if not self.context.options.no_copy_licenses and self.deps_build:
                 for artifact_license in dependency_configuration.artifacts:
@@ -2588,6 +2622,45 @@ class Context:
         if build_target.config.scripts:
             for callback in build_target.config.scripts:
                 callback(self)
+                if self.is_darwin():
+                    if config.type[0] not in ['library']:
+                        continue
+                    artifacts = list()
+                    dylib_artifacts = list()
+                    for target_name in targets:
+                        decorated_target = self.make_decorated_target_from_context(
+                            config=config, target_name=target_name)
+                        artifacts += self.make_artifacts_list(
+                            config=config, decorated_target=decorated_target)
+
+                    for artifact in artifacts:
+                        pattern = re.compile(r'.*\.dylib([\.].*)*$')
+                        basename_artifact = os.path.basename(artifact)
+                        if pattern.match(basename_artifact):
+                            dylib_artifacts.append(
+                                os.path.join(self.make_out_path(), artifact))
+
+                    path_patched = []
+                    print("Patching LC_ID_DYLIB of libraries if any...")
+                    for artifact_binary in dylib_artifacts:
+                        real_path_artifact = os.path.realpath(artifact_binary)
+                        _, extension = os.path.splitext(real_path_artifact)
+                        if extension in ['.a']:
+                            continue
+                        if real_path_artifact in path_patched:
+                            continue
+                        print("Patch artifact: {}".format(real_path_artifact))
+                        if not os.path.exists(real_path_artifact):
+                            print("Cannot find artifact: {}".format(
+                                real_path_artifact))
+                            continue
+                        dirname_artifact = os.path.dirname(real_path_artifact)
+                        helpers.run_task([
+                            'install_name_tool', '-id', real_path_artifact,
+                            real_path_artifact
+                        ],
+                                         cwd=dirname_artifact)
+                        path_patched.append(real_path_artifact)
             return
 
         build_fun(defines=build_target.defines,
@@ -2616,6 +2689,23 @@ class Context:
                   cxxdeps=build_target.cxxdeps,
                   ccdeps=build_target.ccdeps,
                   linkdeps=build_target.linkdeps)
+
+    def make_artifacts_list(self, config, decorated_target):
+        artifacts_dev = self.make_binary_artifact_from_context(
+            config,
+            decorated_target,
+            enable_dev_libs=True,
+            enable_run_libs=True,
+            enable_exes=False)
+
+        artifacts_run = self.make_binary_artifact_from_context(
+            config,
+            decorated_target,
+            enable_dev_libs=False,
+            enable_run_libs=True,
+            enable_exes=True)
+
+        return helpers.filter_unique(artifacts_run + artifacts_dev)
 
     def cppcheck_target(self, task, targets, config):
 

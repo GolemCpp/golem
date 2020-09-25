@@ -282,6 +282,7 @@ tell application "Finder"
 end tell
 """.format(volume_name, background_script_line, app_bundle_name)
 
+    print("Run hdiutil attach -readwrite -noverify {}".format(volume_tmp))
     ps1 = subprocess.Popen(
         ('hdiutil', 'attach', '-readwrite', '-noverify', volume_tmp),
         stdout=subprocess.PIPE,
@@ -301,14 +302,19 @@ end tell
     ps2.wait()
     ps3.wait()
 
-    time.sleep(2)
+    print("Wait for 5 seconds")
+    time.sleep(5)
 
     if volume_background_path:
+        print("Install background image into the DMG volume: {}".format(
+            volume_background_path))
         background_directory = os.path.join("/Volumes", volume_name,
                                             ".background")
         helpers.make_directory(background_directory)
         helpers.copy_file(volume_background_path, background_directory)
 
+    print("Run osascript...")
+    print("{}".format(script))
     ps = subprocess.Popen(('echo', script),
                           stdout=subprocess.PIPE,
                           cwd=package_directory)
