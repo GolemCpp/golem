@@ -36,8 +36,10 @@ def package_dmg(self, package_build_context):
                       build_number=self.get_build_number())
 
     build_number = self.get_build_number(default=0)
-    package_version = '{}.{}.{}.{}'.format(version.major, version.minor,
-                                           version.patch, build_number)
+    package_version = '{}.{}.{}'.format(version.major, version.minor,
+                                        version.patch)
+    package_build_version = '{}.{}.{}.{}'.format(version.major, version.minor,
+                                                 version.patch, build_number)
 
     package_arch = self.get_arch_for_linux()
     package_depends = ', '.join(depends)
@@ -166,14 +168,16 @@ def package_dmg(self, package_build_context):
         template_file_src = self.context.root.find_node(tmp_path)
         template_file_dst = self.context.root.find_or_declare(template_file)
 
-        self.context(features='subst',
-                     source=template_file_src,
-                     target=template_file_dst,
-                     GOLEM_PACKAGE_DMG_BUNDLE_NAME=str(package_name),
-                     GOLEM_PACKAGE_DMG_BUNDLE_EXECUTABLE=str(
-                         os.path.relpath(path=unique_targets_binaries[0],
-                                         start='MacOS')),
-                     GOLEM_PACKAGE_DMG_VERSION=str(package_version))
+        self.context(
+            features='subst',
+            source=template_file_src,
+            target=template_file_dst,
+            GOLEM_PACKAGE_DMG_BUNDLE_NAME=str(package_name),
+            GOLEM_PACKAGE_DMG_BUNDLE_EXECUTABLE=str(
+                os.path.relpath(path=unique_targets_binaries[0],
+                                start='MacOS')),
+            GOLEM_PACKAGE_DMG_VERSION=str(package_version),
+            GOLEM_PACKAGE_DMG_BUILD_VERSION=str(package_build_version))
 
     self.context.add_group()
     self.context.execute_build()
