@@ -169,18 +169,18 @@ class DEBPackage:
 class MSIPackage:
     def __init__(self,
                  skeleton=None,
-                 wix_directory=None,
-                 wix_parameters=None,
-                 wix_extensions=None,
-                 wix_cultures=None,
+                 project=None,
+                 parameters=None,
+                 extensions=None,
+                 cultures=None,
                  installdir_id=None,
                  installdir_files_id=None,
                  installdir_files_xslt=None):
         self.skeleton = skeleton
-        self.wix_directory = wix_directory
-        self.wix_parameters = helpers.parameter_to_list(wix_parameters)
-        self.wix_extensions = helpers.parameter_to_list(wix_extensions)
-        self.wix_cultures = helpers.parameter_to_list(wix_cultures)
+        self.project = project
+        self.parameters = helpers.parameter_to_list(parameters)
+        self.extensions = helpers.parameter_to_list(extensions)
+        self.cultures = helpers.parameter_to_list(cultures)
         self.installdir_id = installdir_id
         self.installdir_files_id = installdir_files_id
         self.installdir_files_xslt = installdir_files_xslt
@@ -210,9 +210,8 @@ class MSIPackage:
     @staticmethod
     def serialized_members():
         return [
-            'skeleton', 'wix_directory', 'wix_parameters', 'wix_extensions',
-            'wix_cultures', 'installdir_id', 'installdir_files_id',
-            'installdir_files_xslt'
+            'skeleton', 'project', 'parameters', 'extensions', 'cultures',
+            'installdir_id', 'installdir_files_id', 'installdir_files_xslt'
         ]
 
     @staticmethod

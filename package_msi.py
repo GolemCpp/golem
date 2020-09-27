@@ -73,9 +73,9 @@ def package_msi(self, package_build_context):
 
     package_wix_directory = None
 
-    if msi_package.wix_directory:
+    if msi_package.project:
         package_wix_directory = os.path.join(self.get_project_dir(),
-                                             msi_package.wix_directory)
+                                             msi_package.project)
 
     if package_wix_directory and not os.path.exists(package_wix_directory):
         raise RuntimeError("Package wix directory doesn't exist: {}".format(
@@ -270,11 +270,11 @@ def package_msi(self, package_build_context):
                      cwd=wix_directory)
 
     wix_parameters = [
-        '-d{}'.format(param) for param in msi_package.wix_parameters
+        '-d{}'.format(param) for param in msi_package.parameters
     ] + ['-dGolemDistSourceDir={}'.format(subdirectory_directory)]
 
     wix_extensions = []
-    for extension in msi_package.wix_extensions:
+    for extension in msi_package.extensions:
         wix_extensions += ['-ext', extension]
 
     wix_locales = []
@@ -282,8 +282,8 @@ def package_msi(self, package_build_context):
         wix_locales += ['-loc', str(path)]
 
     wix_cultures = []
-    if msi_package.wix_cultures:
-        wix_cultures = ['-cultures:' + ';'.join(msi_package.wix_cultures)]
+    if msi_package.cultures:
+        wix_cultures = ['-cultures:' + ';'.join(msi_package.cultures)]
 
     wix_declarations = [str(path)
                         for path in wxs_files] + [harvested_files_wxs]
