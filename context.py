@@ -1311,7 +1311,6 @@ class Context:
                                          dependency_dependencies)).values())
 
             if not self.context.options.no_copy_artifacts and self.deps_build:
-                binary_artifact_paths = list()
                 for artifact_binary in dependency_configuration.artifacts:
                     if not os.path.exists(artifact_binary.absolute_path):
                         continue
@@ -1325,38 +1324,6 @@ class Context:
                         destination_directory=dest_dir,
                         callback=lambda filename: print("Copy binary {}".
                                                         format(filename)))
-
-                    dest_artifact = os.path.join(
-                        dest_dir,
-                        os.path.basename(artifact_binary.absolute_path))
-                    if dest_artifact not in binary_artifact_paths and artifact_binary.type in [
-                            'library'
-                    ]:
-                        binary_artifact_paths.append(dest_artifact)
-
-                if self.is_darwin():
-                    path_patched = list()
-                    for binary_artifact_path in binary_artifact_paths:
-                        real_path_artifact = os.path.realpath(
-                            binary_artifact_path)
-                        _, extension = os.path.splitext(real_path_artifact)
-                        if extension in ['.a']:
-                            continue
-                        if real_path_artifact in path_patched:
-                            continue
-                        print("Patch artifact: {}".format(real_path_artifact))
-                        if not os.path.exists(real_path_artifact):
-                            print("Cannot find artifact: {}".format(
-                                real_path_artifact))
-                            continue
-                        dirname_artifact = os.path.dirname(real_path_artifact)
-                        helpers.run_task([
-                            'install_name_tool', '-id', '@executable_path/' +
-                            os.path.basename(real_path_artifact),
-                            real_path_artifact
-                        ],
-                                         cwd=dirname_artifact)
-                        path_patched.append(real_path_artifact)
 
             if not self.context.options.no_copy_licenses and self.deps_build:
                 for artifact_license in dependency_configuration.artifacts:
@@ -2622,45 +2589,30 @@ class Context:
         if build_target.config.scripts:
             for callback in build_target.config.scripts:
                 callback(self)
+
                 if self.is_darwin():
                     if config.type[0] not in ['library']:
                         continue
-                    artifacts = list()
+
                     dylib_artifacts = list()
                     for target_name in targets:
                         decorated_target = self.make_decorated_target_from_context(
                             config=config, target_name=target_name)
-                        artifacts += self.make_artifacts_list(
+                        artifacts = self.make_artifacts_list(
                             config=config, decorated_target=decorated_target)
-
-                    for artifact in artifacts:
-                        pattern = re.compile(r'.*\.dylib([\.].*)*$')
-                        basename_artifact = os.path.basename(artifact)
-                        if pattern.match(basename_artifact):
+                        for artifact in artifacts:
                             dylib_artifacts.append(
-                                os.path.join(self.make_out_path(), artifact))
+                                self.create_artifact(
+                                    path=artifact,
+                                    location=self.make_out_path(),
+                                    type='library',
+                                    scope=None,
+                                    target=target_name,
+                                    decorated_target=decorated_target))
 
-                    path_patched = []
-                    print("Patching LC_ID_DYLIB of libraries if any...")
-                    for artifact_binary in dylib_artifacts:
-                        real_path_artifact = os.path.realpath(artifact_binary)
-                        _, extension = os.path.splitext(real_path_artifact)
-                        if extension in ['.a']:
-                            continue
-                        if real_path_artifact in path_patched:
-                            continue
-                        print("Patch artifact: {}".format(real_path_artifact))
-                        if not os.path.exists(real_path_artifact):
-                            print("Cannot find artifact: {}".format(
-                                real_path_artifact))
-                            continue
-                        dirname_artifact = os.path.dirname(real_path_artifact)
-                        helpers.run_task([
-                            'install_name_tool', '-id', real_path_artifact,
-                            real_path_artifact
-                        ],
-                                         cwd=dirname_artifact)
-                        path_patched.append(real_path_artifact)
+                    self.patch_darwin_binary_artifacts(
+                        binary_artifacts=dylib_artifacts,
+                        source_artifacts=config.artifacts)
             return
 
         build_fun(defines=build_target.defines,
@@ -2689,6 +2641,15 @@ class Context:
                   cxxdeps=build_target.cxxdeps,
                   ccdeps=build_target.ccdeps,
                   linkdeps=build_target.linkdeps)
+
+    def find_dylibs(self, paths):
+        result = list()
+        for path in paths:
+            pattern = re.compile(r'.*\.dylib([\.].*)*$')
+            path_basename = os.path.basename(path)
+            if pattern.match(path_basename):
+                result.append(path)
+        return result
 
     def make_artifacts_list(self, config, decorated_target):
         artifacts_dev = self.make_binary_artifact_from_context(
@@ -4757,6 +4718,122 @@ class Context:
         for task, targets in tasks_and_targets:
             config, _ = self.iterate_over_task(task=task, targets=targets)
             self.cleanup_old_build_files(config=config)
+
+            if not self.context.options.no_copy_artifacts and self.deps_build:
+                binary_artifacts = [
+                    a for a in config.artifacts.copy()
+                    if a.type in ['library', 'program']
+                ]
+
+                for binary_artifact in binary_artifacts:
+                    binary_artifact.location = self.make_out_path()
+
+                if self.is_darwin():
+                    self.patch_darwin_binary_artifacts(
+                        binary_artifacts=binary_artifacts,
+                        prefix_path='@executable_path')
+
+    def patch_darwin_binary_artifacts(self,
+                                      binary_artifacts,
+                                      prefix_path=None,
+                                      source_artifacts=[]):
+
+        if not self.is_darwin():
+            raise RuntimeError("Patching binary artifacts only works on macOS")
+
+        path_patched = list()
+        for binary_artifact in binary_artifacts:
+            real_path_artifact = os.path.realpath(
+                binary_artifact.absolute_path)
+            _, extension = os.path.splitext(real_path_artifact)
+
+            if real_path_artifact in path_patched:
+                continue
+            path_patched.append(real_path_artifact)
+
+            if not os.path.exists(binary_artifact.absolute_path):
+                continue
+
+            print("otool -L {}".format(binary_artifact.absolute_path))
+            otool_infos = subprocess.check_output(
+                ['otool', '-L', binary_artifact.absolute_path],
+                cwd=self.get_build_path()).decode('utf-8')
+            paths = re.findall(r'^\s*(.*) \(', otool_infos, re.MULTILINE)
+
+            id_path = ''
+            lib_paths = ''
+
+            if not paths:
+                continue
+
+            is_static_library = binary_artifact.type in [
+                'library'
+            ] and extension in ['.a']
+            is_shared_library = binary_artifact.type in [
+                'library'
+            ] and not is_static_library
+            is_program = binary_artifact.type in ['program']
+
+            if is_shared_library:
+                id_path = paths[0]
+                if len(paths) > 1:
+                    lib_paths = paths[1:]
+            elif is_program or is_static_library:
+                lib_paths = paths
+
+            if not id_path and is_shared_library:
+                continue
+
+            print("ID: {}".format(id_path))
+            if id_path:
+                id_path_basename = os.path.basename(id_path)
+                binary_artifact_dirname = os.path.dirname(
+                    binary_artifact.absolute_path)
+                if prefix_path:
+                    binary_artifact_dirname = os.path.dirname(
+                        os.path.join(prefix_path, binary_artifact.path))
+                expected_binary_artifact_id = os.path.join(
+                    binary_artifact_dirname, id_path_basename)
+                if id_path != expected_binary_artifact_id:
+                    print(
+                        "Change ID to {}".format(expected_binary_artifact_id))
+                    helpers.run_task([
+                        'install_name_tool', '-id',
+                        expected_binary_artifact_id,
+                        binary_artifact.absolute_path
+                    ],
+                                     cwd=self.get_build_path())
+
+            print("Dependencies: {}".format(lib_paths))
+
+            for lib_path in lib_paths:
+                lib_basename = os.path.basename(lib_path)
+
+                found_artifact = None
+                for binary_artifact_bis in binary_artifacts + source_artifacts:
+                    if os.path.basename(
+                            binary_artifact_bis.absolute_path) == lib_basename:
+                        found_artifact = binary_artifact_bis
+                        break
+
+                if found_artifact is None:
+                    continue
+
+                expected_lib_path = found_artifact.absolute_path
+                if prefix_path:
+                    expected_lib_path = os.path.join(prefix_path,
+                                                     found_artifact.path)
+
+                if expected_lib_path == lib_path:
+                    continue
+
+                print("Change dependency path {} -> {}".format(
+                    lib_path, expected_lib_path))
+                helpers.run_task([
+                    'install_name_tool', '-change', lib_path,
+                    expected_lib_path, binary_artifact.absolute_path
+                ],
+                                 cwd=self.get_build_path())
 
     def package(self):
 

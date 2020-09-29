@@ -80,6 +80,8 @@ def package_dmg(self, package_build_context):
     artifacts = package_build_context.configuration.artifacts.copy()
     artifacts = [artifact for artifact in artifacts if artifact.scope is None]
 
+    binary_artifacts = list()
+
     for artifact in artifacts:
         local_dir = 'MacOS'
         if artifact.type == 'library':
@@ -101,12 +103,10 @@ def package_dmg(self, package_build_context):
 
         artifact_filename = os.path.basename(artifact.path)
         artifact_dirname = os.path.dirname(artifact.path)
-        if artifact_dirname:
-            local_dir = ''
 
         dst_directory = os.path.realpath(
             helpers.make_directory(subdirectory_directory,
-                                   os.path.join(artifact_dirname, local_dir)))
+                                   os.path.join(local_dir, artifact_dirname)))
 
         src = artifact.absolute_path
         dst = os.path.abspath(os.path.join(dst_directory, artifact_filename))
@@ -116,9 +116,14 @@ def package_dmg(self, package_build_context):
             os.makedirs(dst_dir)
         print("Copying {} to {}".format(src, dst))
         helpers.copy_file(src, dst)
-        artifact.path = os.path.join(artifact_dirname, local_dir,
+        artifact.path = os.path.join(local_dir, artifact_dirname,
                                      artifact_filename)
         artifact.location = os.path.realpath(subdirectory_directory)
+        if artifact.type in ['library', 'program']:
+            binary_artifacts.append(artifact)
+
+    self.patch_darwin_binary_artifacts(binary_artifacts=binary_artifacts,
+                                       prefix_path='@loader_path/..')
 
     repository = self.load_git_remote_origin_url()
     targets_binaries = []
