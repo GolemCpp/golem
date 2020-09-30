@@ -193,7 +193,7 @@ def package_dmg(self, package_build_context):
         if not self.context.env.QTLIBS:
             raise RuntimeError("Can't find path to Qt libraries")
         for binary in unique_targets_binaries:
-            print("Run windeployqt {}".format(binary))
+            print("Run macdeployqt {}".format(binary))
 
             real_path = os.path.realpath(
                 os.path.join(subdirectory_directory, binary))
@@ -213,7 +213,8 @@ def package_dmg(self, package_build_context):
                         os.path.join(self.get_project_dir(), qmldir)))
                 for qmldir in package_build_context.configuration.qmldirs
             ],
-                             cwd=package_directory)
+                             cwd=package_directory,
+                             debug=True)
 
     for symlink_path in targets_binaries_symlinks:
         os.remove(symlink_path)
