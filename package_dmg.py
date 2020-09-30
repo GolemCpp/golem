@@ -128,10 +128,15 @@ def package_dmg(self, package_build_context):
     repository = self.load_git_remote_origin_url()
     targets_binaries = []
     targets_libpaths = ['lib']
+    target_programs = []
     for artifact in artifacts:
         if artifact.type in ['library', 'program']:
             if artifact.target in package_build_context.package.targets and artifact.repository == repository:
                 targets_binaries.append(artifact.path)
+                if artifact.type in ['program']:
+                    real_path = os.path.realpath(artifact.absolute_path)
+                    if real_path not in target_programs:
+                        target_programs.append(real_path)
 
         if artifact.type in ['library']:
             target_path = os.path.dirname(artifact.path)
@@ -179,8 +184,8 @@ def package_dmg(self, package_build_context):
             target=template_file_dst,
             GOLEM_PACKAGE_DMG_BUNDLE_NAME=str(package_name),
             GOLEM_PACKAGE_DMG_BUNDLE_EXECUTABLE=str(
-                os.path.relpath(path=unique_targets_binaries[0],
-                                start='MacOS')),
+                os.path.relpath(path=target_programs[0],
+                                start=os.path.join(app_directory, 'MacOS'))),
             GOLEM_PACKAGE_DMG_VERSION=str(package_version),
             GOLEM_PACKAGE_DMG_BUILD_VERSION=str(package_build_version))
 
