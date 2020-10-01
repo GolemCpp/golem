@@ -122,8 +122,11 @@ def package_dmg(self, package_build_context):
         if artifact.type in ['library', 'program']:
             binary_artifacts.append(artifact)
 
-    self.patch_darwin_binary_artifacts(binary_artifacts=binary_artifacts,
-                                       prefix_path='@loader_path/..')
+    for binary_artifact in binary_artifacts:
+        self.patch_darwin_binary_artifacts(binary_artifacts=[binary_artifact],
+                                           prefix_path='@loader_path',
+                                           source_artifacts=binary_artifacts,
+                                           relative_path=True)
 
     repository = self.load_git_remote_origin_url()
     targets_binaries = []

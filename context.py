@@ -4736,7 +4736,8 @@ class Context:
     def patch_darwin_binary_artifacts(self,
                                       binary_artifacts,
                                       prefix_path=None,
-                                      source_artifacts=[]):
+                                      source_artifacts=[],
+                                      relative_path=False):
 
         if not self.is_darwin():
             raise RuntimeError("Patching binary artifacts only works on macOS")
@@ -4820,9 +4821,17 @@ class Context:
                     continue
 
                 expected_lib_path = found_artifact.absolute_path
-                if prefix_path:
-                    expected_lib_path = os.path.join(prefix_path,
-                                                     found_artifact.path)
+                if relative_path:
+                    expected_lib_path = os.path.relpath(
+                        path=found_artifact.absolute_path,
+                        start=os.path.dirname(binary_artifact.absolute_path))
+                    if prefix_path:
+                        expected_lib_path = os.path.join(
+                            prefix_path, expected_lib_path)
+                else:
+                    if prefix_path:
+                        expected_lib_path = os.path.join(
+                            prefix_path, found_artifact.path)
 
                 if expected_lib_path == lib_path:
                     continue
