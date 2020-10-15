@@ -111,6 +111,13 @@ class Context:
 
         return deps_cache_file_json
 
+    @staticmethod
+    def make_dependency_unique_identifier(dependency):
+        return '{}_{}_{}_{}_{}'.format(dependency.repository,
+                                       dependency.resolved_hash,
+                                       dependency.link, dependency.runtime,
+                                       dependency.runtime)
+
     def load_resolved_dependencies(self):
         master_dependencies = self.load_master_dependencies_configuration()
         if master_dependencies:
@@ -1305,10 +1312,23 @@ class Context:
                         raise RuntimeError("Cannot find target: " + target)
 
                 if dependency_dependencies is not None and self.deps_build:
-                    self.project.deps = list(
-                        dict((obj.name, obj)
-                             for obj in (self.project.deps +
-                                         dependency_dependencies)).values())
+                    dependency_dict = dict()
+                    for dependency in (self.project.deps +
+                                       dependency_dependencies):
+                        dependency_id = Context.make_dependency_unique_identifier(
+                            dependency)
+                        if dependency_id not in dependency_dict:
+                            dependency_dict[dependency_id] = dependency
+                        else:
+                            if not dependency.targets:
+                                dependency_dict[dependency_id].targets = []
+                            elif dependency_dict[dependency_id].targets:
+                                dependency_dict[
+                                    dependency_id].targets += dependency.targets
+                            if not dependency.shallow:
+                                dependency_dict[dependency_id].shallow = False
+
+                    self.project.deps = list(dependency_dict.values())
 
             if not self.context.options.no_copy_artifacts and self.deps_build:
                 for artifact_binary in dependency_configuration.artifacts:
