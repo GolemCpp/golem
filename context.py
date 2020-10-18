@@ -2326,6 +2326,52 @@ class Context:
         if 'qt5' in filtered_wfeatures and self.is_darwin():
             env_cxxflags += ['-iframework{}'.format(self.context.env.QTLIBS)]
 
+        rpath_option = config.rpath
+        linkflags_option = helpers.filter_unique(config.linkflags +
+                                                 target_linkflags + rpath_link)
+        ldflags_option = helpers.filter_unique(stlibflags + config.ldflags)
+        if self.is_linux():
+            if not config.rpath:
+                lib_paths = list()
+                lib_paths.append('$ORIGIN')
+                if 'qt5' in filtered_wfeatures:
+                    lib_paths.append(self.context.env.QTLIBS)
+
+                lib_artifacts = list()
+                for target_name in targets:
+                    decorated_target = self.make_decorated_target_from_context(
+                        config=config, target_name=target_name)
+                    artifacts = self.make_artifacts_list(
+                        config=config, decorated_target=decorated_target)
+                    for artifact in artifacts:
+                        lib_artifacts.append(
+                            self.create_artifact(
+                                path=artifact,
+                                location=self.make_out_path(),
+                                type='library',
+                                scope=None,
+                                target=target_name,
+                                decorated_target=decorated_target))
+
+                libraries_list = [
+                    os.path.basename(artifact.path)
+                    for artifact in config.artifacts
+                    if artifact.type in ['library']
+                    and not artifact.path.endswith('.a')
+                ]
+                local_artifacts = config.artifacts.copy()
+                for local_artifact in local_artifacts:
+                    local_artifact.location = self.make_out_path()
+                lib_paths += self.patch_linux_binary_artifacts(
+                    binary_artifacts=lib_artifacts,
+                    prefix_path='$ORIGIN',
+                    source_artifacts=local_artifacts,
+                    libraries=libraries_list,
+                    simulate=True,
+                    relative_path=True)
+                lib_paths = helpers.filter_unique(lib_paths)
+                rpath_option = lib_paths
+
         return BuildTarget(
             config=config,
             defines=config.defines,
@@ -2339,9 +2385,8 @@ class Context:
             cxxflags=final_cxxflags,
             cflags=helpers.filter_unique(config.cflags + target_cxxflags +
                                          isystemflags),
-            linkflags=helpers.filter_unique(config.linkflags +
-                                            target_linkflags + rpath_link),
-            ldflags=helpers.filter_unique(stlibflags + config.ldflags),
+            linkflags=linkflags_option,
+            ldflags=ldflags_option,
             use=config_all_use,
             uselib=config.uselib,
             moc=listmoc,
@@ -2356,7 +2401,7 @@ class Context:
             cppflags=config.cppflags,
             framework=config.framework,
             frameworkpath=config.frameworkpath,
-            rpath=config.rpath,
+            rpath=rpath_option,
             cxxdeps=config.cxxdeps,
             ccdeps=config.ccdeps,
             linkdeps=config.linkdeps,
@@ -2610,18 +2655,21 @@ class Context:
             for callback in build_target.config.scripts:
                 callback(self)
 
-                if self.is_darwin():
-                    if config.type[0] not in ['library']:
-                        continue
+                if self.is_windows():
+                    continue
 
-                    dylib_artifacts = list()
+                if config.type[0] not in ['library']:
+                    continue
+
+                if self.is_darwin():
+                    lib_artifacts = list()
                     for target_name in targets:
                         decorated_target = self.make_decorated_target_from_context(
                             config=config, target_name=target_name)
                         artifacts = self.make_artifacts_list(
                             config=config, decorated_target=decorated_target)
                         for artifact in artifacts:
-                            dylib_artifacts.append(
+                            lib_artifacts.append(
                                 self.create_artifact(
                                     path=artifact,
                                     location=self.make_out_path(),
@@ -2629,9 +2677,8 @@ class Context:
                                     scope=None,
                                     target=target_name,
                                     decorated_target=decorated_target))
-
                     self.patch_darwin_binary_artifacts(
-                        binary_artifacts=dylib_artifacts,
+                        binary_artifacts=lib_artifacts,
                         source_artifacts=config.artifacts)
             return
 
@@ -4752,6 +4799,11 @@ class Context:
                     self.patch_darwin_binary_artifacts(
                         binary_artifacts=binary_artifacts,
                         prefix_path='@executable_path')
+                elif self.is_linux():
+                    self.patch_linux_binary_artifacts(
+                        binary_artifacts=binary_artifacts,
+                        prefix_path='$ORIGIN',
+                        relative_path=True)
 
     def patch_darwin_binary_artifacts(self,
                                       binary_artifacts,
@@ -4863,6 +4915,140 @@ class Context:
                     expected_lib_path, binary_artifact.absolute_path
                 ],
                                  cwd=self.get_build_path())
+
+    def patch_linux_binary_artifacts(self,
+                                     binary_artifacts,
+                                     prefix_path=None,
+                                     source_artifacts=[],
+                                     relative_path=False,
+                                     search_paths=None,
+                                     libraries=None,
+                                     simulate=False):
+
+        if not self.is_linux():
+            raise RuntimeError("Patching binary artifacts only works on linux")
+
+        rpath_results = list()
+        path_patched = list()
+        for binary_artifact in binary_artifacts:
+            real_path_artifact = os.path.realpath(
+                binary_artifact.absolute_path)
+            _, extension = os.path.splitext(real_path_artifact)
+
+            if real_path_artifact in path_patched:
+                continue
+            path_patched.append(real_path_artifact)
+
+            if not os.path.exists(
+                    binary_artifact.absolute_path) and not simulate:
+                continue
+
+            is_static_library = binary_artifact.type in [
+                'library'
+            ] and extension in ['.a']
+
+            if is_static_library:
+                continue
+
+            library_list = list()
+
+            if libraries is None and os.path.exists(
+                    binary_artifact.absolute_path):
+                readelf_infos = subprocess.check_output(
+                    ['readelf', '-d', binary_artifact.absolute_path],
+                    cwd=self.get_build_path()).decode('utf-8')
+                library_list = re.findall(
+                    r'^.*NEEDED\)\s*Shared library: \[([^\]]*)\]',
+                    readelf_infos, re.MULTILINE)
+            else:
+                library_list = libraries.copy()
+
+            if not library_list:
+                continue
+
+            if search_paths is None:
+                search_paths = list()
+                if 'QTLIBS' in self.context.env and os.path.exists(
+                        self.context.env.QTLIBS):
+                    search_paths = [self.context.env.QTLIBS]
+
+            lib_paths = list()
+
+            for library in library_list:
+
+                found_artifact = None
+                for binary_artifact_bis in binary_artifacts + source_artifacts:
+                    if binary_artifact_bis.type not in ['library']:
+                        continue
+                    if os.path.basename(
+                            binary_artifact_bis.absolute_path) == library:
+                        found_artifact = binary_artifact_bis
+                        break
+
+                if found_artifact is None:
+                    for search_path in search_paths:
+                        if os.path.exists(os.path.join(search_path, library)):
+                            if search_path not in lib_paths:
+                                lib_paths.append(search_path)
+                    continue
+
+                expected_lib_path = found_artifact.absolute_path
+                if relative_path:
+                    expected_lib_path = os.path.relpath(
+                        path=found_artifact.absolute_path,
+                        start=os.path.dirname(binary_artifact.absolute_path))
+                    if prefix_path:
+                        expected_lib_path = os.path.join(
+                            prefix_path, expected_lib_path)
+                else:
+                    if prefix_path:
+                        expected_lib_path = os.path.join(
+                            prefix_path, found_artifact.path)
+
+                expected_lib_path = os.path.dirname(expected_lib_path)
+                if expected_lib_path not in lib_paths:
+                    lib_paths.append(expected_lib_path)
+
+            total_diff = lib_paths.copy()
+
+            if not simulate:
+                current_rpath = subprocess.check_output(
+                    [
+                        'patchelf', '--print-rpath',
+                        binary_artifact.absolute_path
+                    ],
+                    cwd=self.get_build_path()).decode('utf-8').splitlines()[0]
+
+                current_rpath = current_rpath.split(
+                    ':') if current_rpath else []
+
+                diff_list1_list2 = list(set(current_rpath) - set(lib_paths))
+                diff_list2_list1 = list(set(lib_paths) - set(current_rpath))
+                total_diff = diff_list1_list2 + diff_list2_list1
+
+            if lib_paths:
+                rpath = ':'.join(lib_paths)
+                if not simulate and total_diff:
+                    print("Set rpath {} to {}".format(
+                        rpath, binary_artifact.absolute_path))
+                    helpers.run_task([
+                        'patchelf', '--set-rpath', rpath,
+                        binary_artifact.absolute_path
+                    ],
+                                     cwd=self.get_build_path())
+                rpath_results += lib_paths
+            else:
+                if not simulate and total_diff:
+                    print("Remove rpath from {}".format(
+                        binary_artifact.absolute_path))
+                    helpers.run_task([
+                        'patchelf', '--remove-rpath',
+                        binary_artifact.absolute_path
+                    ],
+                                     cwd=self.get_build_path())
+                rpath_results += []
+
+        return rpath_results
 
     def package(self):
 
@@ -4999,6 +5185,8 @@ class Context:
             artifact for artifact in artifacts if artifact.scope is None
         ]
 
+        binary_artifacts = list()
+
         for artifact in artifacts:
             local_dir = 'bin'
             if artifact.type == 'library':
@@ -5040,6 +5228,8 @@ class Context:
             artifact.path = os.path.join(artifact_dirname, local_dir,
                                          artifact_filename)
             artifact.location = os.path.realpath(subdirectory_directory)
+            if artifact.type in ['library', 'program']:
+                binary_artifacts.append(artifact)
 
         # Strip binaries, libraries, archives
 
@@ -5073,8 +5263,9 @@ class Context:
             if artifact.type not in ['library', 'program']:
                 continue
             print("Remove rpath {}".format(artifact.absolute_path))
-            helpers.run_task(['chrpath', '-d', artifact.absolute_path],
-                             cwd=subdirectory_directory)
+            helpers.run_task(
+                ['patchelf', '--remove-rpath', artifact.absolute_path],
+                cwd=subdirectory_directory)
 
         targets_binaries_real_paths = list()
         unique_targets_binaries = list()
@@ -5191,8 +5382,9 @@ class Context:
                 if artifact.type not in ['library', 'program']:
                     continue
                 print("Remove rpath {}".format(artifact.absolute_path))
-                helpers.run_task(['chrpath', '-d', artifact.absolute_path],
-                                 cwd=subdirectory_directory)
+                helpers.run_task(
+                    ['patchelf', '--remove-rpath', artifact.absolute_path],
+                    cwd=subdirectory_directory)
 
         all_prefix_files = []
         for (dirpath, dirnames, filenames) in os.walk(subdirectory_directory):
@@ -5311,12 +5503,38 @@ class Context:
         self.context.execute_build()
 
         if not deb_package.rpath:
-            for artifact in artifacts:
-                if artifact.type not in ['library', 'program']:
-                    continue
-                print("Remove rpath {}".format(artifact.absolute_path))
-                helpers.run_task(['chrpath', '-d', artifact.absolute_path],
-                                 cwd=subdirectory_directory)
+            paths_done = []
+            for binary_artifact in binary_artifacts:
+                if binary_artifact.path not in paths_done:
+                    paths_done.append(binary_artifact.path)
+
+            lib_directory = os.path.join(subdirectory_directory, 'lib')
+
+            libraries_list = self.find_artifacts(path=lib_directory,
+                                                 recursively=True,
+                                                 types=('*.so', '*.so.*'))
+
+            found_lib_artifacts = []
+            for library in libraries_list:
+                library_path = os.path.relpath(path=library,
+                                               start=subdirectory_directory)
+                library_location = subdirectory_directory
+                library_artifact = self.create_artifact(
+                    path=library_path,
+                    location=library_location,
+                    type='library')
+                if library_artifact.path not in paths_done:
+                    paths_done.append(library_artifact.path)
+                    found_lib_artifacts.append(library_artifact)
+
+            all_binary_artifacts = binary_artifacts + found_lib_artifacts
+            for binary_artifact in all_binary_artifacts:
+                self.patch_linux_binary_artifacts(
+                    binary_artifacts=[binary_artifact],
+                    prefix_path='$ORIGIN',
+                    source_artifacts=all_binary_artifacts,
+                    relative_path=True,
+                    search_paths=[])
 
         system_name = self.osname()
         distribution_name = self.distribution()
