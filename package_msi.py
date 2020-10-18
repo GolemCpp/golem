@@ -130,10 +130,15 @@ def package_msi(self, package_build_context):
     repository = self.load_git_remote_origin_url()
     targets_binaries = []
     targets_libpaths = ['lib']
+    target_programs = []
     for artifact in artifacts:
         if artifact.type in ['library', 'program']:
             if artifact.target in package_build_context.package.targets and artifact.repository == repository:
                 targets_binaries.append(artifact.path)
+                if artifact.type in ['program']:
+                    real_path = os.path.realpath(artifact.absolute_path)
+                    if real_path not in target_programs:
+                        target_programs.append(real_path)
 
         if artifact.type in ['library']:
             target_path = os.path.dirname(artifact.path)
@@ -252,7 +257,7 @@ def package_msi(self, package_build_context):
             GOLEM_PACKAGE_MSI_MSVC_CRT_MERGE=str(msvc_crt_merge),
             GOLEM_PACKAGE_MSI_MSVC_CRT_MERGE_REF=str(msvc_crt_merge_ref),
             GOLEM_PACKAGE_MSI_BINARY_PATH=str(
-                os.path.join(subdirectory, targets_binaries[0])),
+                os.path.join(subdirectory, target_programs[0])),
             GOLEM_PACKAGE_MSI_VERSION=str(package_version))
 
     self.context.add_group()

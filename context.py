@@ -5246,10 +5246,15 @@ class Context:
         repository = self.load_git_remote_origin_url()
         targets_binaries = []
         targets_libpaths = ['lib']
+        target_programs = []
         for artifact in artifacts:
             if artifact.type in ['library', 'program']:
                 if artifact.target in package_build_context.package.targets and artifact.repository == repository:
                     targets_binaries.append(artifact.path)
+                    if artifact.type in ['program']:
+                        real_path = os.path.realpath(artifact.absolute_path)
+                        if real_path not in target_programs:
+                            target_programs.append(real_path)
 
             if artifact.type in ['library']:
                 target_path = os.path.dirname(artifact.path)
@@ -5417,7 +5422,7 @@ class Context:
                          target=template_dst,
                          LIBRARY_PATHS=str(rpath),
                          BINARY_PATH=str(
-                             os.path.join(subdirectory, targets_binaries[0])),
+                             os.path.join(subdirectory, target_programs[0])),
                          NAME=str(package_build_context.package.name),
                          PREFIX=str(prefix),
                          SUBDIRECTORY=str(subdirectory))
@@ -5457,7 +5462,7 @@ class Context:
                              LIBRARY_PATHS=str(rpath),
                              BINARY_PATH=str(
                                  os.path.join(subdirectory,
-                                              targets_binaries[0])),
+                                              target_programs[0])),
                              NAME=str(package_build_context.package.name),
                              PREFIX=str(prefix),
                              SUBDIRECTORY=str(subdirectory))
