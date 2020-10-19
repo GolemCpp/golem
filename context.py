@@ -2161,7 +2161,7 @@ class Context:
         version_source = []
         version = Version(working_dir=self.get_project_dir(),
                           build_number=self.get_build_number())
-        version_short = version.semver
+        version_short = version.semver_short
         if task.version_template is not None:
             for version_template in task.version_template:
                 version_template_src = self.context.root.find_node(
