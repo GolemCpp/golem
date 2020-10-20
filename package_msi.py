@@ -146,9 +146,7 @@ def package_msi(self, package_build_context):
                     qt5_binaries.append(artifact.path)
 
                 if artifact.type in ['program']:
-                    real_path = os.path.realpath(artifact.absolute_path)
-                    if real_path not in target_programs:
-                        target_programs.append(real_path)
+                    target_programs.append(artifact.path)
 
         if artifact.type in ['library']:
             target_path = os.path.dirname(artifact.path)

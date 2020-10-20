@@ -5269,9 +5269,7 @@ class Context:
                         qt5_binaries.append(artifact.path)
 
                     if artifact.type in ['program']:
-                        real_path = os.path.realpath(artifact.absolute_path)
-                        if real_path not in target_programs:
-                            target_programs.append(real_path)
+                        target_programs.append(artifact.path)
 
             if artifact.type in ['library']:
                 target_path = os.path.dirname(artifact.path)
@@ -5391,6 +5389,18 @@ class Context:
                                               'AppRun')
                 if os.path.exists(app_run_parent):
                     os.remove(app_run_parent)
+
+            qt_conf_path = os.path.join(subdirectory_directory, 'bin',
+                                        'qt.conf')
+            if not os.path.exists(qt_conf_path):
+                with open(qt_conf_path, 'w') as qt_conf_file:
+                    qt_conf_file.writelines([
+                        "[Paths]\n",  # Header
+                        "Prefix = ../\n",  # Prefix
+                        "Plugins = plugins\n",  # Plugin
+                        "Imports = qml\n",  # QML imports
+                        "Qml2Imports = qml\n"  # QML imports
+                    ])
 
         for symlink_path in targets_binaries_symlinks:
             os.remove(symlink_path)
