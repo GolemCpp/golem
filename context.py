@@ -3692,6 +3692,13 @@ class Context:
         print(call_msvc)
         return call_msvc
 
+    def is_qt5_enabled(self, config):
+        return any([feature.startswith("QT5") for feature in config.features
+                    ]) or 'qt5' in config.wfeatures
+
+    def is_qt5_used(self, config):
+        return any([feature.startswith("QT5") for feature in config.features])
+
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
@@ -3701,11 +3708,7 @@ class Context:
         tasks_and_targets = self.get_tasks_and_targets_to_process()
 
         for task, _ in tasks_and_targets:
-            if any([feature.startswith("QT5") for feature in task.features]):
-                self.project.enable_qt()
-
-        for task, _ in tasks_and_targets:
-            if 'qt5' in task.wfeatures:
+            if (self.is_qt5_enabled(config=task)):
                 self.project.enable_qt()
 
         # features list
@@ -4659,6 +4662,7 @@ class Context:
             self.tasks_and_targets = dict()
             self.append(task=task, targets=targets)
             self.configuration = Configuration()
+            self.targets_and_configs = dict()
 
         def append(self, task, targets):
             if task.name not in self.tasks_and_targets:
@@ -4673,6 +4677,8 @@ class Context:
                 task_targets.generate_config(context=self.context)
                 self.configuration.merge(context=self.context,
                                          configs=[task_targets.config])
+                for target_name in task_targets.config.targets:
+                    self.targets_and_configs[target_name] = task_targets.config
 
     def make_export_task(self, task):
         found_export_task = None
@@ -5247,10 +5253,21 @@ class Context:
         targets_binaries = []
         targets_libpaths = ['lib']
         target_programs = []
+        qt5_binaries = []
         for artifact in artifacts:
             if artifact.type in ['library', 'program']:
                 if artifact.target in package_build_context.package.targets and artifact.repository == repository:
                     targets_binaries.append(artifact.path)
+
+                    target_config = None
+                    if artifact.target in package_build_context.targets_and_configs:
+                        target_config = package_build_context.targets_and_configs[
+                            artifact.target]
+
+                    if target_config and self.is_qt5_enabled(
+                            config=target_config):
+                        qt5_binaries.append(artifact.path)
+
                     if artifact.type in ['program']:
                         real_path = os.path.realpath(artifact.absolute_path)
                         if real_path not in target_programs:
@@ -5283,12 +5300,27 @@ class Context:
             unique_targets_binaries.append(binary)
         targets_binaries_symlinks = list()
 
+        qt5_targets_binaries_real_paths = list()
+        qt5_unique_targets_binaries = list()
+        for binary in qt5_binaries:
+            real_path = os.path.realpath(
+                os.path.join(subdirectory_directory, binary))
+            if real_path in qt5_targets_binaries_real_paths:
+                continue
+            qt5_targets_binaries_real_paths.append(real_path)
+            qt5_unique_targets_binaries.append(binary)
+
         if 'qt5' in package_build_context.configuration.wfeatures:
             if not self.context.env.QMAKE:
                 raise RuntimeError("Can't find path to qmake")
             if not self.context.env.QTLIBS:
                 raise RuntimeError("Can't find path to Qt libraries")
             for binary in unique_targets_binaries:
+
+                if binary not in qt5_unique_targets_binaries:
+                    print("{} is not a Qt binary".format(binary))
+                    continue
+
                 print("Run linuxdeployqt {}".format(binary))
 
                 real_path = os.path.realpath(

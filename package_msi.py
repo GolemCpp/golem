@@ -131,10 +131,20 @@ def package_msi(self, package_build_context):
     targets_binaries = []
     targets_libpaths = ['lib']
     target_programs = []
+    qt5_binaries = []
     for artifact in artifacts:
         if artifact.type in ['library', 'program']:
             if artifact.target in package_build_context.package.targets and artifact.repository == repository:
                 targets_binaries.append(artifact.path)
+
+                target_config = None
+                if artifact.target in package_build_context.targets_and_configs:
+                    target_config = package_build_context.targets_and_configs[
+                        artifact.target]
+
+                if target_config and self.is_qt5_enabled(config=target_config):
+                    qt5_binaries.append(artifact.path)
+
                 if artifact.type in ['program']:
                     real_path = os.path.realpath(artifact.absolute_path)
                     if real_path not in target_programs:
@@ -159,12 +169,27 @@ def package_msi(self, package_build_context):
         unique_targets_binaries.append(binary)
     targets_binaries_symlinks = list()
 
+    qt5_targets_binaries_real_paths = list()
+    qt5_unique_targets_binaries = list()
+    for binary in qt5_binaries:
+        real_path = os.path.realpath(
+            os.path.join(subdirectory_directory, binary))
+        if real_path in qt5_targets_binaries_real_paths:
+            continue
+        qt5_targets_binaries_real_paths.append(real_path)
+        qt5_unique_targets_binaries.append(binary)
+
     if 'qt5' in package_build_context.configuration.wfeatures:
         if not self.context.env.QMAKE:
             raise RuntimeError("Can't find path to qmake")
         if not self.context.env.QTLIBS:
             raise RuntimeError("Can't find path to Qt libraries")
         for binary in unique_targets_binaries:
+
+            if binary not in qt5_unique_targets_binaries:
+                print("{} is not a Qt binary".format(binary))
+                continue
+
             print("Run windeployqt {}".format(binary))
 
             real_path = os.path.realpath(
