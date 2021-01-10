@@ -2045,7 +2045,8 @@ class Context:
     def make_dependencies_slug(self, dependencies):
         string = ''
         for dependency in dependencies:
-            string += json.dumps(Dependency.serialize_to_json(dependency))
+            string += json.dumps(Dependency.serialize_to_json(dependency),
+                                 sort_keys=True)
         return hashlib.sha1(string.encode('utf-8')).hexdigest()[:8]
 
     def make_binary_foldername(self, dependencies=None):

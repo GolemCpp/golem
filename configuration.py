@@ -422,7 +422,7 @@ class Configuration(Condition):
             raw_entry = ConditionExpression.remove_modifiers(entry)
 
             if raw_entry in Configuration.serialized_members_list():
-                self.__dict__[raw_entry] += value
+                self.__dict__[raw_entry] += helpers.parameter_to_list(value)
                 self.__dict__[raw_entry] = helpers.filter_unique(
                     self.__dict__[raw_entry])
                 has_entry = True
@@ -515,8 +515,8 @@ class Configuration(Condition):
         ]
 
     @staticmethod
-    def serialize_to_json(o):
-        json_obj = Condition.serialize_to_json(o)
+    def serialize_to_json(o, avoid_lists=False):
+        json_obj = Condition.serialize_to_json(o, avoid_lists=avoid_lists)
 
         for key in o.__dict__:
             if key in Configuration.serialized_members():
@@ -526,7 +526,14 @@ class Configuration(Condition):
         for key in o.__dict__:
             if key in Configuration.serialized_members_list():
                 if o.__dict__[key]:
-                    json_obj[key] = o.__dict__[key]
+                    if avoid_lists and len(
+                            o.__dict__[key]) == 1 and isinstance(
+                                o.__dict__[key], list) and (
+                                    o.__dict__[key][0] is None or
+                                    not isinstance(o.__dict__[key][0], list)):
+                        json_obj[key] = o.__dict__[key][0]
+                    else:
+                        json_obj[key] = o.__dict__[key]
 
         if o.artifacts:
             json_obj['artifacts'] = [

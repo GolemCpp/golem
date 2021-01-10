@@ -111,8 +111,8 @@ class Dependency(Configuration):
         ]
 
     @staticmethod
-    def serialize_to_json(o):
-        json_obj = Configuration.serialize_to_json(o)
+    def serialize_to_json(o, avoid_lists=False):
+        json_obj = Configuration.serialize_to_json(o, avoid_lists=avoid_lists)
 
         for key in o.__dict__:
             if key in Dependency.serialized_members():
@@ -137,20 +137,11 @@ class Dependency(Configuration):
     @staticmethod
     def save_cache(dependencies):
         cache = []
+
         for dependency in dependencies:
-
-            json = OrderedDict({
-                'repository': dependency.repository,
-                'version': dependency.version,
-                'resolved_version': dependency.resolved_version,
-                'commit': dependency.resolved_hash
-            })
-
-            if dependency.name is not None:
-                json.update({'name': dependency.name})
-                json.move_to_end('name', last=False)
-
+            json = Dependency.serialize_to_json(dependency, avoid_lists=True)
             cache.append(json)
+
         return cache
 
     @staticmethod
@@ -158,15 +149,7 @@ class Dependency(Configuration):
         dependencies = []
 
         for item in cache:
-            dependency = Dependency()
-
-            if 'name' in item:
-                dependency.name = item['name']
-
-            dependency.repository = item['repository']
-            dependency.version = item['version']
-            dependency.resolved_version = item['resolved_version']
-            dependency.resolved_hash = item['commit']
+            dependency = Dependency.unserialize_from_json(item)
             dependencies.append(dependency)
 
         return dependencies

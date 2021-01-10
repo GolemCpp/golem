@@ -104,13 +104,20 @@ class Condition(object):
         ]
 
     @staticmethod
-    def serialize_to_json(o):
+    def serialize_to_json(o, avoid_lists=False):
         json_obj = {}
 
         for key in o.__dict__:
             if key in Condition.serialized_members():
                 if o.__dict__[key]:
-                    json_obj[key] = o.__dict__[key]
+                    if avoid_lists and len(
+                            o.__dict__[key]) == 1 and isinstance(
+                                o.__dict__[key], list) and (
+                                    o.__dict__[key][0] is None or
+                                    not isinstance(o.__dict__[key][0], list)):
+                        json_obj[key] = o.__dict__[key][0]
+                    else:
+                        json_obj[key] = o.__dict__[key]
 
         return json_obj
 
