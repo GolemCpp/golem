@@ -5157,6 +5157,35 @@ class Context:
 
         helpers.make_directory(subdirectory_directory)
 
+        package_copy_skeleton = None
+
+        if deb_package.copy_skeleton:
+            for pair in deb_package.copy_skeleton:
+                if not isinstance(pair, tuple) or len(pair) != 2:
+                    raise RuntimeError(
+                        "Package bad type in copy_skeleton: have to be tuple of size 2 (from path, to path)"
+                    )
+
+            package_copy_skeleton = [
+                (os.path.join(self.get_project_dir(), path_pair[0]),
+                 os.path.join(prefix_directory, path_pair[1]))
+                for path_pair in deb_package.copy_skeleton
+            ]
+
+            for pair in package_copy_skeleton:
+                if not os.path.exists(pair[0]):
+                    raise RuntimeError(
+                        "Package copy_skeleton source path doesn't exist: {}".
+                        format(pair[0]))
+
+            for pair in package_copy_skeleton:
+                if os.path.isdir(pair[0]):
+                    helpers.make_directory(pair[1])
+                    helpers.copy_tree(pair[0], pair[1])
+                else:
+                    helpers.make_directory(os.path.dirname(pair[1]))
+                    helpers.copy_file(pair[0], pair[1])
+
         package_skeleton = None
 
         if deb_package.skeleton:

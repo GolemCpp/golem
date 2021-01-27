@@ -106,7 +106,8 @@ class DEBPackage:
                  homepage=None,
                  depends=None,
                  rpath=None,
-                 templates=None):
+                 templates=None,
+                 copy_skeleton=None):
 
         self.prefix = prefix
         self.subdirectory = subdirectory
@@ -119,8 +120,8 @@ class DEBPackage:
         self.homepage = homepage
         self.depends = helpers.parameter_to_list(depends)
         self.rpath = rpath
-
         self.templates = helpers.parameter_to_list(templates)
+        self.copy_skeleton = helpers.parameter_to_list(copy_skeleton)
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -153,7 +154,7 @@ class DEBPackage:
 
     @staticmethod
     def serialized_members_list():
-        return ['templates', 'depends']
+        return ['templates', 'depends', 'copy_skeleton']
 
     @staticmethod
     def unserialize_from_json(o):
