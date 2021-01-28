@@ -2963,8 +2963,10 @@ class Context:
 
     def find_artifacts(self, path, recursively=False, types=None):
         files_grabbed = []
-        file_types = ('*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*',
-                      '*.dylib', '*.dylib.*')
+        file_types = [
+            '*.pdb', '*.dll', '*.lib', '*.a', '*.so', '*.so.*', '*.dylib',
+            '*.dylib.*'
+        ]
         if types:
             file_types = types
         if recursively == False:
@@ -2984,6 +2986,36 @@ class Context:
                               recursively=False):
 
         files = self.find_artifacts(source_path, recursively)
+
+        for file in files:
+            print("Copy file " + str(file))
+            helpers.copy_file(file, destination_path)
+
+    def copy_binary_artifacts_from_build(self,
+                                         source_path,
+                                         destination_path,
+                                         recursively=False):
+
+        artifact_types = None
+        if self.is_windows():
+            if self.is_static():
+                artifact_types = ['*.pdb', '*.lib']
+            else:
+                artifact_types = ['*.pdb', '*.dll', '*.lib']
+        elif self.is_darwin():
+            if self.is_static():
+                artifact_types = ['*.a']
+            else:
+                artifact_types = ['*.dylib', '*.dylib.*']
+        else:
+            if self.is_static():
+                artifact_types = ['*.a']
+            else:
+                artifact_types = ['*.so', '*.so.*']
+        
+        files = self.find_artifacts(path=source_path,
+                                    recursively=recursively,
+                                    types=artifact_types)
 
         for file in files:
             print("Copy file " + str(file))
