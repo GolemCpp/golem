@@ -3012,7 +3012,7 @@ class Context:
                 artifact_types = ['*.a']
             else:
                 artifact_types = ['*.so', '*.so.*']
-        
+
         files = self.find_artifacts(path=source_path,
                                     recursively=recursively,
                                     types=artifact_types)
@@ -4781,12 +4781,10 @@ class Context:
 
         packages_to_install = []
         found_installed_packages = []
-        installed_packages = subprocess.check_output(['dpkg', '-l']).decode(
-            sys.stdout.encoding)
+        installed_packages = subprocess.check_output(
+            ['apt', 'list', '--installed']).decode(sys.stdout.encoding)
         for package in packages:
-            if installed_packages.find(package +
-                                       ':') == -1 and installed_packages.find(
-                                           package + ' ') == -1:
+            if installed_packages.find(package + '/') == -1:
                 packages_to_install.append(package)
             else:
                 found_installed_packages.append(package)
