@@ -2506,6 +2506,10 @@ class Context:
         if cxx_standard:
             vscode_config.update({"cppStandard": cxx_standard})
 
+        if Context.is_linux():
+            vscode_config.update(
+                {"compilerPath": "/usr/bin/" + self.context.env.CXX_NAME})
+
         self.vscode_configs.append(vscode_config)
 
     def generate_vscode_config(self, compiler_commands_path):
@@ -2577,6 +2581,10 @@ class Context:
 
         if cxx_standard:
             vscode_config.update({"cppStandard": cxx_standard})
+
+        if Context.is_linux():
+            vscode_config.update(
+                {"compilerPath": "/usr/bin/" + self.context.env.CXX_NAME})
 
         data = OrderedDict(
             {"configurations": [vscode_config] + self.vscode_configs})
