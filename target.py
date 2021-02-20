@@ -102,6 +102,10 @@ class TargetConfigurationFile(object):
             conf_file.configuration.licenses)
         conf_file.configuration.rpath_link = context.translate_cache_dir_paths(
             conf_file.configuration.rpath_link)
+        conf_file.configuration.lib = context.translate_cache_dir_paths(
+            conf_file.configuration.lib)
+        conf_file.configuration.stlib = context.translate_cache_dir_paths(
+            conf_file.configuration.stlib)
         conf_file.configuration.libpath = context.translate_cache_dir_paths(
             conf_file.configuration.libpath)
         conf_file.configuration.stlibpath = context.translate_cache_dir_paths(
@@ -131,6 +135,10 @@ class TargetConfigurationFile(object):
             conf_file.configuration.licenses)
         conf_file.configuration.rpath_link = context.make_cache_dir_paths(
             conf_file.configuration.rpath_link)
+        conf_file.configuration.lib = context.make_cache_dir_paths(
+            conf_file.configuration.lib)
+        conf_file.configuration.stlib = context.make_cache_dir_paths(
+            conf_file.configuration.stlib)
         conf_file.configuration.libpath = context.make_cache_dir_paths(
             conf_file.configuration.libpath)
         conf_file.configuration.stlibpath = context.make_cache_dir_paths(

@@ -2271,17 +2271,6 @@ class Context:
         target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
         target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
 
-        stlibflags = config.stlib + (config.system if self.is_static() else [])
-
-        if stlibflags:
-            if self.compiler_name() != 'msvc':
-                stlibflags = ['-l' + name for name in stlibflags]
-                if not self.is_darwin():
-                    stlibflags = ['-Wl,-Bstatic'
-                                  ] + stlibflags + ['-Wl,-Bdynamic']
-            else:
-                stlibflags = [name + '.lib' for name in stlibflags]
-
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
         for config_use in config_all_use:
@@ -2330,7 +2319,26 @@ class Context:
         rpath_option = config.rpath
         linkflags_option = helpers.filter_unique(config.linkflags +
                                                  target_linkflags + rpath_link)
-        ldflags_option = helpers.filter_unique(stlibflags + config.ldflags)
+
+        config_lib = []
+        absolute_path_lib = []
+        for lib in config.lib:
+            if os.path.isabs(lib):
+                absolute_path_lib.append(lib)
+            else:
+                config_lib.append(lib)
+
+        config_stlib = []
+        absolute_path_stlib = []
+        for lib in config.stlib:
+            if os.path.isabs(lib):
+                absolute_path_stlib.append(lib)
+            else:
+                config_stlib.append(lib)
+
+        ldflags_option = helpers.filter_unique(absolute_path_lib +
+                                               absolute_path_stlib +
+                                               config.ldflags)
         if self.is_linux():
             if not config.rpath:
                 lib_paths = list()
@@ -2396,7 +2404,9 @@ class Context:
             vnum=version_short,
             depends_on=version_source,
             lib=helpers.filter_unique(
-                config.lib + (config.system if self.is_shared() else [])),
+                config_lib + (config.system if self.is_shared() else [])),
+            stlib=helpers.filter_unique(
+                config_stlib + (config.system if self.is_static() else [])),
             libpath=config.libpath,
             stlibpath=config.stlibpath,
             cppflags=config.cppflags,
@@ -2708,6 +2718,7 @@ class Context:
                   vnum=build_target.vnum,
                   depends_on=build_target.depends_on,
                   lib=build_target.lib,
+                  stlib=build_target.stlib,
                   libpath=build_target.libpath,
                   stlibpath=build_target.stlibpath,
                   cppflags=build_target.cppflags,
@@ -4240,6 +4251,28 @@ class Context:
 
             out_libpath = os.path.join(out_path, decorated_target_path)
 
+            enable_absolute_path_lib = True
+            if enable_absolute_path_lib:
+                if self.is_windows():
+                    decorated_target_base = '{}.lib'.format(
+                        decorated_target_base)
+                elif self.is_darwin():
+                    if self.is_config_shared(export_target_config):
+                        decorated_target_base = 'lib{}.dylib'.format(
+                            decorated_target_base)
+                    else:
+                        decorated_target_base = 'lib{}.a'.format(
+                            decorated_target_base)
+                else:
+                    if self.is_config_shared(export_target_config):
+                        decorated_target_base = 'lib{}.so'.format(
+                            decorated_target_base)
+                    else:
+                        decorated_target_base = 'lib{}.a'.format(
+                            decorated_target_base)
+                decorated_target_base = os.path.join(out_libpath,
+                                                     decorated_target_base)
+
             if not export_target_config.header_only:
                 export_target_config.rpath_link.append(out_libpath)
 
@@ -4525,6 +4558,8 @@ class Context:
         config.rpath_link = replace_paths(config.rpath_link, old_out_path,
                                           new_out_path)
 
+        config.lib = replace_paths(config.lib, old_out_path, new_out_path)
+        config.stlib = replace_paths(config.stlib, old_out_path, new_out_path)
         config.libpath = replace_paths(config.libpath, old_out_path,
                                        new_out_path)
         config.stlibpath = replace_paths(config.stlibpath, old_out_path,
