@@ -1126,10 +1126,6 @@ class Context:
         if self.context.options.force_version:
             self.version.force_version(self.context.options.force_version)
 
-        out_path = self.make_out_path()
-        if not os.path.exists(out_path):
-            os.makedirs(out_path)
-
         for dependency in self.project.deps:
             dependency.update_cache_dir(context=self)
 
@@ -1311,7 +1307,9 @@ class Context:
                     if not target in dependency_configuration.targets and not target_name:
                         raise RuntimeError("Cannot find target: " + target)
 
-                if dependency_dependencies is not None and self.deps_build:
+                if dependency_dependencies is not None:
+                    for dependency in dependency_dependencies:
+                        dependency.dynamically_added = True
                     dependency_dict = dict()
                     for dependency in (self.project.deps +
                                        dependency_dependencies):
@@ -1324,7 +1322,9 @@ class Context:
                                 dependency_dict[dependency_id].targets = []
                             elif dependency_dict[dependency_id].targets:
                                 dependency_dict[
-                                    dependency_id].targets += dependency.targets
+                                    dependency_id].targets = helpers.filter_unique(
+                                        dependency_dict[dependency_id].targets
+                                        + dependency.targets)
                             if not dependency.shallow:
                                 dependency_dict[dependency_id].shallow = False
 
@@ -2092,6 +2092,8 @@ class Context:
                 if dep_name in deps_linked:
                     continue
                 for dep in self.project.deps:
+                    if dep.dynamically_added == True:
+                        continue
                     if dep_name == dep.name:
                         callback(config, dep)
                         deps_linked.append(dep.name)
@@ -2799,6 +2801,16 @@ class Context:
     def call_build_target(self, build_target_fun, build_recursively=False):
         self.built_tasks = []
         tasks_and_targets = self.get_tasks_and_targets_to_process()
+
+        if self.context.options.export:
+            # Iterate over exported tasks to preload all the required
+            # dependencies and help constructing the correct slug for the
+            # binary folder name
+            tasks_and_targets_bis = self.get_tasks_and_targets_to_process(
+                tasks_source=self.project.exports)
+            for task, targets in tasks_and_targets_bis:
+                _, _ = self.iterate_over_task(task=task, targets=targets)
+
         for task, targets in tasks_and_targets:
             if task.header_only:
                 continue

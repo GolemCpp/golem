@@ -36,6 +36,7 @@ class Dependency(Configuration):
         self.resolved_hash = ''
         self.shallow = shallow
         self.cache_dir = None
+        self.dynamically_added = False
 
     def __str__(self):
         return helpers.print_obj(self)
