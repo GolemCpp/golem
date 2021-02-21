@@ -390,12 +390,12 @@ def package_msi(self, package_build_context):
 
     class Context:
         def __init__(self):
-            self.name = package_name
+            self.name = package_build_context.package.name
             self.binaries = targets_binaries
             self.libpaths = targets_libpaths
             self.targets = package_build_context.package.targets
             self.files = files
-            self.version = package_version
+            self.version = version.semver
             self.major = version.major
             self.minor = version.minor
             self.patch = version.patch
