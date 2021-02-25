@@ -438,7 +438,7 @@ class Context:
         return abolute_path
 
     def make_project_path(self, path):
-        return os.path.join(self.get_project_dir(), path)
+        return os.path.join(self.get_project_dir(), str(Path(path)))
 
     def make_project_path_array(self, array):
         return [self.make_project_path(x) for x in array]
