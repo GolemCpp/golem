@@ -2248,8 +2248,8 @@ class Context:
                     "INCLUDES_") and not key.startswith("INCLUDES_QT5"):
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
-                        isystemflags.append('-isystem' + str(path))
-                        env_isystem.append(str(path))
+                        isystemflags.append('-isystem' + str(Path(str(path))))
+                        env_isystem.append(str(Path(str(path))))
 
         config_all_use = helpers.filter_unique(config.use + config.features)
         for config_use in config_all_use:
@@ -2258,8 +2258,8 @@ class Context:
                     if key.startswith("INCLUDES_QT5") and config_use in key:
                         for path in self.context.env[key]:
                             isystemflags.append('{}{}'.format(
-                                isystem_argument, str(path)))
-                            env_isystem.append(str(path))
+                                isystem_argument, str(Path(str(path)))))
+                            env_isystem.append(str(Path(str(path))))
 
         if self.is_windows():
             version_short = None
