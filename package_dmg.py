@@ -205,7 +205,8 @@ def package_dmg(self, package_build_context):
             target=template_file_dst,
             GOLEM_PACKAGE_DMG_BUNDLE_NAME=str(package_name),
             GOLEM_PACKAGE_DMG_BUNDLE_EXECUTABLE=str(
-                os.path.relpath(path=target_programs[0],
+                os.path.relpath(path=os.path.join(app_directory,
+                                                  target_programs[0]),
                                 start=os.path.join(app_directory, 'MacOS'))),
             GOLEM_PACKAGE_DMG_VERSION=str(package_version),
             GOLEM_PACKAGE_DMG_BUILD_VERSION=str(package_build_version))
