@@ -206,14 +206,23 @@ class Dependency(Configuration):
             return None
 
         if v in transformed_versions:
+
+            # OpenSSL convention is OpenSSL_1_1_1j
+            # The problem is the letter at the end
+            # So ~1.1.1 matches multiple versions
+
+            # Having no solution at the moment for this use case, matching
+            # multiple versions is accepted and the list of versions is reverse
+            # sorted...
+
             v_list = transformed_versions[v]
             if not v_list:
                 return None
             v_list.sort(reverse=True)
 
-            if len(v_list) > 1:
-                raise RuntimeError(
-                    "Found more than one matching version: {} -> {}".format(
-                        ver, v_list))
+            #if len(v_list) > 1:
+            #    raise RuntimeError(
+            #        "Found more than one matching version: {} -> {}".format(
+            #            ver, v_list))
 
             return v_list[0]
