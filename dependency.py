@@ -20,6 +20,7 @@ class Dependency(Configuration):
                  targets=None,
                  repository=None,
                  version=None,
+                 version_regex=None,
                  variant=None,
                  link=None,
                  runtime=None,
@@ -32,6 +33,7 @@ class Dependency(Configuration):
         self.name = '' if name is None else name
         self.repository = '' if repository is None else repository
         self.version = '' if version is None else version
+        self.version_regex = '' if version_regex is None else version_regex
         self.resolved_version = ''
         self.resolved_hash = ''
         self.shallow = shallow
@@ -63,11 +65,16 @@ class Dependency(Configuration):
         versions_list = set(versions_list)
         versions_list = list(versions_list)
 
+        if self.version_regex:
+            p = re.compile(self.version_regex)
+            versions_list = [s for s in versions_list if p.match(s)]
+
         found_version = Dependency.find_version(versions_list, self.version)
         if found_version:
-            hash = subprocess.check_output(
-                ['git', 'ls-remote', '--tags', self.repository,
-                 found_version]).decode(sys.stdout.encoding)
+            hash = subprocess.check_output([
+                'git', 'ls-remote', '--tags', self.repository,
+                'refs/tags/' + found_version
+            ]).decode(sys.stdout.encoding)
             if not hash:
                 raise RuntimeError(
                     "Can't find any hash related to found tag {}".format(
@@ -107,8 +114,8 @@ class Dependency(Configuration):
     @staticmethod
     def serialized_members():
         return [
-            'name', 'repository', 'version', 'resolved_version',
-            'resolved_hash', 'shallow'
+            'name', 'repository', 'version', 'version_regex',
+            'resolved_version', 'resolved_hash', 'shallow'
         ]
 
     @staticmethod
@@ -203,4 +210,10 @@ class Dependency(Configuration):
             if not v_list:
                 return None
             v_list.sort(reverse=True)
+
+            if len(v_list) > 1:
+                raise RuntimeError(
+                    "Found more than one matching version: {} -> {}".format(
+                        ver, v_list))
+
             return v_list[0]
