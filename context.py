@@ -2287,10 +2287,12 @@ class Context:
             rpath_links = config.rpath_link.copy()
             if 'QTLIBS' in self.context.env:
                 rpath_links.append(self.context.env.QTLIBS)
-            rpath_link += ['-Wl,-rpath-link,{}'.format(':'.join(rpath_links))]
+            if rpath_links:
+                rpath_link += ['-Wl,-rpath-link,{}'.format(':'.join(rpath_links))]
 
         if self.is_darwin() and 'QTLIBS' in self.context.env:
-            rpath_link += ['-Wl,-rpath,{}'.format(self.context.env.QTLIBS)]
+            if self.context.env.QTLIBS:
+                rpath_link += ['-Wl,-rpath,{}'.format(self.context.env.QTLIBS)]
 
         # TODO: Should link static library with absolute path on macOS
         #if self.is_darwin():
