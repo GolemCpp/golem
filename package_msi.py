@@ -196,7 +196,9 @@ def package_msi(self, package_build_context):
                 raise RuntimeError(
                     "Cannot find binary path {}".format(real_path))
 
-            helpers.run_task(['windeployqt', binary] + [
+            deployqt_bin = os.path.join(self.context.env.QT_HOST_BINS,
+                                        'windeployqt')
+            helpers.run_task([deployqt_bin, binary] + [
                 '-qmldir={}'.format(
                     os.path.realpath(
                         os.path.join(self.get_project_dir(), qmldir)))
