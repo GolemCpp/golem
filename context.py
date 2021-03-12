@@ -2288,7 +2288,9 @@ class Context:
             if 'QTLIBS' in self.context.env:
                 rpath_links.append(self.context.env.QTLIBS)
             if rpath_links:
-                rpath_link += ['-Wl,-rpath-link,{}'.format(':'.join(rpath_links))]
+                rpath_link += [
+                    '-Wl,-rpath-link,{}'.format(':'.join(rpath_links))
+                ]
 
         if self.is_darwin() and 'QTLIBS' in self.context.env:
             if self.context.env.QTLIBS:
@@ -3799,30 +3801,8 @@ class Context:
         self.context.load(features_to_load)
         self.save_options()
 
-        if self.is_debug() and self.is_windows():
-            for key in list(self.context.env.keys()):
-                if key.startswith("INCLUDES_QT5"):
-                    paths = []
-                    for path in self.context.env[key]:
-                        if path.endswith('d'):
-                            paths.append(path[:-1])
-                        else:
-                            paths.append(path)
-                    self.context.env[key] = paths
-
         if self.context.options.force_version:
             self.version.force_version(self.context.options.force_version)
-
-        if self.is_debug() and self.is_windows():
-            for key in list(self.context.env.keys()):
-                if key.startswith("INCLUDES_QT5"):
-                    paths = []
-                    for path in self.context.env[key]:
-                        if path.endswith('d'):
-                            paths.append(path[:-1])
-                        else:
-                            paths.append(path)
-                    self.context.env[key] = paths
 
     def build_path(self, dep=None):
         if self.is_windows():
