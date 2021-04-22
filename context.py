@@ -5698,7 +5698,8 @@ class Context:
                 self.name = system_name
                 self.distribution = distribution_name
                 self.release = release_name
-                self.version = platform.platform()
+                self.version = platform.platform() + '-' + '-'.join(
+                    platform.libc_ver())
                 self.architecture = package_arch
 
         files_absolute_paths = []
