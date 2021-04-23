@@ -2182,6 +2182,9 @@ class Context:
                 Logs.debug("Generating {} from {}".format(
                     str(version_template_dst), str(version_template_src)))
 
+                def escape_string_for_macro_names(value):
+                    return re.sub('[^0-9a-zA-Z]+', '_', value)
+
                 self.context(
                     name=version_template_dst,
                     features='subst',
@@ -2213,7 +2216,11 @@ class Context:
                     VERSION_GIT_MESSAGE=str(version.gitmessage),
                     VERSION_MESSAGE=str(version.gitmessage),
                     VERSION_GIT_BRANCH=str(version.gitbranch),
-                    VERSION_BRANCH=str(version.gitbranch))
+                    VERSION_GIT_BRANCH_MACRO=escape_string_for_macro_names(
+                        str(version.gitbranch)),
+                    VERSION_BRANCH=str(version.gitbranch),
+                    VERSION_BRANCH_MACRO=escape_string_for_macro_names(
+                        str(version.gitbranch)))
                 filename, filename_ext = os.path.splitext(filename)
                 if filename_ext in ['.cpp', '.cxx', '.c', '.cc']:
                     version_source.append(version_template_dst)
