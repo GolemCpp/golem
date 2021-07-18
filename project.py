@@ -5,6 +5,7 @@ import json
 from target import Target
 from configuration import Configuration
 from condition_expression import ConditionExpression
+from template import Template
 from dependency import Dependency
 from package import Package
 from helpers import *
@@ -106,9 +107,18 @@ class Project:
 
         sys.stdout.flush()
 
-    def target(self, type, name, link=None, version_template=None, **kwargs):
+    def target(self,
+               type,
+               name,
+               link=None,
+               version_template=None,
+               templates=None,
+               args=None,
+               **kwargs):
         new_target = Target(name=name,
                             version_template=version_template,
+                            templates=templates,
+                            args=args,
                             type=type,
                             link=link,
                             **kwargs)
@@ -130,6 +140,12 @@ class Project:
 
     def objects(self, type=None, **kwargs):
         return self.target(type='objects', **kwargs)
+
+    def task(self, name, **kwargs):
+        return self.target(type='task', name=name, args=kwargs)
+
+    def template(self, **kwargs):
+        return Template(**kwargs)
 
     def export(self, type=None, **kwargs):
         new_target = Target(type=None, export=True, **kwargs)

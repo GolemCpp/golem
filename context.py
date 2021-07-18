@@ -12,6 +12,7 @@ import subprocess
 import configparser
 import distutils
 import stat
+from datetime import datetime
 from distutils import dir_util
 from copy import deepcopy
 from module import Module
@@ -22,6 +23,7 @@ import helpers
 from project import Project
 from build_target import BuildTarget
 from dependency import Dependency
+from template import Template
 import copy
 from target import TargetConfigurationFile
 from version import Version
@@ -707,9 +709,11 @@ class Context:
             'amd64': 'x64',
             'x86_64': 'x64',
             'x64': 'x64',
+            'x86_amd64': 'x64',
             'i386': 'x86',
             'i686': 'x86',
-            'x86': 'x86'
+            'x86': 'x86',
+            'amd64_x86': 'x86'
         }
         return machine2bits.get(arch.lower(), None)
 
@@ -730,6 +734,41 @@ class Context:
         machine2bits = {'x64': 'amd64', 'x86': 'i386'}
         return machine2bits.get(
             self.get_arch() if arch is None else arch.lower(), None)
+
+    def get_build_runtime(self):
+        if self.context.env.MSVC_VERSION:
+            return 'msvc'
+        elif self.is_darwin():
+            if self.context.env.MACOSX_DEPLOYMENT_TARGET:
+                return 'macosx'
+            elif self.context.env.IPHONEOS_DEPLOYMENT_TARGET:
+                return 'iphoneos'
+            else:
+                return 'macosx'
+        elif self.is_android():
+            return 'android'
+        else:
+            return str(platform.libc_ver()[0])
+
+    def get_build_runtime_version(self):
+        if self.context.env.MSVC_VERSION:
+            return str(self.context.env.MSVC_VERSION)
+        elif self.is_darwin():
+            if self.context.env.MACOSX_DEPLOYMENT_TARGET:
+                return str(self.context.env.MACOSX_DEPLOYMENT_TARGET)
+            elif self.context.env.IPHONEOS_DEPLOYMENT_TARGET:
+                return str(self.context.env.IPHONEOS_DEPLOYMENT_TARGET)
+            else:
+                return str(platform.mac_ver()[0])
+        elif self.is_android():
+            # minSdkVersion (__ANDROID_API__)
+            raise RuntimeError("Not implemented yet")
+        else:
+            return str(platform.libc_ver()[1])
+
+    def get_build_runtime_version_semver(self):
+        version = self.get_build_runtime_version()
+        return Version.parse_semver(version)[0]
 
     @staticmethod
     def options(context):
@@ -2165,72 +2204,133 @@ class Context:
         version = Version(working_dir=self.get_project_dir(),
                           build_number=self.get_build_number())
         version_short = version.semver_short
+        templates_to_process = []
         if task.version_template is not None:
-            for version_template in task.version_template:
-                version_template_src = self.context.root.find_node(
-                    self.make_project_path(version_template))
+            templates_to_process += task.version_template
+        if task.templates is not None:
+            templates_to_process += task.templates
+        for template_to_process in templates_to_process:
+            if isinstance(template_to_process, str):
+                template_to_process = Template(source=template_to_process)
+            version_template_src = self.context.root.find_node(
+                self.make_project_path(template_to_process.source))
+
+            if template_to_process.target is not None:
+                filename = template_to_process.target
+                version_template_dst = self.context.root.find_or_declare(
+                    os.path.join(self.make_out_path(),
+                                 template_to_process.target))
+            else:
                 filename, filename_ext = os.path.splitext(
-                    os.path.basename(version_template))
+                    os.path.basename(template_to_process.source))
                 if filename_ext not in ['.template']:
-                    filename = os.path.basename(version_template) + '.cpp'
+                    filename = os.path.basename(
+                        template_to_process.source) + '.cpp'
                 version_template_dst = self.context.root.find_or_declare(
                     self.make_build_path(filename))
 
-                if str(version_template_src) in self.context_tasks:
-                    continue
+            if str(version_template_src) in self.context_tasks:
+                continue
 
-                Logs.debug("Generating {} from {}".format(
-                    str(version_template_dst), str(version_template_src)))
+            Logs.debug("Generating {} from {}".format(
+                str(version_template_dst), str(version_template_src)))
 
-                def escape_string_for_macro_names(value):
-                    return re.sub('[^0-9a-zA-Z]+', '_', value)
+            def escape_string_for_macro_names(value):
+                return re.sub('[^0-9a-zA-Z]+', '_', value)
 
-                self.context(
-                    name=version_template_dst,
-                    features='subst',
-                    source=version_template_src,
-                    target=version_template_dst,
-                    VERSION_SEMVER=str(version.semver),
-                    VERSION_SEMVER_LONG=str(version.semver),
-                    VERSION_SEMVER_SHORT=str(version.semver_short),
-                    VERSION_SEMVER_MAJOR=str(version.major),
-                    VERSION_MAJOR=str(version.major),
-                    VERSION_SEMVER_MINOR=str(version.minor),
-                    VERSION_MINOR=str(version.minor),
-                    VERSION_SEMVER_PATCH=str(version.patch),
-                    VERSION_PATCH=str(version.patch),
-                    VERSION_SEMVER_PRERELEASE=str(version.prerelease),
-                    VERSION_PRERELEASE=str(version.prerelease),
-                    VERSION_SEMVER_BUILDMETADATA=str(version.buildmetadata),
-                    VERSION_BUILDMETADATA=str(version.buildmetadata),
-                    VERSION_BUILD_NUMBER=str(self.get_build_number(default=0)),
-                    VERSION=str(version.gitlong_semver),
-                    VERSION_GIT_DESCRIBE_LONG=str(version.gitlong),
-                    VERSION_LONG=str(version.gitlong),
-                    VERSION_GIT_DESCRIBE_SHORT=str(version.gitshort),
-                    VERSION_GIT_TAG=str(version.gitshort),
-                    VERSION_SHORT=str(version.gitshort),
-                    VERSION_GIT_REVISION=str(version.githash),
-                    VERSION_REVISION=str(version.githash),
-                    VERSION_HASH=str(version.githash),
-                    VERSION_GIT_MESSAGE=str(version.gitmessage),
-                    VERSION_MESSAGE=str(version.gitmessage),
-                    VERSION_GIT_BRANCH=str(version.gitbranch),
-                    VERSION_GIT_BRANCH_MACRO=escape_string_for_macro_names(
-                        str(version.gitbranch)),
-                    VERSION_BRANCH=str(version.gitbranch),
-                    VERSION_BRANCH_MACRO=escape_string_for_macro_names(
-                        str(version.gitbranch)))
-                filename, filename_ext = os.path.splitext(filename)
-                if filename_ext in ['.cpp', '.cxx', '.c', '.cc']:
-                    version_source.append(version_template_dst)
-                elif filename_ext in ['.hpp', '.hxx', '.h', '.hh']:
-                    include_path = self.make_build_path('.')
-                    if include_path not in listinclude:
-                        listinclude.append(include_path)
+            _, _, target_artifact_basename = self.make_target_artifact(
+                config=config, decorated_target=decorated_targets[0])
 
-                self.context_tasks.append(str(version_template_src))
-                context_tasks_added = True
+            self.context(
+                name=version_template_dst,
+                features='subst',
+                source=version_template_src,
+                target=version_template_dst,
+                VERSION_SEMVER=str(version.semver),
+                VERSION_SEMVER_LONG=str(version.semver),
+                VERSION_SEMVER_SHORT=str(version.semver_short),
+                VERSION_SEMVER_MAJOR=str(version.major),
+                VERSION_MAJOR=str(version.major),
+                VERSION_SEMVER_MINOR=str(version.minor),
+                VERSION_MINOR=str(version.minor),
+                VERSION_SEMVER_PATCH=str(version.patch),
+                VERSION_PATCH=str(version.patch),
+                VERSION_SEMVER_PRERELEASE=str(version.prerelease),
+                VERSION_PRERELEASE=str(version.prerelease),
+                VERSION_SEMVER_BUILDMETADATA=str(version.buildmetadata),
+                VERSION_BUILDMETADATA=str(version.buildmetadata),
+                VERSION_BUILD_NUMBER=str(self.get_build_number(default=0)),
+                VERSION=str(version.gitlong_semver),
+                VERSION_GIT_DESCRIBE_LONG=str(version.gitlong),
+                VERSION_LONG=str(version.gitlong),
+                VERSION_GIT_DESCRIBE_SHORT=str(version.gitshort),
+                VERSION_GIT_TAG=str(version.gitshort),
+                VERSION_SHORT=str(version.gitshort),
+                VERSION_GIT_REVISION=str(version.githash),
+                VERSION_REVISION=str(version.githash),
+                VERSION_HASH=str(version.githash),
+                VERSION_GIT_MESSAGE=str(version.gitmessage),
+                VERSION_MESSAGE=str(version.gitmessage),
+                VERSION_GIT_BRANCH=str(version.gitbranch),
+                VERSION_GIT_BRANCH_MACRO=escape_string_for_macro_names(
+                    str(version.gitbranch)),
+                VERSION_BRANCH=str(version.gitbranch),
+                VERSION_BRANCH_MACRO=escape_string_for_macro_names(
+                    str(version.gitbranch)),
+                GOLEM_TMPL_VERSION_HASH=str(version.githash),
+                GOLEM_TMPL_VERSION_REVISION=str(version.githash),
+                GOLEM_TMPL_VERSION_MESSAGE=str(version.gitmessage),
+                GOLEM_TMPL_VERSION_BUILD_NUMBER=str(
+                    self.get_build_number(default=0)),
+                GOLEM_TMPL_VERSION_SEMVER=str(version.semver),
+                GOLEM_TMPL_VERSION_SEMVER_LONG=str(version.semver),
+                GOLEM_TMPL_VERSION_SEMVER_SHORT=str(version.semver_short),
+                GOLEM_TMPL_VERSION_SEMVER_MAJOR=str(version.major),
+                GOLEM_TMPL_VERSION_SEMVER_MINOR=str(version.minor),
+                GOLEM_TMPL_VERSION_SEMVER_PATCH=str(version.patch),
+                GOLEM_TMPL_VERSION_SEMVER_PRERELEASE=str(version.prerelease),
+                GOLEM_TMPL_VERSION_SEMVER_BUILDMETADATA=str(
+                    version.buildmetadata),
+                GOLEM_TMPL_VERSION=str(version.gitlong_semver),
+                GOLEM_TMPL_VERSION_SHORT=str(version.gitshort),
+                GOLEM_TMPL_VERSION_LONG=str(version.gitlong),
+                GOLEM_TMPL_VERSION_MAJOR=str(version.major),
+                GOLEM_TMPL_VERSION_MINOR=str(version.minor),
+                GOLEM_TMPL_VERSION_PATCH=str(version.patch),
+                GOLEM_TMPL_VERSION_PRERELEASE=str(version.prerelease),
+                GOLEM_TMPL_VERSION_BUILDMETADATA=str(version.buildmetadata),
+                GOLEM_TMPL_VERSION_GIT_DESCRIBE_SHORT=str(version.gitshort),
+                GOLEM_TMPL_VERSION_GIT_DESCRIBE_LONG=str(version.gitlong),
+                GOLEM_TMPL_VERSION_GIT_TAG=str(version.gitshort),
+                GOLEM_TMPL_VERSION_GIT_REVISION=str(version.githash),
+                GOLEM_TMPL_VERSION_GIT_MESSAGE=str(version.gitmessage),
+                GOLEM_TMPL_VERSION_GIT_BRANCH=str(version.gitbranch),
+                GOLEM_TMPL_VERSION_GIT_BRANCH_MACRO=
+                escape_string_for_macro_names(str(version.gitbranch)),
+                GOLEM_TMPL_VERSION_BRANCH=str(version.gitbranch),
+                GOLEM_TMPL_VERSION_BRANCH_MACRO=escape_string_for_macro_names(
+                    str(version.gitbranch)),
+                GOLEM_TMPL_DATE_UTC_ISO8601=datetime.now().replace(
+                    microsecond=0).isoformat() + 'Z',
+                GOLEM_TMPL_PLATFORM=self.osname(),
+                GOLEM_TMPL_RUNTIME=self.get_build_runtime(),
+                GOLEM_TMPL_RUNTIME_VERSION=self.get_build_runtime_version(),
+                GOLEM_TMPL_RUNTIME_VERSION_SEMVER=self.
+                get_build_runtime_version_semver(),
+                GOLEM_TMPL_ARCHITECTURE=self.get_arch(),
+                GOLEM_TMPL_TARGET_ARTIFACT_BASENAME=target_artifact_basename)
+            filename, filename_ext = os.path.splitext(filename)
+            if filename_ext in ['.cpp', '.cxx', '.c', '.cc'
+                                ] or template_to_process.build == True:
+                version_source.append(version_template_dst)
+            elif filename_ext in ['.hpp', '.hxx', '.h', '.hh'
+                                  ] or template_to_process.build == True:
+                include_path = self.make_build_path('.')
+                if include_path not in listinclude:
+                    listinclude.append(include_path)
+
+            self.context_tasks.append(str(version_template_src))
+            context_tasks_added = True
 
         if context_tasks_added:
             self.context.add_group()
@@ -2682,6 +2782,25 @@ class Context:
             build_fun = self.context.program
         elif task.type_unique == 'objects':
             build_fun = self.context.objects
+        elif task.type_unique == 'task':
+            for arg in task.args:
+                if arg in ['source', 'target']:
+                    nodes = helpers.filter_unique(
+                        helpers.parameter_to_list(task.args[arg]))
+                    for i, _ in enumerate(nodes):
+                        if arg in ['source']:
+                            nodes[i] = self.make_project_path(nodes[i])
+                        if arg in ['target']:
+                            nodes[i] = os.path.join(self.make_target_out(),
+                                                    nodes[i])
+                        nodes[i] = self.context.root.find_or_declare(
+                            str(nodes[i])) if os.path.isabs(
+                                nodes[i]
+                            ) else self.context.srcnode.find_or_declare(
+                                str(nodes[i]))
+                    task.args[arg] = nodes
+            self.context(name=task.name, **task.args)
+            return
         else:
             raise Exception("ERROR: Bad target type {}".format(
                 task.type_unique))
@@ -2938,16 +3057,16 @@ class Context:
     def get_vs_version(self):
         return self.context.env.MSVC_VERSION
 
-    def find_msvc_toolset(self, vs_version):
+    def find_msvc_toolset_number(self, vs_version):
         toolsets = {
-            "16": "v142",
-            "15": "v141",
-            "14": "v140",
-            "12": "v120",
-            "11": "v110",
-            "10": "v100",
-            "9": "v90",
-            "8": "v80"
+            "16": "142",
+            "15": "141",
+            "14": "140",
+            "12": "120",
+            "11": "110",
+            "10": "100",
+            "9": "90",
+            "8": "80"
         }
         if vs_version is None:
             vs_version = self.get_vs_version()
@@ -2965,6 +3084,10 @@ class Context:
                     vs_version))
 
         return toolsets[vs_version]
+
+    def find_msvc_toolset(self, vs_version):
+        return 'v{}'.format(
+            self.find_msvc_toolset_number(vs_version=vs_version))
 
     def get_current_msvc_toolset(self):
         return self.find_msvc_toolset(vs_version=self.get_vs_version())
@@ -4218,6 +4341,31 @@ class Context:
             os.makedirs(outpath_conf)
         return outpath_conf
 
+    def make_target_artifact(self, config, decorated_target, out_path=None):
+        decorated_target_path = os.path.dirname(decorated_target)
+        decorated_target_base = os.path.basename(decorated_target)
+
+        if out_path is not None:
+            target_path = os.path.join(out_path, decorated_target_path)
+        else:
+            target_path = decorated_target_path
+
+        if self.is_windows():
+            target_artifact = '{}.lib'.format(decorated_target_base)
+        elif self.is_darwin():
+            if self.is_config_shared(config):
+                target_artifact = 'lib{}.dylib'.format(decorated_target_base)
+            else:
+                target_artifact = 'lib{}.a'.format(decorated_target_base)
+        else:
+            if self.is_config_shared(config):
+                target_artifact = 'lib{}.so'.format(decorated_target_base)
+            else:
+                target_artifact = 'lib{}.a'.format(decorated_target_base)
+        target_artifact_path = os.path.join(target_path, target_artifact)
+
+        return target_artifact_path, target_path, target_artifact
+
     def update_export_config_from_build_config(self, export_config,
                                                build_config):
 
@@ -4250,46 +4398,24 @@ class Context:
             decorated_target = self.make_decorated_target_from_context(
                 export_target_config, target_name)
 
-            decorated_target_path = os.path.dirname(decorated_target)
-            decorated_target_base = os.path.basename(decorated_target)
-
-            out_libpath = os.path.join(out_path, decorated_target_path)
-
-            enable_absolute_path_lib = True
-            if enable_absolute_path_lib:
-                if self.is_windows():
-                    decorated_target_base = '{}.lib'.format(
-                        decorated_target_base)
-                elif self.is_darwin():
-                    if self.is_config_shared(export_target_config):
-                        decorated_target_base = 'lib{}.dylib'.format(
-                            decorated_target_base)
-                    else:
-                        decorated_target_base = 'lib{}.a'.format(
-                            decorated_target_base)
-                else:
-                    if self.is_config_shared(export_target_config):
-                        decorated_target_base = 'lib{}.so'.format(
-                            decorated_target_base)
-                    else:
-                        decorated_target_base = 'lib{}.a'.format(
-                            decorated_target_base)
-                decorated_target_base = os.path.join(out_libpath,
-                                                     decorated_target_base)
+            target_artifact_path, target_path, _ = self.make_target_artifact(
+                config=export_target_config,
+                decorated_target=decorated_target,
+                out_path=out_path)
 
             if not export_target_config.header_only:
-                export_target_config.rpath_link.append(out_libpath)
+                export_target_config.rpath_link.append(target_path)
 
             if self.is_config_shared(export_target_config):
-                if decorated_target_base not in export_target_config.lib:
-                    export_target_config.lib.append(decorated_target_base)
-                if out_libpath not in export_target_config.libpath:
-                    export_target_config.libpath.append(out_libpath)
+                if target_artifact_path not in export_target_config.lib:
+                    export_target_config.lib.append(target_artifact_path)
+                if target_path not in export_target_config.libpath:
+                    export_target_config.libpath.append(target_path)
             else:
-                if decorated_target_base not in export_target_config.stlib:
-                    export_target_config.stlib.append(decorated_target_base)
-                if out_libpath not in export_target_config.stlibpath:
-                    export_target_config.stlibpath.append(out_libpath)
+                if target_artifact_path not in export_target_config.stlib:
+                    export_target_config.stlib.append(target_artifact_path)
+                if target_path not in export_target_config.stlibpath:
+                    export_target_config.stlibpath.append(target_path)
 
             artifacts_dev = self.make_binary_artifact_from_context(
                 export_target_config,
@@ -4382,6 +4508,14 @@ class Context:
         config.merge(context=self, configs=static_configs)
         config.targets = self.get_targets_from_task(task)
 
+        if task.templates:
+            for template in task.templates:
+                if template.target:
+                    config.artifacts.append(
+                        self.create_artifact(path=template.target,
+                                             location='',
+                                             type='file'))
+
         for license_path in config.licenses:
             license_artifact = self.create_artifact(path=license_path,
                                                     location='',
@@ -4451,11 +4585,24 @@ class Context:
                           build_method=None,
                           build_recursively=False):
         if task.export:
-            return self.process_export_task(
-                task=task,
-                targets=targets,
-                build_method=build_method,
-                build_recursively=build_recursively)
+            if task.args is not None:
+                config = self.generate_configuration(task=task,
+                                                     targets=targets)
+                targets = helpers.filter_unique(
+                    helpers.parameter_to_list(task.args['target']))
+                for target in targets:
+                    artifact_file = self.create_artifact(path=target,
+                                                         location='',
+                                                         type='file')
+                    if artifact_file not in config.artifacts:
+                        config.artifacts.append(artifact_file)
+                return config, []
+            else:
+                return self.process_export_task(
+                    task=task,
+                    targets=targets,
+                    build_method=build_method,
+                    build_recursively=build_recursively)
         else:
             return self.process_build_task(
                 task=task,
@@ -4768,7 +4915,10 @@ class Context:
                 break
 
         if not found_export_task:
-            found_export_task = Target(type=None, export=True, name=task.name)
+            found_export_task = Target(type=None,
+                                       export=True,
+                                       name=task.name,
+                                       args=task.args)
         return found_export_task
 
     def get_packages_to_process(self, asked_packages=None):

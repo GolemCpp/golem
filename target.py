@@ -10,12 +10,16 @@ class Target(Configuration):
     def __init__(self,
                  name=None,
                  version_template=None,
+                 templates=None,
                  export=False,
+                 args=None,
                  **kwargs):
         super(Target, self).__init__(**kwargs)
         self.name = name
         self.version_template = version_template
+        self.templates = templates
         self.export = export
+        self.args = args
 
     def __str__(self):
         return helpers.print_obj(self)

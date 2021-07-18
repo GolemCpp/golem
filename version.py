@@ -73,15 +73,24 @@ class Version:
                                           prerelease=self.prerelease,
                                           buildmetadata=self.buildmetadata)
 
+    def to_semver_string(self):
+        return Version.make_semver(major=self.major,
+                                   minor=self.minor,
+                                   patch=self.patch,
+                                   prerelease=self.prerelease,
+                                   buildmetadata=self.buildmetadata)
+
     @staticmethod
     def make_semver(major, minor, patch, prerelease, buildmetadata):
-        new_version = ''
-        if major is not None:
-            new_version = str(major)
-            if minor is not None:
-                new_version += '.' + str(minor)
-                if patch is not None:
-                    new_version += '.' + str(patch)
+        if major is None:
+            major = 0
+        if minor is None:
+            minor = 0
+        if patch is None:
+            patch = 0
+        new_version = str(major)
+        new_version += '.' + str(minor)
+        new_version += '.' + str(patch)
         if prerelease:
             new_version += '-' + prerelease
         if buildmetadata:
@@ -95,7 +104,21 @@ class Version:
         if matches:
             return (version, matches)
 
+        # Allow alternative separators,
+        # but force having Major, Minor and Patch defined
         semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._](?P<minor>0|[1-9]\d*)[\._](?P<patch>0|[1-9]\d*)(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?'
+        matches = re.search(semver_regex_like, version)
+        if matches:
+            new_version = Version.make_semver(
+                major=matches.group('major'),
+                minor=matches.group('minor'),
+                patch=matches.group('patch'),
+                prerelease=matches.group('prerelease'),
+                buildmetadata=matches.group('buildmetadata'))
+            return (new_version, matches)
+
+        # Allow alternative separators
+        semver_regex_like = r'(?P<major>0|[1-9]\d*)(?:[\._](?P<minor>0|[1-9]\d*))?(?:[\._](?P<patch>0|[1-9]\d*))?(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?'
         matches = re.search(semver_regex_like, version)
         if matches:
             new_version = Version.make_semver(
