@@ -191,8 +191,6 @@ class tmp(BuildContext):
 @before_method('apply_incpaths')
 def add_includes_paths(self):
     incs = set(self.to_list(getattr(self, 'includes', '')))
-    for x in self.compiled_tasks:
-        incs.add(x.inputs[0].parent.path_from(self.path))
     incs = [str(inc) for inc in incs]
     self.includes = sorted(incs)
 
