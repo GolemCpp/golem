@@ -33,12 +33,20 @@ class Version:
         self.update_semver()
 
     def update_semver(self):
-        self.gitlong_semver = self.gitlong
+        git_hash = Version.parse_git_hash(self.gitlong)
+
+        if git_hash:
+            self.gitshort = git_hash[0]
+            self.gitlong = git_hash[1]
+
+            self.gitlong_semver = '0.0.0'
+            self.semver = '0.0.0'
+        else:
+            self.gitlong_semver = self.gitlong
+            self.semver = self.gitshort
 
         if self.gitlong_semver[0] == 'v':
             self.gitlong_semver = self.gitlong_semver[1:]
-
-        self.semver = self.gitshort
 
         if self.semver[0] == 'v':
             self.semver = self.semver[1:]
@@ -96,6 +104,13 @@ class Version:
         if buildmetadata:
             new_version += '+' + buildmetadata
         return new_version
+
+    @staticmethod
+    def parse_git_hash(version):
+        hash_regex = r'^[0-9a-fA-F]{7,40}$'
+        if re.fullmatch(hash_regex, version):
+            return version[:7], version
+        return None
 
     @staticmethod
     def parse_semver(version):
