@@ -505,13 +505,23 @@ class Context:
 
     def distribution(self):
         if self.is_linux():
-            return platform.linux_distribution()[0].lower()
+            if (hasattr(platform, 'linux_distribution')):
+                return platform.linux_distribution()[0].lower()
+            elif (hasattr(platform, 'freedesktop_os_release')):
+                return platform.freedesktop_os_release()['ID'].lower()
+            else:
+                raise RuntimeError("Not implemented yet")
         return None
 
     def release(self):
         if self.is_linux():
-            import lsb_release
-            return lsb_release.get_distro_information()['CODENAME'].lower()
+            if (hasattr(platform, 'linux_distribution')):
+                import lsb_release
+                return lsb_release.get_distro_information()['CODENAME'].lower()
+            elif (hasattr(platform, 'freedesktop_os_release')):
+                return platform.freedesktop_os_release()['VERSION_ID'].lower()
+            else:
+                raise RuntimeError("Not implemented yet")
         return None
 
     def link_min(self, dep=None):
@@ -658,6 +668,10 @@ class Context:
     @staticmethod
     def is_linux():
         return sys.platform.startswith('linux')
+
+    @staticmethod
+    def is_flatpak():
+        return Context.is_linux() and hasattr(platform, 'freedesktop_os_release')
 
     @staticmethod
     def is_darwin():
@@ -5162,6 +5176,12 @@ class Context:
         if not self.is_linux():
             raise RuntimeError("Patching binary artifacts only works on linux")
 
+        patchelf_command = [
+            'patchelf'
+        ]
+        if self.is_flatpak():
+            patchelf_command = [ 'flatpak-spawn', '--host' ] + patchelf_command
+
         rpath_results = list()
         path_patched = list()
         for binary_artifact in binary_artifacts:
@@ -5247,8 +5267,8 @@ class Context:
 
             if not simulate:
                 current_rpath = subprocess.check_output(
-                    [
-                        'patchelf', '--print-rpath',
+                    patchelf_command + [
+                        '--print-rpath',
                         binary_artifact.absolute_path
                     ],
                     cwd=self.get_build_path()).decode('utf-8').splitlines()[0]
@@ -5265,8 +5285,8 @@ class Context:
                 if not simulate and total_diff:
                     print("Set rpath {} to {}".format(
                         rpath, binary_artifact.absolute_path))
-                    helpers.run_task([
-                        'patchelf', '--set-rpath', rpath,
+                    helpers.run_task(patchelf_command + [
+                        '--set-rpath', rpath,
                         binary_artifact.absolute_path
                     ],
                                      cwd=self.get_build_path())
@@ -5275,8 +5295,8 @@ class Context:
                 if not simulate and total_diff:
                     print("Remove rpath from {}".format(
                         binary_artifact.absolute_path))
-                    helpers.run_task([
-                        'patchelf', '--remove-rpath',
+                    helpers.run_task(patchelf_command + [
+                        '--remove-rpath',
                         binary_artifact.absolute_path
                     ],
                                      cwd=self.get_build_path())
@@ -5541,7 +5561,7 @@ class Context:
                 continue
             print("Remove rpath {}".format(artifact.absolute_path))
             helpers.run_task(
-                ['patchelf', '--remove-rpath', artifact.absolute_path],
+                patchelf_command + ['--remove-rpath', artifact.absolute_path],
                 cwd=subdirectory_directory)
 
         targets_binaries_real_paths = list()
