@@ -1,0 +1,2 @@
+CompileFlags:
+  CompilationDatabase: ${compilation_database_path}

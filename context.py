@@ -12,6 +12,7 @@ import subprocess
 import configparser
 import distutils
 import stat
+import string
 from datetime import datetime
 from distutils import dir_util
 from copy import deepcopy
@@ -255,6 +256,9 @@ class Context:
 
     def get_project_dir(self):
         return self.context.options.dir
+
+    def get_golem_dir(self):
+        return os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
     def make_cache_dirs(self):
         cache_dir_list = []
@@ -834,6 +838,11 @@ class Context:
                            action="store_true",
                            default=False,
                            help="VSCode CppTools Properties")
+
+        context.add_option("--clangd",
+                           action="store_true",
+                           default=False,
+                           help="clangd configuration file")
 
         context.add_option("--cache-dir",
                            action="store",
@@ -2557,11 +2566,20 @@ class Context:
     def initialize_vscode_configs(self):
         self.vscode_configs = []
 
+    def initialize_clangd_configs(self):
+        self.clangd_configs = []
+
     def append_compiler_commands(self, build_target):
         self.compiler_commands += self.make_compiler_commands(build_target)
 
     def make_compiler_commands(self, build_target):
         compiler_commands = []
+
+        # TODO: There are duplicates between build_target.cxxflags and 
+        # build_target.env_isystem. But we can't just remove any duplicates
+        # since sometimes duplicates may be used to override a behavior if 
+        # they are placed in last position. Therefore, we need to find a 
+        # different approach.
 
         windows_fix_external_i = '-I'  # /external:I not supported yet
 
@@ -2739,21 +2757,92 @@ class Context:
     def make_vscode_path(self, path):
         return os.path.join(self.get_vscode_path(), path)
 
+    def append_clangd_config_target(self, compiler_commands_path, task,
+                                    targets, config):
+        if not self.context.options.clangd:
+            return
+
+        targets_includes = []
+
+        build_target = self.build_target_gather_config(task=task,
+                                                       targets=targets,
+                                                       config=config)
+
+        targets_includes += [
+            str(item) for item in self.make_project_path_array(
+                build_target.config.includes + build_target.config.source)
+        ]
+        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_includes]
+        targets_includes += [str(item) for item in build_target.includes]
+
+        targets_includes = helpers.filter_unique(targets_includes)
+
+    def generate_clangd_config(self, compiler_commands_path):
+        if not self.context.options.clangd:
+            return
+
+        targets_cxxflags = []
+        targets_includes = []
+        targets_wfeatures = []
+
+        def list_all_targets_includes(task, targets, config, targets_includes,
+                                      targets_cxxflags, targets_wfeatures):
+            build_target = self.build_target_gather_config(task=task,
+                                                           targets=targets,
+                                                           config=config)
+            targets_includes += [
+                str(item) for item in self.make_project_path_array(
+                    build_target.config.includes + build_target.config.source)
+            ]
+            targets_includes += [
+                str(item) for item in build_target.env_isystem
+            ]
+            targets_includes += [
+                str(item) for item in build_target.env_includes
+            ]
+            targets_includes += [str(item) for item in build_target.includes]
+            targets_cxxflags += config.cxxflags
+            targets_wfeatures += config.wfeatures
+
+        self.call_build_target(
+            lambda task, targets, config: list_all_targets_includes(
+                task=task,
+                targets=targets,
+                config=config,
+                targets_includes=targets_includes,
+                targets_cxxflags=targets_cxxflags,
+                targets_wfeatures=targets_wfeatures))
+
+        targets_includes = helpers.filter_unique(targets_includes)
+
+        data = {
+            'compilation_database_path': os.path.abspath(os.path.dirname(compiler_commands_path))
+        }
+        
+        config_file_template_path = os.path.join(self.get_golem_dir(), 'clangd.template')
+        with open(config_file_template_path, 'r') as config_file_template:
+            config_file_template_src = string.Template(config_file_template.read())
+            config_file_src = config_file_template_src.safe_substitute(data)
+
+            config_file_path = os.path.join(self.get_project_dir(), '.clangd')
+            with open(config_file_path, 'w') as outfile:
+                outfile.write(config_file_src)
+
+    def get_clangd_path(self):
+        return self.make_golem_path('clangd')
+
+    def make_clangd_path(self, path):
+        return os.path.join(self.get_clangd_path(), path)
+
     def build_target(self, task, targets, config):
         build_target = self.build_target_gather_config(task=task,
                                                        targets=targets,
                                                        config=config)
 
-        vscode_dir = self.get_vscode_path()
-        helpers.make_directory(vscode_dir)
-
         self.append_compiler_commands(build_target)
 
         if self.context.options.vscode:
-            compile_commands_dir = os.path.dirname(
-                os.path.abspath(os.path.join(vscode_dir, task.name)))
-            helpers.make_directory(compile_commands_dir)
-
             compiler_commands_list = self.make_compiler_commands(build_target)
 
             vscode_dir = self.get_vscode_path()
@@ -2767,6 +2856,24 @@ class Context:
             self.save_compiler_commands_list(compiler_commands_path,
                                              compiler_commands_list)
             self.append_vscode_config_target(
+                compiler_commands_path=compiler_commands_path,
+                task=task,
+                targets=targets,
+                config=config)
+
+        if self.context.options.clangd:
+            compiler_commands_list = self.make_compiler_commands(build_target)
+
+            clangd_dir = self.make_clangd_path(task.name)
+            compiler_commands_path = os.path.join(clangd_dir, 'compile_commands.json')
+
+            if not os.path.exists(clangd_dir):
+                helpers.make_directory(clangd_dir)
+            if os.path.exists(compiler_commands_path):
+                os.remove(compiler_commands_path)
+            self.save_compiler_commands_list(compiler_commands_path,
+                                             compiler_commands_list)
+            self.append_clangd_config_target(
                 compiler_commands_path=compiler_commands_path,
                 task=task,
                 targets=targets,
@@ -4038,11 +4145,26 @@ class Context:
             self.initialize_compiler_commands()
             self.initialize_vscode_configs()
 
+        clangd_dir = self.get_clangd_path()
+        compiler_commands_path = self.make_clangd_path('compile_commands.json')
+
+        if self.context.options.clangd:
+            if not os.path.exists(clangd_dir):
+                helpers.make_directory(clangd_dir)
+            if os.path.exists(compiler_commands_path):
+                os.remove(compiler_commands_path)
+            self.initialize_compiler_commands()
+            self.initialize_clangd_configs()
+
         self.call_build_target(self.build_target, build_recursively=True)
 
         if self.context.options.vscode:
             self.save_compiler_commands(compiler_commands_path)
             self.generate_vscode_config(compiler_commands_path)
+
+        if self.context.options.clangd:
+            self.save_compiler_commands(compiler_commands_path)
+            self.generate_clangd_config(compiler_commands_path)
 
         for targetname in self.context.options.targets.split(','):
             if targetname and not targetname in [
