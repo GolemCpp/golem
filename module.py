@@ -1,6 +1,5 @@
 import os
 import sys
-import imp
 from project import Project
 import importlib.util
 import importlib.machinery

@@ -9,11 +9,25 @@ from waflib import Configure
 from waflib import Task, TaskGen
 import waflib
 import os
-import imp
+import importlib
+import importlib.util
 import sys
 sys.dont_write_bytecode = True
 
-builder = imp.load_source('builder', '$builder_path')
+def import_from_file(name, file_path):
+    loader = importlib.machinery.SourceFileLoader(name, file_path)
+
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+
+    module = importlib.util.module_from_spec(spec)
+
+    sys.modules[name] = module
+
+    spec.loader.exec_module(module)
+
+    return module
+
+builder = import_from_file('builder', '$builder_path')
 
 top = ''
 out = 'obj'

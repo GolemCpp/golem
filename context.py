@@ -2171,15 +2171,22 @@ class Context:
         if any([feature.startswith("QT5") for feature in config.features]):
             project_qt = True
 
+        if any([feature.startswith("QT6") for feature in config.features]):
+            project_qt = True
+
         context_tasks_added = False
 
         wfeatures = []
+
         if project_qt and 'qt5' not in config.wfeatures:
             wfeatures.append('qt5')
 
         if self.is_debug() and self.is_windows():
             for i, feature in enumerate(config.features):
                 if feature.startswith("QT5"):
+                    config.features[i] += "D"
+            for i, feature in enumerate(config.features):
+                if feature.startswith("QT6"):
                     config.features[i] += "D"
 
         listinclude = self.list_include(
@@ -2375,7 +2382,7 @@ class Context:
 
         for key in list(self.context.env.keys()):
             if key.startswith(
-                    "INCLUDES_") and not key.startswith("INCLUDES_QT5"):
+                    "INCLUDES_") and not key.startswith("INCLUDES_QT5") and not key.startswith("INCLUDES_QT6"):
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
                         isystemflags.append('-isystem' + str(Path(str(path))))
@@ -2383,9 +2390,9 @@ class Context:
 
         config_all_use = helpers.filter_unique(config.use + config.features)
         for config_use in config_all_use:
-            if config_use.startswith('QT5'):
+            if config_use.startswith('QT5') or config_use.startswith('QT6'):
                 for key in list(self.context.env.keys()):
-                    if key.startswith("INCLUDES_QT5") and config_use in key:
+                    if (key.startswith("INCLUDES_QT5") or key.startswith("INCLUDES_QT6")) and config_use in key:
                         for path in self.context.env[key]:
                             isystemflags.append('{}{}'.format(
                                 isystem_argument, str(Path(str(path)))))
@@ -2406,9 +2413,9 @@ class Context:
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
         for config_use in config_all_use:
-            if config_use.startswith('QT5'):
+            if config_use.startswith('QT5') or config_use.startswith('QT6'):
                 for key in list(self.context.env.keys()):
-                    if key.startswith("DEFINES_QT5") and config_use in key:
+                    if (key.startswith("DEFINES_QT5") or key.startswith("DEFINES_QT6")) and config_use in key:
                         env_defines += self.context.env[key].copy()
         env_includes = []
 
@@ -2448,6 +2455,14 @@ class Context:
                             and not f.startswith('/std:c++'))
                     ]
                     self.context.env.CXXFLAGS_qt5 = copy_flags
+                if 'CXXFLAGS_q6' in self.context.env:
+                    copy_flags = self.context.env.CXXFLAGS_qt6.copy()
+                    copy_flags = [
+                        f for f in copy_flags
+                        if (not f.startswith('-std=c++')
+                            and not f.startswith('/std:c++'))
+                    ]
+                    self.context.env.CXXFLAGS_qt6 = copy_flags
                 break
 
         filtered_wfeatures = helpers.filter_unique(config.wfeatures +
@@ -4014,12 +4029,14 @@ class Context:
         print(call_msvc)
         return call_msvc
 
-    def is_qt5_enabled(self, config):
-        return any([feature.startswith("QT5") for feature in config.features
-                    ]) or 'qt5' in config.wfeatures
+    def is_qt_enabled(self, config):
+        return self.is_qt5_used(config) or self.is_qt6_used(config) or 'qt5' in config.wfeatures
 
     def is_qt5_used(self, config):
         return any([feature.startswith("QT5") for feature in config.features])
+
+    def is_qt6_used(self, config):
+        return any([feature.startswith("QT6") for feature in config.features])
 
     def configure(self):
 
@@ -4029,9 +4046,13 @@ class Context:
 
         tasks_and_targets = self.get_tasks_and_targets_to_process()
 
+        is_qt6_used = False
+
         for task, _ in tasks_and_targets:
-            if (self.is_qt5_enabled(config=task)):
+            if (self.is_qt_enabled(config=task)):
                 self.project.enable_qt()
+            if (self.is_qt6_used(config=task)):
+                is_qt6_used = True
 
         # features list
         features_to_load = ['compiler_c', 'compiler_cxx']
@@ -4040,6 +4061,7 @@ class Context:
         if self.project.qt:
             self.ensures_qt_is_installed()
             features_to_load.append('qt5')
+            self.context.want_qt6 = is_qt6_used
             if os.path.exists(self.project.qtdir):
                 self.context.options.qtdir = self.project.qtdir
 
@@ -5652,7 +5674,7 @@ class Context:
         targets_binaries = []
         targets_libpaths = ['lib']
         target_programs = []
-        qt5_binaries = []
+        qt_binaries = []
         for artifact in artifacts:
             if artifact.type in ['library', 'program']:
                 if artifact.target in package_build_context.package.targets and artifact.repository == repository:
@@ -5663,9 +5685,9 @@ class Context:
                         target_config = package_build_context.targets_and_configs[
                             artifact.target]
 
-                    if target_config and self.is_qt5_enabled(
+                    if target_config and self.is_qt_enabled(
                             config=target_config):
-                        qt5_binaries.append(artifact.path)
+                        qt_binaries.append(artifact.path)
 
                     if artifact.type in ['program']:
                         target_programs.append(artifact.path)
@@ -5697,15 +5719,15 @@ class Context:
             unique_targets_binaries.append(binary)
         targets_binaries_symlinks = list()
 
-        qt5_targets_binaries_real_paths = list()
-        qt5_unique_targets_binaries = list()
-        for binary in qt5_binaries:
+        qt_targets_binaries_real_paths = list()
+        qt_unique_targets_binaries = list()
+        for binary in qt_binaries:
             real_path = os.path.realpath(
                 os.path.join(subdirectory_directory, binary))
-            if real_path in qt5_targets_binaries_real_paths:
+            if real_path in qt_targets_binaries_real_paths:
                 continue
-            qt5_targets_binaries_real_paths.append(real_path)
-            qt5_unique_targets_binaries.append(binary)
+            qt_targets_binaries_real_paths.append(real_path)
+            qt_unique_targets_binaries.append(binary)
 
         if 'qt5' in package_build_context.configuration.wfeatures:
             if not self.context.env.QMAKE:
@@ -5714,7 +5736,7 @@ class Context:
                 raise RuntimeError("Can't find path to Qt libraries")
             for binary in unique_targets_binaries:
 
-                if binary not in qt5_unique_targets_binaries:
+                if binary not in qt_unique_targets_binaries:
                     print("{} is not a Qt binary".format(binary))
                     continue
 
