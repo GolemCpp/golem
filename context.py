@@ -4042,11 +4042,12 @@ class Context:
     def load_recipes_repositories(self):
         recipe_repositories_env_key = 'GOLEM_RECIPES_REPOSITORIES'
 
-        if recipe_repositories_env_key not in os.environ:
-            return []
-
-        recipes_repositories = os.environ[recipe_repositories_env_key].split(
-            '|')
+        if recipe_repositories_env_key in os.environ:
+            recipes_repositories = os.environ[recipe_repositories_env_key].split(
+                '|')
+        else:
+            # Default recipes repository
+            recipes_repositories = ['https://github.com/GolemCpp/recipes.git']
 
         repos_paths = []
         for url in recipes_repositories:
