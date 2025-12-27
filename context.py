@@ -2184,8 +2184,11 @@ class Context:
                 if feature.startswith("QT5"):
                     config.features[i] += "D"
             for i, feature in enumerate(config.features):
-                if feature.startswith("QT6"):
-                    config.features[i] += "D"
+                pass
+                # NOTE: This may not be required anymore
+                # INSTALL_QT6CORED can't be find, even in debug variant
+                #if feature.startswith("QT6"):
+                #    config.features[i] += "D"
 
         listinclude = self.list_include(
             self.make_project_path_array(config.includes))
