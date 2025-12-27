@@ -842,6 +842,11 @@ class Context:
                            default=False,
                            help="clangd configuration file")
 
+        context.add_option("--compile-commands",
+                           action="store_true",
+                           default=False,
+                           help="Generate the compile_commands.json files")
+
         context.add_option("--cache-dir",
                            action="store",
                            default='',
@@ -2585,6 +2590,9 @@ class Context:
     def initialize_clangd_configs(self):
         self.clangd_configs = []
 
+    def initialize_compile_commands_configs(self):
+        self.compile_commands_configs = []
+
     def append_compiler_commands(self, build_target):
         self.compiler_commands += self.make_compiler_commands(build_target)
 
@@ -2851,6 +2859,69 @@ class Context:
     def make_clangd_path(self, path):
         return os.path.join(self.get_clangd_path(), path)
 
+    def append_compile_commands_config_target(self, compiler_commands_path, task,
+                                    targets, config):
+        if not self.context.options.compile_commands:
+            return
+
+        targets_includes = []
+
+        build_target = self.build_target_gather_config(task=task,
+                                                       targets=targets,
+                                                       config=config)
+
+        targets_includes += [
+            str(item) for item in self.make_project_path_array(
+                build_target.config.includes + build_target.config.source)
+        ]
+        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_includes]
+        targets_includes += [str(item) for item in build_target.includes]
+
+        targets_includes = helpers.filter_unique(targets_includes)
+
+    def generate_compile_commands_config(self, compiler_commands_path):
+        if not self.context.options.compile_commands:
+            return
+
+        targets_cxxflags = []
+        targets_includes = []
+        targets_wfeatures = []
+
+        def list_all_targets_includes(task, targets, config, targets_includes,
+                                      targets_cxxflags, targets_wfeatures):
+            build_target = self.build_target_gather_config(task=task,
+                                                           targets=targets,
+                                                           config=config)
+            targets_includes += [
+                str(item) for item in self.make_project_path_array(
+                    build_target.config.includes + build_target.config.source)
+            ]
+            targets_includes += [
+                str(item) for item in build_target.env_isystem
+            ]
+            targets_includes += [
+                str(item) for item in build_target.env_includes
+            ]
+            targets_includes += [str(item) for item in build_target.includes]
+            targets_cxxflags += config.cxxflags
+            targets_wfeatures += config.wfeatures
+
+        self.call_build_target(
+            lambda task, targets, config: list_all_targets_includes(
+                task=task,
+                targets=targets,
+                config=config,
+                targets_includes=targets_includes,
+                targets_cxxflags=targets_cxxflags,
+                targets_wfeatures=targets_wfeatures))
+
+    def get_compile_commands_path(self):
+        return self.make_golem_path('compile_commands')
+
+    def make_compile_commands_path(self, path):
+        return os.path.join(self.get_compile_commands_path(), path)
+
     def build_target(self, task, targets, config):
         build_target = self.build_target_gather_config(task=task,
                                                        targets=targets,
@@ -2890,6 +2961,24 @@ class Context:
             self.save_compiler_commands_list(compiler_commands_path,
                                              compiler_commands_list)
             self.append_clangd_config_target(
+                compiler_commands_path=compiler_commands_path,
+                task=task,
+                targets=targets,
+                config=config)
+
+        if self.context.options.compile_commands:
+            compiler_commands_list = self.make_compiler_commands(build_target)
+
+            compile_commands_dir = self.make_compile_commands_path(task.name)
+            compiler_commands_path = os.path.join(compile_commands_dir, 'compile_commands.json')
+
+            if not os.path.exists(compile_commands_dir):
+                helpers.make_directory(compile_commands_dir)
+            if os.path.exists(compiler_commands_path):
+                os.remove(compiler_commands_path)
+            self.save_compiler_commands_list(compiler_commands_path,
+                                             compiler_commands_list)
+            self.append_compile_commands_config_target(
                 compiler_commands_path=compiler_commands_path,
                 task=task,
                 targets=targets,
@@ -4172,36 +4261,51 @@ class Context:
 
     def build(self):
         vscode_dir = self.get_vscode_path()
-        compiler_commands_path = self.make_vscode_path('compile_commands.json')
+        vscode_compiler_commands_path = self.make_vscode_path('compile_commands.json')
 
         if self.context.options.vscode:
             if not os.path.exists(vscode_dir):
                 helpers.make_directory(vscode_dir)
-            if os.path.exists(compiler_commands_path):
-                os.remove(compiler_commands_path)
+            if os.path.exists(vscode_compiler_commands_path):
+                os.remove(vscode_compiler_commands_path)
             self.initialize_compiler_commands()
             self.initialize_vscode_configs()
 
         clangd_dir = self.get_clangd_path()
-        compiler_commands_path = self.make_clangd_path('compile_commands.json')
+        clangd_compiler_commands_path = self.make_clangd_path('compile_commands.json')
 
         if self.context.options.clangd:
             if not os.path.exists(clangd_dir):
                 helpers.make_directory(clangd_dir)
-            if os.path.exists(compiler_commands_path):
-                os.remove(compiler_commands_path)
+            if os.path.exists(clangd_compiler_commands_path):
+                os.remove(clangd_compiler_commands_path)
             self.initialize_compiler_commands()
             self.initialize_clangd_configs()
+
+        compile_commands_dir = self.get_compile_commands_path()
+        compile_commands_compiler_commands_path = self.make_compile_commands_path('compile_commands.json')
+
+        if self.context.options.compile_commands:
+            if not os.path.exists(compile_commands_dir):
+                helpers.make_directory(compile_commands_dir)
+            if os.path.exists(compile_commands_compiler_commands_path):
+                os.remove(compile_commands_compiler_commands_path)
+            self.initialize_compiler_commands()
+            self.initialize_compile_commands_configs()
 
         self.call_build_target(self.build_target, build_recursively=True)
 
         if self.context.options.vscode:
-            self.save_compiler_commands(compiler_commands_path)
-            self.generate_vscode_config(compiler_commands_path)
+            self.save_compiler_commands(vscode_compiler_commands_path)
+            self.generate_vscode_config(vscode_compiler_commands_path)
 
         if self.context.options.clangd:
-            self.save_compiler_commands(compiler_commands_path)
-            self.generate_clangd_config(compiler_commands_path)
+            self.save_compiler_commands(clangd_compiler_commands_path)
+            self.generate_clangd_config(clangd_compiler_commands_path)
+
+        if self.context.options.compile_commands:
+            self.save_compiler_commands(compile_commands_compiler_commands_path)
+            self.generate_compile_commands_config(compile_commands_compiler_commands_path)
 
         for targetname in self.context.options.targets.split(','):
             if targetname and not targetname in [
