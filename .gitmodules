@@ -1,3 +1,3 @@
 [submodule "waf"]
 	path = waf
-	url = ../waf.git
+	url = ssh://git@gitlab.com:bbalp/waf.git
