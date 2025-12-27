@@ -70,3 +70,5 @@ if sys.argv[1] == 'distclean':
     else:
         shutil.rmtree(path)
     sys.exit(0)
+
+sys.exit(0)

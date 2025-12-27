@@ -10,11 +10,9 @@ import shutil
 import platform
 import subprocess
 import configparser
-import distutils
 import stat
 import string
 from datetime import datetime
-from distutils import dir_util
 from copy import deepcopy
 from module import Module
 from cache import CacheConf, CacheDir
@@ -3176,15 +3174,22 @@ class Context:
         if subprocess.call(build_cmd, cwd=cwd, shell=True):
             return 1
 
-    def run_command(self, command, cwd):
-        if subprocess.call(command, cwd=cwd, shell=self.is_windows()):
-            return 1
+    def run_command(self, command, cwd, env=None):
+        if env:
+            my_env = os.environ.copy()
+            for k, v in env.items():
+                my_env[k] = v
+            if subprocess.call(command, cwd=cwd, shell=self.is_windows(), env=my_env):
+                return 1
+        else:
+            if subprocess.call(command, cwd=cwd, shell=self.is_windows()):
+                return 1
 
-    def run_build_command(self, command, cwd):
+    def run_build_command(self, command, cwd, env=None):
         if self.is_windows():
             ret = self.run_command_with_msvisualcpp(command=command, cwd=cwd)
         else:
-            ret = self.run_command(command=command, cwd=cwd)
+            ret = self.run_command(command=command, cwd=cwd, env=env)
         if ret:
             print("Error when running command \"" + ' '.join(command) +
                   "\" in directory \"" + str(cwd) + "\"")
@@ -3358,10 +3363,11 @@ class Context:
             raise Exception("Error: Can't find directory " + str(source_path))
 
         print("Copy directory " + str(source_path))
-        distutils.dir_util.copy_tree(
+        shutil.copytree(
             source_path,
             os.path.join(include_dir, helpers.directory_basename(source_path)),
-            preserve_symlinks=1)
+            dirs_exist_ok=True,
+            symlinks=True)
 
     def export_file_to_headers(self, file_path, include_path=None):
         print("Exporting header file")
@@ -3383,7 +3389,8 @@ class Context:
                     arch=None,
                     options=None,
                     install_prefix=None,
-                    prefix_path=None):
+                    prefix_path=None,
+                    env=None):
         if source_path is None:
             source_path = self.get_project_dir()
 
@@ -3444,7 +3451,7 @@ class Context:
 
         print("Run CMake command: " + ' '.join(cmake_command))
 
-        ret = self.run_build_command(command=cmake_command, cwd=build_path)
+        ret = self.run_build_command(command=cmake_command, cwd=build_path, env=env)
         if ret:
             raise RuntimeError("Error when running CMake command: " +
                                ' '.join(cmake_command))
@@ -3458,7 +3465,7 @@ class Context:
                          ] + targets
         print("Run build command: " + ' '.join(cmake_command))
 
-        ret = self.run_command(command=cmake_command, cwd=build_path)
+        ret = self.run_command(command=cmake_command, cwd=build_path, env=env)
         if ret:
             raise RuntimeError("Error when running CMake command: " +
                                ' '.join(cmake_command))
@@ -3468,7 +3475,7 @@ class Context:
                 cmake_command = ['make', 'install']
                 print("Run install command: " + ' '.join(cmake_command))
 
-                ret = self.run_command(command=cmake_command, cwd=build_path)
+                ret = self.run_command(command=cmake_command, cwd=build_path, env=env)
                 if ret:
                     raise RuntimeError("Error when running CMake command: " +
                                        ' '.join(cmake_command))
@@ -4093,6 +4100,11 @@ class Context:
         else:
             return self.build_path(dep) + '-build'
 
+    def find_dependency(self, dep_name):
+        for dep in self.project.deps:
+            if dep_name == dep.name:
+                return dep
+
     def find_dependency_includes(self, dep_name):
         dep_include = []
         cache_conf = self.cache_conf
@@ -4250,8 +4262,10 @@ class Context:
                     os.makedirs(outpath_include)
 
                 for include in includes:
-                    distutils.dir_util.copy_tree(
-                        self.make_project_path(include), outpath_include)
+                    shutil.copytree(
+                        self.make_project_path(include),
+                        outpath_include,
+                        dirs_exist_ok=True)
 
                 # NOTE: Disable export of libs in a separate directory
                 #outpath_lib = os.path.join(outpath, self.build_path())

@@ -1,1 +1,2 @@
 node-semver==0.8.0
+setuptools==80.9.0
