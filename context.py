@@ -3991,7 +3991,7 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
-    def make_basic_dependency_repo_path(self, name, url, branch='master'):
+    def make_basic_dependency_repo_path(self, name, url, branch='main'):
         dependency = Dependency(name=name,
                                 targets=None,
                                 repository=url,
@@ -4014,7 +4014,7 @@ class Context:
                          cwd=path)
 
     def clone_master_dependencies_repository(self, url):
-        branch_version = 'master'
+        branch_version = 'main'
         repo_path = self.make_basic_dependency_repo_path(name='master',
                                                          url=url,
                                                          branch=branch_version)
@@ -4027,7 +4027,7 @@ class Context:
         return repo_path
 
     def clone_recipes_repository(self, url):
-        branch_version = 'master'
+        branch_version = 'main'
         repo_path = self.make_basic_dependency_repo_path(name='recipes',
                                                          url=url,
                                                          branch=branch_version)
