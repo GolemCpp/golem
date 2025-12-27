@@ -2611,8 +2611,7 @@ class Context:
             file = {
                 "directory": self.get_build_path(),
                 "arguments": [
-                    "cl.exe" if Context.is_windows() else "/usr/bin/" +
-                    self.context.env.CXX_NAME
+                    self.context.env.get_flat('CXX')
                 ] + build_target.env_cxxflags + build_target.cxxflags +
                 [(windows_fix_external_i
                   if Context.is_windows() else '-isystem') + str(d)
