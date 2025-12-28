@@ -539,6 +539,12 @@ class Context:
         return self.context.options.runtime if dep is None or not dep.runtime else dep.runtime[
             0]
 
+    def is_runtime_static(self):
+        return self.runtime() == self.link_static()
+
+    def is_runtime_shared(self):
+        return self.runtime() == self.link_shared()
+
     def runtime_min(self, dep=None):
         return self.runtime(dep)[:2]
 
@@ -710,6 +716,9 @@ class Context:
     def compiler_min(self):
         return self.context.env.CXX_NAME[:1] + ''.join(
             self.context.env.CC_VERSION)
+    
+    def is_msvc_like(self):
+        return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
 
     @staticmethod
     def machine():
@@ -796,7 +805,7 @@ class Context:
         context.add_option("--variant",
                            action="store",
                            default='debug',
-                           help="Runtime Linking")
+                           help="Variant (debug, release)")
         context.add_option("--runtime",
                            action="store",
                            default='shared',
@@ -1025,7 +1034,7 @@ class Context:
         if not self.context.options.nounicode:
             self.context.env.DEFINES.append('UNICODE')
 
-        if self.is_windows():
+        if self.is_msvc_like():
             if self.is_x86():
                 self.context.env.LINKFLAGS.append('/MACHINE:X86')
                 self.context.env.ARFLAGS.append('/MACHINE:X86')
@@ -1099,11 +1108,11 @@ class Context:
 
     def configure_debug(self):
 
-        if self.is_windows():
-            if self.is_static():
+        if self.is_msvc_like():
+            if self.is_runtime_static():
                 self.context.env.CXXFLAGS.append('/MTd')
                 self.context.env.CFLAGS.append('/MTd')
-            elif self.is_shared():
+            elif self.is_runtime_shared():
                 self.context.env.CXXFLAGS.append('/MDd')
                 self.context.env.CFLAGS.append('/MDd')
 
@@ -1126,11 +1135,11 @@ class Context:
 
         self.context.env.DEFINES.append('NDEBUG')
 
-        if self.is_windows():
-            if self.is_static():
+        if self.is_msvc_like():
+            if self.is_runtime_static():
                 self.context.env.CXXFLAGS.append('/MT')
                 self.context.env.CFLAGS.append('/MT')
-            elif self.is_shared():
+            elif self.is_runtime_shared():
                 self.context.env.CXXFLAGS.append('/MD')
                 self.context.env.CFLAGS.append('/MD')
 
