@@ -1049,6 +1049,26 @@ class Context:
 
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
+            default_flags = ['/DWIN32', '/D_WINDOWS', '/GR', '/EHsc']
+            
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
+
+            # Set /external ON
+            # TODO: Need to find a way to discover if the compiler supports /external to use /I if it can't
+
+            default_flags = ['/experimental:external', '/external:W0']
+            
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
+
+            # Serialized writes to the program database (PDB) to avoid fatal error C1041
+
+            default_flags = ['/FS']
+            
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
+
             # Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
             # Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
 
@@ -1116,6 +1136,16 @@ class Context:
                 self.context.env.CXXFLAGS.append('/MDd')
                 self.context.env.CFLAGS.append('/MDd')
 
+            default_flags = ['/Zi', '/Ob0', '/Od', '/RTC1']
+            
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
+
+            default_flags = ['/debug', '/INCREMENTAL']
+
+            self.context.env.LINKFLAGS += default_flags
+            self.context.env.ARFLAGS += default_flags
+
             # Some compilation flags (self.context.env.CXXFLAGS)
 
             # '/RTC1'   # run-time error checks (stack frame & uninitialized used variables)
@@ -1130,6 +1160,12 @@ class Context:
             # '/MAPINFO:EXPORTS'    # includes exports information in the mapfile
             # '/DEBUG'              # creates debugging information
             # '/INCREMENTAL'        # incremental linking
+        else:
+            default_flags = ['-O0', '-g']
+
+            self.context.env.LINKFLAGS += default_flags
+            self.context.env.ARFLAGS += default_flags
+
 
     def configure_release(self):
 
@@ -1142,6 +1178,20 @@ class Context:
             elif self.is_runtime_shared():
                 self.context.env.CXXFLAGS.append('/MD')
                 self.context.env.CFLAGS.append('/MD')
+
+            default_flags = ['/O2', '/Ob2']
+            
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
+
+            default_flags =['/INCREMENTAL:NO']
+
+            self.context.env.LINKFLAGS += default_flags
+            self.context.env.ARFLAGS += default_flags
+
+            # TODO: Add --runtime-variant so that on Windows,
+            # we can choose independantly the variant of the runtime
+            # from the variant of the project and its dependencies
 
             # Some compilation flags (self.context.env.CXXFLAGS)
 
@@ -1162,6 +1212,11 @@ class Context:
             # '/OPT:REF'            # eliminates functions and data that are never referenced
             # '/OPT:ICF'            # to perform identical COMDAT folding
             # '/SAFESEH'            # image will contain a table of safe exception handlers
+        else:
+            default_flags = ['-O2']
+
+            self.context.env.LINKFLAGS += default_flags
+            self.context.env.ARFLAGS += default_flags
 
     def environment(self, resolve_dependencies=False):
 
