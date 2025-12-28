@@ -2683,7 +2683,7 @@ class Context:
                     self.context.env.get_flat('CXX')
                 ] + build_target.env_cxxflags + build_target.cxxflags +
                 [(windows_isystem
-                  if Context.is_msvc_like() else '-isystem') + str(d)
+                  if self.context.is_msvc_like() else '-isystem') + str(d)
                  for d in build_target.env_isystem] +
                 ['-I' + str(d) for d in build_target.env_includes] +
                 ['-I' + str(d) for d in build_target.includes] +
