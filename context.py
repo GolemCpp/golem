@@ -2511,9 +2511,16 @@ class Context:
         #        config))
         #    if stlib_filename not in config.ldflags:
         #        config.ldflags.append(stlib_filename)
+        
+        filtered_wfeatures = helpers.filter_unique(config.wfeatures +
+                                                   wfeatures)
+        
+        qt_cxxflags = []
+        if 'qt5' in filtered_wfeatures and self.is_msvc_like():
+            qt_cxxflags += ['/Zc:__cplusplus', '/permissive-']
 
         final_cxxflags = helpers.filter_unique(config.cxxflags +
-                                               target_cxxflags + isystemflags)
+                                               target_cxxflags + isystemflags + qt_cxxflags)
 
         for flag in final_cxxflags:
             if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
@@ -2525,7 +2532,7 @@ class Context:
                             and not f.startswith('/std:c++'))
                     ]
                     self.context.env.CXXFLAGS_qt5 = copy_flags
-                if 'CXXFLAGS_q6' in self.context.env:
+                if 'CXXFLAGS_qt6' in self.context.env:
                     copy_flags = self.context.env.CXXFLAGS_qt6.copy()
                     copy_flags = [
                         f for f in copy_flags
@@ -2535,8 +2542,6 @@ class Context:
                     self.context.env.CXXFLAGS_qt6 = copy_flags
                 break
 
-        filtered_wfeatures = helpers.filter_unique(config.wfeatures +
-                                                   wfeatures)
         if 'qt5' in filtered_wfeatures and self.is_darwin():
             env_cxxflags += ['-iframework{}'.format(self.context.env.QTLIBS)]
 
@@ -2617,7 +2622,7 @@ class Context:
             name=task.name,
             cxxflags=final_cxxflags,
             cflags=helpers.filter_unique(config.cflags + target_cxxflags +
-                                         isystemflags),
+                                         isystemflags + qt_cxxflags),
             linkflags=linkflags_option,
             ldflags=ldflags_option,
             use=config_all_use,
