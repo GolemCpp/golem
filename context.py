@@ -2669,7 +2669,7 @@ class Context:
         # they are placed in last position. Therefore, we need to find a 
         # different approach.
 
-        windows_fix_external_i = '-I'  # /external:I not supported yet
+        windows_isystem = '/external:I'
 
         for source in build_target.source:
             file = {
@@ -2677,8 +2677,8 @@ class Context:
                 "arguments": [
                     self.context.env.get_flat('CXX')
                 ] + build_target.env_cxxflags + build_target.cxxflags +
-                [(windows_fix_external_i
-                  if Context.is_windows() else '-isystem') + str(d)
+                [(windows_isystem
+                  if Context.is_msvc_like() else '-isystem') + str(d)
                  for d in build_target.env_isystem] +
                 ['-I' + str(d) for d in build_target.env_includes] +
                 ['-I' + str(d) for d in build_target.includes] +
