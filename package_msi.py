@@ -219,8 +219,8 @@ def package_msi(self, package_build_context):
     template_tempoary_dir = self.make_build_path('dist_templates_wix')
     helpers.make_directory(template_tempoary_dir)
 
-    wxs_files = self.list_files([wix_directory], ['wxs'])
-    wxl_files = self.list_files([wix_directory], ['wxl'])
+    wxs_files = self.list_files('', [wix_directory], ['wxs'])
+    wxl_files = self.list_files('', [wix_directory], ['wxl'])
 
     component_list = list()
     component_ref_list = list()

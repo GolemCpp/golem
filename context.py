@@ -444,55 +444,96 @@ class Context:
     def make_project_path(self, path):
         return os.path.join(self.get_project_dir(), str(Path(path)))
 
-    def make_project_path_array(self, array):
-        return [self.make_project_path(x) for x in array]
-
     @staticmethod
     def hash_identifier(flags):
         return hashlib.md5(''.join(flags)).hexdigest()[:8]
 
-    def list_include(self, includes):
-        return [
-            self.context.root.find_dir(str(x))
-            if os.path.isabs(x) else self.context.srcnode.find_dir(str(x))
-            for x in includes
-        ]
+    def make_base_path(self, path, prefix_path = ''):
+        base_path = self.context.root
+        if len(prefix_path) == 0:
+            if os.path.isabs(path):
+                base_path = self.context.root
+            else:
+                base_path = self.context.srcnode
+        else:
+            if os.path.isabs(prefix_path):
+                base_path = self.context.root.find_dir(prefix_path)
+            else:
+                base_path = self.context.srcnode.find_dir(prefix_path) 
+        return base_path
 
-    def list_files(self, source, extentions):
+    def list_include(self, includes, prefix_path = ''):
+        file_nodes = []
+        for x in includes:
+            base_path = self.make_base_path(x, prefix_path)
+            file_node = base_path.find_dir(str(x))
+            file_nodes.append(file_node)
+        return file_nodes
+
+    def list_files(self, prefix_path, source, extentions):
         result = []
         for x in source:
-            if os.path.isfile(x):
-                file_node = self.context.root.find_node(
-                    str(x)) if os.path.isabs(
-                        x) else self.context.srcnode.find_node(str(x))
-                result.append(file_node)
-            elif os.path.isdir(x):
-                file_nodes = [
-                    item for sublist in [
-                        self.context.root.find_dir(str(x)).
-                        ant_glob('**/*.' +
-                                 extention) if os.path.isabs(x) else self.
-                        context.srcnode.find_dir(str(x)).ant_glob('**/*.' +
-                                                                  extention)
-                        for x in [x] for extention in extentions
-                    ] for item in sublist
-                ]
-                result += file_nodes
+            if isinstance(x, tuple):
+                base_path = self.make_base_path('', prefix_path)
+                args = { }
+                if len(x) > 0:
+                    args['incl'] = x[0]
+                if len(x) > 1:
+                    args['excl'] = x[1]
+                if len(x) > 2:
+                    args['dir'] = x[2]
+                if len(x) > 3:
+                    args['src'] = x[3]
+                if len(x) > 4:
+                    args['maxdepth'] = x[4]
+                if len(x) > 5:
+                    args['ignorecase'] = x[5]
+                if len(x) > 6:
+                    args['generator'] = x[6]
+                if len(x) > 7:
+                    args['remove'] = x[7]
+                if len(x) > 8:
+                    args['quiet'] = x[8]
+                result += base_path.ant_glob(**args)
+            elif isinstance(x, dict):
+                base_path = self.make_base_path('', prefix_path)
+                result += base_path.ant_glob(**x)
+            else:
+                base_path = self.make_base_path(x, prefix_path)
+                x_path = base_path.find_node(str(x))
+                if os.path.isfile(str(x_path)):
+                    result += [x_path]
+                elif os.path.isdir(str(x_path)):
+                    file_nodes = []
+                    for extention in extentions:
+                        file_nodes += x_path.ant_glob('**/*.' + extention)
+                    result += file_nodes
+                else:
+                    result += x_path.ant_glob(str(x))
+
         return result
 
     def list_source(self, source):
-        return self.list_files(source, ['cpp', 'c', 'cxx', 'cc'] +
+        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc'] +
                                (['mm'] if self.is_darwin() else []))
 
     def list_moc(self, source):
-        return self.list_files(source, ['hpp', 'h', 'hxx', 'hh'])
+        return self.list_files(self.get_project_dir(), source, ['hpp', 'h', 'hxx', 'hh'])
 
     def list_qt_qrc(self, source):
-        return self.list_files(source, ['qrc'])
+        return self.list_files(self.get_project_dir(), source, ['qrc'])
 
     def list_qt_ui(self, source):
-        return self.list_files(source, ['ui'])
+        return self.list_files(self.get_project_dir(), source, ['ui'])
 
+    def list_template(self, source):
+        return self.list_files(self.get_project_dir(), source, ['template'])
+
+    @staticmethod
+    def get_parent_directories(files):
+        directories = [str(Path(str(file)).parent.absolute()) for file in files]
+        return helpers.filter_unique(directories)
+    
     @staticmethod
     def link_static():
         return 'static'
@@ -2259,18 +2300,20 @@ class Context:
                 #if feature.startswith("QT6"):
                 #    config.features[i] += "D"
 
-        listinclude = self.list_include(
-            self.make_project_path_array(config.includes))
-        qrc_sources = self.list_qt_qrc(
-            self.make_project_path_array(config.source))
-        listsource = self.list_source(self.make_project_path_array(config.source)) + qrc_sources + \
-            self.list_qt_ui(self.make_project_path_array(config.source)) if project_qt else self.list_source(
-                self.make_project_path_array(config.source))
-        moc_candidates = self.list_moc(self.make_project_path_array(
-            config.moc)) if project_qt else []
+        listinclude = self.list_include(config.includes, self.get_project_dir())
+        qrc_sources = self.list_qt_qrc(config.source)
 
-        qmldir_template_files = self.list_files(
-            self.make_project_path_array(config.source), ['template'])
+        listsource = []
+        if project_qt:
+            listsource += self.list_source(config.source) + qrc_sources + self.list_qt_ui(config.source)
+        else:
+            listsource += self.list_source(config.source)
+
+        moc_candidates = []
+        if project_qt:
+            moc_candidates += self.list_moc(config.moc)
+
+        qmldir_template_files = self.list_template(config.source)
         for path in qmldir_template_files:
             if os.path.basename(path.abspath()) == "qmldir.template":
                 qmldir_template_path = path
@@ -2714,10 +2757,8 @@ class Context:
                                                        targets=targets,
                                                        config=config)
 
-        targets_includes += [
-            str(item) for item in self.make_project_path_array(
-                build_target.config.includes + build_target.config.source)
-        ]
+        targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
+        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
         targets_includes += [str(item) for item in build_target.env_isystem]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
@@ -2775,16 +2816,11 @@ class Context:
             build_target = self.build_target_gather_config(task=task,
                                                            targets=targets,
                                                            config=config)
-            targets_includes += [
-                str(item) for item in self.make_project_path_array(
-                    build_target.config.includes + build_target.config.source)
-            ]
-            targets_includes += [
-                str(item) for item in build_target.env_isystem
-            ]
-            targets_includes += [
-                str(item) for item in build_target.env_includes
-            ]
+
+            targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
+            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
+            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
             targets_wfeatures += config.wfeatures
@@ -2860,10 +2896,8 @@ class Context:
                                                        targets=targets,
                                                        config=config)
 
-        targets_includes += [
-            str(item) for item in self.make_project_path_array(
-                build_target.config.includes + build_target.config.source)
-        ]
+        targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
+        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
         targets_includes += [str(item) for item in build_target.env_isystem]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
@@ -2883,16 +2917,11 @@ class Context:
             build_target = self.build_target_gather_config(task=task,
                                                            targets=targets,
                                                            config=config)
-            targets_includes += [
-                str(item) for item in self.make_project_path_array(
-                    build_target.config.includes + build_target.config.source)
-            ]
-            targets_includes += [
-                str(item) for item in build_target.env_isystem
-            ]
-            targets_includes += [
-                str(item) for item in build_target.env_includes
-            ]
+
+            targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
+            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
+            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
             targets_wfeatures += config.wfeatures
@@ -2938,10 +2967,8 @@ class Context:
                                                        targets=targets,
                                                        config=config)
 
-        targets_includes += [
-            str(item) for item in self.make_project_path_array(
-                build_target.config.includes + build_target.config.source)
-        ]
+        targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
+        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
         targets_includes += [str(item) for item in build_target.env_isystem]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
@@ -2961,16 +2988,11 @@ class Context:
             build_target = self.build_target_gather_config(task=task,
                                                            targets=targets,
                                                            config=config)
-            targets_includes += [
-                str(item) for item in self.make_project_path_array(
-                    build_target.config.includes + build_target.config.source)
-            ]
-            targets_includes += [
-                str(item) for item in build_target.env_isystem
-            ]
-            targets_includes += [
-                str(item) for item in build_target.env_includes
-            ]
+            
+            targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
+            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
+            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
             targets_wfeatures += config.wfeatures
