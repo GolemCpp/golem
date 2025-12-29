@@ -720,7 +720,7 @@ class Context:
 
     @staticmethod
     def is_flatpak():
-        return Context.is_linux() and hasattr(platform, 'freedesktop_os_release')
+        return Context.is_linux() and hasattr(platform, 'freedesktop_os_release') and (shutil.which('flatpak-spawn') is not None)
 
     @staticmethod
     def is_darwin():
