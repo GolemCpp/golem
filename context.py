@@ -3653,17 +3653,13 @@ class Context:
                                ' '.join(cmake_command))
 
         if install_prefix is not None:
-            if not self.is_windows():
-                cmake_command = ['make', 'install']
-                print("Run install command: " + ' '.join(cmake_command))
+            cmake_command = ['cmake', '--install']
+            print("Run install command: " + ' '.join(cmake_command))
 
-                ret = self.run_command(command=cmake_command, cwd=build_path, env=env)
-                if ret:
-                    raise RuntimeError("Error when running CMake command: " +
-                                       ' '.join(cmake_command))
-            else:
-                raise Exception(
-                    "CMake install command not implemented on Windows")
+            ret = self.run_command(command=cmake_command, cwd=build_path, env=env)
+            if ret:
+                raise RuntimeError("Error when running CMake command: " +
+                                    ' '.join(cmake_command))
 
     def save_options(self):
         self.context.env.OPTIONS = json.dumps(self.context.options.__dict__)
