@@ -2145,7 +2145,7 @@ class Context:
 
         if should_run_command:
             if missing_artifacts:
-                print("Missing artifacts: {} requires {}".format(
+                Logs.warn("Missing artifacts: {} requires {}".format(
                     dep.name, missing_artifacts))
             if cache_dir.is_static:
                 raise RuntimeError(
