@@ -1,12 +1,32 @@
-[![Golem - Build System for Modern C++](docs/banner.png)](https://github.com/GolemCpp/golem/releases)
+<a href="https://github.com/GolemCpp/golem/releases">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/banner-light.png">
+    <img alt="Golem - Build System for Modern C++" src="docs/banner-light.png">
+  </picture>
+</a>
 
-# Golem
+## Golem
 
-- [What is it?](#what-is-it)
-- [Getting started](#getting-started)
+- [Golem](#golem)
+  - [What is it?](#what-is-it)
+- [🌱 Getting started](#🌱-getting-started)
   - [How to install?](#how-to-install)
-
-TODO
+  - [First project](#first-project)
+- [💻 Commands](#💻-commands)
+  - [golem configure](#golem-configure)
+  - [golem resolve (if using dependencies)](#golem-resolve-if-using-dependencies)
+  - [golem dependencies (if using dependencies)](#golem-dependencies-if-using-dependencies)
+  - [golem build](#golem-build)
+  - [golem package](#golem-package)
+  - [golem clean](#golem-clean)
+  - [golem distclean](#golem-distclean)
+- [🚀 Roadmap](#🚀-roadmap)
+- [💖 Thanks](#💖-thanks)
+- [❓ FAQ](#❓-faq)
+  - [Why another build system?](#why-another-build-system)
+  - [Known issues](#known-issues)
+  - [How is it designed?](#how-is-it-designed)
 
 ### What is it?
 
@@ -42,7 +62,7 @@ TODO: mention where to find the sample project showing this file (indicating one
 
 TODO: mention where to find a more elaborate sample project
 
-## Getting started
+## 🌱 Getting started
 
 ### How to install?
 
@@ -96,7 +116,7 @@ int main()
 }
 ```
 
-### Commands
+## 💻 Commands
 
 All the commands are meant to be called at the root of your project, where the project file (e.g. `golemfile.py` or `golem.json`) seats.
 
@@ -158,7 +178,7 @@ golem distclean
 
 TODO
 
-## Roadmap
+## 🚀 Roadmap
 
 Here is a list of important features to add as a priority:
 
@@ -190,13 +210,13 @@ Do not hesitate to create a PR with no change to start the conversation about so
 
 Of course, much remains to be done to make Golem the best build system!
 
-## Thanks
+## 💖 Thanks
 
 A big thank you to:
 
 - **mythicsoul** & **wtfblub** for their early testing, feedback, ideas, and support!
 
-## FAQ
+## ❓ FAQ
 
 ### Why another build system?
 
