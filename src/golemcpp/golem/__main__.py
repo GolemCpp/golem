@@ -1,5 +1,4 @@
 import sys
-import main
+from golemcpp.golem import main
 
-print("lol")
 sys.exit(main.main())
