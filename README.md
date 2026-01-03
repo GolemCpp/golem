@@ -58,7 +58,7 @@ def configure(project):
 ```
 
 TODO: mention where to find the sample project showing this file (indicating one for windows too)
-
+TODO: always mention golemfile.py and an equivalent golemfile.json
 TODO: mention where to find a more elaborate sample project
 
 ## 🌱 Getting started
@@ -128,6 +128,7 @@ golem configure --variant=debug
 ```
 
 TODO: About Qt5/6
+TODO: Editor arguments (--vscode --clangd)
 
 #### golem resolve (if using dependencies)
 
