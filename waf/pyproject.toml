@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "golemcpp-waf"
+version = "1.0.0"
+authors = [
+  { name="Barnabé BALP", email="contact@barnabebalp.fr" },
+]
+description = "Modified Waf for Golem (original project https://gitlab.com/ita1024/waf)"
+keywords = ["cpp"]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "BSD-3-Clause"
+license-files = ["waf/LICENSE"]
+
+[project.urls]
+Homepage = "https://gitlab.com/bbalp/waf"
+Repository = "https://gitlab.com/bbalp/waf.git"
+Issues = "https://gitlab.com/bbalp/waf/-/issues"
+
+[tool.setuptools.packages.find]
+where = ["waf/"]
+include = ["waflib", "waflib.extras", "waflib.Tools"]
