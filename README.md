@@ -80,7 +80,11 @@ git pull origin/main
 git submodule update --init
 ```
 
-Golem's repository needs to be added to your **PATH** environment variable.
+Golem's repository needs to be added to your **PATH** environment variable. And in a Python environment, install the only needed dependency:
+
+``` bash
+pip install node-semver==0.8.0
+```
 
 ### First project
 
