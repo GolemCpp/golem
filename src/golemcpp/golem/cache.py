@@ -1,5 +1,5 @@
 import os
-import helpers
+from golemcpp.golem import helpers
 
 
 class CacheDir:

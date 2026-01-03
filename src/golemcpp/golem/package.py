@@ -1,5 +1,5 @@
-import helpers
-from condition_expression import ConditionExpression
+from golemcpp.golem import helpers
+from golemcpp.golem.condition_expression import ConditionExpression
 
 
 class Package:

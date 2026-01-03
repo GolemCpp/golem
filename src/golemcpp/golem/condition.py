@@ -1,6 +1,6 @@
-import helpers
+from golemcpp.golem import helpers
 import json
-from condition_expression import ConditionExpression
+from golemcpp.golem.condition_expression import ConditionExpression
 
 
 class Condition(object):

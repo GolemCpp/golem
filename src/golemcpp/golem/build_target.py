@@ -1,4 +1,4 @@
-import helpers
+from golemcpp.golem import helpers
 
 
 class BuildTarget:

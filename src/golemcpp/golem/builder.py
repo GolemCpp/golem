@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 from waflib.TaskGen import feature, before_method
-from context import Context
+from golemcpp.golem.context import Context
 import sys
-sys.dont_write_bytecode = True
 
 
 def get_context(context):

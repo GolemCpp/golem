@@ -2,11 +2,11 @@ import os
 import re
 import hashlib
 import platform
-import helpers
+from golemcpp.golem import helpers
 import subprocess
 import time
 import stat
-from version import Version
+from golemcpp.golem.version import Version
 from waflib import Logs, Task
 
 

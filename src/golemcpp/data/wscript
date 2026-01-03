@@ -12,7 +12,6 @@ import os
 import importlib
 import importlib.util
 import sys
-sys.dont_write_bytecode = True
 
 def import_from_file(name, file_path):
     loader = importlib.machinery.SourceFileLoader(name, file_path)

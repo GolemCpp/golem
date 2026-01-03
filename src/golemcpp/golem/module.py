@@ -1,6 +1,6 @@
 import os
 import sys
-from project import Project
+from golemcpp.golem.project import Project
 import importlib.util
 import importlib.machinery
 

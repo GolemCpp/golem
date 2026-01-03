@@ -2,8 +2,8 @@ import os
 import re
 import hashlib
 import platform
-import helpers
-from version import Version
+from golemcpp.golem import helpers
+from golemcpp.golem.version import Version
 from waflib import Logs, Task
 
 

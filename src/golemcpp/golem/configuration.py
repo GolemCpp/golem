@@ -1,8 +1,8 @@
-import helpers
-from condition import Condition
-from condition_expression import ConditionExpression
+from golemcpp.golem import helpers
+from golemcpp.golem.condition import Condition
+from golemcpp.golem.condition_expression import ConditionExpression
 from copy import deepcopy
-from artifact import Artifact
+from golemcpp.golem.artifact import Artifact
 
 
 class Configuration(Condition):

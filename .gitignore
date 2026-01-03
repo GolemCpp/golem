@@ -26,6 +26,10 @@ build/*
 
 *.py[co]
 /env
+/dist
+/waf/dist
+__pycache__
+/.venv
 
 ############
 ## Windows

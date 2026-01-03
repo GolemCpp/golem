@@ -1,14 +1,14 @@
 import os
 import sys
-import helpers
+from golemcpp.golem import helpers
 import json
-from target import Target
-from configuration import Configuration
-from condition_expression import ConditionExpression
-from template import Template
-from dependency import Dependency
-from package import Package
-from helpers import *
+from golemcpp.golem.target import Target
+from golemcpp.golem.configuration import Configuration
+from golemcpp.golem.condition_expression import ConditionExpression
+from golemcpp.golem.template import Template
+from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.package import Package
+from golemcpp.golem.helpers import *
 from waflib import Logs
 import copy
 

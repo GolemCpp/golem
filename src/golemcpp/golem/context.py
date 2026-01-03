@@ -14,28 +14,26 @@ import stat
 import string
 from datetime import datetime
 from copy import deepcopy
-from module import Module
-from cache import CacheConf, CacheDir
-from configuration import Configuration
-import cache
-import helpers
-from project import Project
-from build_target import BuildTarget
-from dependency import Dependency
-from template import Template
+from golemcpp.golem.module import Module
+from golemcpp.golem.cache import CacheConf, CacheDir
+from golemcpp.golem.configuration import Configuration
+from golemcpp.golem import cache
+from golemcpp.golem import helpers
+from golemcpp.golem.project import Project
+from golemcpp.golem.build_target import BuildTarget
+from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.template import Template
 import copy
-from target import TargetConfigurationFile
-from version import Version
+from golemcpp.golem.target import TargetConfigurationFile
+from golemcpp.golem.version import Version
 from functools import partial
 from pathlib import Path
-import importlib.util
-import importlib.machinery
 from waflib import Logs, Task
 from collections import OrderedDict
-from target import Target
-from artifact import Artifact
-from package_msi import package_msi
-from package_dmg import package_dmg
+from golemcpp.golem.target import Target
+from golemcpp.golem.artifact import Artifact
+from golemcpp.golem.package_msi import package_msi
+from golemcpp.golem.package_dmg import package_dmg
 
 
 class Context:
@@ -255,8 +253,11 @@ class Context:
     def get_project_dir(self):
         return self.context.options.dir
 
-    def get_golem_dir(self):
-        return os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+    def get_golemcpp_dir(self):
+        return Path(os.path.abspath(os.path.dirname(os.path.realpath(__file__)))).parent
+
+    def get_golemcpp_data_dir(self):
+        return os.path.join(self.get_golemcpp_dir(), 'data')
 
     def make_cache_dirs(self):
         cache_dir_list = []
@@ -2941,7 +2942,7 @@ class Context:
             'compilation_database_path': os.path.abspath(os.path.dirname(compiler_commands_path))
         }
         
-        config_file_template_path = os.path.join(self.get_golem_dir(), 'clangd.template')
+        config_file_template_path = os.path.join(self.get_golemcpp_data_dir(), 'clangd.template')
         with open(config_file_template_path, 'r') as config_file_template:
             config_file_template_src = string.Template(config_file_template.read())
             config_file_src = config_file_template_src.safe_substitute(data)

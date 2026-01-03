@@ -1,8 +1,8 @@
 import copy
-import helpers
-from configuration import Configuration
-from condition_expression import ConditionExpression
-from dependency import Dependency
+from golemcpp.golem import helpers
+from golemcpp.golem.configuration import Configuration
+from golemcpp.golem.condition_expression import ConditionExpression
+from golemcpp.golem.dependency import Dependency
 import json
 
 

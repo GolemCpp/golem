@@ -1,0 +1,33 @@
+[build-system]
+requires = ["uv_build >= 0.9.18, <0.10.0"]
+build-backend = "uv_build"
+
+[project]
+name = "golemcpp"
+version = "1.0.0"
+authors = [
+  { name="Barnabé BALP", email="contact@barnabebalp.fr" },
+]
+description = "Golem is a cross-platform build system for C/C++ projects"
+keywords = ["cpp"]
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "golemcpp-waf==1.0.0",
+    "node-semver==0.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/GolemCpp/golem"
+Documentation = "https://github.com/GolemCpp/golem"
+Repository = "https://github.com/GolemCpp/golem.git"
+Issues = "https://github.com/GolemCpp/golem/issues"
+
+[project.scripts]
+golem = "golemcpp.golem.main:main"
