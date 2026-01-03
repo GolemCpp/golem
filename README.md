@@ -35,9 +35,6 @@ Golem is a cross-platform build system for C/C++ projects. It can build projects
 Golem's main goal is to remove the noise in the project file, and favor the developers intents rather than the technical details when unneeded.
 
 ``` python
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 def configure(project):
     
     project.dependency(name='json',
@@ -47,10 +44,12 @@ def configure(project):
 
     project.library(name='mylib',
                     includes=['mylib/include'],
-                    source=['mylib/src'])
+                    source=['mylib/src'],
+                    defines=['FOO_API_EXPORT'])
 
     project.export(name='mylib',
-                   includes=['mylib/include'])
+                   includes=['mylib/include'],
+                   defines=['FOO_API_IMPORT'])
 
     project.program(name='hello',
                     source=['src'],
