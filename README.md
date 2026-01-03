@@ -183,7 +183,7 @@ Here is a list of important features to add as a priority:
 
 - Add command to initialize a project
 - Add the ability for a project file to include another one
-- Reverse default value for shallow on dependencies
+- Set default value for shallow on dependencies to True, or 'auto' (when version is a tag then shallow=True, otherwise for branches and commit hashes shallow=false) (this new behavior requires to check how version_template will behave, and it requires to fix how golem projects generate artifacts with the asked version to no break dependencies)
 - Generate an implicit export on a library when a program tries to use it
 - Support downloadable archives instead of git repositories
 - Add commands to manage the dependencies in the cache system
@@ -192,6 +192,17 @@ Here is a list of important features to add as a priority:
 - Add a Visual Studio solution generator (investigate waf capabilities and in slnx too)
 - Add an option to choose the runtime variant (debug or release, important on Windows)
 - Add the ability to remove the default flags of a variant
+- Add the ability to have different recipes for different versions of the dependency
+- Make an empty version on a dependency default to the latest available version
+- Create a pip package
+- Consider packaging Golem for Windows, Linux, MacOS (see https://pyinstaller.org/en/stable/)
+- Add `c_standard`/`cxx_standard` on the Configuration (library, program, dependency)
+- Rename `golem.json` to `golemfile.json` for symmetry with `golemfile.py`
+- Remove v prefix from versions (see `Version.py`)
+- Detect automatically Qt if in `C:\Qt` or other obvious paths on other platforms
+- Return a sensible error message to the user when running golem commands in the wrong order
+- Generate API header and associated defines for libraries when `auto_api_name='MYLIB_API'` is defined (can possibly switch later to a systematic generation with a switch to disable the generation)
+- Add or improve recipes for the most popular dependencies (increase support for configuration options)
 - Add support for cppfront
 - Add support for C++ modules
 
@@ -202,6 +213,17 @@ Here is a list of important improvements to work on the long term:
 - Add unit tests
 - Add the ability to create user-defined variants
 - Use the task mechanism of Waf for everything (e.g. resolving, building dependencies)
+- Improve available helper functions to build dependencies using other build systems (recipes)
+- Define default security profiles (allow creation and customization, `security_profile='all'`)
+
+Here is a list of other nice improvements to work on:
+
+- Properly log messages instead of using print() (needs anlaysis, consider using waflibs.Logs)
+- Properly abort execution when encoutering an error instead of raising an exception (needs anlaysis, consider using config.fatal(''), raise Waf.Error(), etc.)
+- Show the full path of the compiler when in a NixOS shell (issue on Waf's side)
+- Detect when `/external:I` or `-isystem` are available before using them
+- Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
+- Generate by default `qmldir` and a `qrc` file for all the found QML files (allow to customize the namespace, or to disable generation)
 
 Contributions are very welcome!
 
@@ -235,6 +257,11 @@ After the neccessary improvements, I'll advertise Golem to a broader audience.
 - Failure on a dependency processed by `golem resolve` may put this dependency in an unrecoverable state, requiring to delete it manually from the cache
 - Errors of often not user friendly (raised exceptions)
 - In some specific environments, such as NixOS, the path to the compiler is not a full path (not a blocking issue, need to fixed on Waf's side)
+- When dealing with conflicting variants of a same dependency, there is no message to warn the user, and Golem attemps to link both anyway (master_dependencies.json is a good workaround for most cases)
+- Only 1 template among those having the same source will get processed (bug caused by `if str(version_template_src) in self.context_tasks: continue`)
+- No support for specifying header files in include parameter to export a library (needs to be a directory for now)
+
+Additionnally to this non-exhaustive list, there are edge cases where the behavior isn't properly defined yet.
 
 ### How is it designed?
 
