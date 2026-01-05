@@ -3,10 +3,7 @@ import os
 import subprocess
 import pickle
 from golemcpp.golem import helpers
-import distutils
-from distutils import dir_util
 from golemcpp.golem.cache import CacheConf
-# from context import Context
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
