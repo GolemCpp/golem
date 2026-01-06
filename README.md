@@ -257,7 +257,6 @@ After the neccessary improvements, I'll advertise Golem to a broader audience.
 ### Known issues
 
 - `golem` alone should welcome the user with a basic recap of the useful commands
-- Changing a header included by a Qt aware header (e.g. Q_OBJECT) doesn't trigger the recompilation of the associated cpp file
 - The cache system accumulates the dependencies and there are no commands yet to clean it up (requires manual deletion)
 - Failure on a dependency processed by `golem resolve` may put this dependency in an unrecoverable state, requiring to delete it manually from the cache
 - Errors of often not user friendly (raised exceptions)
