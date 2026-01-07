@@ -1,2 +1,2 @@
-set PYTHONPATH=%~dp0src\;%~dp0waf\waf\;%PYTHONPATH%
+set PYTHONPATH=%~dp0src\;%~dp0waflib\waf\;%PYTHONPATH%
 python3 %~dp0src\golemcpp\golem %*
