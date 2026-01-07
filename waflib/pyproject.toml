@@ -3,12 +3,12 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "golemcpp-waf"
+name = "golemcpp-waflib"
 version = "1.0.0"
 authors = [
   { name="Barnabé BALP", email="contact@barnabebalp.fr" },
 ]
-description = "Modified Waf for Golem (original project https://gitlab.com/ita1024/waf)"
+description = "Modified waflib for Golem (original project https://gitlab.com/ita1024/waf)"
 keywords = ["cpp"]
 requires-python = ">=3.10"
 classifiers = [

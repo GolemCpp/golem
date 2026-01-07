@@ -19,7 +19,7 @@ classifiers = [
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
-    "golemcpp-waf==1.0.0",
+    "golemcpp-waflib==1.0.0",
     "node-semver==0.8.0",
 ]
 
