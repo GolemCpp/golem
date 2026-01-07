@@ -27,8 +27,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: golemcpp-waflib-dists
-          path: dist/
-        working-directory: waflib/
+          path: waflib/dist/
           
   build-golemcpp:
     name: Build golemcpp
