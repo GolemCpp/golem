@@ -1,2 +1,2 @@
 node-semver==0.8.0
-golemcpp-waflib==1.0.1
+golemcpp-waflib==1.0.2

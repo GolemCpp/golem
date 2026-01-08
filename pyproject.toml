@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "golemcpp"
-version = "1.0.1"
+version = "1.0.2"
 authors = [
   { name="Barnabé BALP", email="contact@barnabebalp.fr" },
 ]
@@ -19,7 +19,7 @@ classifiers = [
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
-    "golemcpp-waflib==1.0.1",
+    "golemcpp-waflib==1.0.2",
     "node-semver==0.8.0",
 ]
 
