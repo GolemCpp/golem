@@ -93,7 +93,6 @@ jobs:
           skip-existing: true
           packages-dir: waflib/dist/
           repository-url: https://test.pypi.org/legacy/
-          verbose: true
 
   pypi-publish-golemcpp:
     runs-on: ubuntu-latest
@@ -139,4 +138,3 @@ jobs:
           skip-existing: true
           packages-dir: dist/
           repository-url: https://test.pypi.org/legacy/
-          verbose: true
