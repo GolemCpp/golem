@@ -1531,7 +1531,10 @@ class Context:
         common_path = None
 
         for cache_dir in self.cache_conf.locations:
-            common_path = os.path.commonpath([path, cache_dir.location])
+            try:
+                common_path = os.path.commonpath([path, cache_dir.location])
+            except Exception:
+                common_path = None
             if common_path != cache_dir.location:
                 common_path = None
             else:
@@ -4988,8 +4991,11 @@ class Context:
                 common_path = None
 
                 for cache_dir in self.cache_conf.locations:
-                    common_path = os.path.commonpath(
-                        [path, cache_dir.location])
+                    try:
+                        common_path = os.path.commonpath(
+                            [path, cache_dir.location])
+                    except Exception:
+                        common_path = None
                     if common_path != cache_dir.location:
                         common_path = None
                     else:
