@@ -1,0 +1,33 @@
+{
+    "dependencies": [
+        {
+            "name": "json",
+            "repository": "https://github.com/nlohmann/json.git",
+            "version": "^3.0.0",
+            "shallow": true
+        }
+    ],
+    "targets": [
+        {
+            "name": "mylib",
+            "type": "lirbary",
+            "includes": ["mylib/include"],
+            "source": ["mylib/src"],
+            "defines": ["FOO_API_EXPORT"]
+        },
+        {
+            "name": "hello",
+            "type": "program",
+            "source": ["src"],
+            "use": ["mylib"],
+            "deps": ["json"]
+        }
+    ],
+    "exports": [
+        {
+            "name": "mylib",
+            "includes": ["mylib/include"],
+            "defines": ["FOO_API_IMPORT"]
+        }
+    ]
+}
