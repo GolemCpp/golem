@@ -423,6 +423,7 @@ Here is a list of important features to add as a priority:
 - Allow to define individual header files in export()
 - Add pre/post build scripts
 - Add user-defined options on Configuration to allow scripts in recipes to set special options (e.g. backend=opengl)
+- Support parsing versions such as MAJOR.MINOR (without any PATCH defined)
 - Add support for cppfront
 - Add support for C++ modules
 
