@@ -1205,8 +1205,8 @@ class Context:
         else:
             default_flags = ['-O0', '-g']
 
-            self.context.env.LINKFLAGS += default_flags
-            self.context.env.ARFLAGS += default_flags
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
 
 
     def configure_release(self):
@@ -1256,9 +1256,9 @@ class Context:
             # '/SAFESEH'            # image will contain a table of safe exception handlers
         else:
             default_flags = ['-O2']
-
-            self.context.env.LINKFLAGS += default_flags
-            self.context.env.ARFLAGS += default_flags
+            
+            self.context.env.CFLAGS += default_flags
+            self.context.env.CXXFLAGS += default_flags
 
     def environment(self, resolve_dependencies=False):
 
