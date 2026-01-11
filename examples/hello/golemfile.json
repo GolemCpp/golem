@@ -1,0 +1,11 @@
+{
+    "targets": [
+        {
+            "name": "hello",
+            "type": "program",
+            "source": [
+                "src"
+            ]
+        }
+    ]
+}
