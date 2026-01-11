@@ -10,7 +10,7 @@
     "targets": [
         {
             "name": "mylib",
-            "type": "lirbary",
+            "type": "library",
             "includes": ["mylib/include"],
             "source": ["mylib/src"],
             "defines": ["FOO_API_EXPORT"]
