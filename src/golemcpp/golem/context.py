@@ -79,25 +79,23 @@ class Context:
         def get_project_file_path(filname):
             return os.path.join(directory, filname)
 
-        self.project_path = get_project_file_path("golem.json")
+        self.project_path = get_project_file_path("golemfile.py")
+
+        if os.path.exists(self.project_path):
+            self.module = Module(directory)
+            self.project = self.module.project()
+
+        if self.project is not None:
+            return
+        
+        self.project_path = get_project_file_path("golemfile.json")
+
         if os.path.exists(self.project_path):
             json_object = None
             with io.open(self.project_path, 'r') as file:
                 json_object = json.load(file)
             self.project = Project.unserialize_from_json(json_object)
             self.module = None
-
-        if self.project is not None:
-            return
-
-        self.project_path = get_project_file_path("golemfile.py")
-        if not os.path.exists(self.project_path):
-            self.project_path = get_project_file_path("golem.py")
-        if not os.path.exists(self.project_path):
-            self.project_path = get_project_file_path("project.glm")
-        if os.path.exists(self.project_path):
-            self.module = Module(directory)
-            self.project = self.module.project()
 
     def get_dependencies_json_path(self):
 
@@ -4166,7 +4164,7 @@ class Context:
 
         if not found_recipe_dir:
             raise RuntimeError(
-                "ERROR: no project file found ('golem.json' or 'golemfile.py')"
+                "ERROR: no project file found ('golemfile.json' or 'golemfile.py')"
             )
 
         self.load_project(found_recipe_dir)

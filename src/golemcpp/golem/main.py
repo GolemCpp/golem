@@ -17,12 +17,8 @@ def main() -> int:
     print("=== Golem C++ Build System ===")
     sys.stdout.flush()
 
-    project_path = os.path.join(os.getcwd(), 'golem.json')
-    project_path_alt = os.path.join(os.getcwd(), 'golemfile.py')
-    if not os.path.exists(project_path_alt):
-        project_path_alt = os.path.join(os.getcwd(), 'golem.py')
-    if not os.path.exists(project_path_alt):
-        project_path_alt = os.path.join(os.getcwd(), 'project.glm')
+    project_path = os.path.join(os.getcwd(), 'golemfile.py')
+    project_path_alt = os.path.join(os.getcwd(), 'golemfile.json')
 
     golem_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
     golemcpp_data_path = Path(golem_path).parent.joinpath('data')
