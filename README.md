@@ -418,6 +418,11 @@ Here is a list of important features to add as a priority:
 - Return a sensible error message to the user when running golem commands in the wrong order
 - Generate API header and associated defines for libraries when `auto_api_name='MYLIB_API'` is defined (can possibly switch later to a systematic generation with a switch to disable the generation)
 - Add or improve recipes for the most popular dependencies (increase support for configuration options)
+- Add first integration test
+- Add GitHub Action to run pytest on all Python versions
+- Allow to define individual header files in export()
+- Add pre/post build scripts
+- Add user-defined options on Configuration to allow scripts in recipes to set special options (e.g. backend=opengl)
 - Add support for cppfront
 - Add support for C++ modules
 
@@ -439,6 +444,8 @@ Here is a list of other nice improvements to work on:
 - Detect when `/external:I` or `-isystem` are available before using them
 - Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
 - Generate by default `qmldir` and a `qrc` file for all the found QML files (allow to customize the namespace, or to disable generation)
+- Add a `golemfile.yml` format as project file
+
 
 Contributions are very welcome!
 
