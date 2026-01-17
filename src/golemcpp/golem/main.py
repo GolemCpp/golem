@@ -36,7 +36,8 @@ def main() -> int:
 
     sys.argv += ([] if user_defined_dir else ['--dir=' + os.getcwd()])
 
-    build_dir = os.path.join(os.getcwd(), golem_out, 'golem')
+    golem_out = os.path.join(os.getcwd(), golem_out)
+    build_dir = os.path.join(golem_out, 'golem')
 
     filein = open(os.path.join(golemcpp_data_path, 'wscript'))
     src = Template(filein.read())
@@ -64,7 +65,12 @@ def main() -> int:
                 os.system("rmdir /s /q %s" % path)
                 sleep(0.1)
         else:
-            shutil.rmtree(path)
+            if os.path.isfile(path):
+                os.remove(path)
+            elif os.path.islink(path):
+                os.unlink(path)
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
         return 0
 
     return 0
