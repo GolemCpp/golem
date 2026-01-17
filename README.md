@@ -426,6 +426,7 @@ Here is a list of important features to add as a priority:
 - Support parsing versions such as MAJOR.MINOR (without any PATCH defined)
 - Add support for cppfront
 - Add support for C++ modules
+- Implement [CPS](https://cps-org.github.io/cps/) ([sample](https://cps-org.github.io/cps/sample.html))
 
 Here is a list of important improvements to work on the long term:
 
