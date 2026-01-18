@@ -1,0 +1,2 @@
+module golem.qt-qml
+MainWindow 1.0 MainWindow.qml
