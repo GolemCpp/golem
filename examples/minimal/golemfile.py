@@ -15,7 +15,7 @@ def configure(project):
                    includes=['mylib/include'],
                    defines=['FOO_API_IMPORT'])
 
-    project.program(name='hello',
+    project.program(name='hello-minimal',
                     source=['src'],
                     use=['mylib'],
                     deps=['json'])
