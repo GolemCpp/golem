@@ -14,13 +14,6 @@
   - [How to install?](#how-to-install)
   - [First project](#first-project)
 - [💻 Commands](#-commands)
-  - [golem configure](#golem-configure)
-  - [golem resolve (if using dependencies)](#golem-resolve-if-using-dependencies)
-  - [golem dependencies (if using dependencies)](#golem-dependencies-if-using-dependencies)
-  - [golem build](#golem-build)
-  - [golem package](#golem-package)
-  - [golem clean](#golem-clean)
-  - [golem distclean](#golem-distclean)
 - [🚀 Roadmap](#-roadmap)
 - [💖 Thanks](#-thanks)
 - [❓ FAQ](#-faq)
@@ -155,131 +148,16 @@ All the commands are meant to be called at the root of your project, where the p
 
 The commands are presented in the order they are expected to be called, when needed to be called.
 
-### golem configure
-
-This command allows you to configure how to build your project. The choices are saved, therefore it needs to be run only once. Modifying the project file will not require re-executing this command.
-
-
-``` bash
-golem configure [options]
-```
-
-Here is **non-exhaustive** list of available options.
-
-<ins>Build options:</ins>
-
-- `--variant=(debug|release)`
-
-  Variants define a set of default flags/options for your build
-
-  Default: `debug`
-
-- `--link=(shared|static)`
-
-  Builds and links libraries dynamically (`shared`) or staticaly (`static`)
-
-  Default: `shared`
-
-<ins>IDE/support options:</ins>
-
-- `--clangd`
-
-  Generates files to support clangd
-
-  Default: `False`
-
-<ins>Qt options:</ins>
-
-- `--qtdir=<qt_dir>`
-
-  Directory to Qt, for example `C:\Qt\6.10.0\msvc2022_64`
-
-  Default: `None`
-
-**To learn more, read:**
-- About [golem configure](https://golemcpp.org/docs/commands/golem-configure/)
-
-### golem resolve (if using dependencies)
-
-This command resolves the version of each dependency, clones them in the cache system, and configures them.
-
-When defining **dependencies** in the project file, this command becomes **mandatory** after `golem configure`.
-
-This is the only command requiring a network access, although Golem can be setup to not require any network access.
-
-``` bash
-golem resolve
-```
-
-**To learn more, read:**
-- About [golem resolve](https://golemcpp.org/docs/commands/golem-resolve/)
-- About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
-- About managing [Dependencies](https://golemcpp.org/docs/advanced/dependencies/)
-- About the [Recipes](https://golemcpp.org/docs/advanced/recipes/)
-
-
-### golem dependencies (if using dependencies)
-
-When defining **dependencies** in the project file, this command becomes **mandatory** after `golem resolve`, and expects it to have run successfully.
-
-This command builds the dependencies needed to build the project.
-
-``` bash
-golem dependencies
-```
-
-**To learn more, read:**
-- About [golem dependencies](https://golemcpp.org/docs/commands/golem-dependencies/)
-
-### golem build
-
-This command builds the libraries and programs defined in the project file (e.g. `golemfile.py` or `golemfile.json`).
-
-If any dependency is needed, the artifacts are expected to be built using `golem resolve` and `golem dependencies` before hand.
-
-``` bash
-golem build
-```
-
-**To learn more, read:**
-- About [golem build](https://golemcpp.org/docs/commands/golem-build/)
-
-### golem package
-
-This command generates the packages defined in the project file.
-
-``` bash
-golem package
-```
-
-For now, Golem can generate:
-- MSI files for Windows with WiX
-- DMG files for MacOS
-- DEB files for Debian-based distributions
-
-**To learn more, read:**
-- About [golem package](https://golemcpp.org/docs/commands/golem-package/)
-
-### golem clean
-
-This command cleans up the objects built with `golem build`.
-
-``` bash
-golem clean
-```
-
-**To learn more, read:**
-- About [golem clean](https://golemcpp.org/docs/commands/golem-clean/)
-
-### golem distclean
-
-This command deletes the build directory.
-
-``` bash
-golem distclean
-```
-**To learn more, read:**
-- About [golem distclean](https://golemcpp.org/docs/commands/golem-distclean/)
+- [golem configure](https://golemcpp.org/docs/commands/golem-configure/) to configure your project
+- [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to retrieve and configure dependencies
+  * About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
+  * About managing [Dependencies](https://golemcpp.org/docs/advanced/dependencies/)
+  * About the [Recipes](https://golemcpp.org/docs/advanced/recipes/)
+- [golem dependencies (if using dependencies)](https://golemcpp.org/docs/commands/golem-dependencies/) to build dependencies
+- [golem build](https://golemcpp.org/docs/commands/golem-build/) to build your project (dependencies are expected to be built if any)
+- [golem package](https://golemcpp.org/docs/commands/golem-package/) to generate a package (the project is expected have built successfully)
+- [golem clean](https://golemcpp.org/docs/commands/golem-clean/) to clean up built object files
+- [golem distclean](https://golemcpp.org/docs/commands/golem-distclean/) to delete the build directory
 
 ## 🚀 Roadmap
 
