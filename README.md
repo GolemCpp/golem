@@ -108,16 +108,14 @@ Here is an example of `golemfile.py` to compile a **Hello World** program:
 
 ``` python
 def configure(project):
-
-    # The project variable is the entry point to declare dependencies, libraries and programs that make up the project.
-
     project.program(name='hello',
                     source=['src'])
-    
-    # 'hello' is the name of the program being compiled (e.g. hello.exe or hello-debug.exe)
-    # 'src' is the directory where all source files are expected to be found (recusrively) for 'hello'
-    
 ```
+
+The project variable is the entry point to declare dependencies, libraries and programs that make up the project.
+
+- `'hello'` is the name of the program being compiled (e.g. `hello.exe` or `hello-debug.exe`)
+- `'src'` is the directory where all source files are expected to be found (recursively) for 'hello'
 
 Here is `src/main.cpp`:
 
@@ -157,58 +155,55 @@ All the commands are meant to be called at the root of your project, where the p
 
 The commands are presented in the order they are expected to be called, when needed to be called.
 
-#### golem configure
+### golem configure
 
 This command allows you to configure how to build your project. The choices are saved, therefore it needs to be run only once. Modifying the project file will not require re-executing this command.
+
 
 ``` bash
 golem configure [options]
 ```
 
+Here is **non-exhaustive** list of available options.
+
 <ins>Build options:</ins>
 
-``` text
-# Directory where to build the project (default: ./build)
---dir=<build_dir>
+- `--variant=(debug|release)`
 
-# Variants define a set of default flags/options for your build (default: debug)
---variant=(debug|release)
+  Variants define a set of default flags/options for your build
 
-# Links the runtime dynamically (shared) or statically (static) (default: shared)
---runtime=(shared|static)
+  Default: `debug`
 
-# Builds and links libraries dynamically (shared) or staticaly (static) (default: shared)
---link=(shared|static)
+- `--link=(shared|static)`
 
-# Builds using the specfied architecture (default: <your_os_arch>)
---arch=(x64|x86)
-```
+  Builds and links libraries dynamically (`shared`) or staticaly (`static`)
+
+  Default: `shared`
 
 <ins>IDE/support options:</ins>
 
-``` text
-# Generates files to enable Microsoft C/C++ Extension's IntelliSense in VSCode (default: False)
---vscode
+- `--clangd`
 
-# Generates files to support clangd (default: False)
---clangd
+  Generates files to support clangd
 
-# Generates compile_commands.json files in ./build/golem/compile_commands/ (default: False)
---compile-commands
-```
+  Default: `False`
 
 <ins>Qt options:</ins>
 
-``` text
-# Directory to Qt, for example C:\Qt\6.10.0\msvc2022_64 (default: None)
---qtdir=<qt_dir>
-```
+- `--qtdir=<qt_dir>`
 
-#### golem resolve (if using dependencies)
+  Directory to Qt, for example `C:\Qt\6.10.0\msvc2022_64`
 
-When defining **dependencies** in the project file, this command becomes **mandatory** after `golem configure`.
+  Default: `None`
+
+**To learn more, read:**
+- About [golem configure](https://golemcpp.org/docs/commands/golem-configure/)
+
+### golem resolve (if using dependencies)
 
 This command resolves the version of each dependency, clones them in the cache system, and configures them.
+
+When defining **dependencies** in the project file, this command becomes **mandatory** after `golem configure`.
 
 This is the only command requiring a network access, although Golem can be setup to not require any network access.
 
@@ -216,125 +211,14 @@ This is the only command requiring a network access, although Golem can be setup
 golem resolve
 ```
 
-##### About the cache system
+**To learn more, read:**
+- About [golem resolve](https://golemcpp.org/docs/commands/golem-resolve/)
+- About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
+- About managing [Dependencies](https://golemcpp.org/docs/advanced/dependencies/)
+- About the [Recipes](https://golemcpp.org/docs/advanced/recipes/)
 
-By default, Golem stores dependencies in `~/.cache/golem`.
 
-To control where the dependencies are being cached, define the following environment variable:
-
-``` text
-GOLEM_DEFINE_CACHE_DIRECTORIES=<path1>=<regex1>|<path2>=<regex2>|...
-
-# <path> is a directory where the matched depencencies are stored
-# <regex> is defining which dependency needs to be stored in <path> based on the repository URL
-```
-
-For example, this will store all dependencies in `F:\CACHE`:
-
-``` text
-GOLEM_DEFINE_CACHE_DIRECTORIES=F:\CACHE=^.*$
-```
-
-> One interesting use case for this feature is to be able to split the cache in different directories to separate your own dependencies from others. By separating the cache, in a CI environment it allows you to only trigger rebuilds on a specified set of dependencies.
-
-To define a cache directory in read-only mode:
-
-``` test
-GOLEM_STATIC_CACHE_DIRECTORY=<path>
-GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX=<regex>
-
-# <path> is a directory where the matched depencencies are stored
-# <regex> is defining which dependency is already stored in <path> based on the repository URL
-```
-
-> This makes sure that the dependencies stored in it will stay untouched. In a CI environment, it guarantees that Golem won't mess with the static cache if an artifact is found missing, etc.
-
-Note that a static cache doesn't need to be defined with **GOLEM_DEFINE_CACHE_DIRECTORIES** to exist. The static cache definition is defined independantly.
-
-##### Managing dependencies
-
-It is expected in a complex project that dependencies have some dependencies in common, and sometimes they are conflicting with each other.
-
-The `master_dependencies.json` file solves this issue by overriding how dependencies should be resolved. It's a list of dependencies that `golem resolve` checks everytime it is encountering a dependency definition to replace it with the one found (if any) in the `master_dependencies.json`.
-
-> The most common use case is to force a specific version on a dependency accross a whole project.
-
-Here is how a `master_dependencies.json` looks like:
-
-``` json
-[
-    {
-        "repository": "https://github.com/nlohmann/json.git",
-        "version": "^3.0.0",
-        "variant": "release",
-        "shallow": true
-    }
-]
-```
-
-This overrides any reference to this dependency with the version `^3.0.0` and the release variant.
-
-The `master_dependencies.json` can be specified in multiple ways. By order of precedence:
-
-``` text
-# Call golem configure with an option pointing to the file 
---master-dependencies-configuration=<path_to_file>
-
-# Define in the project file where to find the file
-project.master_dependencies_configuration = '<path_to_file>'
-
-# Define an environment variable pointing to the file
-GOLEM_MASTER_DEPENDENCIES_CONFIGURATION=<path_to_file>
-
-# Define in the project file the repository where to find the file
-project.master_dependencies_repository = '<repository_url>'
-
-# Define an environment variable pointing to a repository containing: master_dependencies.json
-GOLEM_MASTER_DEPENDENCIES_REPOSITORY=<repository_url>
-```
-
-> Although useful to quickly try a `master_dependencies.json`, it is not recommended to define it in the project file itself for most projects.
-
-#### Managing recipes
-
-Golem aware dependencies, those having Golem project file defined at their root, can seemlessly refer to each other. But, when refering to a dependency unaware of Golem, Golem provides a recipe mechanism.
-
-By default, Golem provides a [recipe repository](https://github.com/GolemCpp/recipes) to find a corresponding project file for these dependencies unaware of Golem.
-
-Dependencies are uniquely identified by their repository URL. Their ID is constructed such as "https://github.com/nlohmann/json.git" becomes "json@com.github.nlohmann".
-
-A recipe repository contains directories named after these dependency IDs, and each directory contains a project file.
-
-This is how it looks like:
-
-``` text
-.
-├── boost@com.github.boostorg/
-│   └── golemfile.py
-├── json@com.github.nlohmann/
-│   └── golemfile.py
-├── spdlog@com.github.gabime/
-│   └── golemfile.py
-└── <etc>
-    └── golemfile.py
-``` 
-
-> For now, there is no project file per version mechanism, but this is in the Roadmap.
-
-A `golemfile.py` can use scripting to handle any build system, any situation.
-
-To override the default Golem recipe repository, and possibly have multiple sources for recipes:
-
-``` text
-# Define an environment variable pointing to the repositories
-GOLEM_RECIPES_REPOSITORIES=<repository_url_1>|<reposiroty_url_2>|...
-```
-
-> For now, there is no possibility to define a directory instead of a repository, but this is in the Roadmap.
-
-> When a dependency is missing, or not building properly, it is recommended to fork the Golem [recipe repository](https://github.com/GolemCpp/recipes), make the needed changes and create a Pull Request. Contributions are very welcome!
-
-#### golem dependencies (if using dependencies)
+### golem dependencies (if using dependencies)
 
 When defining **dependencies** in the project file, this command becomes **mandatory** after `golem resolve`, and expects it to have run successfully.
 
@@ -344,24 +228,23 @@ This command builds the dependencies needed to build the project.
 golem dependencies
 ```
 
-#### golem build
+**To learn more, read:**
+- About [golem dependencies](https://golemcpp.org/docs/commands/golem-dependencies/)
+
+### golem build
 
 This command builds the libraries and programs defined in the project file (e.g. `golemfile.py` or `golemfile.json`).
 
 If any dependency is needed, the artifacts are expected to be built using `golem resolve` and `golem dependencies` before hand.
 
 ``` bash
-# Build all the targets
 golem build
-
-# Build and show the compile commands
-golem build -v
-
-# Build specific targets
-golem build --targets=foo,bar
 ```
 
-#### golem package
+**To learn more, read:**
+- About [golem build](https://golemcpp.org/docs/commands/golem-build/)
+
+### golem package
 
 This command generates the packages defined in the project file.
 
@@ -374,9 +257,10 @@ For now, Golem can generate:
 - DMG files for MacOS
 - DEB files for Debian-based distributions
 
-Golem also provides a hook mechanism for scripting purposes after a package is generated.
+**To learn more, read:**
+- About [golem package](https://golemcpp.org/docs/commands/golem-package/)
 
-#### golem clean
+### golem clean
 
 This command cleans up the objects built with `golem build`.
 
@@ -384,13 +268,18 @@ This command cleans up the objects built with `golem build`.
 golem clean
 ```
 
-#### golem distclean
+**To learn more, read:**
+- About [golem clean](https://golemcpp.org/docs/commands/golem-clean/)
+
+### golem distclean
 
 This command deletes the build directory.
 
 ``` bash
 golem distclean
 ```
+**To learn more, read:**
+- About [golem distclean](https://golemcpp.org/docs/commands/golem-distclean/)
 
 ## 🚀 Roadmap
 
