@@ -3,6 +3,7 @@ import sys
 import types
 import shutil
 import subprocess
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -92,6 +93,23 @@ def make_directory(base, path=None):
     if not os.path.exists(directory):
         os.makedirs(directory)
     return directory
+
+
+def get_golemcpp_golem_dir():
+    return os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+
+
+def get_golemcpp_data_dir():
+    return os.path.join(get_golemcpp_dir(), 'data')
+
+
+def get_golemcpp_dir():
+    return Path(get_golemcpp_golem_dir()).parent
+
+
+def make_golem_command(command_name):
+    golem_path = get_golemcpp_golem_dir()
+    return ['python3', golem_path, command_name]
 
 
 def generate_recipe_id(url):

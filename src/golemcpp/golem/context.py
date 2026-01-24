@@ -251,12 +251,6 @@ class Context:
     def get_project_dir(self):
         return self.context.options.dir
 
-    def get_golemcpp_dir(self):
-        return Path(os.path.abspath(os.path.dirname(os.path.realpath(__file__)))).parent
-
-    def get_golemcpp_data_dir(self):
-        return os.path.join(self.get_golemcpp_dir(), 'data')
-
     def make_cache_dirs(self):
         cache_dir_list = []
 
@@ -2959,7 +2953,7 @@ class Context:
             'compilation_database_path': os.path.abspath(os.path.dirname(compiler_commands_path))
         }
         
-        config_file_template_path = os.path.join(self.get_golemcpp_data_dir(), 'clangd.template')
+        config_file_template_path = os.path.join(helpers.get_golemcpp_data_dir(), 'clangd.template')
         with open(config_file_template_path, 'r') as config_file_template:
             config_file_template_src = string.Template(config_file_template.read())
             config_file_src = config_file_template_src.safe_substitute(data)

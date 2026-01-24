@@ -20,7 +20,7 @@ def main() -> int:
     project_path = os.path.join(os.getcwd(), 'golemfile.py')
     project_path_alt = os.path.join(os.getcwd(), 'golemfile.json')
 
-    golem_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+    golem_path = helpers.get_golemcpp_golem_dir()
     golemcpp_data_path = Path(golem_path).parent.joinpath('data')
 
     user_defined_dir = None
