@@ -1,0 +1,33 @@
+{
+    "targets": [
+        {
+            "name": "hello-qt-qml",
+            "type": "program",
+            "source": [
+                "src",
+                "qml"
+            ],
+            "moc": [
+                "src"
+            ],
+            "features": [
+                "QT6CORE",
+                "QT6QML",
+                "QT6QUICK"
+            ],
+            "qmldirs": [
+                "qml"
+            ],
+            "?msvc": {
+                "cxxflags": [
+                    "/std:c++17"
+                ]
+            },
+            "?!msvc": {
+                "cxxflags": [
+                    "-std=c++17"
+                ]
+            }
+        }
+    ]
+}
