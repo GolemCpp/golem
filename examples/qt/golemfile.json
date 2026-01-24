@@ -1,0 +1,28 @@
+{
+    "targets": [
+        {
+            "name": "hello-qt",
+            "type": "program",
+            "source": [
+                "src"
+            ],
+            "moc": [
+                "src"
+            ],
+            "features": [
+                "QT6CORE",
+                "QT6WIDGETS"
+            ],
+            "?msvc": {
+                "cxxflags": [
+                    "/std:c++17"
+                ]
+            },
+            "?!msvc": {
+                "cxxflags": [
+                    "-std=c++17"
+                ]
+            }
+        }
+    ]
+}
