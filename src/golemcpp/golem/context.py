@@ -67,9 +67,9 @@ class Context:
             if default is not None:
                 return default
             return None
-        build_number_key = 'BUILD_NUMBER'
-        if build_number_key in os.environ:
-            return int(os.environ[build_number_key])
+        build_number_key = helpers.get_environ('BUILD_NUMBER')
+        if build_number_key:
+            return int(build_number_key)
         return 0
 
     def load_project(self, directory=None):
@@ -285,20 +285,29 @@ class Context:
 
     def get_static_cache_dir_option(self):
         static_cache_dir = self.context.options.static_cache_dir
-        if not static_cache_dir and 'GOLEM_STATIC_CACHE_DIRECTORY' in os.environ and os.environ[
-                'GOLEM_STATIC_CACHE_DIRECTORY']:
-            static_cache_dir = os.environ['GOLEM_STATIC_CACHE_DIRECTORY']
-        return static_cache_dir
+        if static_cache_dir:
+            return static_cache_dir
+        
+        static_cache_dir = helpers.get_environ('GOLEM_STATIC_CACHE_DIRECTORY')
+        if static_cache_dir:
+            return static_cache_dir
+        
+        return None
 
     def get_master_dependencies_configuration(self):
         master_dependencies_configuration = self.context.options.master_dependencies_configuration
-        if not master_dependencies_configuration and self.project.master_dependencies_configuration:
-            master_dependencies_configuration = self.project.master_dependencies_configuration
-        if not master_dependencies_configuration and 'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION' in os.environ and os.environ[
-                'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION']:
-            master_dependencies_configuration = os.environ[
-                'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION']
-        return master_dependencies_configuration
+        if master_dependencies_configuration:
+            return master_dependencies_configuration
+
+        master_dependencies_configuration = self.project.master_dependencies_configuration
+        if master_dependencies_configuration:
+            return master_dependencies_configuration
+
+        master_dependencies_configuration = helpers.get_environ('GOLEM_MASTER_DEPENDENCIES_CONFIGURATION')
+        if master_dependencies_configuration:
+            return master_dependencies_configuration
+        
+        return None
 
     def make_master_dependencies_configuration(self):
         return self.make_local_path_absolute(
@@ -306,19 +315,20 @@ class Context:
 
     def get_master_dependencies_repository(self):
         master_dependencies_repository = self.project.master_dependencies_repository
-        if not self.project.master_dependencies_repository and 'GOLEM_MASTER_DEPENDENCIES_REPOSITORY' in os.environ and os.environ[
-                'GOLEM_MASTER_DEPENDENCIES_REPOSITORY']:
-            master_dependencies_repository = os.environ[
-                'GOLEM_MASTER_DEPENDENCIES_REPOSITORY']
-        return master_dependencies_repository
+        if master_dependencies_repository:
+            return master_dependencies_repository
+
+        master_dependencies_repository = helpers.get_environ('GOLEM_MASTER_DEPENDENCIES_REPOSITORY')
+        if master_dependencies_repository:
+            return master_dependencies_repository
+            
+        return None
 
     def load_master_dependencies_configuration(self):
 
         if not self.resolved_master_dependencies:
-            master_dependencies_configuration = self.make_master_dependencies_configuration(
-            )
-            master_dependencies_repository = self.get_master_dependencies_repository(
-            )
+            master_dependencies_configuration = self.make_master_dependencies_configuration()
+            master_dependencies_repository = self.get_master_dependencies_repository()
             if not master_dependencies_configuration and master_dependencies_repository:
                 repo_path = self.clone_master_dependencies_repository(
                     master_dependencies_repository)
@@ -352,11 +362,14 @@ class Context:
 
     def get_static_cache_dependencies_regex(self):
         static_cache_dependencies_regex = self.context.options.static_cache_dependencies_regex
-        if not static_cache_dependencies_regex and 'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX' in os.environ and os.environ[
-                'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX']:
-            static_cache_dependencies_regex = os.environ[
-                'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX']
-        return static_cache_dependencies_regex
+        if static_cache_dependencies_regex:
+            return static_cache_dependencies_regex
+
+        static_cache_dependencies_regex = helpers.get_environ('GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX')
+        if static_cache_dependencies_regex:
+            return static_cache_dependencies_regex
+
+        return None
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
@@ -387,11 +400,14 @@ class Context:
 
     def get_define_cache_directories_string(self):
         cache_directories_string = self.context.options.define_cache_directories
-        if not cache_directories_string and 'GOLEM_DEFINE_CACHE_DIRECTORIES' in os.environ and os.environ[
-                'GOLEM_DEFINE_CACHE_DIRECTORIES']:
-            cache_directories_string = os.environ[
-                'GOLEM_DEFINE_CACHE_DIRECTORIES']
-        return cache_directories_string
+        if cache_directories_string:
+            return cache_directories_string
+
+        cache_directories_string = helpers.get_environ('GOLEM_DEFINE_CACHE_DIRECTORIES')
+        if cache_directories_string:
+            return cache_directories_string
+
+        return None
 
     def make_define_cache_directories_list(self):
         cache_directories_string = self.get_define_cache_directories_string()
@@ -3700,13 +3716,16 @@ class Context:
     def make_android_ndk_path(self, path=None):
         android_ndk_path = self.context.options.android_ndk
 
-        if 'ANDROID_NDK_ROOT' in os.environ and os.environ['ANDROID_NDK_ROOT']:
-            android_ndk_path = os.environ['ANDROID_NDK_ROOT']
+        if not android_ndk_path:
+            android_ndk_path = helpers.get_environ('ANDROID_NDK_ROOT')
 
-        if path is not None:
+        if android_ndk_path and path:
             android_ndk_path = os.path.join(android_ndk_path, path)
 
-        return android_ndk_path
+        if android_ndk_path:
+            return android_ndk_path
+
+        return None
 
     def has_android_ndk_path(self):
         return self.make_android_ndk_path() != ''
@@ -3747,14 +3766,18 @@ class Context:
 
     def make_android_sdk_path(self):
         android_sdk_path = self.context.options.android_sdk
+        if android_sdk_path:
+            return android_sdk_path
 
-        if 'ANDROID_HOME' in os.environ and os.environ['ANDROID_HOME']:
-            android_sdk_path = os.environ['ANDROID_HOME']
+        android_sdk_path = helpers.get_environ('ANDROID_SDK_ROOT')
+        if android_sdk_path:
+            return android_sdk_path
 
-        if 'ANDROID_SDK_ROOT' in os.environ and os.environ['ANDROID_SDK_ROOT']:
-            android_sdk_path = os.environ['ANDROID_SDK_ROOT']
+        android_sdk_path = helpers.get_environ('ANDROID_HOME')
+        if android_sdk_path:
+            return android_sdk_path
 
-        return android_sdk_path
+        return None
 
     def has_android_sdk_path(self):
         return self.make_android_sdk_path() != ''
@@ -3766,9 +3789,12 @@ class Context:
 
     def make_android_jdk_path(self):
         android_jdk_path = self.context.options.android_jdk
+        if android_jdk_path:
+            return android_jdk_path
 
-        if 'JAVA_HOME' in os.environ and os.environ['JAVA_HOME']:
-            android_jdk_path = os.environ['JAVA_HOME']
+        android_jdk_path = helpers.get_environ('JAVA_HOME')
+        if android_jdk_path:
+            return android_jdk_path
 
         return android_jdk_path
 
@@ -3782,10 +3808,12 @@ class Context:
 
     def make_android_ndk_platform(self):
         android_ndk_platform = self.context.options.android_ndk_platform
+        if android_ndk_platform:
+            return android_ndk_platform
 
-        if 'ANDROID_NDK_PLATFORM' in os.environ and os.environ[
-                'ANDROID_NDK_PLATFORM']:
-            android_ndk_platform = os.environ['ANDROID_NDK_PLATFORM']
+        android_ndk_platform = helpers.get_environ('ANDROID_NDK_PLATFORM')
+        if android_ndk_platform:
+            return android_ndk_platform
 
         return android_ndk_platform
 
@@ -3799,10 +3827,12 @@ class Context:
 
     def make_android_sdk_platform(self):
         android_sdk_platform = self.context.options.android_sdk_platform
+        if android_sdk_platform:
+            return android_sdk_platform
 
-        if 'ANDROID_SDK_PLATFORM' in os.environ and os.environ[
-                'ANDROID_SDK_PLATFORM']:
-            android_sdk_platform = os.environ['ANDROID_SDK_PLATFORM']
+        android_sdk_platform = helpers.get_environ('ANDROID_SDK_PLATFORM')
+        if android_sdk_platform:
+            return android_sdk_platform
 
         return android_sdk_platform
 
@@ -3819,9 +3849,12 @@ class Context:
 
     def make_android_arch(self):
         android_arch = self.context.options.android_arch
+        if android_arch:
+            return android_arch
 
-        if 'ANDROID_ARCH' in os.environ and os.environ['ANDROID_ARCH']:
-            android_arch = os.environ['ANDROID_ARCH']
+        android_arch = helpers.get_environ('ANDROID_ARCH')
+        if android_arch:
+            return android_arch
 
         return android_arch
 
@@ -4129,11 +4162,9 @@ class Context:
         return repo_path
 
     def load_recipes_repositories(self):
-        recipe_repositories_env_key = 'GOLEM_RECIPES_REPOSITORIES'
-
-        if recipe_repositories_env_key in os.environ:
-            recipes_repositories = os.environ[recipe_repositories_env_key].split(
-                '|')
+        recipes_repositories = helpers.get_environ('GOLEM_RECIPES_REPOSITORIES')
+        if recipes_repositories:
+            recipes_repositories = recipes_repositories.split('|')
         else:
             # Default recipes repository
             recipes_repositories = ['https://github.com/GolemCpp/recipes.git']

@@ -79,6 +79,12 @@ def remove_tree(ctx, path):
             shutil.rmtree(path)
 
 
+def get_environ(env_name):
+    if env_name in os.environ and os.environ[env_name] and len(str(os.environ[env_name])) > 0:
+        return str(os.environ[env_name])
+    return None
+
+
 def make_directory(base, path=None):
     directory = base
     if path is not None:
