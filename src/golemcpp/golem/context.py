@@ -1684,46 +1684,61 @@ class Context:
                                          should_clean=should_clean_repo)
         build_path = self.get_dep_build_location(dep, cache_dir)
 
-        global_dependencies_configuration = self.get_global_dependencies_configuration_file(
-        )
+        global_dependencies_configuration = self.get_global_dependencies_configuration_file()
 
-        helpers.run_task([
-            'golem', 'configure', '--targets=' + dep.name, '--runtime=' +
-            (self.context.options.runtime
-             if not dep.runtime else dep.runtime[0]), '--link=' +
-            (self.context.options.link if not dep.link else dep.link[0]),
-            '--arch=' + self.context.options.arch, '--variant=' +
-            (self.context.options.variant
-             if not dep.variant else dep.variant[0]), '--export=' + dep_path,
-            '--no-copy-artifacts', '--no-copy-licenses',
-            '--cache-dir=' + self.make_writable_cache_dir(),
-            '--static-cache-dir=' + self.make_static_cache_dir(),
-            '--static-cache-dependencies-regex=' +
-            self.get_static_cache_dependencies_regex(), '--dir=' + build_path,
-            '--resolved-dependencies-directory=' + build_path,
+        dir_option = [
+            '--dir={}'.format(build_path)
+        ]
+
+        configure_options = dir_option + [
+            '--no-copy-artifacts',
+            '--no-copy-licenses',
             '--no-recipes-repositories-fetch',
-            '--only-update-dependencies-regex=' +
-            self.get_only_update_dependencies_regex(),
-            '--master-dependencies-configuration=' +
-            self.resolved_master_dependencies,
-            '--global-dependencies-configuration=' +
-            global_dependencies_configuration, "--define-cache-directories=" +
-            self.get_define_cache_directories()
-        ] + (['--force-version=' +
-              dep.resolved_version] if dep.shallow else []),
-                         cwd=repo_path)
+            '--targets={}'.format(dep.name),
+            '--runtime={}'.format(self.context.options.runtime if not dep.runtime else dep.runtime[0]),
+            '--link={}'.format(self.context.options.link if not dep.link else dep.link[0]),
+            '--arch={}'.format(self.context.options.arch),
+            '--variant={}'.format(self.context.options.variant if not dep.variant else dep.variant[0]),
+            '--export={}'.format(dep_path),
+            '--cache-dir={}'.format(self.make_writable_cache_dir()),
+            '--static-cache-dir={}'.format(self.make_static_cache_dir()),
+            '--static-cache-dependencies-regex={}'.format(self.get_static_cache_dependencies_regex()),
+            '--resolved-dependencies-directory={}'.format(build_path),
+            '--only-update-dependencies-regex={}'.format(self.get_only_update_dependencies_regex()),
+            '--master-dependencies-configuration={}'.format(self.resolved_master_dependencies),
+            '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
+            '--define-cache-directories={}'.format(self.get_define_cache_directories())
+        ]
+
+        if dep.shallow:
+            configure_options += [
+                '--force-version="{}"'.format(dep.resolved_version)
+            ]
+
+        dependencies_options = dir_option + []
+
+        command_options = dir_option + []
+
+        export_options = dir_option + []
+
+        helpers.run_task(
+            helpers.make_golem_command('configure') + configure_options,
+            cwd=repo_path)
 
         if command == 'build':
-            helpers.run_task(['golem', 'dependencies', '--dir=' + build_path],
-                             cwd=repo_path)
+            helpers.run_task(
+                helpers.make_golem_command('dependencies') + dependencies_options,
+                cwd=repo_path)
 
-        helpers.run_task(['golem', command, '--dir=' + build_path],
-                         cwd=repo_path)
+        helpers.run_task(
+            helpers.make_golem_command(command) + command_options,
+            cwd=repo_path)
 
         if command == 'build':
-            helpers.run_task(['golem', 'export', '--dir=' + build_path],
-                             cwd=repo_path,
-                             stdout=subprocess.DEVNULL)
+            helpers.run_task(
+                helpers.make_golem_command('export') + export_options,
+                cwd=repo_path,
+                stdout=subprocess.DEVNULL)
 
     def can_open_json(self, dep, cache_dir, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep,

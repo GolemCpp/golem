@@ -218,10 +218,10 @@ def copy_file_if_recent(source_path, destination_directory, callback=None):
 
 def run_task(args, cwd=None, debug=False, **kwargs):
     if debug:
-        print("Run {}".format(' '.join(args)))
+        print("Run \"{}\" from \"{}\"".format(' '.join(args), cwd))
     process = subprocess.Popen(args,
                                cwd=cwd,
-                               shell=sys.platform.startswith('win32'),
+                               shell=False,
                                **kwargs)
     ret = process.wait()
     if ret != 0:
