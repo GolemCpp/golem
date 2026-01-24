@@ -1,0 +1,8 @@
+[
+	{
+		"name": "json",
+		"repository": "https://github.com/nlohmann/json.git",
+		"version": "3.10.0",
+		"shallow": true
+	}
+]
