@@ -286,7 +286,7 @@ class Context:
         if static_cache_dir:
             return static_cache_dir
         
-        return None
+        return ''
 
     def get_master_dependencies_configuration(self):
         master_dependencies_configuration = self.context.options.master_dependencies_configuration
@@ -301,7 +301,7 @@ class Context:
         if master_dependencies_configuration:
             return master_dependencies_configuration
         
-        return None
+        return ''
 
     def make_master_dependencies_configuration(self):
         return self.make_local_path_absolute(
@@ -316,7 +316,7 @@ class Context:
         if master_dependencies_repository:
             return master_dependencies_repository
             
-        return None
+        return ''
 
     def load_master_dependencies_configuration(self):
 
@@ -363,7 +363,7 @@ class Context:
         if static_cache_dependencies_regex:
             return static_cache_dependencies_regex
 
-        return None
+        return ''
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
@@ -401,7 +401,7 @@ class Context:
         if cache_directories_string:
             return cache_directories_string
 
-        return None
+        return ''
 
     def make_define_cache_directories_list(self):
         cache_directories_string = self.get_define_cache_directories_string()
@@ -2208,7 +2208,6 @@ class Context:
         return None
 
     def find_writable_cache_dir(self, dep, cache_conf):
-
         for cache_dir in cache_conf.locations:
             if not cache_dir.regex or cache_dir.is_static:
                 continue
@@ -3734,7 +3733,7 @@ class Context:
         if android_ndk_path:
             return android_ndk_path
 
-        return None
+        return ''
 
     def has_android_ndk_path(self):
         return self.make_android_ndk_path() != ''
@@ -3786,7 +3785,7 @@ class Context:
         if android_sdk_path:
             return android_sdk_path
 
-        return None
+        return ''
 
     def has_android_sdk_path(self):
         return self.make_android_sdk_path() != ''
@@ -3805,7 +3804,7 @@ class Context:
         if android_jdk_path:
             return android_jdk_path
 
-        return android_jdk_path
+        return ''
 
     def has_android_jdk_path(self):
         return self.make_android_jdk_path() != ''
@@ -3824,7 +3823,7 @@ class Context:
         if android_ndk_platform:
             return android_ndk_platform
 
-        return android_ndk_platform
+        return ''
 
     def has_android_ndk_platform(self):
         return self.make_android_ndk_platform() != ''
@@ -3843,7 +3842,7 @@ class Context:
         if android_sdk_platform:
             return android_sdk_platform
 
-        return android_sdk_platform
+        return ''
 
     def has_android_sdk_platform(self):
         return self.make_android_sdk_platform() != ''
@@ -3865,7 +3864,7 @@ class Context:
         if android_arch:
             return android_arch
 
-        return android_arch
+        return ''
 
     def has_android_arch(self):
         return self.make_android_arch() != ''
@@ -3875,7 +3874,6 @@ class Context:
         assert android_arch != ''
 
     def configure_compiler(self):
-
         if self.is_android():
             self.check_android_ndk_platform()
             self.check_android_arch()
@@ -4269,7 +4267,6 @@ class Context:
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
-
         self.load_recipe()
 
         tasks_and_targets = self.get_tasks_and_targets_to_process()
