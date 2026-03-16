@@ -1,0 +1,7 @@
+/.clangd
+/build
+/dependencies.json
+/cache-default
+/cache-deps
+/cache-recipes
+/cache-static
