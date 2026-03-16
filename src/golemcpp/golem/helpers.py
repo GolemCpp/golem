@@ -113,10 +113,30 @@ def make_golem_command(command_name):
 
 
 def generate_recipe_id(url):
-    url = url.replace('file:///', 'file://')
+    is_filesystem = False
+    is_http = False
+    is_ssh = False
+
+    if os.path.exists(url):
+        url = 'file://' + url
+    if url.startswith('file:///'):
+        url = url.replace('file:///', 'file://')
+    
+    if url.startswith('file://'):
+        is_filesystem = True
+    elif url.startswith('http://') or url.startswith('https://'):
+        is_http = True
+    elif url.startswith('ssh://'):
+        is_ssh = True
+    else:
+        is_ssh = True
+    
     o = urlparse(url)
-    host = o.hostname.split('.')
-    host.reverse()
+    if is_filesystem:
+        host = ['fsys'] + o.hostname.split('.')
+    else:
+        host = o.hostname.split('.')
+        host.reverse()
     path = list(filter(None, o.path.split('/')))
 
     if len(path) > 0 and path[-1].endswith('.git'):
@@ -215,8 +235,59 @@ def copy_file_if_recent(source_path, destination_directory, callback=None):
     copy_file(source_path=source_path, destination_path=destination_path)
     return True
 
+def is_git_repository(path):
+    git_index = os.path.join(path, '.git', 'HEAD')
+    return os.path.exists(git_index)
 
-def run_task(args, cwd=None, debug=False, **kwargs):
+def is_not_git_repository(path):
+    git_dir = os.path.join(path, '.git')
+    return not os.path.exists(git_dir)
+
+def does_git_command_need_no_repository(args):
+    if args[1] in ['init', 'clone']:
+        return True
+    return False
+
+def does_git_command_need_nothing(args):
+    if args[1] in ['ls-remote']:
+        return True
+    return False
+
+def validate_git_command(args, cwd):
+    if does_git_command_need_no_repository(args=args):
+        if not is_not_git_repository(path=cwd):
+            raise RuntimeError(
+                "Already a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
+    elif does_git_command_need_nothing(args=args):
+        pass
+    else:
+        # Needs a repository
+        if not is_git_repository(path=cwd):
+            raise RuntimeError(
+                "Not a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
+
+def run_git(params, cwd, **kwargs):
+    args = ['git'] + params
+
+    validate_git_command(args=args, cwd=cwd)
+    
+    run_task(args=args, cwd=cwd, **kwargs)
+
+def check_git_output(params, cwd, **kwargs):
+    args = ['git'] + params
+
+    validate_git_command(args=args, cwd=cwd)
+
+    return subprocess.check_output(args, cwd=cwd, **kwargs)
+
+def call_git(params, cwd, **kwargs):
+    args = ['git'] + params
+
+    validate_git_command(args=args, cwd=cwd)
+
+    return subprocess.call(args, cwd=cwd, **kwargs)
+
+def run_task(args, cwd=None, debug=True, **kwargs):
     if debug:
         print("Run \"{}\" from \"{}\"".format(' '.join(args), cwd))
     process = subprocess.Popen(args,

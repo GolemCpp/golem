@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 from golemcpp.golem import helpers
 
 
@@ -31,7 +32,11 @@ def default_cached_dir():
 class CacheConf:
     def __init__(self):
         self.remote = ''
-        self.locations = [default_cached_dir()]
+        self.locations = []
 
     def __str__(self):
         return helpers.print_obj(self)
+
+class CacheResolutionMode(Enum):
+    STRICT = "strict"
+    WEAK = "weak"

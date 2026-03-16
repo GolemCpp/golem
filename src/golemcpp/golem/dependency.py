@@ -49,9 +49,9 @@ class Dependency(Configuration):
         if self.resolved_hash:
             return self.resolved_hash
 
-        tags = subprocess.check_output(
-            ['git', 'ls-remote', '--tags',
-             self.repository]).decode(sys.stdout.encoding)
+        tags = helpers.check_git_output(
+            ['ls-remote', '--tags', self.repository],
+            cwd=os.getcwd()).decode(sys.stdout.encoding)
         tags = tags.split('\n')
         tmp = ''
         for line in tags:
@@ -68,10 +68,11 @@ class Dependency(Configuration):
 
         found_version = Dependency.find_version(versions_list, self.version)
         if found_version:
-            hash = subprocess.check_output([
-                'git', 'ls-remote', '--tags', self.repository,
+            hash = helpers.check_git_output([
+                'ls-remote', '--tags', self.repository,
                 'refs/tags/' + found_version
-            ]).decode(sys.stdout.encoding)
+            ],
+            cwd=os.getcwd()).decode(sys.stdout.encoding)
             if not hash:
                 raise RuntimeError(
                     "Can't find any hash related to found tag {}".format(
@@ -82,9 +83,9 @@ class Dependency(Configuration):
             self.resolved_version = found_version
         else:
             self.resolved_version = self.version
-            hash = subprocess.check_output(
-                ['git', 'ls-remote', '--heads', self.repository,
-                 self.version]).decode(sys.stdout.encoding)
+            hash = helpers.check_git_output(
+                ['ls-remote', '--heads', self.repository, self.version],
+                cwd=os.getcwd()).decode(sys.stdout.encoding)
             if hash:
                 hash = hash.splitlines()[0]
                 hash = hash.split('\t')[0]

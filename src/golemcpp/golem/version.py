@@ -152,8 +152,8 @@ class Version:
         version_string = None
 
         try:
-            version_string = subprocess.check_output(
-                ['git', 'describe', '--long', '--tags', '--dirty=-d'],
+            version_string = helpers.check_git_output(
+                ['describe', '--long', '--tags', '--dirty=-d'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
             version_string = version_string.splitlines()[0]
@@ -168,8 +168,8 @@ class Version:
         version_string = None
 
         try:
-            version_string = subprocess.check_output(
-                ['git', 'describe', '--abbrev=0', '--tags'],
+            version_string = helpers.check_git_output(
+                ['describe', '--abbrev=0', '--tags'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
             version_string = version_string.splitlines()[0]
@@ -183,8 +183,8 @@ class Version:
         version_string = None
 
         try:
-            version_string = subprocess.check_output(
-                ['git', 'rev-parse', 'HEAD'],
+            version_string = helpers.check_git_output(
+                ['rev-parse', 'HEAD'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
             version_string = version_string.splitlines()[0]
@@ -202,8 +202,8 @@ class Version:
             return ''
 
         try:
-            message = subprocess.check_output(
-                ['git', 'log', '--format=%B', '-n', '1', commit_hash],
+            message = helpers.check_git_output(
+                ['log', '--format=%B', '-n', '1', commit_hash],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
             message = message.strip()
@@ -218,8 +218,8 @@ class Version:
         branch = None
 
         try:
-            branch = subprocess.check_output(
-                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            branch = helpers.check_git_output(
+                ['rev-parse', '--abbrev-ref', 'HEAD'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
             branch = branch.strip()

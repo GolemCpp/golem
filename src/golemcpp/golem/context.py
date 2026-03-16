@@ -15,7 +15,7 @@ import string
 from datetime import datetime
 from copy import deepcopy
 from golemcpp.golem.module import Module
-from golemcpp.golem.cache import CacheConf, CacheDir
+from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionMode
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
 from golemcpp.golem import helpers
@@ -254,30 +254,64 @@ class Context:
     def make_cache_dirs(self):
         cache_dir_list = []
 
-        cache_dir = self.make_writable_cache_dir()
+        cache_dir = self.make_cache_directory()
         if cache_dir:
-            cache_dir_list.append(CacheDir(cache_dir, False))
+            cache_dir_list.append(cache_dir)
 
-        defined_cached_directories = self.make_define_cache_directories_list()
-        cache_dir_list += defined_cached_directories
+        defined_cache_directories = self.make_define_cache_directories()
+        cache_dir_list += defined_cache_directories
 
-        static_cache_dir = self.make_static_cache_dir()
-        if static_cache_dir:
-            cache_dir_list.append(CacheDir(static_cache_dir, True))
+        defined_static_cached_directories = self.make_define_static_cache_directories()
+        cache_dir_list += defined_static_cached_directories
 
         return cache_dir_list
 
-    def make_writable_cache_dir(self):
-        cache_dir = self.make_local_path_absolute(
-            path=self.context.options.cache_dir)
+    def get_cache_directory(self):
+        cache_dir = self.context.options.cache_dir
+        if cache_dir:
+            return cache_dir
+            
+        cache_dir = self.context.options.cache_directory
         if cache_dir:
             return cache_dir
 
-        cache_dir = cache.default_cached_dir().location
+        cache_dir = helpers.get_environ('GOLEM_CACHE_DIRECTORY')
+        if cache_dir:
+            return cache_dir
+
+        return cache.default_cached_dir().location
+
+    def make_cache_directory(self):
+        cache_dir = self.get_cache_directory()
+        if not cache_dir:
+            return None
+
+        cache_dir = self.make_local_path_absolute(path=cache_dir)
+
+        return CacheDir(location=cache_dir,
+                        is_static=False)
+
+    def make_cache_dir_option(self):
+        cache_dir = self.get_cache_directory()
+        if not cache_dir:
+            return ''
+
+        cache_dir = self.make_local_path_absolute(path=cache_dir)
 
         return cache_dir
 
-    def get_static_cache_dir_option(self):
+    def get_static_cache_dependencies_regex(self):
+        static_cache_dependencies_regex = self.context.options.static_cache_dependencies_regex
+        if static_cache_dependencies_regex:
+            return static_cache_dependencies_regex
+
+        static_cache_dependencies_regex = helpers.get_environ('GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX')
+        if static_cache_dependencies_regex:
+            return static_cache_dependencies_regex
+
+        return ''
+
+    def get_static_cache_dir(self):
         static_cache_dir = self.context.options.static_cache_dir
         if static_cache_dir:
             return static_cache_dir
@@ -287,6 +321,21 @@ class Context:
             return static_cache_dir
         
         return ''
+
+    def make_static_cache(self):
+        static_cache_regex = self.get_static_cache_dependencies_regex()
+        if not static_cache_regex:
+            static_cache_regex = None
+
+        static_cache_dir = self.get_static_cache_dir()
+        if not static_cache_dir:
+            return None
+
+        static_cache_dir = self.make_local_path_absolute(path=static_cache_dir)
+
+        return CacheDir(location=static_cache_dir,
+                        is_static=True,
+                        regex=static_cache_regex)
 
     def get_master_dependencies_configuration(self):
         master_dependencies_configuration = self.context.options.master_dependencies_configuration
@@ -354,21 +403,10 @@ class Context:
 
         return master_dependencies
 
-    def get_static_cache_dependencies_regex(self):
-        static_cache_dependencies_regex = self.context.options.static_cache_dependencies_regex
-        if static_cache_dependencies_regex:
-            return static_cache_dependencies_regex
-
-        static_cache_dependencies_regex = helpers.get_environ('GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX')
-        if static_cache_dependencies_regex:
-            return static_cache_dependencies_regex
-
-        return ''
-
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
 
-    def parse_cache_directories_string(self, string):
+    def parse_cache_directories_string(self, string, is_static):
 
         dirs = []
         cache_directories_pairs = string.split('|')
@@ -381,18 +419,73 @@ class Context:
             cache_path = cache_definition[0]
             cache_regex = cache_definition[1]
 
-            _ = re.compile(cache_regex)
+            if cache_regex:
+                _ = re.compile(cache_regex)
+            else:
+                cache_regex = None
 
             cache_path = self.make_local_path_absolute(path=cache_path)
 
             cache = CacheDir(location=cache_path,
-                             is_static=False,
+                             is_static=is_static,
                              regex=cache_regex)
             dirs.append(cache)
 
         return dirs
 
-    def get_define_cache_directories_string(self):
+    def get_define_static_cache_directories(self):
+        static_cache_directories_string = self.context.options.define_static_cache_directories
+        if static_cache_directories_string:
+            return static_cache_directories_string
+
+        static_cache_directories_string = helpers.get_environ('GOLEM_DEFINE_STATIC_CACHE_DIRECTORIES')
+        if static_cache_directories_string:
+            return static_cache_directories_string
+
+        return ''
+
+    def make_define_static_cache_directories(self):
+        cache_dir_list = []
+
+        static_cache_dir = self.make_static_cache()
+        if static_cache_dir:
+            cache_dir_list.append(static_cache_dir)
+
+        static_cache_directories_string = self.get_define_static_cache_directories()
+        if static_cache_directories_string:
+            cache_dir_list += self.parse_cache_directories_string(
+                string=static_cache_directories_string,
+                is_static=True)
+
+        return cache_dir_list
+
+    def make_define_static_cache_directories_option(self):
+        dirs = []
+
+        static_cache_dir = self.make_static_cache()
+        if static_cache_dir:
+            dirs.append(static_cache_dir)
+
+        static_cache_directories_string = self.get_define_static_cache_directories()
+        if static_cache_directories_string:
+            dirs += self.parse_cache_directories_string(
+                string=static_cache_directories_string,
+                is_static=True)
+
+        if not dirs:
+            return ''
+
+        new_string = []
+        for cache_dir in dirs:
+            string = '{}={}'.format(cache_dir.location,
+                                    cache_dir.regex if cache_dir.regex else '')
+            new_string.append(string)
+
+        static_cache_directories_string = '|'.join(new_string)
+
+        return static_cache_directories_string
+
+    def get_define_cache_directories(self):
         cache_directories_string = self.context.options.define_cache_directories
         if cache_directories_string:
             return cache_directories_string
@@ -403,22 +496,24 @@ class Context:
 
         return ''
 
-    def make_define_cache_directories_list(self):
-        cache_directories_string = self.get_define_cache_directories_string()
+    def make_define_cache_directories(self):
+        cache_directories_string = self.get_define_cache_directories()
         if not cache_directories_string:
             return []
 
         return self.parse_cache_directories_string(
-            string=cache_directories_string)
+            string=cache_directories_string,
+            is_static=False)
 
-    def get_define_cache_directories(self):
-        cache_directories_string = self.get_define_cache_directories_string()
+    def make_define_cache_directories_option(self):
+        cache_directories_string = self.get_define_cache_directories()
 
         if not cache_directories_string:
             return ''
 
         dirs = self.parse_cache_directories_string(
-            string=cache_directories_string)
+            string=cache_directories_string,
+            is_static=False)
 
         new_string = []
         for cache_dir in dirs:
@@ -430,17 +525,9 @@ class Context:
 
         return cache_directories_string
 
-    def get_options_static_cache_dir(self):
-        return self.make_local_path_absolute(
-            path=self.context.options.static_cache_dir)
-
     def get_options_master_dependencies_configuration(self):
         return self.make_local_path_absolute(
             path=self.context.options.master_dependencies_configuration)
-
-    def make_static_cache_dir(self):
-        return self.make_local_path_absolute(
-            path=self.get_static_cache_dir_option())
 
     def make_local_path_absolute(self, path):
         abolute_path = path
@@ -906,15 +993,6 @@ class Context:
                            default=False,
                            help="Generate the compile_commands.json files")
 
-        context.add_option("--cache-dir",
-                           action="store",
-                           default='',
-                           help="Cache directory location")
-        context.add_option("--static-cache-dir",
-                           action="store",
-                           default='',
-                           help="Read-only cache directory location")
-
         if Context.is_windows():
             context.add_option("--nounicode",
                                action="store_true",
@@ -1003,20 +1081,18 @@ class Context:
             help="Disable copy of dependencies' licenses into licenses folder")
 
         context.add_option(
-            "--static-cache-dependencies-regex",
-            action="store",
-            default='',
-            help=
-            "Store all dependencies with an URL matching the regex in the static cache (if defined)"
-        )
-
-        context.add_option(
             "--only-update-dependencies-regex",
             action="store",
             default='',
             help=
             "Select only dependencies with an URL matching the regex to resolve new versions"
         )
+
+        context.add_option(
+            "--cache-directory",
+            action="store",
+            default='',
+            help="Default cache directory location (default is resolved to ~/.cache/golem)")
 
         context.add_option(
             "--define-cache-directories",
@@ -1027,10 +1103,42 @@ class Context:
         )
 
         context.add_option(
+            "--define-static-cache-directories",
+            action="store",
+            default='',
+            help=
+            "Define static cache directories by specifying a string such as <path>=<regex>|<path>=(...) where regex is selecting dependencies with a matching repository URL"
+        )
+
+        context.add_option(
+            "--cache-resolution-mode",
+            action="store",
+            default='strict',
+            help="Cache resolution mode controls how dependencies are found (strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)")
+
+        context.add_option(
             "--output-file",
             action="store",
             default='',
             help="Output file for static analysis results (e.g. cppcheck)")
+
+        context.add_option(
+            "--cache-dir",
+            action="store",
+            default='',
+            help="(DEPRECATED: Use --cache-directory instead) Cache directory location")
+        context.add_option(
+            "--static-cache-dir",
+            action="store",
+            default='',
+            help="(DEPRECATED: Use --define-static-cache-directories instead) Read-only cache directory location")
+        context.add_option(
+            "--static-cache-dependencies-regex",
+            action="store",
+            default='',
+            help=
+            "(DEPRECATED: Use --define-static-cache-directories instead) Store all dependencies with an URL matching the regex in the static cache (if defined)"
+        )
 
     def configure_init(self):
         if not self.context.env.DEFINES:
@@ -1349,9 +1457,6 @@ class Context:
             cache_conf = CacheConf()
             cache_conf.locations = self.make_cache_dirs()
 
-        if len(cache_conf.locations) == 0:
-            cache_conf.locations.append(cache.default_cached_dir())
-
         return cache_conf
 
     def get_local_dep_pkl(self, dep):
@@ -1601,26 +1706,26 @@ class Context:
         return artifacts_list
 
     def clean_repo(self, repo_path):
-        helpers.run_task(['git', 'clean', '-ffxd'],
+        helpers.run_git(['clean', '-ffxd'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
-        helpers.run_task([
-            'git', 'submodule', 'foreach', '--recursive', 'git', 'clean',
+        helpers.run_git([
+            'submodule', 'foreach', '--recursive', 'git', 'clean',
             '-ffxd'
         ],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
-        helpers.run_task(['git', 'reset', '--hard'],
+        helpers.run_git(['reset', '--hard'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
-        helpers.run_task([
-            'git', 'submodule', 'foreach', '--recursive', 'git', 'reset',
+        helpers.run_git([
+            'submodule', 'foreach', '--recursive', 'git', 'reset',
             '--hard'
         ],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
-        helpers.run_task(
-            ['git', 'submodule', 'update', '--init', '--recursive'],
+        helpers.run_git(
+            ['submodule', 'update', '--init', '--recursive'],
             cwd=repo_path,
             stdout=subprocess.DEVNULL)
 
@@ -1633,25 +1738,25 @@ class Context:
                                                      repo_path))
 
         if dep.shallow:
-            helpers.run_task(['git', 'init'], cwd=repo_path)
-            helpers.run_task(
-                ['git', 'remote', 'add', 'origin', dep.repository],
+            helpers.run_git(['init'], cwd=repo_path)
+            helpers.run_git(
+                ['remote', 'add', 'origin', dep.repository],
                 cwd=repo_path)
-            helpers.run_task(
-                ['git', 'fetch', '--depth=1', 'origin', dep.resolved_hash],
+            helpers.run_git(
+                ['fetch', '--depth=1', 'origin', dep.resolved_hash],
                 cwd=repo_path)
-            helpers.run_task(['git', 'reset', '--hard', 'FETCH_HEAD'],
+            helpers.run_git(['reset', '--hard', 'FETCH_HEAD'],
                              cwd=repo_path)
         else:
-            helpers.run_task(['git', 'clone', '--', dep.repository, '.'],
+            helpers.run_git(['clone', '--', dep.repository, '.'],
                              cwd=repo_path)
-            helpers.run_task(['git', 'checkout', dep.resolved_version],
+            helpers.run_git(['checkout', dep.resolved_version],
                              cwd=repo_path)
-            helpers.run_task(['git', 'reset', '--hard', dep.resolved_hash],
+            helpers.run_git(['reset', '--hard', dep.resolved_hash],
                              cwd=repo_path)
 
-        helpers.run_task([
-            'git', 'submodule', 'update', '--init', '--recursive', '--depth=1'
+        helpers.run_git([
+            'submodule', 'update', '--init', '--recursive', '--depth=1'
         ],
                          cwd=repo_path)
 
@@ -1700,14 +1805,14 @@ class Context:
             '--arch={}'.format(self.context.options.arch),
             '--variant={}'.format(self.context.options.variant if not dep.variant else dep.variant[0]),
             '--export={}'.format(dep_path),
-            '--cache-dir={}'.format(self.make_writable_cache_dir()),
-            '--static-cache-dir={}'.format(self.make_static_cache_dir()),
-            '--static-cache-dependencies-regex={}'.format(self.get_static_cache_dependencies_regex()),
+            '--cache-directory={}'.format(self.make_cache_dir_option()),
             '--resolved-dependencies-directory={}'.format(build_path),
             '--only-update-dependencies-regex={}'.format(self.get_only_update_dependencies_regex()),
             '--master-dependencies-configuration={}'.format(self.resolved_master_dependencies),
             '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
-            '--define-cache-directories={}'.format(self.get_define_cache_directories())
+            '--define-cache-directories={}'.format(self.make_define_cache_directories_option()),
+            '--define-static-cache-directories={}'.format(self.make_define_static_cache_directories_option()),
+            '--cache-resolution-mode={}'.format(self.make_cache_resolution_mode_option())
         ]
 
         if dep.shallow:
@@ -2184,43 +2289,111 @@ class Context:
         self.use_dep(config, dep, cache_dir)
 
     def find_dep_cache_dir(self, dep, cache_conf):
-        static_cache_dir = self.make_static_cache_dir()
-        if self.get_static_cache_dependencies_regex() and static_cache_dir:
-            pattern = re.compile(self.get_static_cache_dependencies_regex())
-            if pattern.match(dep.repository):
-                return CacheDir(location=static_cache_dir, is_static=True)
+        # Strict mode ON: Only the first valid match is considered to find the dependency
+        # Strict mode OFF: Every valid match is considered to find the dependency
 
-        cache_dir = self.find_existing_dep_cache_dir(dep, cache_conf)
+        strict_mode = self.make_cache_resolution_mode() == CacheResolutionMode.STRICT
+        
+        read_only_caches_with_regex = self.find_cache_dir(dep=dep,
+                                                          cache_conf=cache_conf,
+                                                          is_read_only=True,
+                                                          with_regex=True)
 
-        if cache_dir is None:
-            cache_dir = self.find_writable_cache_dir(dep, cache_conf)
+        for cache_dir in read_only_caches_with_regex:
+            if strict_mode:
+                return cache_dir
+            if self.is_dep_in_cache_dir(dep, cache_dir):
+                return cache_dir
 
-        return cache_dir
+        read_only_caches_without_regex = self.find_cache_dir(dep=dep,
+                                                             cache_conf=cache_conf,
+                                                             is_read_only=True,
+                                                             with_regex=False)
+
+        for cache_dir in read_only_caches_without_regex:
+            if strict_mode:
+                return cache_dir
+            if self.is_dep_in_cache_dir(dep, cache_dir):
+                return cache_dir
+
+
+        writable_caches_with_regex = self.find_cache_dir(dep=dep,
+                                                         cache_conf=cache_conf,
+                                                         is_read_only=False,
+                                                         with_regex=True)
+
+        for cache_dir in writable_caches_with_regex:
+            if strict_mode:
+                return cache_dir
+            if self.is_dep_in_cache_dir(dep, cache_dir):
+                return cache_dir
+
+        writable_caches_without_regex = self.find_cache_dir(dep=dep,
+                                                            cache_conf=cache_conf,
+                                                            is_read_only=False,
+                                                            with_regex=False)
+
+        for cache_dir in writable_caches_without_regex:
+            if strict_mode:
+                return cache_dir
+            if self.is_dep_in_cache_dir(dep, cache_dir):
+                return cache_dir
+
+        if writable_caches_with_regex:
+            return writable_caches_with_regex[0]
+        elif writable_caches_without_regex:
+            return writable_caches_without_regex[0]
+        else:
+            raise RuntimeError("Can't find any writable cache location")
+
+    def get_cache_resolution_mode(self):
+        cache_resolution_mode = self.context.options.cache_resolution_mode
+        if cache_resolution_mode:
+            return cache_resolution_mode
+
+        cache_resolution_mode = helpers.get_environ('GOLEM_CACHE_RESOLUTION_MODE')
+        if cache_resolution_mode:
+            return cache_resolution_mode
+
+        return ''
+
+    def make_cache_resolution_mode(self):
+        return CacheResolutionMode(self.get_cache_resolution_mode())
+
+    def make_cache_resolution_mode_option(self):
+        return self.make_cache_resolution_mode().value
 
     def is_dep_in_cache_dir(self, dep, cache_dir):
         path = self.get_dep_location(dep, cache_dir)
         return os.path.exists(path)
 
-    def find_existing_dep_cache_dir(self, dep, cache_conf):
-        for cache_dir in cache_conf.locations:
-            if self.is_dep_in_cache_dir(dep, cache_dir):
-                return cache_dir
-        return None
+    def find_cache_dir(self, dep, cache_conf, is_read_only, with_regex):
+        found_caches = []
 
-    def find_writable_cache_dir(self, dep, cache_conf):
-        for cache_dir in cache_conf.locations:
-            if not cache_dir.regex or cache_dir.is_static:
-                continue
+        if with_regex:
+            # Search among cache directories with a regex
+            for cache_dir in cache_conf.locations:
+                if not cache_dir.regex:
+                    continue
+                if is_read_only and not cache_dir.is_static:
+                    continue
 
-            pattern = re.compile(cache_dir.regex)
-            if pattern.match(dep.repository):
-                return cache_dir
+                pattern = re.compile(cache_dir.regex)
+                if not pattern.match(dep.repository):
+                    continue
+                
+                found_caches.append(cache_dir)
+        else:
+            # Search among cache directories without a regex
+            for cache_dir in cache_conf.locations:
+                if cache_dir.regex:
+                    continue
+                if is_read_only and not cache_dir.is_static:
+                    continue
 
-        for cache_dir in cache_conf.locations:
-            if not cache_dir.is_static:
-                return cache_dir
+                found_caches.append(cache_dir)
 
-        raise RuntimeError("Can't find any writable cache location")
+        return found_caches
 
     def export_dependency(self, config, dep):
         self.dep_command(config, dep, 'export', True)
@@ -4135,11 +4308,11 @@ class Context:
     def clone_repository(self, path, url, branch):
         if not os.path.exists(path):
             os.makedirs(path)
-            helpers.run_task(['git', 'clone', '--', url, '.'], cwd=path)
+            helpers.run_git(['clone', '--', url, '.'], cwd=path)
         else:
-            helpers.run_task(['git', 'fetch', 'origin'], cwd=path)
+            helpers.run_git(['fetch', 'origin'], cwd=path)
 
-        helpers.run_task(['git', 'reset', '--hard', 'origin/' + branch],
+        helpers.run_git(['reset', '--hard', 'origin/' + branch],
                          cwd=path)
 
     def clone_master_dependencies_repository(self, url):
@@ -4219,8 +4392,8 @@ class Context:
             return self.repository
         self.repository = ''
         try:
-            remote_url = subprocess.check_output(
-                ['git', 'config', '--get', 'remote.origin.url'],
+            remote_url = helpers.check_git_output(
+                ['config', '--get', 'remote.origin.url'],
                 cwd=self.get_project_dir()).decode(sys.stdout.encoding)
             remote_url = remote_url.split('\n')
             self.repository = remote_url[0] if remote_url else None
