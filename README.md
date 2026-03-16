@@ -204,6 +204,7 @@ Here is a list of important improvements to work on the long term:
 - Use the task mechanism of Waf for everything (e.g. resolving, building dependencies)
 - Improve available helper functions to build dependencies using other build systems (recipes)
 - Define default security profiles (allow creation and customization, `security_profile='all'`)
+- Enhance static cache directories to be able to use read-only caches (for now they just block the generatino of missing artifacts)
 
 Here is a list of other nice improvements to work on:
 
