@@ -15,7 +15,7 @@ import string
 from datetime import datetime
 from copy import deepcopy
 from golemcpp.golem.module import Module
-from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionMode
+from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
 from golemcpp.golem import helpers
@@ -1111,10 +1111,10 @@ class Context:
         )
 
         context.add_option(
-            "--cache-resolution-mode",
+            "--cache-resolution-policy",
             action="store",
             default='strict',
-            help="Cache resolution mode controls how dependencies are found (strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)")
+            help="Cache resolution policy controls how dependencies are found (strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)")
 
         context.add_option(
             "--output-file",
@@ -1812,7 +1812,7 @@ class Context:
             '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
             '--define-cache-directories={}'.format(self.make_define_cache_directories_option()),
             '--define-static-cache-directories={}'.format(self.make_define_static_cache_directories_option()),
-            '--cache-resolution-mode={}'.format(self.make_cache_resolution_mode_option())
+            '--cache-resolution-policy={}'.format(self.make_cache_resolution_policy_option())
         ]
 
         if dep.shallow:
@@ -2289,10 +2289,10 @@ class Context:
         self.use_dep(config, dep, cache_dir)
 
     def find_dep_cache_dir(self, dep, cache_conf):
-        # Strict mode ON: Only the first valid match is considered to find the dependency
-        # Strict mode OFF: Every valid match is considered to find the dependency
+        # Strict policy ON: Only the first valid match is considered to find the dependency
+        # Strict policy OFF: Every valid match is considered to find the dependency
 
-        strict_mode = self.make_cache_resolution_mode() == CacheResolutionMode.STRICT
+        strict_policy = self.make_cache_resolution_policy() == CacheResolutionPolicy.STRICT
         
         read_only_caches_with_regex = self.find_cache_dir(dep=dep,
                                                           cache_conf=cache_conf,
@@ -2300,7 +2300,7 @@ class Context:
                                                           with_regex=True)
 
         for cache_dir in read_only_caches_with_regex:
-            if strict_mode:
+            if strict_policy:
                 return cache_dir
             if self.is_dep_in_cache_dir(dep, cache_dir):
                 return cache_dir
@@ -2311,7 +2311,7 @@ class Context:
                                                              with_regex=False)
 
         for cache_dir in read_only_caches_without_regex:
-            if strict_mode:
+            if strict_policy:
                 return cache_dir
             if self.is_dep_in_cache_dir(dep, cache_dir):
                 return cache_dir
@@ -2323,7 +2323,7 @@ class Context:
                                                          with_regex=True)
 
         for cache_dir in writable_caches_with_regex:
-            if strict_mode:
+            if strict_policy:
                 return cache_dir
             if self.is_dep_in_cache_dir(dep, cache_dir):
                 return cache_dir
@@ -2334,7 +2334,7 @@ class Context:
                                                             with_regex=False)
 
         for cache_dir in writable_caches_without_regex:
-            if strict_mode:
+            if strict_policy:
                 return cache_dir
             if self.is_dep_in_cache_dir(dep, cache_dir):
                 return cache_dir
@@ -2346,22 +2346,22 @@ class Context:
         else:
             raise RuntimeError("Can't find any writable cache location")
 
-    def get_cache_resolution_mode(self):
-        cache_resolution_mode = self.context.options.cache_resolution_mode
-        if cache_resolution_mode:
-            return cache_resolution_mode
+    def get_cache_resolution_policy(self):
+        cache_resolution_policy = self.context.options.cache_resolution_policy
+        if cache_resolution_policy:
+            return cache_resolution_policy
 
-        cache_resolution_mode = helpers.get_environ('GOLEM_CACHE_RESOLUTION_MODE')
-        if cache_resolution_mode:
-            return cache_resolution_mode
+        cache_resolution_policy = helpers.get_environ('GOLEM_CACHE_RESOLUTION_POLICY')
+        if cache_resolution_policy:
+            return cache_resolution_policy
 
         return ''
 
-    def make_cache_resolution_mode(self):
-        return CacheResolutionMode(self.get_cache_resolution_mode())
+    def make_cache_resolution_policy(self):
+        return CacheResolutionPolicy(self.get_cache_resolution_policy())
 
-    def make_cache_resolution_mode_option(self):
-        return self.make_cache_resolution_mode().value
+    def make_cache_resolution_policy_option(self):
+        return self.make_cache_resolution_policy().value
 
     def is_dep_in_cache_dir(self, dep, cache_dir):
         path = self.get_dep_location(dep, cache_dir)

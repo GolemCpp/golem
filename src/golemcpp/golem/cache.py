@@ -37,6 +37,6 @@ class CacheConf:
     def __str__(self):
         return helpers.print_obj(self)
 
-class CacheResolutionMode(Enum):
+class CacheResolutionPolicy(Enum):
     STRICT = "strict"
     WEAK = "weak"
