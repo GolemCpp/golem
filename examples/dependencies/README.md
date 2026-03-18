@@ -1,5 +1,7 @@
 # dependencies
 
+Start a [clean session](#start-a-clean-session) to run commands, if needed.
+
 ## Controlling dependencies globally
 
 To showcase how `master_dependencies.json` work, we suggest you to build this project without and with it.
@@ -30,3 +32,14 @@ golem build
 
 In `dependencies.json`, the JSON library is resolved to `3.10.0`, exacly the version forced by `master_dependencies.json`.
 
+## Start a clean session
+
+To run the commands without the Golem environment variables that you may have set on your system:
+
+``` bash
+# On Windows
+clean-session
+
+# On UNIX/Linux
+./clean-session
+```
