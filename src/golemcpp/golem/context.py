@@ -605,7 +605,8 @@ class Context:
                         file_nodes += x_path.ant_glob('**/*.' + extention)
                     result += file_nodes
                 else:
-                    result += x_path.ant_glob(str(x))
+                    base_path = self.make_base_path('', prefix_path)
+                    result += base_path.ant_glob(str(x))
 
         return result
 
