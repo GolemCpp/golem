@@ -1648,19 +1648,19 @@ class Context:
 
         for cache_dir in self.cache_conf.locations:
             try:
-                common_path = os.path.commonpath([path, cache_dir.location])
+                common_path = os.path.commonpath([os.path.realpath(path), os.path.realpath(cache_dir.location)])
             except Exception:
                 common_path = None
-            if common_path != cache_dir.location:
+            if common_path != os.path.realpath(cache_dir.location):
                 common_path = None
             else:
                 break
 
         if not common_path:
             raise RuntimeError(
-                "Can't find path in any cache directories {}".format(path))
+                "Can't find path in any cache directories {}".format(os.path.realpath(path)))
 
-        new_path = Path(os.path.relpath(path=path, start=common_path))
+        new_path = Path(os.path.relpath(path=os.path.realpath(path), start=common_path))
         return new_path.parts[0]
 
     def list_dep_binary_artifacts(self, config, dep, cache_dir):
