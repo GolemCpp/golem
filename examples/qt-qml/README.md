@@ -6,14 +6,14 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 
 Build the program:
 
-``` batch
+``` bash
 golem configure --variant=debug --qtdir="C:\Qt\6.8.1\msvc2022_64"
 golem build
 ```
 
 Run the program:
 
-``` batch
+``` bash
 # On Windows
 & { $env:PATH = "C:\Qt\6.8.1\msvc2022_64\bin;$env:PATH"; & .\build\bin\hello-qt-qml-debug.exe }
 
