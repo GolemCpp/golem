@@ -5919,6 +5919,12 @@ class Context:
 
         print("Check package's targets")
 
+        patchelf_command = [
+            'patchelf'
+        ]
+        if self.is_flatpak():
+            patchelf_command = [ 'flatpak-spawn', '--host' ] + patchelf_command
+
         depends = package_build_context.configuration.packages.copy()
         depends = helpers.filter_unique(depends)
 
@@ -6267,7 +6273,7 @@ class Context:
                     continue
                 print("Set rpath on file {}".format(artifact.absolute_path))
                 helpers.run_task(
-                    ['patchelf', '--set-rpath', rpath, artifact.absolute_path],
+                    patchelf_command + ['--set-rpath', rpath, artifact.absolute_path],
                     cwd=subdirectory_directory)
         else:
             for artifact in artifacts:
@@ -6275,7 +6281,7 @@ class Context:
                     continue
                 print("Remove rpath {}".format(artifact.absolute_path))
                 helpers.run_task(
-                    ['patchelf', '--remove-rpath', artifact.absolute_path],
+                    patchelf_command + ['--remove-rpath', artifact.absolute_path],
                     cwd=subdirectory_directory)
 
         all_prefix_files = []
@@ -6381,7 +6387,12 @@ class Context:
 
         class fakeroot(Task.Task):
             always_run = True
-            run_str = 'fakeroot dpkg-deb --build ${SRC} ${TGT}'
+            fakeroot_command = [
+                'fakeroot'
+            ]
+            if self.is_flatpak():
+                fakeroot_command = [ 'flatpak-spawn', '--host' ] + fakeroot_command
+            run_str = ' '.join(fakeroot_command) + ' dpkg-deb --build ${SRC} ${TGT}'
 
         task = fakeroot(env=self.context.env)
         task.set_inputs(self.context.root.find_node(package_directory))
