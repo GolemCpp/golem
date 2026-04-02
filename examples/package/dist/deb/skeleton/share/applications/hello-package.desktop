@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Name=hello-package
+GenericName=hello-package
+Exec=@PREFIX@/bin/@NAME@
+Terminal=false
+Icon=hello-package.png
+Type=Application

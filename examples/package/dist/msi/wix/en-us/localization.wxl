@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-us" Codepage="1252"
+    xmlns="http://schemas.microsoft.com/wix/2006/localization">
+    <String Id="Language">1033</String>
+
+    <String Id="ApplicationName">hello-package</String>
+    <String Id="ManufacturerName">example.com</String>
+    <String Id="ManufacturerFullName">example.com</String>
+    <String Id="ProductDescription">description</String>
+    <String Id="Comments">Installs hello-package</String>
+
+    <String Id="LicenseRtf" Overridable="yes">en-us\EULA.rtf</String>
+
+    <String Id="OS2Old">This product requires at least Windows Vista / Server 2008.</String>
+    <String Id="NewerInstalled">The same or a newer version of this product is already installed.</String>
+    <String Id="x86VersionRequired">This software requires 64-bit Windows.</String>
+
+    <String Id="FeatureCompleteDescription">The complete package.</String>
+    <String Id="FeatureMainProgramDescription">The main version including all dependencies.</String>
+    <String Id="FeatureMainProgramTitle">Main program</String>
+</WixLocalization>

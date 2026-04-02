@@ -1,0 +1,4 @@
+
+# Symlink bin command to /usr/bin
+rm -f @PREFIX@/bin/@NAME@
+ln -s @BINARY_PATH@ @PREFIX@/bin/@NAME@
