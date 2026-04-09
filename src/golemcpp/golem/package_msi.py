@@ -177,7 +177,7 @@ def package_msi(self, package_build_context):
         qt5_targets_binaries_real_paths.append(real_path)
         qt5_unique_targets_binaries.append(binary)
 
-    if 'qt5' in package_build_context.configuration.wfeatures:
+    if self.is_qt_enabled(package_build_context.configuration):
         if not self.context.env.QMAKE:
             raise RuntimeError("Can't find path to qmake")
         if not self.context.env.QTLIBS:

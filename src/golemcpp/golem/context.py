@@ -2475,19 +2475,20 @@ class Context:
         decorated_targets = self.make_decorated_target_list_from_context(
             config=config, target_names=targets)
 
-        project_qt = False
-        if any([feature.startswith("QT5") for feature in config.features]):
-            project_qt = True
-
-        if any([feature.startswith("QT6") for feature in config.features]):
-            project_qt = True
-
         context_tasks_added = False
 
         wfeatures = []
 
-        if project_qt and 'qt5' not in config.wfeatures:
+        if self.is_qt5_used(config) and 'qt5' not in config.wfeatures:
             wfeatures.append('qt5')
+
+        if self.is_qt6_used(config) and 'qt6' not in config.wfeatures:
+            wfeatures.append('qt6')
+            
+        filtered_wfeatures = helpers.filter_unique(config.wfeatures + wfeatures)
+        is_qt_on = self.is_qt_enabled(config)
+        
+        project_qt = self.is_qt_enabled(config)
 
         if self.is_debug() and self.is_windows():
             for i, feature in enumerate(config.features):
@@ -2768,12 +2769,9 @@ class Context:
         #        config))
         #    if stlib_filename not in config.ldflags:
         #        config.ldflags.append(stlib_filename)
-        
-        filtered_wfeatures = helpers.filter_unique(config.wfeatures +
-                                                   wfeatures)
-        
+
         qt_cxxflags = []
-        if 'qt5' in filtered_wfeatures and self.is_msvc_like():
+        if is_qt_on and self.is_msvc_like():
             qt_cxxflags += ['/Zc:__cplusplus', '/permissive-']
 
         final_cxxflags = helpers.filter_unique(config.cxxflags +
@@ -2799,7 +2797,7 @@ class Context:
                     self.context.env.CXXFLAGS_qt6 = copy_flags
                 break
 
-        if 'qt5' in filtered_wfeatures and self.is_darwin():
+        if is_qt_on and self.is_darwin():
             env_cxxflags += ['-iframework{}'.format(self.context.env.QTLIBS)]
 
         rpath_option = config.rpath
@@ -2829,7 +2827,7 @@ class Context:
             if not config.rpath:
                 lib_paths = list()
                 lib_paths.append('$ORIGIN')
-                if 'qt5' in filtered_wfeatures:
+                if is_qt_on:
                     lib_paths.append(self.context.env.QTLIBS)
 
                 lib_artifacts = list()
@@ -2997,7 +2995,7 @@ class Context:
             vscode_config.update({
                 'macFrameworkPath': [
                     "/System/Library/Frameworks", "/Library/Frameworks"
-                ] + ([] if not 'qt5' in config.wfeatures else
+                ] + ([] if not self.is_qt_enabled(config) else
                      [self.context.env.QTLIBS])
             })
 
@@ -3023,10 +3021,11 @@ class Context:
 
         targets_cxxflags = []
         targets_includes = []
+        targets_features = []
         targets_wfeatures = []
 
         def list_all_targets_includes(task, targets, config, targets_includes,
-                                      targets_cxxflags, targets_wfeatures):
+                                      targets_cxxflags, targets_features, targets_wfeatures):
             build_target = self.build_target_gather_config(task=task,
                                                            targets=targets,
                                                            config=config)
@@ -3037,6 +3036,7 @@ class Context:
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
+            targets_features += config.features
             targets_wfeatures += config.wfeatures
 
         self.call_build_target(
@@ -3046,6 +3046,7 @@ class Context:
                 config=config,
                 targets_includes=targets_includes,
                 targets_cxxflags=targets_cxxflags,
+                targets_features=targets_features,
                 targets_wfeatures=targets_wfeatures))
 
         targets_includes = helpers.filter_unique(targets_includes)
@@ -3068,7 +3069,7 @@ class Context:
             vscode_config.update({
                 'macFrameworkPath': [
                     "/System/Library/Frameworks", "/Library/Frameworks"
-                ] + ([] if not 'qt5' in targets_wfeatures else
+                ] + ([] if not self.is_qt_enabled_in_params(features=targets_features, wfeatures=targets_wfeatures) else
                      [self.context.env.QTLIBS])
             })
 
@@ -4444,13 +4445,22 @@ class Context:
         return call_msvc
 
     def is_qt_enabled(self, config):
-        return self.is_qt5_used(config) or self.is_qt6_used(config) or 'qt5' in config.wfeatures
+        return self.is_qt_enabled_in_params(features=config.features, wfeatures=config.wfeatures)
+
+    def is_qt_enabled_in_params(self, features=None, wfeatures=None):
+        return self.is_qt5_used_in_params(features=features, wfeatures=wfeatures) or self.is_qt6_used_in_params(features=features, wfeatures=wfeatures)
 
     def is_qt5_used(self, config):
-        return any([feature.startswith("QT5") for feature in config.features])
+        return self.is_qt5_used_in_params(features=config.features, wfeatures=config.wfeatures)
+
+    def is_qt5_used_in_params(self, features=None, wfeatures=None):
+        return (any([feature.startswith("QT5") for feature in features]) if features else False) or ('qt5' in wfeatures if wfeatures else False)
 
     def is_qt6_used(self, config):
-        return any([feature.startswith("QT6") for feature in config.features])
+        return self.is_qt6_used_in_params(features=config.features, wfeatures=config.wfeatures)
+
+    def is_qt6_used_in_params(self, features=None, wfeatures=None):
+        return (any([feature.startswith("QT6") for feature in features]) if features else False) or ('qt6' in wfeatures if wfeatures else False)
 
     def configure(self):
 
@@ -4943,18 +4953,24 @@ class Context:
         else:
             target_path = decorated_target_path
 
-        if self.is_windows():
-            target_artifact = '{}.lib'.format(decorated_target_base)
-        elif self.is_darwin():
-            if self.is_config_shared(config):
-                target_artifact = 'lib{}.dylib'.format(decorated_target_base)
+        if 'program' in config.type:
+            if self.is_windows():
+                target_artifact = '{}.exe'.format(decorated_target_base)
             else:
-                target_artifact = 'lib{}.a'.format(decorated_target_base)
+                target_artifact = decorated_target_base
         else:
-            if self.is_config_shared(config):
-                target_artifact = 'lib{}.so'.format(decorated_target_base)
+            if self.is_windows():
+                target_artifact = '{}.lib'.format(decorated_target_base)
+            elif self.is_darwin():
+                if self.is_config_shared(config):
+                    target_artifact = 'lib{}.dylib'.format(decorated_target_base)
+                else:
+                    target_artifact = 'lib{}.a'.format(decorated_target_base)
             else:
-                target_artifact = 'lib{}.a'.format(decorated_target_base)
+                if self.is_config_shared(config):
+                    target_artifact = 'lib{}.so'.format(decorated_target_base)
+                else:
+                    target_artifact = 'lib{}.a'.format(decorated_target_base)
         target_artifact_path = os.path.join(target_path, target_artifact)
 
         return target_artifact_path, target_path, target_artifact
@@ -4999,16 +5015,17 @@ class Context:
             if not export_target_config.header_only:
                 export_target_config.rpath_link.append(target_path)
 
-            if self.is_config_shared(export_target_config):
-                if target_artifact_path not in export_target_config.lib:
-                    export_target_config.lib.append(target_artifact_path)
-                if target_path not in export_target_config.libpath:
-                    export_target_config.libpath.append(target_path)
-            else:
-                if target_artifact_path not in export_target_config.stlib:
-                    export_target_config.stlib.append(target_artifact_path)
-                if target_path not in export_target_config.stlibpath:
-                    export_target_config.stlibpath.append(target_path)
+            if not 'program' in export_target_config.type:
+                if self.is_config_shared(export_target_config):
+                    if target_artifact_path not in export_target_config.lib:
+                        export_target_config.lib.append(target_artifact_path)
+                    if target_path not in export_target_config.libpath:
+                        export_target_config.libpath.append(target_path)
+                else:
+                    if target_artifact_path not in export_target_config.stlib:
+                        export_target_config.stlib.append(target_artifact_path)
+                    if target_path not in export_target_config.stlibpath:
+                        export_target_config.stlibpath.append(target_path)
 
             artifacts_dev = self.make_binary_artifact_from_context(
                 export_target_config,
@@ -5049,16 +5066,24 @@ class Context:
                 build_config.packages_dev + export_target_config.packages_dev)
             export_target_config.licenses = helpers.filter_unique(
                 build_config.licenses + export_target_config.licenses)
-            export_target_config.qmldirs = helpers.filter_unique(
-                build_config.qmldirs + export_target_config.qmldirs)
             export_target_config.artifacts_dev = helpers.filter_unique(
                 artifacts_dev + export_target_config.artifacts_dev)
             export_target_config.artifacts_run = helpers.filter_unique(
                 artifacts_run + export_target_config.artifacts_run)
             export_target_config.artifacts = helpers.filter_unique(
                 build_config.artifacts + export_target_config.artifacts)
+            
+            export_target_config.qmldirs = helpers.filter_unique(
+                build_config.qmldirs + export_target_config.qmldirs)
+            
+            wfeatures = []
+            if self.is_qt5_used(build_config):
+                wfeatures.append('qt5')
+            if self.is_qt6_used(build_config):
+                wfeatures.append('qt6')
+
             export_target_config.wfeatures = helpers.filter_unique(
-                build_config.wfeatures + export_target_config.wfeatures)
+                build_config.wfeatures + export_target_config.wfeatures + wfeatures)
 
             export_config.merge(context=self, configs=[export_target_config])
             export_target_configs.append(export_target_config)
@@ -6173,7 +6198,7 @@ class Context:
             qt_targets_binaries_real_paths.append(real_path)
             qt_unique_targets_binaries.append(binary)
 
-        if 'qt5' in package_build_context.configuration.wfeatures:
+        if self.is_qt_enabled(package_build_context.configuration):
             if not self.context.env.QMAKE:
                 raise RuntimeError("Can't find path to qmake")
             if not self.context.env.QTLIBS:

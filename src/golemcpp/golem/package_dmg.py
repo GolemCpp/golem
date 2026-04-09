@@ -214,7 +214,7 @@ def package_dmg(self, package_build_context):
     self.context.add_group()
     self.context.execute_build()
 
-    if 'qt5' in package_build_context.configuration.wfeatures:
+    if self.is_qt_enabled(package_build_context.configuration):
         if not self.context.env.QMAKE:
             raise RuntimeError("Can't find path to qmake")
         if not self.context.env.QTLIBS:
