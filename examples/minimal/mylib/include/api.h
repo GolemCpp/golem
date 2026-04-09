@@ -6,4 +6,6 @@
     #elif defined(FOO_API_IMPORT)
         #define FOO_API __declspec(dllimport)
     #endif
+#else
+    #define FOO_API 
 #endif
