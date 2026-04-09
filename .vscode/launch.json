@@ -5,7 +5,49 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "[examples/cache] golem resolve",
+			"name": "[examples/package] golem package",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"package"
+			],
+			"cwd": "${workspaceFolder}/examples/package",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
+			"name": "[examples/minimal] golem build",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"build"
+			],
+			"cwd": "${workspaceFolder}/examples/minimal",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
+			"name": "[examples/advanced] golem resolve",
 			"type": "debugpy",
 			"request": "launch",
 			"program": "${workspaceFolder}/src/golemcpp/golem",
@@ -13,7 +55,28 @@
 			"args": [
 				"resolve"
 			],
-			"cwd": "${workspaceFolder}/examples/cache",
+			"cwd": "${workspaceFolder}/examples/advanced",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
+			"name": "[examples/advanced] golem dependencies",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"dependencies"
+			],
+			"cwd": "${workspaceFolder}/examples/advanced",
 			"linux": {
 				"env": {
 					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
