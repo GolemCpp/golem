@@ -2566,7 +2566,7 @@ class Context:
             else:
                 filename, filename_ext = os.path.splitext(
                     os.path.basename(template_to_process.source))
-                if filename_ext not in ['.template']:
+                if filename_ext not in ['.template', '.in']:
                     filename = os.path.basename(
                         template_to_process.source) + '.cpp'
                 version_template_dst = self.context.root.find_or_declare(
@@ -2663,14 +2663,28 @@ class Context:
                 GOLEM_TMPL_ARCHITECTURE=self.get_arch(),
                 GOLEM_TMPL_TARGET_ARTIFACT_BASENAME=target_artifact_basename)
             filename, filename_ext = os.path.splitext(filename)
-            if filename_ext in ['.cpp', '.cxx', '.c', '.cc'
-                                ] or template_to_process.build == True:
+
+            include_path = None
+            source_extensions = ['.cpp', '.cxx', '.c', '.cc']
+            header_extensions = ['.hpp', '.hxx', '.h', '.hh']
+
+            is_build_default = template_to_process.build is None
+            is_build_enabled = template_to_process.build == True
+            is_extension_matching = filename_ext in (source_extensions + header_extensions)
+
+            is_build_scenario_default = is_build_default or (is_build_enabled and is_extension_matching)
+            is_build_scenario_build_only = is_build_enabled and not is_extension_matching
+
+            if is_build_scenario_default:
+                if filename_ext in source_extensions:
+                    version_source.append(version_template_dst)
+                elif filename_ext in header_extensions:
+                    include_path = self.make_build_path('.')
+            elif is_build_scenario_build_only:
                 version_source.append(version_template_dst)
-            elif filename_ext in ['.hpp', '.hxx', '.h', '.hh'
-                                  ] or template_to_process.build == True:
-                include_path = self.make_build_path('.')
-                if include_path not in listinclude:
-                    listinclude.append(include_path)
+
+            if include_path is not None and include_path not in listinclude:
+                listinclude.append(include_path)
 
             self.context_tasks.append(str(version_template_src))
             context_tasks_added = True

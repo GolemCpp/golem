@@ -3,6 +3,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.template import Template
 import json
 
 
@@ -16,8 +17,8 @@ class Target(Configuration):
                  **kwargs):
         super(Target, self).__init__(**kwargs)
         self.name = name
-        self.version_template = version_template
-        self.templates = templates
+        self.version_template = helpers.parameter_to_list(version_template)
+        self.templates = helpers.parameter_to_list(templates)
         self.export = export
         self.args = args
 
@@ -26,7 +27,7 @@ class Target(Configuration):
 
     @staticmethod
     def serialized_members():
-        return ['name', 'version_template']
+        return ['name', 'version_template', 'templates']
 
     @staticmethod
     def serialize_to_json(o):
@@ -34,8 +35,18 @@ class Target(Configuration):
 
         for key in o.__dict__:
             if key in Target.serialized_members():
-                if o.__dict__[key]:
-                    json_obj[key] = o.__dict__[key]
+                value = o.__dict__[key]
+                if value:
+                    if (key == 'templates' or key == 'version_template'):
+                        array=[]
+                        for item in value:
+                            if isinstance(item, str):
+                                array.append(item)
+                            else:
+                                array.append(Template.serialize_to_json(item))
+                        json_obj[key] = array
+                    else:
+                        json_obj[key] = value
 
         return json_obj
 
@@ -44,7 +55,16 @@ class Target(Configuration):
 
         for key, value in o.items():
             if key in Target.serialized_members():
-                self.__dict__[key] = value
+                if key == 'templates' or key == 'version_template':
+                    array=[]
+                    for item in value:
+                        if isinstance(item, str):
+                            array.append(item)
+                        else:
+                            array.append(Template.unserialize_from_json(item))
+                    self.__dict__[key] = array
+                else:
+                    self.__dict__[key] = value
 
     @staticmethod
     def unserialize_from_json(o):
