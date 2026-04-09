@@ -9,6 +9,7 @@ from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
 from semver import max_satisfying
 from collections import OrderedDict
+from urllib.parse import urlparse, unquote
 
 
 class Dependency(Configuration):
@@ -43,12 +44,55 @@ class Dependency(Configuration):
     def update_cache_dir(self, context):
         self.cache_dir = context.find_dep_cache_dir(
             dep=self, cache_conf=context.cache_conf)
+        
+    @staticmethod
+    def resolve_repository_url(url, project_dir):
+        if url.startswith("http://") or url.startswith("https://") or url.startswith("ssh://") or url.startswith("file://"):
+            return url
+        path = os.path.join(project_dir, url)
+        path = os.path.realpath(path)
+        file_prefix = 'file://'
+        if sys.platform.startswith("win"):
+            file_prefix += '/'
+        path = file_prefix + path
+        return path
+
+    def update_repository(self, project_dir):
+        self.repository = Dependency.resolve_repository_url(url=self.repository, project_dir=project_dir)
+
+    def get_non_git_directory_path(self):
+        parsed = urlparse(self.repository)
+
+        if parsed.scheme != 'file':
+            return None
+
+        if helpers.is_git_repository(path=self.repository):
+            return None
+
+        path = unquote(parsed.path)
+
+        if sys.platform.startswith("win"):
+            if path.startswith("/") and len(path) > 2 and path[2] == ":":
+                path = path[1:]
+            path = path.replace("/", "\\")
+
+        if not os.path.exists(path):
+            return None
+        
+        return path
+
+    def is_non_git_directory(self):
+        path = self.get_non_git_directory_path()
+        return path is not None
 
     def resolve(self):
-
         if self.resolved_hash:
             return self.resolved_hash
 
+        if self.is_non_git_directory():
+            self.resolved_version = '-'
+            self.resolved_hash = '-'
+        else:
         tags = helpers.check_git_output(
             ['ls-remote', '--tags', self.repository],
             cwd=os.getcwd()).decode(sys.stdout.encoding)

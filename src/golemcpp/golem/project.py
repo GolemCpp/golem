@@ -14,7 +14,7 @@ import copy
 
 
 class Project:
-    def __init__(self):
+    def __init__(self, project_dir):
         self.cache = []
         self.deps = []
 
@@ -33,6 +33,8 @@ class Project:
         self.clang_tidy_checks = None
         self.cppcheck_enable = None
         self.enable_build_number = False
+
+        self.project_dir = project_dir
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -157,6 +159,7 @@ class Project:
 
     def dependency(self, **kwargs):
         dep = Dependency(**kwargs)
+        dep.update_repository(self.project_dir)
         self.deps.append(dep)
         return dep
 
@@ -191,8 +194,8 @@ class Project:
         return configs
 
     @staticmethod
-    def unserialize_from_json(json_object):
-        project = Project()
+    def unserialize_from_json(json_object, project_dir):
+        project = Project(project_dir=project_dir)
         for entry in json_object:
             key = ConditionExpression.clean(entry)
             value = json_object[entry]

@@ -20,6 +20,7 @@ class Module:
             if not os.path.exists(project_path):
                 print("ERROR: can't find " + project_path)
                 return
+            self.project_dir = os.path.dirname(project_path)
             self.load_recipe_source(project_path)
 
     def load_recipe_source(self, path):
@@ -37,6 +38,6 @@ class Module:
             print("ERROR: no configure function found")
             return
 
-        project = Project()
+        project = Project(project_dir=self.project_dir)
         self.module.configure(project)
         return project

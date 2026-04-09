@@ -94,7 +94,7 @@ class Context:
             json_object = None
             with io.open(self.project_path, 'r') as file:
                 json_object = json.load(file)
-            self.project = Project.unserialize_from_json(json_object)
+            self.project = Project.unserialize_from_json(json_object=json_object, project_dir=os.path.dirname(self.project_path))
             self.module = None
 
     def get_dependencies_json_path(self):
@@ -1706,7 +1706,23 @@ class Context:
                         Artifact(abspath, relpath, path_build))
         return artifacts_list
 
-    def clean_repo(self, repo_path):
+    def copy_non_git_repo(self, dep, local_path, repo_path):
+        if os.path.isdir(repo_path):
+            shutil.rmtree(repo_path)
+        shutil.copytree(
+            local_path,
+            repo_path,
+            dirs_exist_ok=True,
+            symlinks=True)
+        with open(os.path.join(repo_path, '.golem-origin'), 'w') as f:
+            f.write(dep.repository)
+
+    def clean_repo(self, dep, repo_path):
+        local_path = dep.get_non_git_directory_path()
+        if local_path:
+            self.copy_non_git_repo(dep, local_path, repo_path)
+            return
+        
         helpers.run_git(['clean', '-ffxd'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
@@ -1735,6 +1751,13 @@ class Context:
         # NOTE: Can't use ['--depth', '1'] by default because of git describe --tags required for golem repos
 
         os.makedirs(repo_path)
+
+        local_path = dep.get_non_git_directory_path()
+        if local_path:
+            print("Copying repository {} into {}".format(dep.repository, repo_path))
+            self.copy_non_git_repo(dep, local_path, repo_path)
+            return
+
         print("Cloning repository {} into {}".format(dep.repository,
                                                      repo_path))
 
@@ -1766,7 +1789,7 @@ class Context:
 
         if os.path.exists(repo_path):
             if should_clean:
-                self.clean_repo(repo_path)
+                self.clean_repo(dep, repo_path)
         else:
             self.clone_repo(dep, repo_path)
 
@@ -2265,6 +2288,9 @@ class Context:
                     are_artifacts_availables = False
                     missing_artifacts.append(path)
         else:
+            are_artifacts_availables = False
+
+        if dep.is_non_git_directory():
             are_artifacts_availables = False
 
         is_resolving = (command == 'resolve'
@@ -4415,6 +4441,13 @@ class Context:
             self.repository = remote_url[0] if remote_url else None
         except Exception:
             pass
+        if self.repository == '':
+            repository_origin = os.path.join(self.get_project_dir(), '.golem-origin')
+            if os.path.exists(repository_origin):
+                with open(repository_origin, 'r', encoding='utf-8') as f:
+                    for line in f.readlines():
+                        self.repository = line
+                        break
         return self.repository
 
     def msvc_vcvars_cmd(self):
