@@ -36,9 +36,9 @@ def configure(project):
                 skeleton='dist/dmg/skeleton',
                 background='dist/dmg/background.png')
 
-    package.hook(upload_files)
+    package.hook(log_files)
 
 
-def upload_files(context):
+def log_files(context):
     for f in context.files:
         print("{}".format(f.path))

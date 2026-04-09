@@ -27,6 +27,8 @@ Package the program:
 golem package
 ```
 
+The built package can be found in `./build`.
+
 ## Start a clean session
 
 To run the commands without the Golem environment variables that you may have set on your system:
