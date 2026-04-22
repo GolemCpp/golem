@@ -249,7 +249,7 @@ class Context:
             json.dump(cache, fp, indent=4)
 
     def get_project_dir(self):
-        return self.context.options.dir
+        return self.context.options.project_dir
 
     def make_cache_dirs(self):
         cache_dir_list = []
@@ -936,10 +936,14 @@ class Context:
     @staticmethod
     def options(context):
         context.load('compiler_c compiler_cxx qt5')
-        context.add_option("--dir",
+        context.add_option("--project-dir",
                            action="store",
                            default='.',
                            help="Project location")
+        context.add_option("--build-dir",
+                           action="store",
+                           default='build',
+                           help="Build location")
         context.add_option("--variant",
                            action="store",
                            default='debug',
@@ -1815,11 +1819,12 @@ class Context:
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file()
 
-        dir_option = [
-            '--dir={}'.format(build_path)
+        path_options = [
+            '--project-dir={}'.format(repo_path),
+            '--build-dir={}'.format(build_path)
         ]
 
-        configure_options = dir_option + [
+        configure_options = path_options + [
             '--no-copy-artifacts',
             '--no-copy-licenses',
             '--no-recipes-repositories-fetch',
@@ -1844,11 +1849,11 @@ class Context:
                 '--force-version="{}"'.format(dep.resolved_version)
             ]
 
-        dependencies_options = dir_option + []
+        dependencies_options = path_options + []
 
-        command_options = dir_option + []
+        command_options = path_options + []
 
-        export_options = dir_option + []
+        export_options = path_options + []
 
         helpers.run_task(
             helpers.make_golem_command('configure') + configure_options,

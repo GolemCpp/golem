@@ -95,7 +95,13 @@ pip install --upgrade golemcpp
 
 ### First project
 
-Everything starts with `golemfile.py`. Create it at the root of your project directory.
+Everything starts with `golemfile.py`. You can generate a documented starter file at the root of your project directory with:
+
+``` bash
+golem init
+```
+
+If you prefer to create it manually, here is a minimal example:
 
 Here is an example of `golemfile.py` to compile a **Hello World** program:
 
@@ -146,8 +152,11 @@ Debug artifacts are suffixed with **"-debug"** by default.
 
 All the commands are meant to be called at the root of your project, where the project file (e.g. `golemfile.py` or `golemfile.json`) seats.
 
+If you need to run them from somewhere else, use `--project-dir=<project_dir>`. If you need to customize the build directory, use `--build-dir=<build_dir>`.
+
 The commands are presented in the order they are expected to be called, when needed to be called.
 
+- [golem init](https://golemcpp.org/docs/commands/golem-init/) to generate a documented starter `golemfile.py`
 - [golem configure](https://golemcpp.org/docs/commands/golem-configure/) to configure your project
 - [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to retrieve and configure dependencies
   * About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
@@ -163,7 +172,6 @@ The commands are presented in the order they are expected to be called, when nee
 
 Here is a list of important features to add as a priority:
 
-- Add command to initialize a project
 - Add command to initialize a recipe (takes a URL and an option for the build system, include comments in project file)
 - Add the ability for a project file to include another one
 - Set default value for shallow on dependencies to True, or 'auto' (when version is a tag then shallow=True, otherwise for branches and commit hashes shallow=false) (this new behavior requires to check how version_template will behave, and it requires to fix how golem projects generate artifacts with the asked version to no break dependencies)
