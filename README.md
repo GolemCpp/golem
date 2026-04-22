@@ -259,3 +259,15 @@ Additionnally to this non-exhaustive list, there are edge cases where the behavi
 Golem is powered by [Waf](https://waf.io/), but provides a completely different API. It's a sophisticated frontend to Waf that adds many features and simplifies for the users how to define their project.
 
 Among the added features, Golem provides dependency management with a cache system and [recipes](https://github.com/GolemCpp/recipes).
+
+### About AI-assisted development
+
+Golem started without any AI assistance. But as programming practices evolve, Golem's development must adapt.
+
+Using AI tools to help develop Golem is allowed.
+
+Vibe coding is not. Any AI-assisted change must be thoroughly reviewed by the person submitting it before it is committed.
+
+**Owning the code is paramount:** contributors are expected to understand, validate, and stand behind every line they submit, whether it was written manually or with AI assistance.
+
+Therefore, committing with an AI as the co-author is forbidden. Only humans are responsible for the code committed to Golem.
