@@ -5,6 +5,29 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "[examples/hello] golem configure debug",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"configure",
+				"--clangd",
+				"--variant=debug"
+			],
+			"cwd": "${workspaceFolder}/examples/hello",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
 			"name": "[examples/package] golem package",
 			"type": "debugpy",
 			"request": "launch",
