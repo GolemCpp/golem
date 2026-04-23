@@ -17,11 +17,19 @@ git pull origin/main
 git submodule update --init
 ```
 
-Golem's repository needs to be added to your **PATH** environment variable. And in a Python environment, install the only needed dependency:
+Golem's repository needs to be added to your **PATH** environment variable. And in a Python environment, install the needed dependencies for development:
 
 ``` bash
-pip install node-semver==0.8.0
+pip install --group dev
 ```
+
+To run the Python unit tests locally:
+
+``` bash
+python -m pytest
+```
+
+These tests only cover small isolated Python behaviors. End-to-end validation should still be done through the projects in `examples/`.
 
 ## Contribution expectations
 

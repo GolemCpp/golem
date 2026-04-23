@@ -23,6 +23,12 @@ dependencies = [
     "node-semver==0.8.0",
 ]
 
+[dependency-groups]
+dev = [
+  "node-semver==0.8.0",
+  "pytest>=9.0,<10",
+]
+
 [project.urls]
 Homepage = "https://github.com/GolemCpp/golem"
 Documentation = "https://github.com/GolemCpp/golem"
@@ -31,3 +37,9 @@ Issues = "https://github.com/GolemCpp/golem/issues"
 
 [project.scripts]
 golem = "golemcpp.golem.main:main"
+
+[tool.pytest]
+minversion = "9.0"
+testpaths = [
+    "tests",
+]
