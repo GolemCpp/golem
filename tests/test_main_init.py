@@ -3,6 +3,36 @@ from pathlib import Path
 from golemcpp.golem import main
 
 
+def test_main_without_command_prints_command_recap(tmp_path, monkeypatch, capsys):
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(main.sys, 'argv', ['golem'])
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError('Waf entry point should not run without a command')
+
+    monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
+
+    result = main.main()
+
+    assert result == 0
+
+    stdout = capsys.readouterr().out
+    assert '=== Golem C++ Build System ===' in stdout
+    assert 'Run `golem <command>` from your project root.' in stdout
+    assert 'Useful commands:' in stdout
+    assert 'init' in stdout
+    assert 'configure' in stdout
+    assert 'resolve' in stdout
+    assert 'dependencies' in stdout
+    assert 'build' in stdout
+    assert 'package' in stdout
+    assert 'clean' in stdout
+    assert 'distclean' in stdout
+
+
 def test_main_init_creates_golemfile_from_template(tmp_path, monkeypatch, capsys):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()

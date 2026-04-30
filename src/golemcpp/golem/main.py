@@ -15,6 +15,19 @@ from waflib import Context
 import inspect
 from pathlib import Path
 
+
+def print_command_recap() -> None:
+    print('Run `golem <command>` from your project root.')
+    print('Useful commands:')
+    print('  init          Create a documented starter golemfile.py')
+    print('  configure     Configure the project with all the needed options')
+    print('  resolve       Retrieve and configure dependencies (if dependencies are defined)')
+    print('  dependencies  Build dependencies after resolve (if dependencies are defined)')
+    print('  build         Build the project')
+    print('  package       Generate a package from a successful build')
+    print('  clean         Remove built object files')
+    print('  distclean     Delete the build directory')
+
 def main() -> int:
     print("=== Golem C++ Build System ===")
     sys.stdout.flush()
@@ -23,6 +36,10 @@ def main() -> int:
     golemcpp_data_path = Path(golem_path).parent.joinpath('data')
 
     command, project_dir, build_dir, command_args = cli_arguments.resolve_cli_arguments(sys.argv, os.getcwd())
+
+    if command is None:
+        print_command_recap()
+        return 0
 
     if command in ('init', 'initialize'):
         return init_command.handle_init_command(project_dir=project_dir,
