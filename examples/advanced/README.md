@@ -2,9 +2,9 @@
 
 Start a [clean session](#start-a-clean-session) to run commands, if needed.
 
-## Controlling the locations
+## Customize and force options on dependencies
 
-To showcase how to control how to customize or force options on dependencies, we suggest to run the following:
+To showcase how to customize or force options on dependencies, we suggest to run the following:
 
 ``` bash
 golem configure --variant=debug
