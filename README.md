@@ -172,36 +172,38 @@ The commands are presented in the order they are expected to be called, when nee
 
 Here is a list of important features to add as a priority:
 
+- `golem` alone should welcome the user with a basic recap of the useful commands
+- Add `c_standard`/`cxx_standard` on the Configuration (library, program, dependency)
+- Remove v prefix from versions (see `Version.py`)
+- Support parsing versions such as MAJOR.MINOR (without any PATCH defined)
+- Detect automatically Qt if in `C:\Qt` or other obvious paths on other platforms
+- Add an option to choose the runtime variant (debug or release, important on Windows)
+- Allow the recipes to be a local folder instead of a repository
+- Add a Visual Studio solution generator (investigate waf capabilities and in slnx too)
+- Add the ability to remove the default flags of a variant
+- Allow to define individual header files in export()
+- Add the ability to have different recipes for different versions of the dependency
+- Make an empty version on a dependency default to the latest available version
+- Generate API header and associated defines for libraries when `auto_api_name='MYLIB_API'` is defined (can possibly switch later to a systematic generation with a switch to disable the generation)
 - Add command to initialize a recipe (takes a URL and an option for the build system, include comments in project file)
 - Add the ability for a project file to include another one
 - Set default value for shallow on dependencies to True, or 'auto' (when version is a tag then shallow=True, otherwise for branches and commit hashes shallow=false) (this new behavior requires to check how version_template will behave, and it requires to fix how golem projects generate artifacts with the asked version to no break dependencies)
 - Generate an implicit export on a library when a program tries to use it
 - Support downloadable archives instead of git repositories
 - Add commands to manage the dependencies in the cache system
-- Allow the recipes to be a local folder instead of a repository
 - Supporting libraries mixing compiled targets and header only targets (e.g. boost)
-- Add a Visual Studio solution generator (investigate waf capabilities and in slnx too)
-- Add an option to choose the runtime variant (debug or release, important on Windows)
-- Add the ability to remove the default flags of a variant
-- Add the ability to have different recipes for different versions of the dependency
-- Make an empty version on a dependency default to the latest available version
-- Create a pip package
 - Consider packaging Golem for Windows, Linux, MacOS (see https://pyinstaller.org/en/stable/)
-- Add `c_standard`/`cxx_standard` on the Configuration (library, program, dependency)
-- Remove v prefix from versions (see `Version.py`)
-- Detect automatically Qt if in `C:\Qt` or other obvious paths on other platforms
 - Return a sensible error message to the user when running golem commands in the wrong order
-- Generate API header and associated defines for libraries when `auto_api_name='MYLIB_API'` is defined (can possibly switch later to a systematic generation with a switch to disable the generation)
 - Add or improve recipes for the most popular dependencies (increase support for configuration options)
 - Add first integration test
-- Add GitHub Action to run pytest on all Python versions
-- Allow to define individual header files in export()
 - Add pre/post build scripts
 - Add user-defined options on Configuration to allow scripts in recipes to set special options (e.g. backend=opengl)
-- Support parsing versions such as MAJOR.MINOR (without any PATCH defined)
 - Add support for cppfront
 - Add support for C++ modules
 - Implement [CPS](https://cps-org.github.io/cps/) ([sample](https://cps-org.github.io/cps/sample.html))
+- Detect when `/external:I` or `-isystem` are available before using them
+- Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
+- Generate by default `qmldir` and a `qrc` file for all the found QML files (allow to customize the namespace, or to disable generation)
 
 Here is a list of important improvements to work on the long term:
 
@@ -219,11 +221,7 @@ Here is a list of other nice improvements to work on:
 - Properly log messages instead of using print() (needs anlaysis, consider using waflibs.Logs)
 - Properly abort execution when encoutering an error instead of raising an exception (needs anlaysis, consider using config.fatal(''), raise Waf.Error(), etc.)
 - Show the full path of the compiler when in a NixOS shell (issue on Waf's side)
-- Detect when `/external:I` or `-isystem` are available before using them
-- Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
-- Generate by default `qmldir` and a `qrc` file for all the found QML files (allow to customize the namespace, or to disable generation)
 - Add a `golemfile.yml` format as project file
-
 
 Contributions are very welcome!
 
@@ -251,7 +249,6 @@ After the neccessary improvements, I'll advertise Golem to a broader audience.
 
 ### Known issues
 
-- `golem` alone should welcome the user with a basic recap of the useful commands
 - The cache system accumulates the dependencies and there are no commands yet to clean it up (requires manual deletion)
 - Failure on a dependency processed by `golem resolve` may put this dependency in an unrecoverable state, requiring to delete it manually from the cache
 - Errors of often not user friendly (raised exceptions)
