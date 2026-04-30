@@ -172,8 +172,6 @@ The commands are presented in the order they are expected to be called, when nee
 
 Here is a list of important features to add as a priority:
 
-- `golem` alone should welcome the user with a basic recap of the useful commands
-- Add `c_standard`/`cxx_standard` on the Configuration (library, program, dependency)
 - Remove v prefix from versions (see `Version.py`)
 - Support parsing versions such as MAJOR.MINOR (without any PATCH defined)
 - Detect automatically Qt if in `C:\Qt` or other obvious paths on other platforms

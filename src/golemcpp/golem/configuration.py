@@ -14,6 +14,8 @@ class Configuration(Condition):
                  includes=None,
                  isystem=None,
                  source=None,
+                 c_standard=None,
+                 cxx_standard=None,
                  cxxflags=None,
                  linkflags=None,
                  system=None,
@@ -58,6 +60,8 @@ class Configuration(Condition):
 
         self.packages_tool = '' if packages_tool is None else packages_tool
         self.header_only = False if header_only is None else header_only
+        self.c_standard = '' if c_standard is None else c_standard
+        self.cxx_standard = '' if cxx_standard is None else cxx_standard
 
         self.targets = helpers.parameter_to_list(targets)
 
@@ -143,6 +147,11 @@ class Configuration(Condition):
 
         if hasattr(config, 'ldflags'):
             self.ldflags = helpers.filter_unique(self.ldflags + config.ldflags)
+
+        if hasattr(config, 'c_standard') and config.c_standard:
+            self.c_standard = config.c_standard
+        if hasattr(config, 'cxx_standard') and config.cxx_standard:
+            self.cxx_standard = config.cxx_standard
 
         self.defines = helpers.filter_unique(self.defines + config.defines)
         self.includes = helpers.filter_unique(self.includes + config.includes)
@@ -498,7 +507,7 @@ class Configuration(Condition):
 
     @staticmethod
     def serialized_members():
-        return ['packages_tool', 'header_only']
+        return ['packages_tool', 'header_only', 'c_standard', 'cxx_standard']
 
     @staticmethod
     def serialized_members_list():

@@ -859,6 +859,106 @@ class Context:
         return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
 
     @staticmethod
+    def strip_language_standard_flags(flags, language):
+        patterns = {
+            'c': [r'^-std=(?:gnu|iso)?c(?!\+\+)', r'^/std:c(?!\+\+)'],
+            'cxx': [r'^-std=(?:gnu\+\+|c\+\+)', r'^/std:c\+\+'],
+        }
+
+        filtered_flags = []
+        for flag in flags:
+            if any(re.match(pattern, flag) for pattern in patterns[language]):
+                continue
+            filtered_flags.append(flag)
+        return filtered_flags
+
+    @staticmethod
+    def make_c_standard_flag(standard, compiler_name):
+        if standard is None:
+            return None
+
+        standard = str(standard).strip()
+        if not standard:
+            return None
+
+        if standard.startswith('-std=') or standard.startswith('/std:'):
+            return standard
+
+        normalized = standard.lower().replace(' ', '')
+
+        if compiler_name in ['msvc', 'clang-cl']:
+            normalized = normalized.replace('gnu', 'c', 1)
+            mapping = {
+                '11': '/std:c11',
+                'c11': '/std:c11',
+                '17': '/std:c17',
+                'c17': '/std:c17',
+                'latest': '/std:clatest',
+                'clatest': '/std:clatest',
+            }
+            if normalized in mapping:
+                return mapping[normalized]
+            raise RuntimeError(
+                "Unsupported C standard '{}' for compiler '{}'".format(
+                    standard, compiler_name))
+
+        if normalized.isdigit():
+            normalized = 'c{}'.format(normalized)
+        elif not normalized.startswith('c') and not normalized.startswith('gnu'):
+            raise RuntimeError(
+                "Unsupported C standard '{}' for compiler '{}'".format(
+                    standard, compiler_name))
+
+        return '-std={}'.format(normalized)
+
+    @staticmethod
+    def make_cxx_standard_flag(standard, compiler_name):
+        if standard is None:
+            return None
+
+        standard = str(standard).strip()
+        if not standard:
+            return None
+
+        if standard.startswith('-std=') or standard.startswith('/std:'):
+            return standard
+
+        normalized = standard.lower().replace(' ', '')
+
+        if compiler_name in ['msvc', 'clang-cl']:
+            normalized = normalized.replace('gnu++', 'c++', 1)
+            mapping = {
+                '11': '/std:c++11',
+                'c++11': '/std:c++11',
+                '14': '/std:c++14',
+                'c++14': '/std:c++14',
+                '17': '/std:c++17',
+                'c++17': '/std:c++17',
+                '20': '/std:c++20',
+                'c++20': '/std:c++20',
+                '23': '/std:c++latest',
+                '26': '/std:c++latest',
+                'c++23': '/std:c++latest',
+                'c++26': '/std:c++latest',
+                'latest': '/std:c++latest',
+                'c++latest': '/std:c++latest',
+            }
+            if normalized in mapping:
+                return mapping[normalized]
+            raise RuntimeError(
+                "Unsupported C++ standard '{}' for compiler '{}'".format(
+                    standard, compiler_name))
+
+        if normalized.isdigit():
+            normalized = 'c++{}'.format(normalized)
+        elif not normalized.startswith('c++') and not normalized.startswith('gnu++'):
+            raise RuntimeError(
+                "Unsupported C++ standard '{}' for compiler '{}'".format(
+                    standard, compiler_name))
+
+        return '-std={}'.format(normalized)
+
+    @staticmethod
     def machine():
         if os.name == 'nt' and sys.version_info[:2] < (2, 7):
             return os.environ.get("PROCESSOR_ARCHITEW6432",
@@ -2803,8 +2903,20 @@ class Context:
         if is_qt_on and self.is_msvc_like():
             qt_cxxflags += ['/Zc:__cplusplus', '/permissive-']
 
-        final_cxxflags = helpers.filter_unique(config.cxxflags +
-                                               target_cxxflags + isystemflags + qt_cxxflags)
+        c_standard_flag = self.make_c_standard_flag(config.c_standard, self.compiler_name())
+        cxx_standard_flag = self.make_cxx_standard_flag(config.cxx_standard, self.compiler_name())
+
+        final_cxxflags = config.cxxflags + target_cxxflags
+        if cxx_standard_flag:
+            final_cxxflags = self.strip_language_standard_flags(final_cxxflags, language='cxx')
+            final_cxxflags = [cxx_standard_flag] + final_cxxflags
+        final_cxxflags = helpers.filter_unique(final_cxxflags + isystemflags + qt_cxxflags)
+
+        final_cflags = config.cflags + target_cxxflags
+        if c_standard_flag:
+            final_cflags = self.strip_language_standard_flags(final_cflags, language='c')
+            final_cflags = [c_standard_flag] + final_cflags
+        final_cflags = helpers.filter_unique(final_cflags + isystemflags + qt_cxxflags)
 
         for flag in final_cxxflags:
             if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
@@ -2905,8 +3017,7 @@ class Context:
             ],
             name=task.name,
             cxxflags=final_cxxflags,
-            cflags=helpers.filter_unique(config.cflags + target_cxxflags +
-                                         isystemflags + qt_cxxflags),
+            cflags=final_cflags,
             linkflags=linkflags_option,
             ldflags=ldflags_option,
             use=config_all_use,
