@@ -68,3 +68,30 @@ def test_normalize_argv_keeps_explicit_build_dir_and_drops_deprecated_dir_option
         'configure',
         '--build-dir=current',
     ]
+
+
+def test_normalize_argv_adds_project_and_build_dir_when_missing():
+    assert normalize_argv(
+        ['golem', 'configure', '--clangd'],
+        project_dir='/workspace/project',
+        build_dir='/workspace/project/build',
+    ) == [
+        'golem',
+        'configure',
+        '--clangd',
+        '--project-dir=/workspace/project',
+        '--build-dir=/workspace/project/build',
+    ]
+
+
+def test_normalize_argv_preserves_explicit_project_and_build_dir():
+    assert normalize_argv(
+        ['golem', '--project-dir=demo', 'configure', '--build-dir=out'],
+        project_dir='/workspace/project',
+        build_dir='/workspace/project/build',
+    ) == [
+        'golem',
+        '--project-dir=demo',
+        'configure',
+        '--build-dir=out',
+    ]

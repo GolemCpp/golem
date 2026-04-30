@@ -938,11 +938,9 @@ class Context:
         context.load('compiler_c compiler_cxx qt5')
         context.add_option("--project-dir",
                            action="store",
-                           default='.',
                            help="Project location")
         context.add_option("--build-dir",
                            action="store",
-                           default='build',
                            help="Build location")
         context.add_option("--variant",
                            action="store",

@@ -44,9 +44,10 @@ def resolve_cli_arguments(argv: list[str], cwd: str) -> tuple[str | None, str, s
     return command, project_dir, build_dir, command_args
 
 
-def normalize_argv(argv: list[str]) -> list[str]:
+def normalize_argv(argv: list[str], project_dir: str | None = None, build_dir: str | None = None) -> list[str]:
     normalized_argv = [argv[0]]
     has_build_dir = False
+    has_project_dir = False
 
     for arg in argv[1:]:
         if arg.startswith('--dir='):
@@ -54,6 +55,9 @@ def normalize_argv(argv: list[str]) -> list[str]:
 
         if arg.startswith('--build-dir='):
             has_build_dir = True
+
+        if arg.startswith('--project-dir='):
+            has_project_dir = True
 
         normalized_argv.append(arg)
 
@@ -63,5 +67,12 @@ def normalize_argv(argv: list[str]) -> list[str]:
         if arg.startswith('--dir='):
             if not has_build_dir:
                 normalized_argv.append('--build-dir=' + arg.split('=', 1)[1])
+                has_build_dir = True
+
+    if project_dir is not None and not has_project_dir:
+        normalized_argv.append('--project-dir=' + project_dir)
+
+    if build_dir is not None and not has_build_dir:
+        normalized_argv.append('--build-dir=' + build_dir)
 
     return normalized_argv

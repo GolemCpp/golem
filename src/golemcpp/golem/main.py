@@ -46,7 +46,9 @@ def main() -> int:
                                    data_dir=golemcpp_data_path,
                                    args=command_args)
 
-    sys.argv = cli_arguments.normalize_argv(sys.argv)
+    sys.argv = cli_arguments.normalize_argv(sys.argv,
+                                           project_dir=project_dir,
+                                           build_dir=build_dir)
 
     golem_out = build_dir
     build_dir = os.path.join(golem_out, 'golem')
