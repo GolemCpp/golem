@@ -71,3 +71,26 @@ def test_main_init_returns_error_when_project_file_exists(tmp_path, monkeypatch,
     stdout = capsys.readouterr().out
     assert 'already exists' in stdout
     assert '--force' in stdout
+
+
+def test_main_sets_project_and_build_dir_before_calling_waf(tmp_path, monkeypatch):
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(main.sys, 'argv', ['golem', 'configure', '--clangd'])
+
+    captured = {}
+
+    def fake_waf_entry_point(build_dir, waf_version, wafdir):
+        captured['build_dir'] = build_dir
+        captured['argv'] = list(main.sys.argv)
+
+    monkeypatch.setattr(main.Scripting, 'waf_entry_point', fake_waf_entry_point)
+
+    result = main.main()
+
+    assert result == 0
+    assert captured['build_dir'] == str(project_dir / 'build' / 'golem')
+    assert '--project-dir=' + str(project_dir) in captured['argv']
+    assert '--build-dir=' + str(project_dir / 'build') in captured['argv']

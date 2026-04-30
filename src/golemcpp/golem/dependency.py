@@ -15,19 +15,13 @@ from urllib.parse import urlparse, unquote
 class Dependency(Configuration):
     def __init__(self,
                  name=None,
-                 targets=None,
                  repository=None,
                  version=None,
                  version_regex=None,
-                 variant=None,
-                 link=None,
-                 runtime=None,
-                 shallow=False):
-        super(Dependency, self).__init__(targets=targets,
-                                         type='library',
-                                         variant=variant,
-                                         link=link,
-                                         runtime=runtime)
+                 shallow=False,
+                 **kwargs):
+        super(Dependency, self).__init__(type='library',
+                                         **kwargs)
         self.name = '' if name is None else name
         self.repository = '' if repository is None else repository
         self.version = '' if version is None else version
@@ -93,49 +87,49 @@ class Dependency(Configuration):
             self.resolved_version = '-'
             self.resolved_hash = '-'
         else:
-        tags = helpers.check_git_output(
-            ['ls-remote', '--tags', self.repository],
-            cwd=os.getcwd()).decode(sys.stdout.encoding)
-        tags = tags.split('\n')
-        tmp = ''
-        for line in tags:
-            if '^{}' not in line:
-                tmp += line + '\n'
-        tags = tmp
-        versions_list = re.findall(r'refs\/tags\/(.*)', tags)
-        versions_list = set(versions_list)
-        versions_list = list(versions_list)
-
-        if self.version_regex:
-            p = re.compile(self.version_regex)
-            versions_list = [s for s in versions_list if p.match(s)]
-
-        found_version = Dependency.find_version(versions_list, self.version)
-        if found_version:
-            hash = helpers.check_git_output([
-                'ls-remote', '--tags', self.repository,
-                'refs/tags/' + found_version
-            ],
-            cwd=os.getcwd()).decode(sys.stdout.encoding)
-            if not hash:
-                raise RuntimeError(
-                    "Can't find any hash related to found tag {}".format(
-                        found_version))
-            hash = hash.splitlines()[0]
-            hash = hash.split('\t')[0]
-            self.resolved_hash = hash
-            self.resolved_version = found_version
-        else:
-            self.resolved_version = self.version
-            hash = helpers.check_git_output(
-                ['ls-remote', '--heads', self.repository, self.version],
+            tags = helpers.check_git_output(
+                ['ls-remote', '--tags', self.repository],
                 cwd=os.getcwd()).decode(sys.stdout.encoding)
-            if hash:
+            tags = tags.split('\n')
+            tmp = ''
+            for line in tags:
+                if '^{}' not in line:
+                    tmp += line + '\n'
+            tags = tmp
+            versions_list = re.findall(r'refs\/tags\/(.*)', tags)
+            versions_list = set(versions_list)
+            versions_list = list(versions_list)
+
+            if self.version_regex:
+                p = re.compile(self.version_regex)
+                versions_list = [s for s in versions_list if p.match(s)]
+
+            found_version = Dependency.find_version(versions_list, self.version)
+            if found_version:
+                hash = helpers.check_git_output([
+                    'ls-remote', '--tags', self.repository,
+                    'refs/tags/' + found_version
+                ],
+                cwd=os.getcwd()).decode(sys.stdout.encoding)
+                if not hash:
+                    raise RuntimeError(
+                        "Can't find any hash related to found tag {}".format(
+                            found_version))
                 hash = hash.splitlines()[0]
                 hash = hash.split('\t')[0]
                 self.resolved_hash = hash
+                self.resolved_version = found_version
             else:
-                self.resolved_hash = self.version
+                self.resolved_version = self.version
+                hash = helpers.check_git_output(
+                    ['ls-remote', '--heads', self.repository, self.version],
+                    cwd=os.getcwd()).decode(sys.stdout.encoding)
+                if hash:
+                    hash = hash.splitlines()[0]
+                    hash = hash.split('\t')[0]
+                    self.resolved_hash = hash
+                else:
+                    self.resolved_hash = self.version
 
         if not self.resolved_hash:
             raise RuntimeError(
