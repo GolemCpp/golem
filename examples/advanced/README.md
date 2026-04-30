@@ -7,7 +7,7 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 To showcase how to customize or force options on dependencies, we suggest to run the following:
 
 ``` bash
-golem configure --variant=debug
+golem configure --variant=release
 golem resolve
 golem dependencies
 golem build
