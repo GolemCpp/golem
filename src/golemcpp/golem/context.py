@@ -824,7 +824,7 @@ class Context:
         return sys.platform.startswith('darwin')
 
     def is_android(self):
-        return self.has_android_ndk_path()
+        return False and self.has_android_ndk_path()
 
     def osname(self):
         osname = ''
