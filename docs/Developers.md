@@ -23,13 +23,13 @@ Golem's repository needs to be added to your **PATH** environment variable. And 
 pip install --group dev
 ```
 
-To run the Python unit tests locally:
+To run the automated tests locally:
 
 ``` bash
 python -m pytest
 ```
 
-These tests only cover small isolated Python behaviors. End-to-end validation should still be done through the projects in `examples/`.
+The suite covers both small isolated Python behaviors and example-based integration tests that exercise projects under `examples/`. End-to-end coverage is still partial, so manual validation of the relevant example project remains useful for larger changes.
 
 ## Contribution expectations
 

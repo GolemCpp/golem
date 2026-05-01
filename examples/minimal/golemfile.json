@@ -16,7 +16,7 @@
             "defines": ["FOO_API_EXPORT"]
         },
         {
-            "name": "hello",
+            "name": "hello-minimal",
             "type": "program",
             "source": ["src"],
             "use": ["mylib"],

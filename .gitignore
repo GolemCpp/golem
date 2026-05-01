@@ -30,6 +30,8 @@ build/*
 /waf/dist
 __pycache__
 /.venv
+/.pytest_cache
+/.pytest-examples
 
 ############
 ## Windows
