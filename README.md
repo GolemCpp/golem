@@ -172,7 +172,6 @@ The commands are presented in the order they are expected to be called, when nee
 
 Here is a list of important features to add as a priority:
 
-- Remove v prefix from versions (see `Version.py`)
 - Support parsing versions such as MAJOR.MINOR (without any PATCH defined)
 - Detect automatically Qt if in `C:\Qt` or other obvious paths on other platforms
 - Add an option to choose the runtime variant (debug or release, important on Windows)
@@ -193,7 +192,6 @@ Here is a list of important features to add as a priority:
 - Consider packaging Golem for Windows, Linux, MacOS (see https://pyinstaller.org/en/stable/)
 - Return a sensible error message to the user when running golem commands in the wrong order
 - Add or improve recipes for the most popular dependencies (increase support for configuration options)
-- Add first integration test
 - Add pre/post build scripts
 - Add user-defined options on Configuration to allow scripts in recipes to set special options (e.g. backend=opengl)
 - Add support for cppfront
