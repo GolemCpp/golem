@@ -6,8 +6,8 @@ import subprocess
 class Version:
     def __init__(self, working_dir=None, build_number=None):
         if not working_dir:
-            self.gitlong = 'v0.0.0'
-            self.gitshort = 'v0.0.0'
+            self.gitlong = '0.0.0'
+            self.gitshort = '0.0.0'
             self.githash = ''
             self.gitmessage = ''
             self.gitbranch = ''
@@ -16,9 +16,9 @@ class Version:
             return
 
         self.gitlong = Version.retrieve_gitlong(working_dir=working_dir,
-                                                default='v0.0.0')
+                                                default='0.0.0')
         self.gitshort = Version.retrieve_gitshort(working_dir=working_dir,
-                                                  default='v0.0.0')
+                                                  default='0.0.0')
         self.githash = Version.retrieve_githash(working_dir=working_dir)
         self.gitmessage = Version.retrieve_gitmessage(working_dir=working_dir,
                                                       commit_hash=self.githash)
