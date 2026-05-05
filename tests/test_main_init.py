@@ -31,6 +31,7 @@ def test_main_without_command_prints_command_recap(tmp_path, monkeypatch, capsys
     assert 'package' in stdout
     assert 'clean' in stdout
     assert 'distclean' in stdout
+    assert 'Documentation: https://golemcpp.org/docs/' in stdout
 
 
 def test_main_init_creates_golemfile_from_template(tmp_path, monkeypatch, capsys):
