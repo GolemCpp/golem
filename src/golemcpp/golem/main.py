@@ -27,6 +27,7 @@ def print_command_recap() -> None:
     print('  package       Generate a package from a successful build')
     print('  clean         Remove built object files')
     print('  distclean     Delete the build directory')
+    print('Documentation: https://golemcpp.org/docs/guides/getting-started/')
 
 def main() -> int:
     print("=== Golem C++ Build System ===")
