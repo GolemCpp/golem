@@ -9,9 +9,9 @@ def get_golem_version() -> str:
     try:
         return package_version('golemcpp')
     except PackageNotFoundError:
-        return Version(working_dir=Path(__file__).resolve().parents[3]).semver
+        return '0.0.0'
 
 
 def handle_version_command() -> bool:
-    print(f'golem {get_golem_version()}')
+    print(f'Golem {get_golem_version()}')
     return True
