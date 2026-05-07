@@ -1,13 +1,9 @@
 from golemcpp.golem import helpers
 from golemcpp.golem import cli_arguments
 from golemcpp.golem import init_command
-from shutil import copytree
+from golemcpp.golem import version_command
 from string import Template
-import subprocess
 import shutil
-import string
-import importlib.util
-import importlib.machinery
 import os
 import sys
 from waflib import Scripting
@@ -36,20 +32,25 @@ def main() -> int:
     golem_path = helpers.get_golemcpp_golem_dir()
     golemcpp_data_path = Path(golem_path).parent.joinpath('data')
 
-    command, project_dir, build_dir, command_args = cli_arguments.resolve_cli_arguments(sys.argv, os.getcwd())
+    global_args, command, command_args = cli_arguments.parse_cli_arguments(sys.argv, os.getcwd())
 
+    if '--version' in global_args:
+        version_command.handle_version_command()
+        return 0
+    
     if command is None:
         print_command_recap()
         return 0
 
+    project_dir, build_dir = cli_arguments.parse_directories_from_arguments(command_args)
+
     if command in ('init', 'initialize'):
         return init_command.handle_init_command(project_dir=project_dir,
-                                   data_dir=golemcpp_data_path,
-                                   args=command_args)
+                                                data_dir=golemcpp_data_path,
+                                                args=command_args)
 
-    sys.argv = cli_arguments.normalize_argv(sys.argv,
-                                           project_dir=project_dir,
-                                           build_dir=build_dir)
+    # For other commands, we only keep the arguments that are relevant for waf, which are the ones after the command
+    sys.argv = [sys.argv[0], command] + command_args
 
     golem_out = build_dir
     build_dir = os.path.join(golem_out, 'golem')
