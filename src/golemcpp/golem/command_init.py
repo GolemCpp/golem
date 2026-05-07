@@ -47,6 +47,8 @@ def handle_init_command(project_dir: str, data_dir: Path, args: list[str]) -> in
     for arg in args:
         if arg.startswith('--project-dir='):
             continue
+        if arg.startswith('--build-dir='):
+            continue
         if arg in ('-h', '--help'):
             print("Usage: golem init [--project-dir=<project_dir>] [--force]")
             print("Generate a commented golemfile.py in the current project directory.")
