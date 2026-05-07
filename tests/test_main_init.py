@@ -33,7 +33,6 @@ def test_main_without_command_prints_command_recap(tmp_path, monkeypatch, capsys
     assert 'distclean' in stdout
     assert 'Documentation: https://golemcpp.org/docs/' in stdout
 
-
 def test_main_init_creates_golemfile_from_template(tmp_path, monkeypatch, capsys):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()
@@ -93,5 +92,10 @@ def test_main_sets_project_and_build_dir_before_calling_waf(tmp_path, monkeypatc
 
     assert result == 0
     assert captured['build_dir'] == str(project_dir / 'build' / 'golem')
-    assert '--project-dir=' + str(project_dir) in captured['argv']
-    assert '--build-dir=' + str(project_dir / 'build') in captured['argv']
+    assert captured['argv'] == [
+        'golem',
+        'configure',
+        '--clangd',
+        '--project-dir=' + str(project_dir),
+        '--build-dir=' + str(project_dir / 'build'),
+    ]
