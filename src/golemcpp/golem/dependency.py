@@ -204,6 +204,8 @@ class Dependency(Configuration):
 
         semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._\-](?P<minor>0|[1-9]\d*)[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?'
 
+        semver_short_regex_like = r'(?P<major>0|[1-9]\d*)(?:[\._\-](?P<minor>0|[1-9]\d*)(?:[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?)?)?'        
+
         semver_list = []
 
         transformed_versions = dict()
@@ -213,12 +215,12 @@ class Dependency(Configuration):
             if not semver:
                 matches = re.search(semver_regex_like, v)
                 if not matches:
-                    continue
+                    matches = re.search(semver_short_regex_like, v)
+                    if not matches:
+                        continue
                 new_version = matches.group('major')
-                if matches.group('minor'):
-                    new_version += '.' + matches.group('minor')
-                    if matches.group('patch'):
-                        new_version += '.' + matches.group('patch')
+                new_version += '.' + (matches.group('minor') or '0')
+                new_version += '.' + (matches.group('patch') or '0')
                 if matches.group('prerelease'):
                     new_version += '-' + matches.group('prerelease')
                 if matches.group('buildmetadata'):
