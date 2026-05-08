@@ -26,6 +26,7 @@ from golemcpp.golem.template import Template
 import copy
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
+from golemcpp.golem import qt_discovery
 from functools import partial
 from pathlib import Path
 from waflib import Logs, Task
@@ -4609,6 +4610,21 @@ class Context:
     def is_qt6_used_in_params(self, features=None, wfeatures=None):
         return (any([feature.startswith("QT6") for feature in features]) if features else False) or ('qt6' in wfeatures if wfeatures else False)
 
+    def is_qmake_available_on_path(self):
+        return shutil.which('qmake6') is not None or shutil.which('qmake') is not None
+
+    def should_autodiscover_qtdir(self):
+        if self.context.options.qtdir or self.project.qtdir:
+            return False
+
+        if os.environ.get('QT5_ROOT') or os.environ.get('QT6_ROOT'):
+            return False
+
+        if self.is_qmake_available_on_path():
+            return False
+
+        return True
+
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
@@ -4634,6 +4650,10 @@ class Context:
             self.context.want_qt6 = is_qt6_used
             if os.path.exists(self.project.qtdir):
                 self.context.options.qtdir = self.project.qtdir
+            elif self.should_autodiscover_qtdir():
+                qtdir = qt_discovery.search_for_qt_root_in_default_dirs(self)
+                if qtdir:
+                    self.context.options.qtdir = qtdir
 
         self.context.setenv('main')
         self.configure_compiler()
