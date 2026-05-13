@@ -341,7 +341,8 @@ class Configuration(Condition):
 
             expected_variant = self.variant
             expected_link = self.link
-            expected_runtime = self.runtime
+            expected_runtime_link = self.runtime_link
+            expected_runtime_variant = self.runtime_variant
             expected_osystem = self.osystem
             expected_arch = self.arch
             expected_compiler = self.compiler
@@ -352,7 +353,10 @@ class Configuration(Condition):
             if condition is not None:
                 if not expected_variant: expected_variant = condition.variant
                 if not expected_link: expected_link = condition.link
-                if not expected_runtime: expected_runtime = condition.runtime
+                if not expected_runtime_link:
+                    expected_runtime_link = condition.runtime_link
+                if not expected_runtime_variant:
+                    expected_runtime_variant = condition.runtime_variant
                 if not expected_osystem: expected_osystem = condition.osystem
                 if not expected_arch: expected_arch = condition.arch
                 if not expected_compiler:
@@ -364,7 +368,10 @@ class Configuration(Condition):
 
             if not expected_variant: expected_variant = context.variant()
             if not expected_link: expected_link = context.link()
-            if not expected_runtime: expected_runtime = context.runtime()
+            if not expected_runtime_link:
+                expected_runtime_link = context.runtime_link()
+            if not expected_runtime_variant:
+                expected_runtime_variant = context.runtime_variant()
             if not expected_osystem: expected_osystem = context.osname()
             if not expected_arch: expected_arch = context.arch()
             if not expected_compiler:
@@ -382,8 +389,8 @@ class Configuration(Condition):
             if ((c.variant
                  and not evaluate_condition(expected_variant, c.variant)) or
                 (c.link and not evaluate_condition(expected_link, c.link)) or
-                (c.runtime
-                 and not evaluate_condition(expected_runtime, c.runtime)) or
+                (c.runtime_link and not evaluate_condition(expected_runtime_link, c.runtime_link)) or
+                (c.runtime_variant and not evaluate_condition(expected_runtime_variant, c.runtime_variant)) or
                 (c.osystem
                  and not evaluate_condition(expected_osystem, c.osystem)) or
                 (c.arch and not evaluate_condition(expected_arch, c.arch)) or
@@ -403,6 +410,10 @@ class Configuration(Condition):
                     self.header_only = c.header_only
 
     def when(self, **kwargs):
+        # Handle legacy 'runtime' keyword by mapping it to 'runtime_link'
+        if 'runtime' in kwargs and 'runtime_link' not in kwargs:
+            kwargs['runtime_link'] = kwargs.pop('runtime')
+            
         config = Configuration(**kwargs)
         self.when_configs.append(config)
         return config
@@ -484,7 +495,10 @@ class Configuration(Condition):
                 condition.link.append(entry)
                 is_empty = False
             elif raw_entry in ['rshared', 'rstatic']:
-                condition.runtime.append(entry)
+                condition.runtime_link.append(entry[1:])
+                is_empty = False
+            elif raw_entry in ['rdebug', 'rrelease']:
+                condition.runtime_variant.append(entry[1:])
                 is_empty = False
             elif raw_entry in [
                     'debian', 'opensuse', 'ubuntu', 'centos', 'redhat'

@@ -113,8 +113,9 @@ class Context:
     def make_dependency_unique_identifier(dependency):
         return '{}_{}_{}_{}_{}'.format(dependency.repository,
                                        dependency.resolved_hash,
-                                       dependency.link, dependency.runtime,
-                                       dependency.runtime)
+                                       dependency.link,
+                                       dependency.runtime_link,
+                                       dependency.runtime_variant)
 
     def load_resolved_dependencies(self):
         master_dependencies = self.load_master_dependencies_configuration()
@@ -134,8 +135,10 @@ class Context:
                             dependency.link = master_dependency.link
                         if master_dependency.variant:
                             dependency.variant = master_dependency.variant
-                        if master_dependency.runtime:
-                            dependency.runtime = master_dependency.runtime
+                        if master_dependency.runtime_link:
+                            dependency.runtime_link = master_dependency.runtime_link
+                        if master_dependency.runtime_variant:
+                            dependency.runtime_variant = master_dependency.runtime_variant
                         break
 
         if self.resolved_dependencies_path is not None:
@@ -674,18 +677,32 @@ class Context:
     def is_shared(self):
         return self.context.options.link == self.link_shared()
 
-    def runtime(self, dep=None):
-        return self.context.options.runtime if dep is None or not dep.runtime else dep.runtime[
-            0]
+    def runtime_link(self, dep=None):
+        return self.context.options.runtime_link if dep is None or not dep.runtime_link else dep.runtime_link[0]
 
     def is_runtime_static(self):
-        return self.runtime() == self.link_static()
+        return self.runtime_link() == self.link_static()
 
     def is_runtime_shared(self):
-        return self.runtime() == self.link_shared()
+        return self.runtime_link() == self.link_shared()
 
-    def runtime_min(self, dep=None):
-        return self.runtime(dep)[:2]
+    def runtime_variant(self, dep=None):
+        runtime_variant = self.context.options.runtime_variant if dep is None or not dep.runtime_variant else dep.runtime_variant[0]
+
+        # If runtime_variant is not set, fallback to variant
+        return runtime_variant if runtime_variant else self.variant()
+
+    def is_runtime_variant_debug(self):
+        return self.runtime_variant() == self.variant_debug()
+
+    def is_runtime_variant_release(self):
+        return self.runtime_variant() == self.variant_release()
+
+    def runtime_link_min(self, dep=None):
+        return self.runtime_link(dep)[:2]
+
+    def runtime_variant_min(self, dep=None):
+        return self.runtime_variant(dep)[:1]
 
     def arch(self):
         return self.context.options.arch
@@ -1047,14 +1064,20 @@ class Context:
                            action="store",
                            default='debug',
                            help="Variant (debug, release)")
-        context.add_option("--runtime",
+        context.add_option("--runtime-link",
+                           "--runtime", # Deprecated
+                           dest='runtime_link',
                            action="store",
                            default='shared',
-                           help="Runtime Linking")
+                           help="Runtime Linking (shared, static)")
+        context.add_option("--runtime-variant",
+                           action="store",
+                           default=None, # matches --variant
+                           help="Runtime Variant (debug, release)")
         context.add_option("--link",
                            action="store",
                            default='shared',
-                           help="Library Linking")
+                           help="Library Linking (shared, static)")
         context.add_option("--arch",
                            action="store",
                            default=Context.osarch(),
@@ -1392,11 +1415,13 @@ class Context:
 
         if self.is_msvc_like():
             if self.is_runtime_static():
-                self.context.env.CXXFLAGS.append('/MTd')
-                self.context.env.CFLAGS.append('/MTd')
+                runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
+                self.context.env.CXXFLAGS.append(runtime_flag)
+                self.context.env.CFLAGS.append(runtime_flag)
             elif self.is_runtime_shared():
-                self.context.env.CXXFLAGS.append('/MDd')
-                self.context.env.CFLAGS.append('/MDd')
+                runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
+                self.context.env.CXXFLAGS.append(runtime_flag)
+                self.context.env.CFLAGS.append(runtime_flag)
 
             default_flags = ['/Zi', '/Ob0', '/Od', '/RTC1']
             
@@ -1435,11 +1460,13 @@ class Context:
 
         if self.is_msvc_like():
             if self.is_runtime_static():
-                self.context.env.CXXFLAGS.append('/MT')
-                self.context.env.CFLAGS.append('/MT')
+                runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
+                self.context.env.CXXFLAGS.append(runtime_flag)
+                self.context.env.CFLAGS.append(runtime_flag)
             elif self.is_runtime_shared():
-                self.context.env.CXXFLAGS.append('/MD')
-                self.context.env.CFLAGS.append('/MD')
+                runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
+                self.context.env.CXXFLAGS.append(runtime_flag)
+                self.context.env.CFLAGS.append(runtime_flag)
 
             default_flags = ['/O2', '/Ob2']
             
@@ -1450,10 +1477,6 @@ class Context:
 
             self.context.env.LINKFLAGS += default_flags
             self.context.env.ARFLAGS += default_flags
-
-            # TODO: Add --runtime-variant so that on Windows,
-            # we can choose independantly the variant of the runtime
-            # from the variant of the project and its dependencies
 
             # Some compilation flags (self.context.env.CXXFLAGS)
 
@@ -1928,8 +1951,9 @@ class Context:
             '--no-copy-licenses',
             '--no-recipes-repositories-fetch',
             '--targets={}'.format(dep.name),
-            '--runtime={}'.format(self.context.options.runtime if not dep.runtime else dep.runtime[0]),
-            '--link={}'.format(self.context.options.link if not dep.link else dep.link[0]),
+            '--runtime-link={}'.format(self.runtime_link(dep)),
+            '--runtime-variant={}'.format(self.runtime_variant(dep)),
+            '--link={}'.format(self.link(dep)),
             '--arch={}'.format(self.context.options.arch),
             '--variant={}'.format(self.context.options.variant if not dep.variant else dep.variant[0]),
             '--export={}'.format(dep_path),
@@ -4023,6 +4047,13 @@ class Context:
     def restore_options_env(self, env):
 
         options = json.loads(env.OPTIONS)
+
+        # Backwards compatibility with old versions where runtime_link option was not available
+        if 'runtime_link' not in options and 'runtime' in options:
+            options['runtime_link'] = options['runtime']
+        if 'runtime_variant' not in options:
+            options['runtime_variant'] = None
+
         if not self.context.options.targets:
             self.context.options.targets = options['targets']
         else:
@@ -4675,11 +4706,12 @@ class Context:
     def build_path(self, dep=None):
         if self.is_windows():
             return self.osname()[:1] + ('64' if self.get_arch(
-            ) == 'x64' else '32') + self.compiler_min() + self.runtime_min(
-                dep) + self.link_min(dep) + self.variant_min(dep)
+            ) == 'x64' else '32') + self.compiler_min() + self.runtime_link_min(
+                dep) + self.runtime_variant_min(dep) + self.link_min(
+                dep) + self.variant_min(dep)
         else:
             return self.osname() + '-' + self.arch_min() + '-' + self.compiler(
-            ) + '-' + self.runtime_min(dep) + '-' + self.link_min(
+            ) + '-' + self.runtime_link_min(dep) + '-' + self.link_min(
                 dep) + '-' + self.variant_min(dep)
 
     def build_path_build(self, dep=None):
