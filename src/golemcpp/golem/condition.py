@@ -7,13 +7,19 @@ class Condition(object):
     def __init__(self,
                  variant=None,
                  link=None,
-                 runtime=None,
+                 runtime_link=None,
+                 runtime_variant=None,
                  osystem=None,
                  arch=None,
                  compiler=None,
                  distribution=None,
                  release=None,
-                 type=None):
+                 type=None,
+                 runtime=None):
+
+        # Handle legacy 'runtime' parameter by mapping it to 'runtime_link'
+        if runtime_link is None and runtime is not None:
+            runtime_link = runtime
 
         # debug, release
         self.variant = helpers.parameter_to_list(variant)
@@ -22,7 +28,10 @@ class Condition(object):
         self.link = helpers.parameter_to_list(link)
 
         # shared, static
-        self.runtime = helpers.parameter_to_list(runtime)
+        self.runtime_link = helpers.parameter_to_list(runtime_link)
+
+        # debug, release
+        self.runtime_variant = helpers.parameter_to_list(runtime_variant)
 
         # linux, windows, osx
         self.osystem = helpers.parameter_to_list(osystem)
@@ -81,8 +90,10 @@ class Condition(object):
             condition.variant, self.variant)
         self.link = Condition.intersection_expression(condition.link,
                                                       self.link)
-        self.runtime = Condition.intersection_expression(
-            condition.runtime, self.runtime)
+        self.runtime_link = Condition.intersection_expression(
+            condition.runtime_link, self.runtime_link)
+        self.runtime_variant = Condition.intersection_expression(
+            condition.runtime_variant, self.runtime_variant)
         self.osystem = Condition.intersection_expression(
             condition.osystem, self.osystem)
         self.arch = Condition.intersection_expression(condition.arch,
@@ -99,8 +110,8 @@ class Condition(object):
     @staticmethod
     def serialized_members():
         return [
-            'variant', 'link', 'runtime', 'osystem', 'arch', 'compiler',
-            'distribution', 'release', 'type'
+            'variant', 'link', 'runtime_link', 'runtime_variant', 'osystem',
+            'arch', 'compiler', 'distribution', 'release', 'type'
         ]
 
     @staticmethod
@@ -126,6 +137,10 @@ class Condition(object):
         has_entry = False
         for entry in entries:
             raw_entry = ConditionExpression.remove_modifiers(entry)
+
+            # Handle legacy 'runtime' entry by mapping it to 'runtime_link'
+            if raw_entry == 'runtime':
+                raw_entry = 'runtime_link'
 
             if raw_entry in Condition.serialized_members():
                 if not isinstance(value, list):
