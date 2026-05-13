@@ -14,7 +14,12 @@ class Condition(object):
                  compiler=None,
                  distribution=None,
                  release=None,
-                 type=None):
+                 type=None,
+                 runtime=None):
+
+        # Handle legacy 'runtime' parameter by mapping it to 'runtime_link'
+        if runtime_link is None and runtime is not None:
+            runtime_link = runtime
 
         # debug, release
         self.variant = helpers.parameter_to_list(variant)

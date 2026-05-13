@@ -410,10 +410,6 @@ class Configuration(Condition):
                     self.header_only = c.header_only
 
     def when(self, **kwargs):
-        # Handle legacy 'runtime' keyword by mapping it to 'runtime_link'
-        if 'runtime' in kwargs and 'runtime_link' not in kwargs:
-            kwargs['runtime_link'] = kwargs.pop('runtime')
-            
         config = Configuration(**kwargs)
         self.when_configs.append(config)
         return config
