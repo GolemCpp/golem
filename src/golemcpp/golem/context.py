@@ -4610,17 +4610,21 @@ class Context:
     def is_qt6_used_in_params(self, features=None, wfeatures=None):
         return (any([feature.startswith("QT6") for feature in features]) if features else False) or ('qt6' in wfeatures if wfeatures else False)
 
-    def is_qmake_available_on_path(self):
-        return shutil.which('qmake6') is not None or shutil.which('qmake') is not None
+    def is_qmake_available_on_path(self, wants_qt6=False):
+        qmake_names = ['qmake-qt6', 'qmake6', 'qmake'] if wants_qt6 else [
+            'qmake-qt5', 'qmake5', 'qmake'
+        ]
+        return any(shutil.which(qmake_name) is not None for qmake_name in qmake_names)
 
-    def should_autodiscover_qtdir(self):
+    def should_autodiscover_qtdir(self, wants_qt6=False):
         if self.context.options.qtdir or self.project.qtdir:
             return False
 
-        if os.environ.get('QT5_ROOT') or os.environ.get('QT6_ROOT'):
+        qt_root_variable = 'QT6_ROOT' if wants_qt6 else 'QT5_ROOT'
+        if os.environ.get(qt_root_variable):
             return False
 
-        if self.is_qmake_available_on_path():
+        if self.is_qmake_available_on_path(wants_qt6=wants_qt6):
             return False
 
         return True
@@ -4650,8 +4654,9 @@ class Context:
             self.context.want_qt6 = is_qt6_used
             if os.path.exists(self.project.qtdir):
                 self.context.options.qtdir = self.project.qtdir
-            elif self.should_autodiscover_qtdir():
-                qtdir = qt_discovery.search_for_qt_root_in_default_dirs(self)
+            elif self.should_autodiscover_qtdir(wants_qt6=is_qt6_used):
+                qtdir = qt_discovery.search_for_qt_root_in_default_dirs(
+                    self, wants_qt6=is_qt6_used)
                 if qtdir:
                     self.context.options.qtdir = qtdir
 

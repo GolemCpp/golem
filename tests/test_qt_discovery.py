@@ -36,7 +36,8 @@ def test_search_for_qt_root_in_default_dirs_returns_most_recent_valid_sdk(tmp_pa
         lambda _: [str(qt_base_dir)],
     )
 
-    assert qt_discovery.search_for_qt_root_in_default_dirs(context) == str(qt6_root)
+    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=False) == str(qt5_root)
+    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=True) == str(qt6_root)
 
 
 def test_search_for_qt_root_in_default_dirs_ignores_invalid_existing_dirs(tmp_path, monkeypatch):
@@ -52,4 +53,20 @@ def test_search_for_qt_root_in_default_dirs_ignores_invalid_existing_dirs(tmp_pa
         lambda _: [str(qt_base_dir)],
     )
 
-    assert qt_discovery.search_for_qt_root_in_default_dirs(context) is None
+    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=True) is None
+
+
+def test_search_for_qt_root_in_default_dirs_filters_other_qt_major_versions(tmp_path, monkeypatch):
+    qt_base_dir = tmp_path / 'Qt'
+    qt6_root = qt_base_dir / '6.7.2' / 'gcc_64'
+
+    create_qt_sdk_root(qt6_root, 'libQt6Core.so')
+
+    context = make_context_for_platform('linux')
+    monkeypatch.setattr(
+        qt_discovery,
+        'list_default_qt_root_installation_dirs',
+        lambda _: [str(qt_base_dir)],
+    )
+
+    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=False) is None

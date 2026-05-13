@@ -37,7 +37,16 @@ def extract_qt_version_from_path(path):
     return max(versions)
 
 
-def is_valid_qt_sdk_root(path):
+def matches_required_qt_major_version(path, wants_qt6=False):
+    version = extract_qt_version_from_path(path)
+    if version is None:
+        return True
+
+    required_major_version = 6 if wants_qt6 else 5
+    return version[0] == required_major_version
+
+
+def is_valid_qt_sdk_root(path, wants_qt6=False):
     required_directories = ['bin', 'include', 'lib', 'mkspecs']
     required_paths = [os.path.join(path, directory) for directory in required_directories]
 
@@ -47,13 +56,14 @@ def is_valid_qt_sdk_root(path):
     if not os.path.isdir(os.path.join(path, 'include', 'QtCore')):
         return False
 
-    library_patterns = [
-        'Qt5Core*',
-        'Qt6Core*',
-        'libQt5Core*',
-        'libQt6Core*',
-        'QtCore.framework',
-    ]
+    if not matches_required_qt_major_version(path, wants_qt6=wants_qt6):
+        return False
+
+    library_patterns = ['QtCore.framework']
+    if wants_qt6:
+        library_patterns = ['Qt6Core*', 'libQt6Core*'] + library_patterns
+    else:
+        library_patterns = ['Qt5Core*', 'libQt5Core*'] + library_patterns
 
     for pattern in library_patterns:
         if glob.glob(os.path.join(path, 'lib', pattern)):
@@ -111,11 +121,11 @@ def make_qt_sdk_sort_key(path):
     return (1, version, path)
 
 
-def search_for_qt_root_in_default_dirs(context):
+def search_for_qt_root_in_default_dirs(context, wants_qt6=False):
     valid_qt_roots = []
 
     for directory in list_default_qt_sdk_root_candidates(context):
-        if is_valid_qt_sdk_root(directory):
+        if is_valid_qt_sdk_root(directory, wants_qt6=wants_qt6):
             valid_qt_roots.append(directory)
 
     if valid_qt_roots:
