@@ -57,7 +57,15 @@ Have a look at the full example in [examples/minimal](/examples/minimal).
 
 #### Other examples
 
-TODO: List more elaborate projects here.
+- [examples/advanced](/examples/advanced) - Customize and force dependency options.
+- [examples/cache](/examples/cache) - Control cache directories and cache resolution policy.
+- [examples/conditions](/examples/conditions) - Build with platform-aware conditions in the project file.
+- [examples/dependencies](/examples/dependencies) - Override resolved dependency versions with `master_dependencies.json`.
+- [examples/hello](/examples/hello) - Smallest Hello World program.
+- [examples/minimal](/examples/minimal) - Basic library plus program with a dependency.
+- [examples/package](/examples/package) - Build and package a Qt application.
+- [examples/qt](/examples/qt) - Basic Qt widgets application.
+- [examples/qt-qml](/examples/qt-qml) - Basic Qt Quick / QML application.
 
 ## 🌱 Getting started
 
