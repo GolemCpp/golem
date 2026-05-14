@@ -10,6 +10,17 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.repository import Repository
 
 
+class AttrDict(dict):
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+
 def make_configure_context(project_qt=True, project_qtdir=''):
     context = Context.__new__(Context)
     context.project = SimpleNamespace(
@@ -139,6 +150,7 @@ def make_runtime_context(*,
             runtime_variant=runtime_variant,
             link=link,
             arch='x64',
+            nounicode=False,
         ),
         env=SimpleNamespace(
             DEFINES=[],
@@ -199,12 +211,192 @@ def test_build_path_on_windows_includes_runtime_variant_segment():
 def test_configure_debug_keeps_debug_flags_with_release_runtime_variant():
     context = make_runtime_context(runtime_variant='release')
 
-    context.configure_debug()
+    flags = context.make_default_build_flags(variant='debug')
 
-    assert '/MD' in context.context.env.CXXFLAGS
-    assert '/MDd' not in context.context.env.CXXFLAGS
-    assert '/Od' in context.context.env.CXXFLAGS
-    assert '/RTC1' in context.context.env.CXXFLAGS
+    assert '/MD' in flags['cxxflags']
+    assert '/MDd' not in flags['cxxflags']
+    assert '/Od' in flags['cxxflags']
+    assert '/RTC1' in flags['cxxflags']
+
+
+def make_build_target_context(*, variant='release', no_defaults=False):
+    context = Context.__new__(Context)
+    context.project = SimpleNamespace(deps=[])
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(
+            nounicode=False,
+            variant=variant,
+            runtime_link='shared',
+            runtime_variant='release',
+            link='shared',
+            arch='x64',
+        ),
+        env=AttrDict(
+            DEFINES=['FROM_ENV'],
+            CXXFLAGS=['/env-cxx'],
+            CFLAGS=['/env-c'],
+            LINKFLAGS=['/env-link'],
+            ARFLAGS=[],
+        ),
+        root=SimpleNamespace(
+            find_or_declare=lambda path: path,
+            find_node=lambda path: path,
+        ),
+        add_group=lambda: None,
+    )
+    context.context_tasks = []
+    context.make_decorated_target_list_from_context = lambda config, target_names: target_names
+    context.make_decorated_target_from_context = lambda config, target_name: target_name
+    context.is_qt5_used = lambda config: False
+    context.is_qt6_used = lambda config: False
+    context.is_qt_enabled = lambda config: False
+    context.is_debug = lambda: variant == 'debug'
+    context.is_windows = lambda: True
+    context.is_linux = lambda: False
+    context.is_darwin = lambda: False
+    context.is_android = lambda: False
+    context.is_msvc_like = lambda: True
+    context.is_x86 = lambda: False
+    context.is_x64 = lambda: True
+    context.is_runtime_static = lambda: False
+    context.is_runtime_shared = lambda: True
+    context.is_runtime_variant_debug = lambda: False
+    context.list_include = lambda includes, project_dir: list(includes)
+    context.list_qt_qrc = lambda source: []
+    context.list_source = lambda source: list(source)
+    context.list_qt_ui = lambda source: []
+    context.list_moc = lambda moc: []
+    context.list_template = lambda source: []
+    context.get_project_dir = lambda: '/tmp/project'
+    context.get_build_number = lambda default=None: 0
+    context.osname = lambda: 'windows'
+    context.get_arch = lambda: 'x64'
+    context.compiler_name = lambda: 'msvc'
+    context.make_c_standard_flag = lambda standard, compiler_name: None
+    context.make_cxx_standard_flag = lambda standard, compiler_name: None
+    context.strip_language_standard_flags = Context.strip_language_standard_flags
+    context.make_out_path = lambda: '/tmp/out'
+    context.make_target_out = lambda: '/tmp/out'
+    context.patch_linux_binary_artifacts = lambda **kwargs: []
+    context.make_artifacts_list = lambda config, decorated_target: []
+
+    task = SimpleNamespace(
+        name='demo',
+        version_template=None,
+        templates=None,
+        type_unique='program',
+    )
+    config = golem_context.Configuration(type='program', no_defaults=no_defaults)
+    config.type = 'program'
+
+    return context, task, config
+
+
+def make_static_library_build_target_context(*, variant='release', no_defaults=False):
+    context, task, config = make_build_target_context(
+        variant=variant, no_defaults=no_defaults)
+    context.is_shared = lambda: False
+    context.is_static = lambda: True
+    task.type_unique = 'library'
+    task.link = ['static']
+    task.link_unique = 'static'
+    config.type = ['library']
+
+    return context, task, config
+
+
+def test_build_target_gather_config_applies_default_flags_per_target(monkeypatch):
+    context, task, config = make_build_target_context(no_defaults=False)
+
+    monkeypatch.setattr(
+        golem_context,
+        'Version',
+        lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
+    )
+
+    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+
+    assert 'UNICODE' in build_target.defines
+    assert 'NDEBUG' in build_target.defines
+    assert '/MACHINE:X64' in build_target.linkflags
+    assert '/INCREMENTAL:NO' in build_target.linkflags
+    assert '/MD' in build_target.cxxflags
+    assert '/O2' in build_target.cxxflags
+    assert build_target.env_defines == ['FROM_ENV']
+    assert build_target.env_cxxflags == ['/env-cxx']
+
+
+def test_build_target_gather_config_skips_default_flags_when_no_defaults_is_enabled(monkeypatch):
+    context, task, config = make_build_target_context(no_defaults=True)
+
+    monkeypatch.setattr(
+        golem_context,
+        'Version',
+        lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
+    )
+
+    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+
+    assert 'UNICODE' not in build_target.defines
+    assert 'NDEBUG' not in build_target.defines
+    assert '/MACHINE:X64' not in build_target.linkflags
+    assert '/INCREMENTAL:NO' not in build_target.linkflags
+    assert '/MD' not in build_target.cxxflags
+    assert '/O2' not in build_target.cxxflags
+    assert build_target.env_defines == ['FROM_ENV']
+    assert build_target.env_cxxflags == ['/env-cxx']
+
+
+def test_build_target_gather_config_applies_default_arflags_per_target(monkeypatch):
+    context, task, config = make_static_library_build_target_context(
+        no_defaults=False)
+
+    monkeypatch.setattr(
+        golem_context,
+        'Version',
+        lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
+    )
+
+    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+
+    assert '/MACHINE:X64' in build_target.arflags
+    assert '/INCREMENTAL:NO' in build_target.arflags
+
+
+def test_build_target_gather_config_merges_config_arflags(monkeypatch):
+    context, task, config = make_static_library_build_target_context(
+        no_defaults=False)
+    config.arflags = ['/custom-arflag']
+
+    monkeypatch.setattr(
+        golem_context,
+        'Version',
+        lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
+    )
+
+    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+
+    assert '/MACHINE:X64' in build_target.arflags
+    assert '/INCREMENTAL:NO' in build_target.arflags
+    assert '/custom-arflag' in build_target.arflags
+
+
+def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_enabled(monkeypatch):
+    context, task, config = make_static_library_build_target_context(
+        no_defaults=True)
+    config.arflags = ['/custom-arflag']
+
+    monkeypatch.setattr(
+        golem_context,
+        'Version',
+        lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
+    )
+
+    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+
+    assert '/MACHINE:X64' not in build_target.arflags
+    assert '/INCREMENTAL:NO' not in build_target.arflags
+    assert build_target.arflags == ['/custom-arflag']
 
 
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
