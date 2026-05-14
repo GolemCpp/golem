@@ -16,6 +16,7 @@ golem build
 The project file defines a dependency, forces it to the `release` variant, and sets a message `'Hello'` through a macro on it. The program linked to this dependency calls the dependency to print the options it was built with.
 
 ``` bash
+# On Windows
 .\build\bin\hello-advanced.exe
 
 # On UNIX/Linux
