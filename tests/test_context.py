@@ -1,9 +1,13 @@
+import os
 import pytest
 from types import SimpleNamespace
 import json
 
 from golemcpp.golem import context as golem_context, helpers, qt_discovery
+from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, CachedResourceResolver
 from golemcpp.golem.context import Context
+from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.repository import Repository
 
 
 def make_configure_context(project_qt=True, project_qtdir=''):
@@ -238,3 +242,328 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     assert '--runtime-link=shared' in calls[0]
     assert '--runtime-variant=release' in calls[0]
     assert '--runtime=shared' not in calls[0]
+
+
+def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):
+    context = Context.__new__(Context)
+    context.project = SimpleNamespace(master_dependencies_repository=None)
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(
+            project_dir=str(project_dir),
+            no_recipes_repositories_fetch=no_recipes_repositories_fetch,
+            cache_resolution_policy='strict',
+        ))
+    context.deps_resolve = deps_resolve
+    return context
+
+
+def make_cache_conf(*cache_dirs):
+    cache_conf = CacheConf()
+    cache_conf.locations = list(cache_dirs)
+    return cache_conf
+
+
+def test_cached_resource_resolver_strict_policy_returns_first_match_without_probe():
+    cache_conf = make_cache_conf(
+        CacheDir('/static-regex', is_static=True, regex='.*recipes.*'),
+        CacheDir('/writable', is_static=False),
+    )
+
+    resolver = CachedResourceResolver(
+        identifier='https://github.com/GolemCpp/recipes.git',
+        cache_conf=cache_conf,
+        policy=CacheResolutionPolicy.WEAK,
+    )
+
+    assert resolver.resolve().location == '/static-regex'
+
+
+def test_cached_resource_resolver_weak_policy_without_probe_returns_none_for_phase():
+    cache_conf = make_cache_conf(
+        CacheDir('/static-default', is_static=True),
+        CacheDir('/writable-regex', is_static=False, regex='.*recipes.*'),
+        CacheDir('/writable-default', is_static=False),
+    )
+
+    resolver = CachedResourceResolver(
+        identifier='https://github.com/GolemCpp/recipes.git',
+        cache_conf=cache_conf,
+        policy=CacheResolutionPolicy.WEAK,
+    )
+
+    assert resolver._select_cache(cache_conf.locations) is None
+
+
+def test_cached_resource_resolver_weak_policy_checks_existing_caches():
+    static_missing = CacheDir('/static-missing', is_static=True, regex='.*json.*')
+    static_present = CacheDir('/static-present', is_static=True, regex='.*json.*')
+    cache_conf = make_cache_conf(static_missing, static_present)
+
+    resolver = CachedResourceResolver(
+        identifier='https://github.com/nlohmann/json.git',
+        cache_conf=cache_conf,
+        policy=CacheResolutionPolicy.WEAK,
+        exists_in_cache=lambda cache_dir: cache_dir.location == '/static-present',
+    )
+
+    assert resolver.resolve().location == '/static-present'
+
+
+def test_cached_resource_resolver_weak_policy_falls_back_to_first_writable_cache():
+    writable_regex = CacheDir('/writable-regex', is_static=False, regex='.*json.*')
+    writable_default = CacheDir('/writable-default', is_static=False)
+    cache_conf = make_cache_conf(writable_regex, writable_default)
+
+    resolver = CachedResourceResolver(
+        identifier='https://github.com/nlohmann/json.git',
+        cache_conf=cache_conf,
+        policy=CacheResolutionPolicy.WEAK,
+        exists_in_cache=lambda cache_dir: False,
+    )
+
+    assert resolver.resolve().location == '/writable-regex'
+
+
+def test_find_repository_cache_dir_uses_repository_probe_under_weak_policy(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    context.context.options.cache_resolution_policy = 'weak'
+    context.cache_conf = make_cache_conf(
+        CacheDir('/static-regex', is_static=True, regex='.*recipes.*'),
+        CacheDir('/writable-default', is_static=False),
+    )
+
+    context.is_resource_in_cache_dir = lambda resource, cache_dir: cache_dir.location == '/static-regex'
+
+    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
+
+    cache_dir = context.find_repository_cache_dir(repository)
+
+    assert cache_dir.location == '/static-regex'
+
+
+def test_find_repository_cache_dir_weak_policy_skips_read_only_hit_when_probe_fails(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    context.context.options.cache_resolution_policy = 'weak'
+    context.cache_conf = make_cache_conf(
+        CacheDir('/static-regex', is_static=True, regex='.*recipes.*'),
+        CacheDir('/writable-default', is_static=False),
+    )
+
+    context.is_resource_in_cache_dir = lambda resource, cache_dir: False
+
+    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
+
+    cache_dir = context.find_repository_cache_dir(repository)
+
+    assert cache_dir.location == '/static-regex'
+
+
+def test_parse_local_non_git_repository_returns_local_path_for_non_git_directory(tmp_path):
+    repository_dir = tmp_path / 'recipes'
+    repository_dir.mkdir()
+
+    dependency = Dependency(repository='file://' + str(repository_dir))
+
+    assert Repository.parse_local_non_git_repository(dependency.repository) == str(repository_dir)
+
+
+def test_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
+    repository_dir = tmp_path / 'recipes'
+    git_dir = repository_dir / '.git'
+    git_dir.mkdir(parents=True)
+    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+
+    dependency = Dependency(repository='file://' + str(repository_dir))
+
+    assert Repository.parse_local_non_git_repository(dependency.repository) is None
+    assert Repository.parse_local_directory_path(url=dependency.repository) == str(repository_dir)
+
+
+def test_helpers_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
+    repository_dir = tmp_path / 'recipes'
+    git_dir = repository_dir / '.git'
+    git_dir.mkdir(parents=True)
+    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+
+    assert Repository.parse_local_non_git_repository('file://' + str(repository_dir)) is None
+    assert Repository.parse_local_directory_path('file://' + str(repository_dir)) == str(repository_dir)
+
+
+def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    recipes_dir = tmp_path / 'recipes'
+    recipes_dir.mkdir()
+
+    monkeypatch.setenv('GOLEM_RECIPES_REPOSITORIES', 'recipes')
+
+    repositories = context.load_recipes_repositories()
+
+    assert [repository.url for repository in repositories] == ['file://' + str(recipes_dir)]
+
+
+def test_get_master_dependencies_repository_normalizes_local_paths(monkeypatch, tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    master_dir = tmp_path / 'master-dependencies'
+    master_dir.mkdir()
+
+    monkeypatch.setenv('GOLEM_MASTER_DEPENDENCIES_REPOSITORY', 'master-dependencies')
+
+    assert context.get_master_dependencies_repository().url == 'file://' + str(master_dir)
+
+
+def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
+    project_dir = tmp_path / 'project dir'
+    recipes_dir = project_dir / 'recipes #1?x'
+    recipes_dir.mkdir(parents=True)
+
+    repository = Repository.from_url('recipes #1?x', str(project_dir)).url
+
+    assert repository == recipes_dir.resolve().as_uri()
+    assert Repository.parse_local_directory_path(repository) == str(recipes_dir.resolve())
+
+
+def test_clone_repository_copies_non_git_directory(tmp_path):
+    project_dir = tmp_path / 'project'
+    project_dir.mkdir()
+    source_dir = project_dir / 'recipes'
+    source_dir.mkdir()
+    (source_dir / 'marker.txt').write_text('copied\n', encoding='utf-8')
+    repo_path = tmp_path / 'cache' / 'recipes'
+
+    context = make_repository_context(project_dir=project_dir)
+    repository = Repository.from_url('recipes', str(project_dir))
+
+    context.clone_repository(path=str(repo_path), repository=repository)
+
+    assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'copied\n'
+    assert (repo_path / '.golem-origin').read_text(encoding='utf-8') == repository.url
+
+
+def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path):
+    project_dir = tmp_path / 'project'
+    project_dir.mkdir()
+    source_dir = project_dir / 'recipes'
+    source_dir.mkdir()
+    (source_dir / 'marker.txt').write_text('fresh\n', encoding='utf-8')
+    repo_path = tmp_path / 'cache' / 'recipes'
+    repo_path.mkdir(parents=True)
+    (repo_path / 'marker.txt').write_text('stale\n', encoding='utf-8')
+
+    context = make_repository_context(project_dir=project_dir)
+    repository = Repository.from_url('recipes', str(project_dir))
+
+    context.clone_repository(path=str(repo_path), repository=repository)
+
+    assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'fresh\n'
+
+
+def test_clone_repository_raises_for_missing_local_directory(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    repository = Repository.from_url('missing-recipes', str(tmp_path))
+    repo_path = tmp_path / 'cache' / 'recipes'
+
+    with pytest.raises(RuntimeError, match="Can't find local repository directory"):
+        context.clone_repository(path=str(repo_path), repository=repository)
+
+
+def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path):
+    project_dir = tmp_path / 'project'
+    project_dir.mkdir()
+    source_dir = project_dir / 'recipes'
+    git_dir = source_dir / '.git'
+    git_dir.mkdir(parents=True)
+    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+    repo_path = tmp_path / 'cache' / 'recipes'
+
+    context = make_repository_context(project_dir=project_dir)
+    repository = Repository.from_url('recipes', str(project_dir))
+    calls = []
+
+    monkeypatch.setattr(helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append((args, cwd)))
+
+    context.clone_repository(path=str(repo_path), repository=repository)
+
+    assert calls[0] == (['clone', '--', repository.url, '.'], str(repo_path))
+    assert calls[1] == (['reset', '--hard', 'origin/main'], str(repo_path))
+
+
+def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    context.cache_conf = make_cache_conf(CacheDir('/cache', is_static=False))
+    context.find_repository_cache_dir = lambda repository: CacheDir('/cache', is_static=False)
+
+    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
+
+    repo_path = context.make_basic_dependency_repo_path(repository)
+
+    assert repo_path == '/cache/' + Repository.make_repository_base(
+        'https://github.com/GolemCpp/recipes.git', 'main')
+
+
+def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+
+    dep = Dependency(
+        repository='https://github.com/nlohmann/json.git',
+        version='^3.0.0')
+    dep.resolved_hash = '1234567890abcdef'
+
+    expected_repository = Repository(
+        url=dep.repository,
+        reference=helpers.get_dependency_resolved_version(dep))
+
+    assert context.get_resource_location(dep, cache_dir) == os.path.join(
+        cache_dir.location, expected_repository.get_cache_key())
+
+
+def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+    os.makedirs(cache_dir.location, exist_ok=True)
+
+    dep = Dependency(
+        repository='https://github.com/nlohmann/json.git',
+        version='^3.0.0')
+    dep.resolved_hash = '1234567890abcdef'
+
+    resource_path = context.get_resource_location(dep, cache_dir)
+    os.makedirs(resource_path, exist_ok=True)
+
+    assert context.is_resource_in_cache_dir(dep, cache_dir) is True
+
+
+def test_make_dependency_path_uses_shared_resource_location(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+
+    dep = Dependency(
+        repository='https://github.com/nlohmann/json.git',
+        version='^3.0.0')
+    dep.resolved_hash = '1234567890abcdef'
+    dep.cache_dir = cache_dir
+
+    assert context.make_dependency_path(dep, 'artifact') == os.path.join(
+        context.get_resource_location(dep, cache_dir), 'artifact')
+
+
+def test_get_dependency_resolved_version_prefers_hash_prefix():
+    dep = Dependency(
+        repository='https://github.com/nlohmann/json.git',
+        version='^3.0.0')
+    dep.resolved_version = '3.11.3'
+    dep.resolved_hash = '1234567890abcdef'
+
+    assert helpers.get_dependency_resolved_version(dep) == '12345678'
+
+
+def test_is_resource_in_cache_dir_uses_repository_base(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+    os.makedirs(cache_dir.location, exist_ok=True)
+
+    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
+    resource_path = context.get_resource_location(repository, cache_dir)
+    os.makedirs(resource_path, exist_ok=True)
+
+    assert context.is_resource_in_cache_dir(repository, cache_dir) is True

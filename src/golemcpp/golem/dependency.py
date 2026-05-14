@@ -7,9 +7,9 @@ from golemcpp.golem.cache import CacheConf
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
+from golemcpp.golem.repository import Repository
 from semver import max_satisfying
 from collections import OrderedDict
-from urllib.parse import urlparse, unquote
 
 
 class Dependency(Configuration):
@@ -38,45 +38,13 @@ class Dependency(Configuration):
     def update_cache_dir(self, context):
         self.cache_dir = context.find_dep_cache_dir(
             dep=self, cache_conf=context.cache_conf)
-        
-    @staticmethod
-    def resolve_repository_url(url, project_dir):
-        if url.startswith("http://") or url.startswith("https://") or url.startswith("ssh://") or url.startswith("file://"):
-            return url
-        path = os.path.join(project_dir, url)
-        path = os.path.realpath(path)
-        file_prefix = 'file://'
-        if sys.platform.startswith("win"):
-            file_prefix += '/'
-        path = file_prefix + path
-        return path
 
     def update_repository(self, project_dir):
-        self.repository = Dependency.resolve_repository_url(url=self.repository, project_dir=project_dir)
-
-    def get_non_git_directory_path(self):
-        parsed = urlparse(self.repository)
-
-        if parsed.scheme != 'file':
-            return None
-
-        if helpers.is_git_repository(path=self.repository):
-            return None
-
-        path = unquote(parsed.path)
-
-        if sys.platform.startswith("win"):
-            if path.startswith("/") and len(path) > 2 and path[2] == ":":
-                path = path[1:]
-            path = path.replace("/", "\\")
-
-        if not os.path.exists(path):
-            return None
-        
-        return path
+        self.repository = Repository.from_url(url=self.repository,
+                                              project_dir=project_dir).url
 
     def is_non_git_directory(self):
-        path = self.get_non_git_directory_path()
+        path = Repository.parse_local_non_git_repository(self.repository)
         return path is not None
 
     def resolve(self):
