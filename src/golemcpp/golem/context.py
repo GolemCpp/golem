@@ -15,13 +15,14 @@ import string
 from datetime import datetime
 from copy import deepcopy
 from golemcpp.golem.module import Module
-from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy
+from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, CachedResourceResolver
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
 from golemcpp.golem import helpers
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.repository import Repository
 from golemcpp.golem.template import Template
 import copy
 from golemcpp.golem.target import TargetConfigurationFile
@@ -363,13 +364,17 @@ class Context:
     def get_master_dependencies_repository(self):
         master_dependencies_repository = self.project.master_dependencies_repository
         if master_dependencies_repository:
-            return master_dependencies_repository
+            return Repository.from_url(
+                url=master_dependencies_repository,
+                project_dir=self.get_project_dir())
 
         master_dependencies_repository = helpers.get_environ('GOLEM_MASTER_DEPENDENCIES_REPOSITORY')
         if master_dependencies_repository:
-            return master_dependencies_repository
-            
-        return ''
+            return Repository.from_url(
+                url=master_dependencies_repository,
+                project_dir=self.get_project_dir())
+
+        return None
 
     def load_master_dependencies_configuration(self):
 
@@ -1589,13 +1594,8 @@ class Context:
     def get_local_dep_pkl(self, dep):
         return os.path.join(self.make_out_path(), dep.name + '.pkl')
 
-    def get_dependency_location(self, dependency):
-        path = helpers.make_dep_base(dep=dependency)
-        return os.path.join(dependency.cache_dir.location, path)
-
     def get_dep_location(self, dep, cache_dir):
-        path = helpers.make_dep_base(dep)
-        return os.path.join(cache_dir.location, path)
+        return self.get_resource_location(dep, cache_dir)
 
     def get_dep_repo_location(self, dep, cache_dir, base=None):
         path = self.get_dep_location(dep, cache_dir) if base is None else base
@@ -1607,7 +1607,7 @@ class Context:
 
     def make_dependency_path(self, dependency, path):
         return os.path.join(
-            self.get_dependency_location(dependency=dependency), path)
+            self.get_resource_location(dependency, dependency.cache_dir), path)
 
     def make_dependency_build_path(self, dependency, path):
         return self.make_dependency_path(dependency=dependency,
@@ -1663,7 +1663,7 @@ class Context:
             repository = self.load_git_remote_origin_url()
 
         config_filename = "{}@{}.json".format(
-            '@'.join(name), helpers.generate_recipe_id(repository))
+            '@'.join(name), Repository.generate_recipe_id(repository))
 
         return config_filename
 
@@ -1832,7 +1832,7 @@ class Context:
                         Artifact(abspath, relpath, path_build))
         return artifacts_list
 
-    def copy_non_git_repo(self, dep, local_path, repo_path):
+    def copy_non_git_repo(self, repository, local_path, repo_path):
         if os.path.isdir(repo_path):
             shutil.rmtree(repo_path)
         shutil.copytree(
@@ -1841,12 +1841,12 @@ class Context:
             dirs_exist_ok=True,
             symlinks=True)
         with open(os.path.join(repo_path, '.golem-origin'), 'w') as f:
-            f.write(dep.repository)
+            f.write(repository)
 
     def clean_repo(self, dep, repo_path):
-        local_path = dep.get_non_git_directory_path()
+        local_path = Repository.parse_local_non_git_repository(dep.repository)
         if local_path:
-            self.copy_non_git_repo(dep, local_path, repo_path)
+            self.copy_non_git_repo(dep.repository, local_path, repo_path)
             return
         
         helpers.run_git(['clean', '-ffxd'],
@@ -1878,10 +1878,10 @@ class Context:
 
         os.makedirs(repo_path)
 
-        local_path = dep.get_non_git_directory_path()
+        local_path = Repository.parse_local_non_git_repository(dep.repository)
         if local_path:
             print("Copying repository {} into {}".format(dep.repository, repo_path))
-            self.copy_non_git_repo(dep, local_path, repo_path)
+            self.copy_non_git_repo(dep.repository, local_path, repo_path)
             return
 
         print("Cloning repository {} into {}".format(dep.repository,
@@ -2444,62 +2444,13 @@ class Context:
         self.use_dep(config, dep, cache_dir)
 
     def find_dep_cache_dir(self, dep, cache_conf):
-        # Strict policy ON: Only the first valid match is considered to find the dependency
-        # Strict policy OFF: Every valid match is considered to find the dependency
-
-        strict_policy = self.make_cache_resolution_policy() == CacheResolutionPolicy.STRICT
-        
-        read_only_caches_with_regex = self.find_cache_dir(dep=dep,
-                                                          cache_conf=cache_conf,
-                                                          is_read_only=True,
-                                                          with_regex=True)
-
-        for cache_dir in read_only_caches_with_regex:
-            if strict_policy:
-                return cache_dir
-            if self.is_dep_in_cache_dir(dep, cache_dir):
-                return cache_dir
-
-        read_only_caches_without_regex = self.find_cache_dir(dep=dep,
-                                                             cache_conf=cache_conf,
-                                                             is_read_only=True,
-                                                             with_regex=False)
-
-        for cache_dir in read_only_caches_without_regex:
-            if strict_policy:
-                return cache_dir
-            if self.is_dep_in_cache_dir(dep, cache_dir):
-                return cache_dir
-
-
-        writable_caches_with_regex = self.find_cache_dir(dep=dep,
-                                                         cache_conf=cache_conf,
-                                                         is_read_only=False,
-                                                         with_regex=True)
-
-        for cache_dir in writable_caches_with_regex:
-            if strict_policy:
-                return cache_dir
-            if self.is_dep_in_cache_dir(dep, cache_dir):
-                return cache_dir
-
-        writable_caches_without_regex = self.find_cache_dir(dep=dep,
-                                                            cache_conf=cache_conf,
-                                                            is_read_only=False,
-                                                            with_regex=False)
-
-        for cache_dir in writable_caches_without_regex:
-            if strict_policy:
-                return cache_dir
-            if self.is_dep_in_cache_dir(dep, cache_dir):
-                return cache_dir
-
-        if writable_caches_with_regex:
-            return writable_caches_with_regex[0]
-        elif writable_caches_without_regex:
-            return writable_caches_without_regex[0]
-        else:
-            raise RuntimeError("Can't find any writable cache location")
+        resolver = CachedResourceResolver(
+            identifier=dep.repository,
+            cache_conf=cache_conf,
+            policy=self.make_cache_resolution_policy(),
+            exists_in_cache=lambda cache_dir: self.is_resource_in_cache_dir(
+                dep, cache_dir))
+        return resolver.resolve()
 
     def get_cache_resolution_policy(self):
         cache_resolution_policy = self.context.options.cache_resolution_policy
@@ -2518,37 +2469,22 @@ class Context:
     def make_cache_resolution_policy_option(self):
         return self.make_cache_resolution_policy().value
 
-    def is_dep_in_cache_dir(self, dep, cache_dir):
-        path = self.get_dep_location(dep, cache_dir)
-        return os.path.exists(path)
-
-    def find_cache_dir(self, dep, cache_conf, is_read_only, with_regex):
-        found_caches = []
-
-        if with_regex:
-            # Search among cache directories with a regex
-            for cache_dir in cache_conf.locations:
-                if not cache_dir.regex:
-                    continue
-                if is_read_only and not cache_dir.is_static:
-                    continue
-
-                pattern = re.compile(cache_dir.regex)
-                if not pattern.match(dep.repository):
-                    continue
-                
-                found_caches.append(cache_dir)
+    def get_resource_location(self, resource, cache_dir):
+        if isinstance(resource, Dependency):
+            cache_resource = Repository(
+                url=resource.repository,
+                reference=helpers.get_dependency_resolved_version(resource))
+        elif isinstance(resource, Repository):
+            cache_resource = resource
         else:
-            # Search among cache directories without a regex
-            for cache_dir in cache_conf.locations:
-                if cache_dir.regex:
-                    continue
-                if is_read_only and not cache_dir.is_static:
-                    continue
+            raise RuntimeError(
+                "resource must be a Dependency or Repository")
 
-                found_caches.append(cache_dir)
+        return os.path.join(cache_dir.location, cache_resource.get_cache_key())
 
-        return found_caches
+    def is_resource_in_cache_dir(self, resource, cache_dir):
+        path = self.get_resource_location(resource, cache_dir)
+        return os.path.exists(path)
 
     def export_dependency(self, config, dep):
         self.dep_command(config, dep, 'export', True)
@@ -4481,79 +4417,97 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
-    def make_basic_dependency_repo_path(self, name, url, branch='main'):
-        dependency = Dependency(name=name,
-                                targets=None,
-                                repository=url,
-                                version=branch)
-        dependency.resolved_version = branch
-        dependency.update_cache_dir(context=self)
-        repo_path = os.path.join(
-            dependency.cache_dir.location,
-            helpers.generate_recipe_id(dependency.repository))
-        return repo_path
+    def find_repository_cache_dir(self, repository):
+        resolver = CachedResourceResolver(
+            identifier=repository.url,
+            cache_conf=self.cache_conf,
+            policy=self.make_cache_resolution_policy(),
+            exists_in_cache=lambda cache_dir: self.is_resource_in_cache_dir(
+                repository, cache_dir))
+        return resolver.resolve()
 
-    def clone_repository(self, path, url, branch):
+    def make_basic_dependency_repo_path(self, repository):
+        cache_dir = self.find_repository_cache_dir(
+            repository=repository)
+        return self.get_resource_location(repository, cache_dir)
+
+    def clone_repository(self, path, repository):
+        local_path = repository.get_local_path()
+        if local_path is not None:
+            if not os.path.exists(local_path):
+                raise RuntimeError(
+                    "Can't find local repository directory: {}".format(
+                        local_path))
+            if not os.path.isdir(local_path):
+                raise RuntimeError(
+                    "Local repository path is not a directory: {}".format(
+                        local_path))
+
+        non_git_directory_path = repository.get_non_git_directory_path()
+        if non_git_directory_path is not None:
+            print("Copying repository {} into {}".format(repository.url, path))
+            self.copy_non_git_repo(repository.url, non_git_directory_path, path)
+            return
+
         if not os.path.exists(path):
             os.makedirs(path)
-            helpers.run_git(['clone', '--', url, '.'], cwd=path)
+            helpers.run_git(['clone', '--', repository.url, '.'], cwd=path)
         else:
             helpers.run_git(['fetch', 'origin'], cwd=path)
 
-        helpers.run_git(['reset', '--hard', 'origin/' + branch],
+        helpers.run_git(['reset', '--hard', 'origin/' + repository.reference],
                          cwd=path)
 
-    def clone_master_dependencies_repository(self, url):
-        branch_version = 'main'
-        repo_path = self.make_basic_dependency_repo_path(name='master',
-                                                         url=url,
-                                                         branch=branch_version)
+    def clone_master_dependencies_repository(self, repository):
+        repo_path = self.make_basic_dependency_repo_path(repository)
 
         if not self.deps_resolve:
             return repo_path
 
-        self.clone_repository(path=repo_path, url=url, branch=branch_version)
+        self.clone_repository(path=repo_path,
+                              repository=repository)
 
         return repo_path
 
-    def clone_recipes_repository(self, url):
-        branch_version = 'main'
-        repo_path = self.make_basic_dependency_repo_path(name='recipes',
-                                                         url=url,
-                                                         branch=branch_version)
+    def clone_recipes_repository(self, repository):
+        repo_path = self.make_basic_dependency_repo_path(repository)
 
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
             return repo_path
 
-        self.clone_repository(path=repo_path, url=url, branch=branch_version)
+        self.clone_repository(path=repo_path, repository=repository)
 
         return repo_path
 
     def load_recipes_repositories(self):
         recipes_repositories = helpers.get_environ('GOLEM_RECIPES_REPOSITORIES')
         if recipes_repositories:
-            recipes_repositories = recipes_repositories.split('|')
+            recipes_repositories = [
+                Repository.from_url(
+                    url=url,
+                    project_dir=self.get_project_dir())
+                for url in recipes_repositories.split('|')
+            ]
         else:
             # Default recipes repository
-            recipes_repositories = ['https://github.com/GolemCpp/recipes.git']
+            recipes_repositories = [Repository(url='https://github.com/GolemCpp/recipes.git')]
 
-        repos_paths = []
-        for url in recipes_repositories:
-            repo_path = self.clone_recipes_repository(url=url)
-            repos_paths.append(repo_path)
-
-        return repos_paths
+        return recipes_repositories
 
     def load_recipe(self):
         recipe_id = self.context.options.recipe
 
-        recipes_repos_paths = self.load_recipes_repositories()
+        recipes_repositories = self.load_recipes_repositories()
+        recipes_repos_paths = []
+        for repository in recipes_repositories:
+            repo_path = self.clone_recipes_repository(repository=repository)
+            recipes_repos_paths.append(repo_path)
 
         if not recipe_id and self.project is None:
             recipe_url = self.load_git_remote_origin_url()
             if not recipe_url:
                 return
-            recipe_id = helpers.generate_recipe_id(recipe_url)
+            recipe_id = Repository(url=recipe_url).get_recipe_id()
 
         if not recipe_id:
             return

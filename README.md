@@ -172,7 +172,6 @@ The commands are presented in the order they are expected to be called, when nee
 
 Here is a list of important features to add as a priority:
 
-- Allow the recipes to be a local folder instead of a repository
 - Add a Visual Studio solution generator (investigate waf capabilities and in slnx too)
 - Add the ability to remove the default flags of a variant
 - Allow to define individual header files in export()

@@ -4,7 +4,6 @@ import types
 import shutil
 import subprocess
 from pathlib import Path
-from urllib.parse import urlparse
 
 
 def print_obj(obj, depth=5, l=""):
@@ -112,63 +111,8 @@ def make_golem_command(command_name):
     return ['python3', golem_path, command_name]
 
 
-def generate_recipe_id(url):
-    is_filesystem = False
-    is_http = False
-    is_ssh = False
-
-    if os.path.exists(url):
-        url = 'file://' + url
-    if url.startswith('file:///'):
-        url = url.replace('file:///', 'file://')
-    
-    if url.startswith('file://'):
-        is_filesystem = True
-    elif url.startswith('http://') or url.startswith('https://'):
-        is_http = True
-    elif url.startswith('ssh://'):
-        is_ssh = True
-    else:
-        is_ssh = True
-    
-    o = urlparse(url)
-    if is_filesystem:
-        host = ['fsys'] + o.hostname.split('.')
-    else:
-        host = o.hostname.split('.')
-        host.reverse()
-    path = list(filter(None, o.path.split('/')))
-
-    if len(path) > 0 and path[-1].endswith('.git'):
-        path[-1] = path[-1][:-4]
-
-    path = list(filter(None, path))
-
-    identifier = host + path
-    for index, s in enumerate(identifier):
-        identifier[index] = ''.join(
-            filter(
-                lambda x: x in
-                "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_",
-                s)).lower()
-
-    name = identifier[-1]
-    host = identifier[:-1]
-
-    host = '.'.join(host)
-
-    if not host:
-        host = '_no_host_'
-
-    repo_id = name + '@' + host
-
-    return ''.join(repo_id)
-
-
-def make_dep_base(dep):
-    dep_id = generate_recipe_id(dep.repository)
-    return dep_id + '+' + str(
-        dep.resolved_hash[:8] if dep.resolved_hash else dep.resolved_version)
+def get_dependency_resolved_version(dep):
+    return dep.resolved_hash[:8] if dep.resolved_hash else dep.resolved_version
 
 
 def copy_tree(source_path, destination_path):
