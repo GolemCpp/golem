@@ -1321,17 +1321,7 @@ class Context:
         return cacheconf
 
     def configure_default(self):
-        if not self.context.options.nounicode:
-            self.context.env.DEFINES.append('UNICODE')
-
         if self.is_msvc_like():
-            if self.is_x86():
-                self.context.env.LINKFLAGS.append('/MACHINE:X86')
-                self.context.env.ARFLAGS.append('/MACHINE:X86')
-            elif self.is_x64():
-                self.context.env.LINKFLAGS.append('/MACHINE:X64')
-                self.context.env.ARFLAGS.append('/MACHINE:X64')
-
             if self.is_x86():
                 self.context.env.MSVC_TARGETS = ['x86']
             elif self.is_x64():
@@ -1339,26 +1329,46 @@ class Context:
 
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
+        if self.is_darwin():
+            self.context.env.CXX = ['clang++']
+
+    def make_default_build_flags(self, variant=None):
+        flags = {
+            'defines': [],
+            'cflags': [],
+            'cxxflags': [],
+            'linkflags': [],
+            'arflags': [],
+        }
+
+        if not self.context.options.nounicode:
+            flags['defines'].append('UNICODE')
+
+        if self.is_msvc_like():
+            if self.is_x86():
+                flags['linkflags'].append('/MACHINE:X86')
+                flags['arflags'].append('/MACHINE:X86')
+            elif self.is_x64():
+                flags['linkflags'].append('/MACHINE:X64')
+                flags['arflags'].append('/MACHINE:X64')
+
             default_flags = ['/DWIN32', '/D_WINDOWS', '/GR', '/EHsc']
-            
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
+            flags['cflags'] += default_flags
+            flags['cxxflags'] += default_flags
 
             # Set /external ON
             # TODO: Need to find a way to discover if the compiler supports /external to use /I if it can't
 
             default_flags = ['/experimental:external', '/external:W0']
-            
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
+            flags['cflags'] += default_flags
+            flags['cxxflags'] += default_flags
 
             # Serialized writes to the program database (PDB) to avoid fatal error C1041
 
             default_flags = ['/FS']
+            flags['cflags'] += default_flags
+            flags['cxxflags'] += default_flags
             
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
-
             # Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
             # Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
 
@@ -1404,39 +1414,35 @@ class Context:
             # '/SUBSYSTEM'  # how to run the .exe file
             # '/DLL'        # builds a DLL
             # '/TLBID:1'    # resource ID of the linker-generated type library
-        else:
-            if not self.is_android():
-                if self.is_x86():
-                    self.context.env.CXXFLAGS.append('-m32')
-                    self.context.env.CFLAGS.append('-m32')
-                elif self.is_x64():
-                    self.context.env.CXXFLAGS.append('-m64')
-                    self.context.env.CFLAGS.append('-m64')
 
-        if self.is_darwin():
-            self.context.env.CXX = ['clang++']
+        elif not self.is_android():
+            if self.is_x86():
+                flags['cflags'].append('-m32')
+                flags['cxxflags'].append('-m32')
+            elif self.is_x64():
+                flags['cflags'].append('-m64')
+                flags['cxxflags'].append('-m64')
 
-    def configure_debug(self):
+        variant = self.variant() if variant is None else variant
 
-        if self.is_msvc_like():
-            if self.is_runtime_static():
-                runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
-                self.context.env.CXXFLAGS.append(runtime_flag)
-                self.context.env.CFLAGS.append(runtime_flag)
-            elif self.is_runtime_shared():
-                runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
-                self.context.env.CXXFLAGS.append(runtime_flag)
-                self.context.env.CFLAGS.append(runtime_flag)
+        if variant == 'debug':
+            if self.is_msvc_like():
+                if self.is_runtime_static():
+                    runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
+                    flags['cflags'].append(runtime_flag)
+                    flags['cxxflags'].append(runtime_flag)
+                elif self.is_runtime_shared():
+                    runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
+                    flags['cflags'].append(runtime_flag)
+                    flags['cxxflags'].append(runtime_flag)
 
-            default_flags = ['/Zi', '/Ob0', '/Od', '/RTC1']
-            
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
+                default_flags = ['/Zi', '/Ob0', '/Od', '/RTC1']
+                flags['cflags'] += default_flags
+                flags['cxxflags'] += default_flags
 
-            default_flags = ['/debug', '/INCREMENTAL']
-
-            self.context.env.LINKFLAGS += default_flags
-            self.context.env.ARFLAGS += default_flags
+                default_flags = ['/debug', '/INCREMENTAL']
+                flags['linkflags'] += default_flags
+                flags['arflags'] += default_flags
 
             # Some compilation flags (self.context.env.CXXFLAGS)
 
@@ -1452,36 +1458,31 @@ class Context:
             # '/MAPINFO:EXPORTS'    # includes exports information in the mapfile
             # '/DEBUG'              # creates debugging information
             # '/INCREMENTAL'        # incremental linking
-        else:
-            default_flags = ['-O0', '-g']
 
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
+            else:
+                default_flags = ['-O0', '-g']
+                flags['cflags'] += default_flags
+                flags['cxxflags'] += default_flags
+        elif variant == 'release':
+            flags['defines'].append('NDEBUG')
 
+            if self.is_msvc_like():
+                if self.is_runtime_static():
+                    runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
+                    flags['cflags'].append(runtime_flag)
+                    flags['cxxflags'].append(runtime_flag)
+                elif self.is_runtime_shared():
+                    runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
+                    flags['cflags'].append(runtime_flag)
+                    flags['cxxflags'].append(runtime_flag)
 
-    def configure_release(self):
+                default_flags = ['/O2', '/Ob2']
+                flags['cflags'] += default_flags
+                flags['cxxflags'] += default_flags
 
-        self.context.env.DEFINES.append('NDEBUG')
-
-        if self.is_msvc_like():
-            if self.is_runtime_static():
-                runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
-                self.context.env.CXXFLAGS.append(runtime_flag)
-                self.context.env.CFLAGS.append(runtime_flag)
-            elif self.is_runtime_shared():
-                runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
-                self.context.env.CXXFLAGS.append(runtime_flag)
-                self.context.env.CFLAGS.append(runtime_flag)
-
-            default_flags = ['/O2', '/Ob2']
-            
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
-
-            default_flags =['/INCREMENTAL:NO']
-
-            self.context.env.LINKFLAGS += default_flags
-            self.context.env.ARFLAGS += default_flags
+                default_flags = ['/INCREMENTAL:NO']
+                flags['linkflags'] += default_flags
+                flags['arflags'] += default_flags
 
             # Some compilation flags (self.context.env.CXXFLAGS)
 
@@ -1502,11 +1503,13 @@ class Context:
             # '/OPT:REF'            # eliminates functions and data that are never referenced
             # '/OPT:ICF'            # to perform identical COMDAT folding
             # '/SAFESEH'            # image will contain a table of safe exception handlers
-        else:
-            default_flags = ['-O2']
-            
-            self.context.env.CFLAGS += default_flags
-            self.context.env.CXXFLAGS += default_flags
+
+            else:
+                default_flags = ['-O2']
+                flags['cflags'] += default_flags
+                flags['cxxflags'] += default_flags
+
+        return flags
 
     def environment(self, resolve_dependencies=False):
 
@@ -1522,12 +1525,6 @@ class Context:
         # init default environment variables
         self.configure_init()
         self.configure_default()
-
-        # set environment variables according variant
-        if self.is_debug():
-            self.configure_debug()
-        else:
-            self.configure_release()
 
         # android specific flags
         self.append_android_cxxflags()
@@ -2828,6 +2825,13 @@ class Context:
         target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
         target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
 
+        default_flags = self.make_default_build_flags()
+        default_defines = [] if config.no_defaults else default_flags['defines'].copy()
+        default_cxxflags = [] if config.no_defaults else default_flags['cxxflags'].copy()
+        default_cflags = [] if config.no_defaults else default_flags['cflags'].copy()
+        default_linkflags = [] if config.no_defaults else default_flags['linkflags'].copy()
+        default_arflags = [] if config.no_defaults else default_flags['arflags'].copy()
+
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
         for config_use in config_all_use:
@@ -2867,13 +2871,15 @@ class Context:
         c_standard_flag = self.make_c_standard_flag(config.c_standard, self.compiler_name())
         cxx_standard_flag = self.make_cxx_standard_flag(config.cxx_standard, self.compiler_name())
 
-        final_cxxflags = config.cxxflags + target_cxxflags
+        final_defines = helpers.filter_unique(default_defines + config.defines)
+
+        final_cxxflags = default_cxxflags + config.cxxflags + target_cxxflags
         if cxx_standard_flag:
             final_cxxflags = self.strip_language_standard_flags(final_cxxflags, language='cxx')
             final_cxxflags = [cxx_standard_flag] + final_cxxflags
         final_cxxflags = helpers.filter_unique(final_cxxflags + isystemflags + qt_cxxflags)
 
-        final_cflags = config.cflags + target_cxxflags
+        final_cflags = default_cflags + config.cflags + target_cxxflags
         if c_standard_flag:
             final_cflags = self.strip_language_standard_flags(final_cflags, language='c')
             final_cflags = [c_standard_flag] + final_cflags
@@ -2903,7 +2909,8 @@ class Context:
             env_cxxflags += ['-iframework{}'.format(self.context.env.QTLIBS)]
 
         rpath_option = config.rpath
-        linkflags_option = helpers.filter_unique(config.linkflags +
+        arflags_option = helpers.filter_unique(default_arflags + config.arflags)
+        linkflags_option = helpers.filter_unique(default_linkflags + config.linkflags +
                                                  target_linkflags + rpath_link)
 
         config_lib = []
@@ -2969,7 +2976,7 @@ class Context:
 
         return BuildTarget(
             config=config,
-            defines=config.defines,
+            defines=final_defines,
             includes=listinclude,
             source=helpers.filter_unique(listsource + version_source),
             target=[
@@ -2980,6 +2987,7 @@ class Context:
             cxxflags=final_cxxflags,
             cflags=final_cflags,
             linkflags=linkflags_option,
+            arflags=arflags_option,
             ldflags=ldflags_option,
             use=config_all_use,
             uselib=config.uselib,
@@ -3476,6 +3484,7 @@ class Context:
                   cxxflags=build_target.cxxflags,
                   cflags=build_target.cflags,
                   linkflags=build_target.linkflags,
+                  arflags=build_target.arflags,
                   ldflags=build_target.ldflags,
                   use=build_target.use,
                   uselib=build_target.uselib,

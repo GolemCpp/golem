@@ -18,6 +18,7 @@ class Configuration(Condition):
                  cxx_standard=None,
                  cxxflags=None,
                  linkflags=None,
+                 arflags=None,
                  system=None,
                  packages=None,
                  packages_dev=None,
@@ -53,6 +54,7 @@ class Configuration(Condition):
                  artifacts_run=None,
                  licenses=None,
                  qmldirs=None,
+                 no_defaults=None,
                  artifacts_generators=None,
                  target_decorators=None,
                  **kwargs):
@@ -60,6 +62,7 @@ class Configuration(Condition):
 
         self.packages_tool = '' if packages_tool is None else packages_tool
         self.header_only = False if header_only is None else header_only
+        self.no_defaults = False if no_defaults is None else no_defaults
         self.c_standard = '' if c_standard is None else c_standard
         self.cxx_standard = '' if cxx_standard is None else cxx_standard
 
@@ -97,6 +100,7 @@ class Configuration(Condition):
 
         self.cxxflags = helpers.parameter_to_list(cxxflags)
         self.linkflags = helpers.parameter_to_list(linkflags)
+        self.arflags = helpers.parameter_to_list(arflags)
         self.ldflags = helpers.parameter_to_list(ldflags)
         self.system = helpers.parameter_to_list(system)
 
@@ -147,6 +151,9 @@ class Configuration(Condition):
 
         if hasattr(config, 'ldflags'):
             self.ldflags = helpers.filter_unique(self.ldflags + config.ldflags)
+
+        if hasattr(config, 'no_defaults') and config.no_defaults:
+            self.no_defaults = True
 
         if hasattr(config, 'c_standard') and config.c_standard:
             self.c_standard = config.c_standard
@@ -211,6 +218,8 @@ class Configuration(Condition):
         self.cxxflags = helpers.filter_unique(self.cxxflags + config.cxxflags)
         self.linkflags = helpers.filter_unique(self.linkflags +
                                                config.linkflags)
+        if hasattr(config, 'arflags'):
+            self.arflags = helpers.filter_unique(self.arflags + config.arflags)
         self.system = helpers.filter_unique(self.system + config.system)
 
         self.packages = helpers.filter_unique(self.packages + config.packages)
@@ -517,7 +526,10 @@ class Configuration(Condition):
 
     @staticmethod
     def serialized_members():
-        return ['packages_tool', 'header_only', 'c_standard', 'cxx_standard']
+        return [
+            'packages_tool', 'header_only', 'no_defaults', 'c_standard',
+            'cxx_standard'
+        ]
 
     @staticmethod
     def serialized_members_list():
@@ -527,7 +539,7 @@ class Configuration(Condition):
             'stlibpath', 'rpath', 'rpath_link', 'cflags', 'cppflags',
             'cxxdeps', 'ccdeps', 'linkdeps', 'framework', 'frameworkpath',
             'program_cxxflags', 'program_linkflags', 'library_cxxflags',
-            'library_linkflags', 'cxxflags', 'linkflags', 'ldflags', 'system',
+            'library_linkflags', 'cxxflags', 'linkflags', 'arflags', 'ldflags', 'system',
             'packages', 'packages_dev', 'features', 'deps', 'use', 'uselib',
             'wfeatures', 'artifacts_dev', 'artifacts_run', 'licenses',
             'qmldirs'

@@ -17,6 +17,26 @@ def test_configuration_json_roundtrip_preserves_language_standards():
     assert restored.cxx_standard == '20'
 
 
+def test_configuration_roundtrip_preserves_no_defaults():
+    original = Configuration(no_defaults=True)
+
+    payload = Configuration.serialize_to_json(original, avoid_lists=True)
+    restored = Configuration.unserialize_from_json(payload)
+
+    assert payload['no_defaults'] is True
+    assert restored.no_defaults is True
+
+
+def test_configuration_roundtrip_preserves_arflags():
+    original = Configuration(arflags=['/machine:x64', '/debug'])
+
+    payload = Configuration.serialize_to_json(original, avoid_lists=True)
+    restored = Configuration.unserialize_from_json(payload)
+
+    assert payload['arflags'] == ['/machine:x64', '/debug']
+    assert restored.arflags == ['/machine:x64', '/debug']
+
+
 def test_condition_deserializes_legacy_runtime_into_runtime_link():
     restored = Condition.unserialize_from_json({'runtime': 'static'})
 
@@ -112,6 +132,42 @@ def test_configuration_append_overrides_language_standards():
 
     assert base.c_standard == '17'
     assert base.cxx_standard == '20'
+
+
+def test_configuration_append_keeps_no_defaults_when_any_input_enables_it():
+    base = Configuration(no_defaults=False)
+
+    base.append(Configuration(no_defaults=True))
+
+    assert base.no_defaults is True
+
+
+def test_configuration_merge_copy_keeps_no_defaults_when_any_match_enables_it():
+    context = SimpleNamespace(
+        variant=lambda: 'debug',
+        link=lambda: 'shared',
+        runtime_link=lambda: 'shared',
+        runtime_variant=lambda: 'debug',
+        osname=lambda: 'linux',
+        arch=lambda: 'x64',
+        compiler_name=lambda: 'gcc',
+        distribution=lambda: None,
+        release=lambda: None,
+    )
+    base = Configuration()
+    override = Configuration(variant='debug', no_defaults=True)
+
+    merged = base.merge_copy(context=context, configs=[override])
+
+    assert merged.no_defaults is True
+
+
+def test_configuration_append_merges_arflags():
+    base = Configuration(arflags=['/machine:x64'])
+
+    base.append(Configuration(arflags=['/debug']))
+
+    assert base.arflags == ['/machine:x64', '/debug']
 
 
 @pytest.mark.parametrize(
