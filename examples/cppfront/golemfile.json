@@ -1,0 +1,14 @@
+{
+    "targets": [
+        {
+            "name": "hello-cppfront",
+            "type": "program",
+            "source": [
+                "src"
+            ],
+            "cpp2flags": [
+                "-p"
+            ]
+        }
+    ]
+}

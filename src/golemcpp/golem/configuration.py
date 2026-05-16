@@ -54,6 +54,7 @@ class Configuration(Condition):
                  artifacts_run=None,
                  licenses=None,
                  qmldirs=None,
+                 cpp2flags=None,
                  no_defaults=None,
                  artifacts_generators=None,
                  target_decorators=None,
@@ -117,6 +118,8 @@ class Configuration(Condition):
         self.artifacts_run = helpers.parameter_to_list(artifacts_run)
         self.licenses = helpers.parameter_to_list(licenses)
         self.qmldirs = helpers.parameter_to_list(qmldirs)
+
+        self.cpp2flags = helpers.parameter_to_list(cpp2flags)
 
         self.artifacts = []
 
@@ -253,6 +256,9 @@ class Configuration(Condition):
 
         if hasattr(config, 'qmldirs'):
             self.qmldirs = helpers.filter_unique(self.qmldirs + config.qmldirs)
+
+        if hasattr(config, 'cpp2flags'):
+            self.cpp2flags = helpers.filter_unique(self.cpp2flags + config.cpp2flags)
 
         if hasattr(config, 'artifacts_generators'):
             self.artifacts_generators = self.artifacts_generators + config.artifacts_generators
@@ -542,7 +548,7 @@ class Configuration(Condition):
             'library_linkflags', 'cxxflags', 'linkflags', 'arflags', 'ldflags', 'system',
             'packages', 'packages_dev', 'features', 'deps', 'use', 'uselib',
             'wfeatures', 'artifacts_dev', 'artifacts_run', 'licenses',
-            'qmldirs'
+            'qmldirs', 'cpp2flags'
         ]
 
     @staticmethod

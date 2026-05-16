@@ -620,7 +620,7 @@ class Context:
         return result
 
     def list_source(self, source):
-        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc'] +
+        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc', 'C', 'c++', 'cpp2'] +
                                (['mm'] if self.is_darwin() else []))
 
     def list_moc(self, source):
@@ -1058,7 +1058,7 @@ class Context:
 
     @staticmethod
     def options(context):
-        context.load('compiler_c compiler_cxx qt5')
+        context.load('compiler_c compiler_cxx qt5 cppfront')
         context.add_option("--project-dir",
                            action="store",
                            help="Project location")
@@ -1339,6 +1339,7 @@ class Context:
             'cxxflags': [],
             'linkflags': [],
             'arflags': [],
+            'cpp2flags': ['-p'],
         }
 
         if not self.context.options.nounicode:
@@ -2831,6 +2832,7 @@ class Context:
         default_cflags = [] if config.no_defaults else default_flags['cflags'].copy()
         default_linkflags = [] if config.no_defaults else default_flags['linkflags'].copy()
         default_arflags = [] if config.no_defaults else default_flags['arflags'].copy()
+        default_cpp2flags = [] if config.no_defaults else default_flags['cpp2flags'].copy()
 
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
@@ -2912,6 +2914,7 @@ class Context:
         arflags_option = helpers.filter_unique(default_arflags + config.arflags)
         linkflags_option = helpers.filter_unique(default_linkflags + config.linkflags +
                                                  target_linkflags + rpath_link)
+        cpp2flags_option = helpers.filter_unique(default_cpp2flags + config.cpp2flags)
 
         config_lib = []
         absolute_path_lib = []
@@ -2988,6 +2991,7 @@ class Context:
             cflags=final_cflags,
             linkflags=linkflags_option,
             arflags=arflags_option,
+            cpp2flags=cpp2flags_option,
             ldflags=ldflags_option,
             use=config_all_use,
             uselib=config.uselib,
@@ -3485,6 +3489,7 @@ class Context:
                   cflags=build_target.cflags,
                   linkflags=build_target.linkflags,
                   arflags=build_target.arflags,
+                  cpp2flags=build_target.cpp2flags,
                   ldflags=build_target.ldflags,
                   use=build_target.use,
                   uselib=build_target.uselib,
@@ -4623,6 +4628,15 @@ class Context:
 
         return True
 
+    def is_cpp2_in_source_files(self, config):
+        for source in self.list_source(config.source):
+            if source.suffix() in ['.cpp2']:
+                return True
+        return False
+
+    def is_cppfront_used(self, config):
+        return self.is_cpp2_in_source_files(config=config)
+
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
@@ -4654,6 +4668,17 @@ class Context:
                 if qtdir:
                     self.context.options.qtdir = qtdir
 
+        # cppfront check
+
+        is_cppfront_used = False
+
+        for task, _ in tasks_and_targets:
+            if self.is_cppfront_used(config=task):
+                is_cppfront_used = True
+
+        if is_cppfront_used:
+            features_to_load.append('cppfront')
+        
         self.context.setenv('main')
         self.configure_compiler()
         if self.is_windows():
