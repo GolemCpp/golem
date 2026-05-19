@@ -110,6 +110,50 @@
 					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
 				}
 			}
+		},
+		{
+			"name": "[examples/cppfront] golem configure debug",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"configure",
+				"--clangd",
+				"--variant=debug"
+			],
+			"cwd": "${workspaceFolder}/examples/cppfront",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
+			"name": "[examples/cppfront] golem build",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"build"
+			],
+			"cwd": "${workspaceFolder}/examples/cppfront",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+				}
+			}
 		}
 	]
 }

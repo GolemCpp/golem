@@ -3,7 +3,7 @@ from golemcpp.golem import helpers
 
 class BuildTarget:
     def __init__(self, config, defines, includes, source, target, name,
-                 cxxflags, cflags, linkflags, arflags, ldflags, use, uselib, moc,
+                 cxxflags, cflags, linkflags, arflags, cpp2flags, ldflags, use, uselib, moc,
                  features, install_path, vnum, depends_on, lib, libpath, stlib,
                  stlibpath, cppflags, framework, frameworkpath, rpath, cxxdeps,
                  ccdeps, linkdeps, env_defines, env_cxxflags, env_includes,
@@ -30,6 +30,8 @@ class BuildTarget:
         self.linkflags = helpers.filter_unique(self.linkflags)
         self.arflags = arflags
         self.arflags = helpers.filter_unique(self.arflags)
+        self.cpp2flags = cpp2flags
+        self.cpp2flags = helpers.filter_unique(self.cpp2flags)
         self.ldflags = ldflags
         self.ldflags = helpers.filter_unique(self.ldflags)
         self.use = use

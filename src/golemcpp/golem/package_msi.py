@@ -41,7 +41,7 @@ def package_msi(self, package_build_context):
 
     print("Clean-up")
     package_directory = self.make_output_path('dist')
-    helpers.remove_tree(self, package_directory)
+    helpers.remove_tree(package_directory)
     files_directory = os.path.join(package_directory, 'files')
     wix_directory = os.path.join(package_directory, 'wix')
 

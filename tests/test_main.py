@@ -90,6 +90,38 @@ def test_main_init_dispatches_to_command_init(tmp_path, monkeypatch):
     ]
 
 
+def test_main_tools_dispatches_to_command_tools(tmp_path, monkeypatch):
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(main.sys, 'argv', ['golem', 'tools', 'install', 'cppfront'])
+
+    captured = {}
+
+    def fake_handle_tools_command(project_dir, args):
+        captured['project_dir'] = project_dir
+        captured['args'] = list(args)
+        return 11
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError('Waf entry point should not run for tools')
+
+    monkeypatch.setattr(main.command_tools, 'handle_tools_command', fake_handle_tools_command)
+    monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
+
+    result = main.main()
+
+    assert result == 11
+    assert captured['project_dir'] == str(project_dir)
+    assert captured['args'] == [
+        'install',
+        'cppfront',
+        '--project-dir=' + str(project_dir),
+        '--build-dir=' + str(project_dir / 'build'),
+    ]
+
+
 def test_main_sets_project_and_build_dir_before_calling_waf(tmp_path, monkeypatch):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()

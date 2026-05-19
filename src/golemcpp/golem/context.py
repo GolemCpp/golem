@@ -19,6 +19,7 @@ from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, Cac
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
 from golemcpp.golem import helpers
+from golemcpp.golem import tools_cache
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
@@ -28,6 +29,7 @@ import copy
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
 from golemcpp.golem import qt_discovery
+from golemcpp.golem import cppfront_tool
 from functools import partial
 from pathlib import Path
 from waflib import Logs, Task
@@ -620,7 +622,7 @@ class Context:
         return result
 
     def list_source(self, source):
-        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc'] +
+        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc', 'C', 'c++', 'cpp2'] +
                                (['mm'] if self.is_darwin() else []))
 
     def list_moc(self, source):
@@ -1058,7 +1060,7 @@ class Context:
 
     @staticmethod
     def options(context):
-        context.load('compiler_c compiler_cxx qt5')
+        context.load('compiler_c compiler_cxx qt5 cppfront')
         context.add_option("--project-dir",
                            action="store",
                            help="Project location")
@@ -1255,6 +1257,12 @@ class Context:
             help="Output file for static analysis results (e.g. cppcheck)")
 
         context.add_option(
+            "--tools-cache-directory",
+            action="store",
+            default='',
+            help="Directory where cache-backed local tools are stored")
+
+        context.add_option(
             "--cache-dir",
             action="store",
             default='',
@@ -1339,6 +1347,7 @@ class Context:
             'cxxflags': [],
             'linkflags': [],
             'arflags': [],
+            'cpp2flags': ['-p'],
         }
 
         if not self.context.options.nounicode:
@@ -2831,6 +2840,7 @@ class Context:
         default_cflags = [] if config.no_defaults else default_flags['cflags'].copy()
         default_linkflags = [] if config.no_defaults else default_flags['linkflags'].copy()
         default_arflags = [] if config.no_defaults else default_flags['arflags'].copy()
+        default_cpp2flags = [] if config.no_defaults else default_flags['cpp2flags'].copy()
 
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
@@ -2912,6 +2922,7 @@ class Context:
         arflags_option = helpers.filter_unique(default_arflags + config.arflags)
         linkflags_option = helpers.filter_unique(default_linkflags + config.linkflags +
                                                  target_linkflags + rpath_link)
+        cpp2flags_option = helpers.filter_unique(default_cpp2flags + config.cpp2flags)
 
         config_lib = []
         absolute_path_lib = []
@@ -2988,6 +2999,7 @@ class Context:
             cflags=final_cflags,
             linkflags=linkflags_option,
             arflags=arflags_option,
+            cpp2flags=cpp2flags_option,
             ldflags=ldflags_option,
             use=config_all_use,
             uselib=config.uselib,
@@ -3485,6 +3497,7 @@ class Context:
                   cflags=build_target.cflags,
                   linkflags=build_target.linkflags,
                   arflags=build_target.arflags,
+                  cpp2flags=build_target.cpp2flags,
                   ldflags=build_target.ldflags,
                   use=build_target.use,
                   uselib=build_target.uselib,
@@ -3596,7 +3609,7 @@ class Context:
     def cppcheck(self):
         cppcheck_dir = self.make_golem_path("cppcheck")
         if os.path.exists(cppcheck_dir):
-            helpers.remove_tree(self, cppcheck_dir)
+            helpers.remove_tree(cppcheck_dir)
 
         self.call_build_target(self.cppcheck_target)
 
@@ -3629,7 +3642,7 @@ class Context:
     def clang_tidy(self):
         clang_tidy_dir = self.make_golem_path('clang-tidy')
         if os.path.exists(clang_tidy_dir):
-            helpers.remove_tree(self, clang_tidy_dir)
+            helpers.remove_tree(clang_tidy_dir)
         helpers.make_directory(clang_tidy_dir)
 
         self.initialize_compiler_commands()
@@ -4344,7 +4357,7 @@ class Context:
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
-        helpers.remove_tree(self, package_directory)
+        helpers.remove_tree(package_directory)
 
         # Strip binaries, libraries, archives
 
@@ -4623,6 +4636,34 @@ class Context:
 
         return True
 
+    def is_cpp2_in_source_files(self, config):
+        for source in self.list_source(config.source):
+            if source.suffix() in ['.cpp2']:
+                return True
+        return False
+
+    def is_cppfront_used(self, config):
+        return self.is_cpp2_in_source_files(config=config)
+
+    def autodiscover_cppfront(self):
+        cache_directory = tools_cache.get_cache_directory(
+            project_dir=self.get_project_dir(),
+            options=self.context.options,
+        )
+
+        cppfront_cache_info = cppfront_tool.find_cppfront_cache(
+            cache_directory=cache_directory,
+        )
+
+        if cppfront_cache_info is None:
+            return
+
+        if not self.context.options.cppfront_path and 'CPPFRONT' not in os.environ:
+            self.context.options.cppfront_path = cppfront_cache_info.executable_path
+
+        if not self.context.options.cppfront_include and 'CPPFRONT_INCLUDE' not in os.environ:
+            self.context.options.cppfront_include = cppfront_cache_info.include_path
+
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
@@ -4654,6 +4695,18 @@ class Context:
                 if qtdir:
                     self.context.options.qtdir = qtdir
 
+        # cppfront check
+
+        is_cppfront_used = False
+
+        for task, _ in tasks_and_targets:
+            if self.is_cppfront_used(config=task):
+                is_cppfront_used = True
+
+        if is_cppfront_used:
+            self.autodiscover_cppfront()
+            features_to_load.append('cppfront')
+        
         self.context.setenv('main')
         self.configure_compiler()
         if self.is_windows():
@@ -5532,7 +5585,7 @@ class Context:
             break
         for path in dirs_to_remove:
             print("Remove {}".format(path))
-            helpers.remove_tree(self, path)
+            helpers.remove_tree(path)
 
     def write_config_file(self, task, config, target=None):
         export_path = self.make_outpath()
@@ -6165,7 +6218,7 @@ class Context:
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
-        helpers.remove_tree(self, package_directory)
+        helpers.remove_tree(package_directory)
 
         # Install documentation
 

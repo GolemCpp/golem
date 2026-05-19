@@ -165,6 +165,7 @@ If you need to run them from somewhere else, use `--project-dir=<project_dir>`. 
 The commands are presented in the order they are expected to be called, when needed to be called.
 
 - [golem init](https://golemcpp.org/docs/commands/golem-init/) to generate a documented starter `golemfile.py`
+- [golem tools](https://golemcpp.org/docs/commands/golem-tools/) to install, uninstall, and list external tools (for example cppfront)
 - [golem configure](https://golemcpp.org/docs/commands/golem-configure/) to configure your project
 - [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to retrieve and configure dependencies
   * About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)

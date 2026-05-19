@@ -1,10 +1,6 @@
 import os
 
-
-def make_absolute_path(path: str, cwd: str) -> str:
-    if os.path.isabs(path):
-        return path
-    return os.path.join(cwd, path)
+from golemcpp.golem import helpers
 
 def parse_global_and_command_arguments(argv: list[str]) -> tuple[list[str], str | None, list[str]]:
     global_args = []
@@ -97,7 +93,7 @@ def normalize_argv_by_resolving_dirs(argv: list[str], cwd: str) -> list[str]:
         if arg.startswith('--project-dir='):
             requested_dir = arg.split('=', 1)[1]
             if requested_dir:
-                resolved_dir = make_absolute_path(requested_dir, cwd)
+                resolved_dir = helpers.make_absolute_path(requested_dir, cwd)
                 normalized_argv.append('--project-dir=' + resolved_dir)
             else:
                 normalized_argv.append(arg)
@@ -106,7 +102,7 @@ def normalize_argv_by_resolving_dirs(argv: list[str], cwd: str) -> list[str]:
         if arg.startswith('--build-dir='):
             requested_dir = arg.split('=', 1)[1]
             if requested_dir:
-                resolved_dir = make_absolute_path(requested_dir, cwd)
+                resolved_dir = helpers.make_absolute_path(requested_dir, cwd)
                 normalized_argv.append('--build-dir=' + resolved_dir)
             else:
                 normalized_argv.append(arg)
