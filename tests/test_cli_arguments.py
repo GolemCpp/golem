@@ -1,10 +1,10 @@
 from golemcpp.golem.cli_arguments import (
-    make_absolute_path,
     normalize_argv,
     parse_cli_arguments,
     parse_directories_from_arguments,
     parse_global_and_command_arguments,
 )
+from golemcpp.golem.helpers import make_absolute_path
 
 
 def test_make_absolute_path_returns_absolute_input_unchanged():

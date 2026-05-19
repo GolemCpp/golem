@@ -46,7 +46,7 @@ def package_dmg(self, package_build_context):
 
     print("Clean-up")
     package_directory = self.make_output_path('dist')
-    helpers.remove_tree(self, package_directory)
+    helpers.remove_tree(package_directory)
     app_bundle_name = package_name + '.app'
     app_directory = os.path.join(package_directory, app_bundle_name,
                                  'Contents')

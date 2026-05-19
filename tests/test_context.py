@@ -37,6 +37,7 @@ def make_configure_context(project_qt=True, project_qtdir=''):
             variant='debug',
             link='shared',
             arch='x64',
+            project_dir=os.getcwd(),
         ),
         want_qt6=False,
         env=SimpleNamespace(),
@@ -55,9 +56,22 @@ def make_configure_context(project_qt=True, project_qtdir=''):
     return context
 
 
+def make_task_config(*, features=None, wfeatures=None, source=None):
+    config = golem_context.Configuration(
+        features=features or [],
+        wfeatures=wfeatures or [],
+        source=source or [],
+    )
+    config.type = []
+    return config
+
+
 def test_configure_autodiscovers_qtdir_when_qt_is_enabled_and_other_sources_are_missing(monkeypatch):
     context = make_configure_context()
-    context.get_tasks_and_targets_to_process = lambda: [(SimpleNamespace(features=['QT6CORE'], wfeatures=[]), None)]
+    context.get_tasks_and_targets_to_process = lambda: [(
+        make_task_config(features=['QT6CORE']),
+        None,
+    )]
 
     monkeypatch.delenv('QT5_ROOT', raising=False)
     monkeypatch.delenv('QT6_ROOT', raising=False)
@@ -84,7 +98,7 @@ def test_configure_skips_qtdir_autodiscovery_when_qmake_or_qt_roots_are_availabl
         context = make_configure_context()
         called = {'search': False}
         context.get_tasks_and_targets_to_process = lambda: [(
-            SimpleNamespace(
+            make_task_config(
                 features=['QT6CORE'] if test_case['wants_qt6'] else ['QT5CORE'],
                 wfeatures=['qt6'] if test_case['wants_qt6'] else [],
             ),

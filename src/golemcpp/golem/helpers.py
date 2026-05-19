@@ -47,35 +47,21 @@ def print_obj(obj, depth=5, l=""):
         for k, v in objdict.items()) + "\n" + l + "}"
 
 
-def handle_remove_readonly(func, path, exc_info):
-    """
-    Error handler for ``shutil.rmtree``.
+def remove_tree(path):
+    if not os.path.exists(path):
+        return
 
-    If the error is due to an access error (read only file)
-    it attempts to add write permission and then retries.
-
-    If the error is for another reason it re-raises the error.
-
-    Usage : ``shutil.rmtree(path, onerror=handle_remove_readonly)``
-    """
-    import stat
-    if not os.access(path, os.W_OK):
-        # Is the error an access error ?
-        os.chmod(path, stat.S_IWUSR)
-        func(path)
+    if sys.platform.startswith('win32'):
+        from time import sleep
+        while os.path.exists(path):
+            os.system("rmdir /s /q %s" % path)
+            sleep(0.1)
     else:
-        raise RuntimeError("Can't access to \"{}\"".format(path))
-
-
-def remove_tree(ctx, path):
-    if os.path.exists(path):
-        if ctx.is_windows():
-            # shutil.rmtree(build_dir, ignore_errors=False, onerror=handle_remove_readonly)
-            from time import sleep
-            while os.path.exists(path):
-                os.system("rmdir /s /q %s" % path)
-                sleep(0.1)
-        else:
+        if os.path.isfile(path):
+            os.remove(path)
+        elif os.path.islink(path):
+            os.unlink(path)
+        elif os.path.isdir(path):
             shutil.rmtree(path)
 
 
@@ -108,7 +94,7 @@ def get_golemcpp_dir():
 
 def make_golem_command(command_name):
     golem_path = get_golemcpp_golem_dir()
-    return ['python3', golem_path, command_name]
+    return [sys.executable, golem_path, command_name]
 
 
 def get_dependency_resolved_version(dep):
@@ -280,3 +266,8 @@ def parameter_to_list(input):
         return [input]
     else:
         return input
+
+def make_absolute_path(path: str, cwd: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.join(cwd, path)

@@ -6,9 +6,13 @@ import sys
 import tempfile
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Iterator
 
 import pytest
+
+from golemcpp.golem import cppfront_tool
+from golemcpp.golem import tools_manager
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -209,6 +213,98 @@ def assert_package_artifact_exists(project_dir: Path) -> None:
         assert any(project_dir.joinpath('build').rglob('*.dmg'))
     elif sys.platform.startswith('win32'):
         assert any(project_dir.joinpath('build').rglob('*.msi'))
+
+
+def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_path):
+    require_cxx_compiler()
+    require_git_remote_access(cppfront_tool.CPPFRONT_REPOSITORY_URL)
+
+    project_dir = example_tmp_path / 'project'
+    project_dir.mkdir()
+    cache_dir = example_tmp_path / 'cache'
+    tools_cache_dir = example_tmp_path / 'tools-cache'
+
+    result = run_golem(
+        project_dir,
+        cache_dir,
+        'tools',
+        'install',
+        'cppfront',
+        '--tools-cache-directory=' + str(tools_cache_dir),
+    )
+
+    cache_info = cppfront_tool.CppFrontCacheInfo.from_cache_root(
+        str(tools_cache_dir / cppfront_tool.CPPFRONT_NAME)
+    )
+
+    assert result.returncode == 0
+    assert Path(cache_info.executable_path).is_file()
+    assert Path(cache_info.include_path).is_dir()
+
+    manifest = tools_manager.ToolsManager(str(tools_cache_dir)).read_tool_manifest(tool_name=cppfront_tool.CPPFRONT_NAME)
+
+    assert manifest.version == cppfront_tool.DEFAULT_CPPFRONT_VERSION
+    assert manifest.tool == cppfront_tool.CPPFRONT_NAME
+
+
+def test_tools_list_available_mentions_supported_tools(example_tmp_path):
+    project_dir = example_tmp_path / 'project'
+    project_dir.mkdir()
+    cache_dir = example_tmp_path / 'cache'
+
+    result = run_golem(
+        project_dir,
+        cache_dir,
+        'tools',
+        'list',
+        '--available',
+    )
+
+    assert result.returncode == 0
+    assert 'Supported installable tools:' in result.stdout
+    assert 'cppfront\n  Description:' in result.stdout
+    assert '  Repository: {}'.format(cppfront_tool.CPPFRONT_REPOSITORY_URL) in result.stdout
+    assert '  Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in result.stdout
+
+
+@pytest.mark.parametrize('project_variant', PROJECT_VARIANTS)
+def test_cppfront_example_installs_builds_and_runs(example_tmp_path, project_variant):
+    require_cxx_compiler()
+    require_git_remote_access(cppfront_tool.CPPFRONT_REPOSITORY_URL)
+
+    project_dir = prepare_example_project('cppfront', example_tmp_path, project_variant)
+    cache_dir = example_tmp_path / f'cache-{project_variant}'
+    tools_cache_dir = example_tmp_path / f'tools-cache-{project_variant}'
+
+    run_golem(
+        project_dir,
+        cache_dir,
+        'tools',
+        'install',
+        'cppfront',
+        '--tools-cache-directory=' + str(tools_cache_dir),
+    )
+    run_golem(
+        project_dir,
+        cache_dir,
+        'configure',
+        '--variant=debug',
+        '--tools-cache-directory=' + str(tools_cache_dir),
+    )
+    run_golem(
+        project_dir,
+        cache_dir,
+        'build',
+        '--tools-cache-directory=' + str(tools_cache_dir),
+    )
+
+    binary = program_path(project_dir, 'hello-cppfront-debug')
+    assert binary.exists()
+
+    result = run_binary(binary, project_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == 'Hello, Alice!\nHello, Bob!\n'
 
 
 @pytest.mark.parametrize('project_variant', PROJECT_VARIANTS)

@@ -19,6 +19,7 @@ from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, Cac
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
 from golemcpp.golem import helpers
+from golemcpp.golem import tools_cache
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
@@ -28,6 +29,7 @@ import copy
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
 from golemcpp.golem import qt_discovery
+from golemcpp.golem import cppfront_tool
 from functools import partial
 from pathlib import Path
 from waflib import Logs, Task
@@ -1253,6 +1255,12 @@ class Context:
             action="store",
             default='',
             help="Output file for static analysis results (e.g. cppcheck)")
+
+        context.add_option(
+            "--tools-cache-directory",
+            action="store",
+            default='',
+            help="Directory where cache-backed local tools are stored")
 
         context.add_option(
             "--cache-dir",
@@ -3601,7 +3609,7 @@ class Context:
     def cppcheck(self):
         cppcheck_dir = self.make_golem_path("cppcheck")
         if os.path.exists(cppcheck_dir):
-            helpers.remove_tree(self, cppcheck_dir)
+            helpers.remove_tree(cppcheck_dir)
 
         self.call_build_target(self.cppcheck_target)
 
@@ -3634,7 +3642,7 @@ class Context:
     def clang_tidy(self):
         clang_tidy_dir = self.make_golem_path('clang-tidy')
         if os.path.exists(clang_tidy_dir):
-            helpers.remove_tree(self, clang_tidy_dir)
+            helpers.remove_tree(clang_tidy_dir)
         helpers.make_directory(clang_tidy_dir)
 
         self.initialize_compiler_commands()
@@ -4349,7 +4357,7 @@ class Context:
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
-        helpers.remove_tree(self, package_directory)
+        helpers.remove_tree(package_directory)
 
         # Strip binaries, libraries, archives
 
@@ -4637,6 +4645,25 @@ class Context:
     def is_cppfront_used(self, config):
         return self.is_cpp2_in_source_files(config=config)
 
+    def autodiscover_cppfront(self):
+        cache_directory = tools_cache.get_cache_directory(
+            project_dir=self.get_project_dir(),
+            options=self.context.options,
+        )
+
+        cppfront_cache_info = cppfront_tool.find_cppfront_cache(
+            cache_directory=cache_directory,
+        )
+
+        if cppfront_cache_info is None:
+            return
+
+        if not self.context.options.cppfront_path and 'CPPFRONT' not in os.environ:
+            self.context.options.cppfront_path = cppfront_cache_info.executable_path
+
+        if not self.context.options.cppfront_include and 'CPPFRONT_INCLUDE' not in os.environ:
+            self.context.options.cppfront_include = cppfront_cache_info.include_path
+
     def configure(self):
 
         self.cache_conf = self.make_cache_conf()
@@ -4677,6 +4704,7 @@ class Context:
                 is_cppfront_used = True
 
         if is_cppfront_used:
+            self.autodiscover_cppfront()
             features_to_load.append('cppfront')
         
         self.context.setenv('main')
@@ -5557,7 +5585,7 @@ class Context:
             break
         for path in dirs_to_remove:
             print("Remove {}".format(path))
-            helpers.remove_tree(self, path)
+            helpers.remove_tree(path)
 
     def write_config_file(self, task, config, target=None):
         export_path = self.make_outpath()
@@ -6190,7 +6218,7 @@ class Context:
 
         print("Clean-up")
         package_directory = self.make_output_path('dist')
-        helpers.remove_tree(self, package_directory)
+        helpers.remove_tree(package_directory)
 
         # Install documentation
 

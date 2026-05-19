@@ -4,6 +4,9 @@ from enum import Enum
 from golemcpp.golem import helpers
 
 
+def get_default_cache_directory_path():
+    return os.path.join(os.path.expanduser('~'), '.cache', 'golem')
+
 class CacheDir:
     def __init__(self, location, is_static=False, regex=None):
         self._location = location
@@ -27,7 +30,7 @@ class CacheDir:
 
 
 def default_cached_dir():
-    return CacheDir(os.path.join(os.path.expanduser("~"), '.cache', 'golem'))
+    return CacheDir(get_default_cache_directory_path())
 
 
 class CacheConf:

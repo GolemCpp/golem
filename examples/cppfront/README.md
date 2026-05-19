@@ -7,7 +7,16 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 Build the program:
 
 ``` bash
-golem configure --variant=debug --cppfront-path=/path/to/cppfront --cppfront-include=/path/to/cppfront/source
+golem tools list --available
+golem tools install cppfront
+golem configure --variant=debug
+golem build
+```
+
+If you prefer to use your own cppfront build instead of the cache-backed installation, you can still configure it explicitly:
+
+``` bash
+golem configure --variant=debug --cppfront-path=/path/to/cppfront --cppfront-include=/path/to/cppfront/include
 golem build
 ```
 
