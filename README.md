@@ -60,9 +60,11 @@ Have a look at the full example in [examples/minimal](/examples/minimal).
 - [examples/advanced](/examples/advanced) - Customize and force dependency options.
 - [examples/cache](/examples/cache) - Control cache directories and cache resolution policy.
 - [examples/conditions](/examples/conditions) - Build with platform-aware conditions in the project file.
+- [examples/cppfront](/examples/cppfront) - Basic cppfront program.
 - [examples/dependencies](/examples/dependencies) - Override resolved dependency versions with `master_dependencies.json`.
 - [examples/hello](/examples/hello) - Smallest Hello World program.
 - [examples/minimal](/examples/minimal) - Basic library plus program with a dependency.
+- [examples/modules](/examples/modules) - Basic library plus program with a dependency using C++ modules.
 - [examples/package](/examples/package) - Build and package a Qt application.
 - [examples/qt](/examples/qt) - Basic Qt widgets application.
 - [examples/qt-qml](/examples/qt-qml) - Basic Qt Quick / QML application.
@@ -198,8 +200,6 @@ Here is a list of important features to add as a priority:
 - Add or improve recipes for the most popular dependencies (increase support for configuration options)
 - Add pre/post build scripts
 - Add user-defined options on Configuration to allow scripts in recipes to set special options (e.g. backend=opengl)
-- Add support for cppfront
-- Add support for C++ modules
 - Implement [CPS](https://cps-org.github.io/cps/) ([sample](https://cps-org.github.io/cps/sample.html))
 - Detect when `/external:I` or `-isystem` are available before using them
 - Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
