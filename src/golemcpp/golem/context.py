@@ -622,7 +622,7 @@ class Context:
         return result
 
     def list_source(self, source):
-        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc', 'C', 'c++', 'cpp2'] +
+        return self.list_files(self.get_project_dir(), source, ['cxx', 'cpp', 'c++', 'c', 'cc', 'C', 'ixx', 'cppm', 'cxxm', 'cpp2'] +
                                (['mm'] if self.is_darwin() else []))
 
     def list_moc(self, source):
@@ -2762,8 +2762,8 @@ class Context:
             filename, filename_ext = os.path.splitext(filename)
 
             include_path = None
-            source_extensions = ['.cpp', '.cxx', '.c', '.cc']
-            header_extensions = ['.hpp', '.hxx', '.h', '.hh']
+            source_extensions = ['.cxx', '.cpp', '.c++', '.c', '.cc', '.C', '.ixx', '.cppm', '.cxxm', '.cpp2']
+            header_extensions = ['.hpp', '.h', '.hxx', '.hh']
 
             is_build_default = template_to_process.build is None
             is_build_enabled = template_to_process.build == True
