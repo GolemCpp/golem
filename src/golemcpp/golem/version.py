@@ -155,7 +155,7 @@ class Version:
             version_string = helpers.check_git_output(
                 ['describe', '--long', '--tags', '--dirty=-d'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
+                stderr=subprocess.DEVNULL)
             version_string = version_string.splitlines()[0]
         except:
             version_string = default
@@ -171,7 +171,7 @@ class Version:
             version_string = helpers.check_git_output(
                 ['describe', '--abbrev=0', '--tags'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
+                stderr=subprocess.DEVNULL)
             version_string = version_string.splitlines()[0]
         except:
             version_string = default
@@ -186,7 +186,7 @@ class Version:
             version_string = helpers.check_git_output(
                 ['rev-parse', 'HEAD'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
+                stderr=subprocess.DEVNULL)
             version_string = version_string.splitlines()[0]
         except:
             version_string = ''
@@ -205,7 +205,7 @@ class Version:
             message = helpers.check_git_output(
                 ['log', '--format=%B', '-n', '1', commit_hash],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
+                stderr=subprocess.DEVNULL)
             message = message.strip()
         except:
             message = ''
@@ -221,7 +221,7 @@ class Version:
             branch = helpers.check_git_output(
                 ['rev-parse', '--abbrev-ref', 'HEAD'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL).decode(sys.stdout.encoding)
+                stderr=subprocess.DEVNULL)
             branch = branch.strip()
         except:
             branch = default

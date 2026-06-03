@@ -66,7 +66,7 @@ class Repository:
         is_ssh = False
 
         if os.path.exists(url):
-            url = 'file://' + url
+            url = Path(url).resolve().as_uri()
         if url.startswith('file:///'):
             url = url.replace('file:///', 'file://')
 

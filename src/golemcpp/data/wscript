@@ -27,7 +27,7 @@ def import_from_file(name, file_path):
 
     return module
 
-builder = import_from_file('builder', '$builder_path')
+builder = import_from_file('builder', $builder_path)
 
 top = ''
 out = 'obj'

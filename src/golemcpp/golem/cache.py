@@ -5,7 +5,8 @@ from golemcpp.golem import helpers
 
 
 def get_default_cache_directory_path():
-    return os.path.join(os.path.expanduser('~'), '.cache', 'golem')
+    home_directory = helpers.get_environ('HOME') or os.path.expanduser('~')
+    return os.path.join(home_directory, '.cache', 'golem')
 
 class CacheDir:
     def __init__(self, location, is_static=False, regex=None):

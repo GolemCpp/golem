@@ -1,3 +1,4 @@
+from golemcpp.golem import helpers
 from golemcpp.golem import command_tools
 from golemcpp.golem import cppfront_tool
 from golemcpp.golem import tools_manager
@@ -133,7 +134,7 @@ def test_handle_tools_command_accepts_explicit_tools_cache_directory(monkeypatch
     )
 
     assert result == 0
-    assert captured['cache_directory'] == '/tmp/custom-tools-cache'
+    assert captured['cache_directory'] == helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))
 
 
 def test_handle_tools_command_uninstalls_cppfront(monkeypatch, capsys, tmp_path):
@@ -156,10 +157,10 @@ def test_handle_tools_command_uninstalls_cppfront(monkeypatch, capsys, tmp_path)
 
     assert result == 0
     assert captured['tool_name'] == 'cppfront'
-    assert captured['cache_directory'] == '/tmp/custom-tools-cache'
+    assert captured['cache_directory'] == helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))
 
     stdout = capsys.readouterr().out
-    assert 'Uninstalled cppfront from /tmp/custom-tools-cache' in stdout
+    assert 'Uninstalled cppfront from {}'.format(helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))) in stdout
 
 
 def test_handle_tools_command_reports_when_tool_is_not_installed(monkeypatch, capsys, tmp_path):
@@ -176,7 +177,7 @@ def test_handle_tools_command_reports_when_tool_is_not_installed(monkeypatch, ca
     assert result == 0
 
     stdout = capsys.readouterr().out
-    assert 'cppfront is not installed in /tmp/custom-tools-cache' in stdout
+    assert 'cppfront is not installed in {}'.format(helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))) in stdout
 
 
 def test_handle_tools_command_lists_available_tools(capsys, tmp_path):

@@ -1347,7 +1347,7 @@ class Context:
             'cxxflags': [],
             'linkflags': [],
             'arflags': [],
-            'cpp2flags': ['-p'],
+            'cpp2flags': [],
         }
 
         if not self.context.options.nounicode:
@@ -1374,7 +1374,7 @@ class Context:
 
             # Serialized writes to the program database (PDB) to avoid fatal error C1041
 
-            default_flags = ['/FS']
+            default_flags = ['/FS', '/utf-8']
             flags['cflags'] += default_flags
             flags['cxxflags'] += default_flags
             
@@ -3672,7 +3672,7 @@ class Context:
         out, _ = ret.communicate()
         if ret.returncode:
             raise RuntimeError("ERROR: " + ' '.join(cmd))
-        lines = out.decode(sys.stdout.encoding).splitlines()
+        lines = helpers.decode_output(out).splitlines()
         if not lines[0]:
             raise RuntimeError(
                 "No result when requesting installationPath to vswhere.exe")
@@ -3683,15 +3683,10 @@ class Context:
         msvc_path = self.vswhere_get_installation_path()
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
-        call_msvc = [
-            'call', '"' + vcvars + '"', self.context.env['MSVC_TARGETS'][0],
-            '&&'
-        ]
-
-        cmd = call_msvc + command
-
-        build_cmd = ' '.join(cmd)
-        if subprocess.call(build_cmd, cwd=cwd, shell=True):
+        call_msvc = 'call ' + subprocess.list2cmdline(
+            [vcvars, self.context.env['MSVC_TARGETS'][0]])
+        build_cmd = call_msvc + ' && ' + subprocess.list2cmdline(command)
+        if subprocess.call(['cmd', '/d', '/s', '/c', build_cmd], cwd=cwd, shell=False):
             return 1
 
     def run_command(self, command, cwd, env=None):
@@ -3699,10 +3694,10 @@ class Context:
             my_env = os.environ.copy()
             for k, v in env.items():
                 my_env[k] = v
-            if subprocess.call(command, cwd=cwd, shell=self.is_windows(), env=my_env):
+            if subprocess.call(command, cwd=cwd, shell=False, env=my_env):
                 return 1
         else:
-            if subprocess.call(command, cwd=cwd, shell=self.is_windows()):
+            if subprocess.call(command, cwd=cwd, shell=False):
                 return 1
 
     def run_build_command(self, command, cwd, env=None):
@@ -3720,6 +3715,8 @@ class Context:
 
     def find_msvc_toolset_number(self, vs_version):
         toolsets = {
+            "18": "145",
+            "17": "143",
             "16": "142",
             "15": "141",
             "14": "140",
@@ -4558,7 +4555,7 @@ class Context:
         try:
             remote_url = helpers.check_git_output(
                 ['config', '--get', 'remote.origin.url'],
-                cwd=self.get_project_dir()).decode(sys.stdout.encoding)
+                cwd=self.get_project_dir())
             remote_url = remote_url.split('\n')
             self.repository = remote_url[0] if remote_url else None
         except Exception:
@@ -4587,7 +4584,7 @@ class Context:
         if ret.returncode:
             print("ERROR: " + ' '.join(cmd))
             return -1
-        lines = out.decode(sys.stdout.encoding).splitlines()
+        lines = helpers.decode_output(out).splitlines()
         if not lines[0]:
             return 1
         msvc_path = lines[0]
@@ -5820,7 +5817,8 @@ class Context:
         packages_to_install = []
         found_installed_packages = []
         installed_packages = subprocess.check_output(
-            ['apt', 'list', '--installed']).decode(sys.stdout.encoding)
+            ['apt', 'list', '--installed'])
+        installed_packages = helpers.decode_output(installed_packages)
         for package in packages:
             if installed_packages.find(package + '/') == -1:
                 packages_to_install.append(package)

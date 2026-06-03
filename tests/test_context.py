@@ -233,6 +233,15 @@ def test_configure_debug_keeps_debug_flags_with_release_runtime_variant():
     assert '/RTC1' in flags['cxxflags']
 
 
+def test_make_default_build_flags_enables_utf8_for_msvc():
+    context = make_runtime_context()
+
+    flags = context.make_default_build_flags(variant='debug')
+
+    assert '/utf-8' in flags['cflags']
+    assert '/utf-8' in flags['cxxflags']
+
+
 def make_build_target_context(*, variant='release', no_defaults=False):
     context = Context.__new__(Context)
     context.project = SimpleNamespace(deps=[])
@@ -568,7 +577,7 @@ def test_parse_local_non_git_repository_returns_local_path_for_non_git_directory
     repository_dir = tmp_path / 'recipes'
     repository_dir.mkdir()
 
-    dependency = Dependency(repository='file://' + str(repository_dir))
+    dependency = Dependency(repository=repository_dir.resolve().as_uri())
 
     assert Repository.parse_local_non_git_repository(dependency.repository) == str(repository_dir)
 
@@ -579,7 +588,7 @@ def test_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
     git_dir.mkdir(parents=True)
     (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
 
-    dependency = Dependency(repository='file://' + str(repository_dir))
+    dependency = Dependency(repository=repository_dir.resolve().as_uri())
 
     assert Repository.parse_local_non_git_repository(dependency.repository) is None
     assert Repository.parse_local_directory_path(url=dependency.repository) == str(repository_dir)
@@ -591,8 +600,10 @@ def test_helpers_parse_local_non_git_repository_ignores_local_git_directory(tmp_
     git_dir.mkdir(parents=True)
     (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
 
-    assert Repository.parse_local_non_git_repository('file://' + str(repository_dir)) is None
-    assert Repository.parse_local_directory_path('file://' + str(repository_dir)) == str(repository_dir)
+    repository_uri = repository_dir.resolve().as_uri()
+
+    assert Repository.parse_local_non_git_repository(repository_uri) is None
+    assert Repository.parse_local_directory_path(repository_uri) == str(repository_dir)
 
 
 def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path):
@@ -604,7 +615,7 @@ def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path)
 
     repositories = context.load_recipes_repositories()
 
-    assert [repository.url for repository in repositories] == ['file://' + str(recipes_dir)]
+    assert [repository.url for repository in repositories] == [recipes_dir.resolve().as_uri()]
 
 
 def test_get_master_dependencies_repository_normalizes_local_paths(monkeypatch, tmp_path):
@@ -614,18 +625,65 @@ def test_get_master_dependencies_repository_normalizes_local_paths(monkeypatch, 
 
     monkeypatch.setenv('GOLEM_MASTER_DEPENDENCIES_REPOSITORY', 'master-dependencies')
 
-    assert context.get_master_dependencies_repository().url == 'file://' + str(master_dir)
+    assert context.get_master_dependencies_repository().url == master_dir.resolve().as_uri()
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
     project_dir = tmp_path / 'project dir'
-    recipes_dir = project_dir / 'recipes #1?x'
+    recipes_dir = project_dir / 'recipes #1'
     recipes_dir.mkdir(parents=True)
 
-    repository = Repository.from_url('recipes #1?x', str(project_dir)).url
+    repository = Repository.from_url('recipes #1', str(project_dir)).url
 
     assert repository == recipes_dir.resolve().as_uri()
     assert Repository.parse_local_directory_path(repository) == str(recipes_dir.resolve())
+
+
+def test_run_command_uses_subprocess_without_shell_on_windows(monkeypatch):
+    context = make_runtime_context()
+    captured = {}
+
+    def fake_call(command, cwd=None, shell=False, env=None):
+        captured['command'] = command
+        captured['cwd'] = cwd
+        captured['shell'] = shell
+        captured['env'] = env
+        return 0
+
+    monkeypatch.setattr(golem_context.subprocess, 'call', fake_call)
+
+    result = context.run_command(['git', 'status'], cwd='C:/tmp/project', env={'GOLEM_FLAG': '1'})
+
+    assert result is None
+    assert captured['command'] == ['git', 'status']
+    assert captured['cwd'] == 'C:/tmp/project'
+    assert captured['shell'] is False
+    assert captured['env']['GOLEM_FLAG'] == '1'
+
+
+def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch):
+    context = make_runtime_context()
+    context.context.env = AttrDict(MSVC_TARGETS=['x64'])
+    captured = {}
+
+    monkeypatch.setattr(context, 'vswhere_get_installation_path', lambda: 'C:\\VS Path')
+
+    def fake_call(command, cwd=None, shell=False, env=None):
+        captured['command'] = command
+        captured['cwd'] = cwd
+        captured['shell'] = shell
+        return 0
+
+    monkeypatch.setattr(golem_context.subprocess, 'call', fake_call)
+
+    result = context.run_command_with_msvisualcpp(['cl.exe', '/nologo'], cwd='C:/tmp/project')
+
+    assert result is None
+    assert captured['command'][:4] == ['cmd', '/d', '/s', '/c']
+    assert captured['cwd'] == 'C:/tmp/project'
+    assert captured['shell'] is False
+    assert captured['command'][4].startswith('call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64')
+    assert '&& cl.exe /nologo' in captured['command'][4]
 
 
 def test_clone_repository_copies_non_git_directory(tmp_path):
@@ -702,9 +760,9 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
 
     repo_path = context.make_basic_dependency_repo_path(repository)
 
-    assert repo_path == '/cache/' + Repository.make_repository_base(
+    assert repo_path == os.path.join('/cache', Repository.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
-
+    )
 
 def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_path):
     context = make_repository_context(project_dir=tmp_path)

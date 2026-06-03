@@ -1,3 +1,4 @@
+import locale
 import os
 import sys
 import types
@@ -51,24 +52,35 @@ def remove_tree(path):
     if not os.path.exists(path):
         return
 
-    if sys.platform.startswith('win32'):
+    if os.path.isfile(path):
+        os.remove(path)
+    elif os.path.islink(path):
+        os.unlink(path)
+    elif sys.platform.startswith('win32'):
         from time import sleep
         while os.path.exists(path):
-            os.system("rmdir /s /q %s" % path)
+            os.system('rmdir /s /q {}'.format(subprocess.list2cmdline([path])))
             sleep(0.1)
     else:
-        if os.path.isfile(path):
-            os.remove(path)
-        elif os.path.islink(path):
-            os.unlink(path)
-        elif os.path.isdir(path):
-            shutil.rmtree(path)
+        shutil.rmtree(path)
 
 
 def get_environ(env_name):
     if env_name in os.environ and os.environ[env_name] and len(str(os.environ[env_name])) > 0:
         return str(os.environ[env_name])
     return None
+
+
+def decode_output(output):
+    if isinstance(output, str):
+        return output
+
+    encoding = getattr(sys.stdout, 'encoding', None) or locale.getpreferredencoding(False) or 'utf-8'
+
+    try:
+        return output.decode(encoding)
+    except UnicodeDecodeError:
+        return output.decode('utf-8', errors='replace')
 
 
 def make_directory(base, path=None):
@@ -208,7 +220,10 @@ def check_git_output(params, cwd, **kwargs):
 
     validate_git_command(args=args, cwd=cwd)
 
-    return subprocess.check_output(args, cwd=cwd, **kwargs)
+    output = subprocess.check_output(args, cwd=cwd, **kwargs)
+    output = decode_output(output)
+    
+    return output
 
 def call_git(params, cwd, **kwargs):
     args = ['git'] + params
