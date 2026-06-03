@@ -131,7 +131,7 @@ def package_msi(self, package_build_context):
     targets_binaries = []
     targets_libpaths = ['lib']
     target_programs = []
-    qt5_binaries = []
+    qt_binaries = []
     for artifact in artifacts:
         if artifact.type in ['library', 'program']:
             if artifact.target in package_build_context.package.targets and artifact.repository == repository:
@@ -142,8 +142,8 @@ def package_msi(self, package_build_context):
                     target_config = package_build_context.targets_and_configs[
                         artifact.target]
 
-                if target_config and self.is_qt5_enabled(config=target_config):
-                    qt5_binaries.append(artifact.path)
+                if target_config and self.is_qt_enabled(config=target_config):
+                    qt_binaries.append(artifact.path)
 
                 if artifact.type in ['program']:
                     target_programs.append(artifact.path)
@@ -169,7 +169,7 @@ def package_msi(self, package_build_context):
 
     qt5_targets_binaries_real_paths = list()
     qt5_unique_targets_binaries = list()
-    for binary in qt5_binaries:
+    for binary in qt_binaries:
         real_path = os.path.realpath(
             os.path.join(subdirectory_directory, binary))
         if real_path in qt5_targets_binaries_real_paths:

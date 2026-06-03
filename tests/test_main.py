@@ -148,3 +148,40 @@ def test_main_sets_project_and_build_dir_before_calling_waf(tmp_path, monkeypatc
         '--project-dir=' + str(project_dir),
         '--build-dir=' + str(project_dir / 'build'),
     ]
+
+
+def test_main_writes_wscript_with_repr_safe_builder_path(tmp_path, monkeypatch):
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+
+    fake_package_dir = tmp_path / 'golem 日本 path' / 'golem'
+    fake_package_dir.mkdir(parents=True)
+    (fake_package_dir / 'builder.py').write_text('# builder\n', encoding='utf-8')
+
+    data_dir = fake_package_dir.parent / 'data'
+    data_dir.mkdir()
+    (data_dir / 'wscript').write_text(
+        "builder = import_from_file('builder', $builder_path)\n",
+        encoding='utf-8',
+    )
+
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(main.sys, 'argv', ['golem', 'configure'])
+    monkeypatch.setattr(main.helpers, 'get_golemcpp_golem_dir', lambda: str(fake_package_dir))
+
+    captured = {}
+
+    def fake_waf_entry_point(build_dir, waf_version, wafdir):
+        captured['build_dir'] = build_dir
+
+    monkeypatch.setattr(main.Scripting, 'waf_entry_point', fake_waf_entry_point)
+
+    result = main.main()
+
+    generated_wscript = (project_dir / 'build' / 'golem' / 'wscript').read_text(encoding='utf-8')
+
+    assert result == 0
+    assert captured['build_dir'] == str(project_dir / 'build' / 'golem')
+    assert generated_wscript == "builder = import_from_file('builder', {})\n".format(
+        repr(str(fake_package_dir / 'builder.py'))
+    )

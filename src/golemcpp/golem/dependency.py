@@ -57,7 +57,7 @@ class Dependency(Configuration):
         else:
             tags = helpers.check_git_output(
                 ['ls-remote', '--tags', self.repository],
-                cwd=os.getcwd()).decode(sys.stdout.encoding)
+                cwd=os.getcwd())
             tags = tags.split('\n')
             tmp = ''
             for line in tags:
@@ -78,7 +78,7 @@ class Dependency(Configuration):
                     'ls-remote', '--tags', self.repository,
                     'refs/tags/' + found_version
                 ],
-                cwd=os.getcwd()).decode(sys.stdout.encoding)
+                cwd=os.getcwd())
                 if not hash:
                     raise RuntimeError(
                         "Can't find any hash related to found tag {}".format(
@@ -91,7 +91,7 @@ class Dependency(Configuration):
                 self.resolved_version = self.version
                 hash = helpers.check_git_output(
                     ['ls-remote', '--heads', self.repository, self.version],
-                    cwd=os.getcwd()).decode(sys.stdout.encoding)
+                    cwd=os.getcwd())
                 if hash:
                     hash = hash.splitlines()[0]
                     hash = hash.split('\t')[0]

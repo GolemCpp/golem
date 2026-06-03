@@ -1,3 +1,5 @@
+import os
+
 from golemcpp.golem.cli_arguments import (
     normalize_argv,
     parse_cli_arguments,
@@ -12,7 +14,7 @@ def test_make_absolute_path_returns_absolute_input_unchanged():
 
 
 def test_make_absolute_path_joins_relative_path_with_cwd():
-    assert make_absolute_path('build-debug', '/workspace/project') == '/workspace/project/build-debug'
+    assert make_absolute_path('build-debug', '/workspace/project') == os.path.join('/workspace/project', 'build-debug')
 
 
 def test_parse_global_and_command_arguments_splits_global_flags_and_command_args():
@@ -30,7 +32,7 @@ def test_parse_cli_arguments_uses_defaults_when_no_command_is_provided():
 
     assert global_args == [
         '--project-dir=/workspace/project',
-        '--build-dir=/workspace/project/build',
+        '--build-dir=' + os.path.join('/workspace/project', 'build'),
     ]
     assert command is None
     assert command_args == []
@@ -45,9 +47,9 @@ def test_parse_cli_arguments_extracts_command_and_relative_directories():
     assert global_args == []
     assert command == 'configure'
     assert command_args == [
-        '--project-dir=/workspace/project/demo',
+        '--project-dir=' + os.path.join('/workspace/project', 'demo'),
         '--clangd',
-        '--build-dir=/workspace/project/build',
+        '--build-dir=' + os.path.join('/workspace/project', 'build'),
     ]
 
 
@@ -60,7 +62,7 @@ def test_parse_cli_arguments_supports_deprecated_dir_option():
     assert global_args == []
     assert command == 'configure'
     assert command_args == [
-        '--build-dir=/workspace/project/out',
+        '--build-dir=' + os.path.join('/workspace/project', 'out'),
         '--project-dir=/workspace/project',
     ]
 
@@ -74,7 +76,7 @@ def test_parse_cli_arguments_prefers_build_dir_over_deprecated_dir_option():
     assert global_args == []
     assert command == 'configure'
     assert command_args == [
-        '--build-dir=/workspace/project/modern-build',
+        '--build-dir=' + os.path.join('/workspace/project', 'modern-build'),
         '--variant=debug',
         '--project-dir=/workspace/project',
     ]
@@ -84,7 +86,7 @@ def test_normalize_argv_converts_deprecated_dir_option():
     assert normalize_argv(['golem', 'configure', '--dir=out'], '/workspace/project') == [
         'golem',
         'configure',
-        '--build-dir=/workspace/project/out',
+        '--build-dir=' + os.path.join('/workspace/project', 'out'),
     ]
 
 
@@ -92,7 +94,7 @@ def test_normalize_argv_keeps_explicit_build_dir_and_drops_deprecated_dir_option
     assert normalize_argv(['golem', '--dir=legacy', 'configure', '--build-dir=current'], '/workspace/project') == [
         'golem',
         'configure',
-        '--build-dir=/workspace/project/current',
+        '--build-dir=' + os.path.join('/workspace/project', 'current'),
     ]
 
 
@@ -120,8 +122,8 @@ def test_normalize_argv_preserves_explicit_project_and_build_dir():
     ) == [
         'golem',
         'configure',
-        '--project-dir=/workspace/project/demo',
-        '--build-dir=/workspace/project/out',
+        '--project-dir=' + os.path.join('/workspace/project', 'demo'),
+        '--build-dir=' + os.path.join('/workspace/project', 'out'),
     ]
 
 
@@ -145,7 +147,7 @@ def test_parse_cli_arguments_keeps_global_version_before_command():
     assert command_args == [
         '--clangd',
         '--project-dir=/workspace/project',
-        '--build-dir=/workspace/project/build',
+        '--build-dir=' + os.path.join('/workspace/project', 'build'),
     ]
 
 
@@ -158,7 +160,7 @@ def test_parse_cli_arguments_treats_only_flags_as_global_args_when_no_command_ex
     assert global_args == [
         '--version',
         '--project-dir=/workspace/project',
-        '--build-dir=/workspace/project/build',
+        '--build-dir=' + os.path.join('/workspace/project', 'build'),
     ]
     assert command is None
     assert command_args == []
