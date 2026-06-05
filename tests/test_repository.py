@@ -27,12 +27,48 @@ def test_repository_from_url_preserves_explicit_reference(tmp_path):
 
 def test_repository_parses_encoded_local_directory_path(tmp_path):
     project_dir = tmp_path / 'project dir'
-    recipes_dir = project_dir / 'recipes #1?x'
+    recipes_dir = project_dir / 'recipes #1'
     recipes_dir.mkdir(parents=True)
 
-    repository = Repository.from_url('recipes #1?x', str(project_dir))
+    repository = Repository.from_url('recipes #1', str(project_dir))
 
     assert repository.get_local_path() == str(recipes_dir.resolve())
+
+
+def test_repository_from_url_normalizes_local_path_under_non_ascii_parent(tmp_path):
+    project_dir = tmp_path / '日本 語 project'
+    recipes_dir = project_dir / 'recipes'
+    recipes_dir.mkdir(parents=True)
+
+    repository = Repository.from_url('recipes', str(project_dir))
+
+    assert repository.url == recipes_dir.resolve().as_uri()
+    assert repository.get_local_path() == str(recipes_dir.resolve())
+
+
+def test_repository_generate_recipe_id_accepts_local_path_under_non_ascii_parent(tmp_path):
+    project_dir = tmp_path / '日本 語 project'
+    recipes_dir = project_dir / 'recipes'
+    recipes_dir.mkdir(parents=True)
+
+    recipe_id = Repository.generate_recipe_id(str(recipes_dir))
+
+    assert recipe_id.startswith('recipes@fsys.')
+    assert 'project' in recipe_id
+
+
+def test_repository_generate_recipe_id_uses_hash_for_local_path_uniqueness(tmp_path):
+    parent_one = tmp_path / 'alpha' / 'recipes'
+    parent_two = tmp_path / 'beta' / 'recipes'
+    parent_one.mkdir(parents=True)
+    parent_two.mkdir(parents=True)
+
+    recipe_id_one = Repository.generate_recipe_id(str(parent_one))
+    recipe_id_two = Repository.generate_recipe_id(str(parent_two))
+
+    assert recipe_id_one != recipe_id_two
+    assert recipe_id_one.startswith('recipes@fsys.')
+    assert recipe_id_two.startswith('recipes@fsys.')
 
 
 def test_repository_non_git_directory_detection_ignores_git_repositories(tmp_path):

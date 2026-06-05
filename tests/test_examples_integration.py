@@ -17,12 +17,26 @@ from golemcpp.golem import tools_manager
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / 'examples'
-EXAMPLES_TMP_DIR = REPO_ROOT / '.pytest-examples'
 PROJECT_VARIANTS = ('python', 'json')
+
+
+def get_examples_tmp_dir() -> Path:
+    return REPO_ROOT / '.pytest-examples'
 
 
 def command_exists(command: str) -> bool:
     return shutil.which(command) is not None
+
+
+def has_windows_msvc_toolchain() -> bool:
+    installer_root = Path(
+        os.environ.get(
+            'ProgramFiles(x86)',
+            os.environ.get('ProgramFiles', 'C:\\Program Files (x86)'),
+        )
+    )
+    vswhere_path = installer_root / 'Microsoft Visual Studio' / 'Installer' / 'vswhere.exe'
+    return command_exists('cl') or vswhere_path.is_file()
 
 
 def run_tool_query(command: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -35,10 +49,15 @@ def run_tool_query(command: str, *args: str) -> subprocess.CompletedProcess[str]
 
 
 def require_cxx_compiler() -> None:
+    if sys.platform.startswith('win32') and has_windows_msvc_toolchain():
+        return
     if any(command_exists(candidate) for candidate in ('c++', 'g++', 'clang++')):
         return
     pytest.skip('No C++ compiler available for example integration tests')
 
+def require_long_paths() -> None:
+    if sys.platform.startswith('win32'):
+        pytest.skip('This test is not supported on Windows due to the too long path lengths of the generated build files')
 
 @lru_cache(maxsize=None)
 def can_access_git_remote(repository: str) -> bool:
@@ -159,8 +178,9 @@ def use_json_project_file(project_dir: Path) -> None:
 
 @pytest.fixture
 def example_tmp_path() -> Iterator[Path]:
-    EXAMPLES_TMP_DIR.mkdir(exist_ok=True)
-    path = Path(tempfile.mkdtemp(prefix='example-', dir=EXAMPLES_TMP_DIR))
+    examples_tmp_dir = get_examples_tmp_dir()
+    examples_tmp_dir.mkdir(exist_ok=True)
+    path = Path(tempfile.mkdtemp(prefix='example-', dir=examples_tmp_dir))
 
     try:
         yield path
@@ -353,6 +373,7 @@ def test_conditions_example_builds_and_uses_platform_specific_sources(example_tm
 
 def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path):
     require_cxx_compiler()
+    require_long_paths()
 
     project_dir = copy_example_project('advanced', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'
@@ -520,3 +541,34 @@ def test_package_example_builds_and_packages(example_tmp_path):
 
     assert program_path(project_dir, 'hello-package').exists()
     assert_package_artifact_exists(project_dir)
+
+
+def test_has_windows_msvc_toolchain_accepts_vswhere_installation(monkeypatch, tmp_path):
+    installer_root = tmp_path / 'Program Files (x86)'
+    vswhere_path = installer_root / 'Microsoft Visual Studio' / 'Installer' / 'vswhere.exe'
+    vswhere_path.parent.mkdir(parents=True)
+    vswhere_path.write_text('', encoding='utf-8')
+
+    monkeypatch.setenv('ProgramFiles(x86)', str(installer_root))
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(__import__(__name__), 'command_exists', lambda command: False)
+
+    assert has_windows_msvc_toolchain() is True
+
+
+def test_require_cxx_compiler_skips_on_windows_without_any_detected_toolchain(monkeypatch, tmp_path):
+    installer_root = tmp_path / 'Program Files (x86)'
+    installer_root.mkdir()
+
+    monkeypatch.setenv('ProgramFiles(x86)', str(installer_root))
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(__import__(__name__), 'command_exists', lambda command: False)
+
+    with pytest.raises(pytest.skip.Exception, match=r'No C\+\+ compiler available'):
+        require_cxx_compiler()
+
+
+def test_get_examples_tmp_dir_uses_repo_root_off_windows(monkeypatch):
+    monkeypatch.setattr(sys, 'platform', 'linux')
+
+    assert get_examples_tmp_dir() == REPO_ROOT / '.pytest-examples'

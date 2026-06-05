@@ -47,27 +47,27 @@ def main() -> int:
     golem_out = build_dir
     build_dir = os.path.join(golem_out, 'golem')
 
-    filein = open(os.path.join(golemcpp_data_path, 'wscript'))
+    filein = open(os.path.join(golemcpp_data_path, 'wscript'), encoding='utf-8')
     src = Template(filein.read())
     filein.close()
     out = src.substitute(
-        builder_path=os.path.join(golem_path, 'builder.py').replace('\\', '\\\\'))
+        builder_path=repr(os.path.join(golem_path, 'builder.py')))
 
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
-    fileout = open(os.path.join(build_dir, 'wscript'), 'w+')
+    fileout = open(os.path.join(build_dir, 'wscript'), 'w+', encoding='utf-8')
     fileout.write(out)
     fileout.close()
 
     wafdir = os.path.abspath(inspect.getfile(inspect.getmodule(Scripting)))
     wafdir = str(Path(wafdir).parent.parent.absolute())
 
-    Scripting.waf_entry_point(build_dir, Context.WAFVERSION, wafdir)
-
     if command == 'distclean':
         path = golem_out
         helpers.remove_tree(path)
         return 0
+
+    Scripting.waf_entry_point(build_dir, Context.WAFVERSION, wafdir)
 
     return 0
