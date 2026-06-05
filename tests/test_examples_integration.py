@@ -55,6 +55,9 @@ def require_cxx_compiler() -> None:
         return
     pytest.skip('No C++ compiler available for example integration tests')
 
+def require_long_paths() -> None:
+    if sys.platform.startswith('win32'):
+        pytest.skip('This test is not supported on Windows due to the too long path lengths of the generated build files')
 
 @lru_cache(maxsize=None)
 def can_access_git_remote(repository: str) -> bool:
@@ -370,6 +373,7 @@ def test_conditions_example_builds_and_uses_platform_specific_sources(example_tm
 
 def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path):
     require_cxx_compiler()
+    require_long_paths()
 
     project_dir = copy_example_project('advanced', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'
