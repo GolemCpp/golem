@@ -28,7 +28,7 @@ jobs:
 
   test-golemcpp-windows:
     name: Test golemcpp (Windows)
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     steps:
       - uses: actions/checkout@v6
         with:
@@ -64,7 +64,7 @@ jobs:
 
   test-golemcpp-examples-windows:
     name: Test golemcpp examples (Windows)
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     steps:
       - uses: actions/checkout@v6
         with:
