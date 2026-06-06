@@ -23,7 +23,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -44,7 +44,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -65,7 +65,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -86,7 +86,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -107,7 +107,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -130,7 +130,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -151,7 +151,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -174,7 +174,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		},
@@ -195,7 +195,7 @@
 			},
 			"windows": {
 				"env": {
-					"PYTHONPATH": "${workspaceFolder}/src;${workspaceFolder}/waflib/waf;${env:PYTHONPATH}"
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
 				}
 			}
 		}
