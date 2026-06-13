@@ -5,7 +5,7 @@ class BuildTarget:
     def __init__(self, config, defines, includes, source, target, name,
                  cxxflags, cflags, linkflags, arflags, cpp2flags, ldflags, use, uselib, moc,
                  features, install_path, vnum, depends_on, lib, libpath, stlib,
-                 stlibpath, cppflags, framework, frameworkpath, rpath, cxxdeps,
+                 stlibpath, cppflags, framework, frameworkpath, module_indices, rpath, cxxdeps,
                  ccdeps, linkdeps, env_defines, env_cxxflags, env_includes,
                  env_isystem):
 
@@ -58,6 +58,7 @@ class BuildTarget:
         self.framework = helpers.filter_unique(self.framework)
         self.frameworkpath = frameworkpath
         self.frameworkpath = helpers.filter_unique(self.frameworkpath)
+        self.module_indices = helpers.filter_unique(module_indices)
         self.rpath = rpath
         self.rpath = helpers.filter_unique(self.rpath)
         self.cxxdeps = cxxdeps

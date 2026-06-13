@@ -1973,6 +1973,31 @@ class Context:
             '--cache-resolution-policy={}'.format(self.make_cache_resolution_policy_option())
         ]
 
+        if hasattr(self.context.options, 'check_c_compiler') and self.context.options.check_c_compiler:
+            configure_options += [
+                '--check-c-compiler={}'.format(self.context.options.check_c_compiler)
+            ]
+
+        if hasattr(self.context.options, 'check_cxx_compiler') and self.context.options.check_c_compiler:
+            configure_options += [
+                '--check-cxx-compiler={}'.format(self.context.options.check_cxx_compiler)
+            ]
+
+        if hasattr(self.context.options, 'msvc_version') and self.context.options.msvc_version:
+            configure_options += [
+                '--msvc_version={}'.format(self.context.options.msvc_version)
+            ]
+
+        if hasattr(self.context.options, 'msvc_targets') and self.context.options.msvc_targets:
+            configure_options += [
+                '--msvc_targets={}'.format(self.context.options.msvc_targets)
+            ]
+
+        if hasattr(self.context.options, 'no_msvc_lazy'):
+            configure_options += [
+                '--no-msvc-lazy={}'.format(self.context.options.no_msvc_lazy)
+            ]
+
         if dep.shallow:
             configure_options += [
                 '--force-version="{}"'.format(dep.resolved_version)
@@ -2187,6 +2212,21 @@ class Context:
                 self.make_decorated_target_from_context(config, target_name))
 
         return decorated_targets
+
+    def make_module_index_path(self, path, decorated_target):
+        return os.path.join(path, decorated_target + '.modules.json')
+
+    def make_module_index_artifact_from_context(self, config, decorated_target):
+        
+        decorated_target_path = os.path.dirname(decorated_target)
+        decorated_target_base = os.path.basename(decorated_target)
+
+        artifacts = []
+        
+        module_index = self.make_module_index_path(decorated_target_path, decorated_target_base)
+        artifacts.append(module_index)
+
+        return artifacts
 
     @staticmethod
     def default_artifacts_generator(decorated_target, config, context):
@@ -3017,6 +3057,7 @@ class Context:
             cppflags=config.cppflags,
             framework=config.framework,
             frameworkpath=config.frameworkpath,
+            module_indices=config.module_indices,
             rpath=rpath_option,
             cxxdeps=config.cxxdeps,
             ccdeps=config.ccdeps,
@@ -3513,6 +3554,7 @@ class Context:
                   cppflags=build_target.cppflags,
                   framework=build_target.framework,
                   frameworkpath=build_target.frameworkpath,
+                  module_indices=build_target.module_indices,
                   rpath=build_target.rpath,
                   cxxdeps=build_target.cxxdeps,
                   ccdeps=build_target.ccdeps,
@@ -5243,6 +5285,9 @@ class Context:
                         export_target_config.stlib.append(target_artifact_path)
                     if target_path not in export_target_config.stlibpath:
                         export_target_config.stlibpath.append(target_path)
+                
+                module_index = self.make_module_index_path(target_path, decorated_target)
+                export_target_config.module_indices.append(module_index)
 
             artifacts_dev = self.make_binary_artifact_from_context(
                 export_target_config,
@@ -5269,12 +5314,31 @@ class Context:
                         target=target_name,
                         decorated_target=decorated_target))
 
+            module_index_artifacts = self.make_module_index_artifact_from_context(
+                export_target_config,
+                decorated_target
+            )
+
+            for artifact in module_index_artifacts:
+                export_target_config.artifacts.append(
+                    self.create_artifact(
+                        path=artifact,
+                        location='',
+                        type='module_index',
+                        scope='dev',
+                        target=target_name,
+                        decorated_target=decorated_target))
+
+            export_target_config.artifacts = helpers.filter_unique(
+                build_config.artifacts + export_target_config.artifacts)
             export_target_config.artifacts_dev = helpers.filter_unique(
-                build_config.artifacts_dev +
-                export_target_config.artifacts_dev)
+                build_config.artifacts_dev + export_target_config.artifacts_dev + artifacts_dev)
             export_target_config.artifacts_run = helpers.filter_unique(
-                build_config.artifacts_run +
-                export_target_config.artifacts_run)
+                build_config.artifacts_run + export_target_config.artifacts_run + artifacts_run)
+
+            export_target_config.module_indices = helpers.filter_unique(
+                build_config.module_indices + export_target_config.module_indices)
+            
             export_target_config.rpath_link = helpers.filter_unique(
                 build_config.rpath_link + export_target_config.rpath_link)
             export_target_config.packages = helpers.filter_unique(
@@ -5283,13 +5347,6 @@ class Context:
                 build_config.packages_dev + export_target_config.packages_dev)
             export_target_config.licenses = helpers.filter_unique(
                 build_config.licenses + export_target_config.licenses)
-            export_target_config.artifacts_dev = helpers.filter_unique(
-                artifacts_dev + export_target_config.artifacts_dev)
-            export_target_config.artifacts_run = helpers.filter_unique(
-                artifacts_run + export_target_config.artifacts_run)
-            export_target_config.artifacts = helpers.filter_unique(
-                build_config.artifacts + export_target_config.artifacts)
-            
             export_target_config.qmldirs = helpers.filter_unique(
                 build_config.qmldirs + export_target_config.qmldirs)
             

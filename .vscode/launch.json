@@ -179,6 +179,48 @@
 			}
 		},
 		{
+			"name": "[examples/modules] golem resolve",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"resolve"
+			],
+			"cwd": "${workspaceFolder}/examples/modules",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
+			"name": "[examples/modules] golem dependencies",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/golemcpp/golem",
+			"console": "integratedTerminal",
+			"args": [
+				"dependencies"
+			],
+			"cwd": "${workspaceFolder}/examples/modules",
+			"linux": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/src:${workspaceFolder}/waflib/waf:${env:PYTHONPATH}"
+				}
+			},
+			"windows": {
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}\\src;${workspaceFolder}\\waflib\\waf;${env:PYTHONPATH}"
+				}
+			}
+		},
+		{
 			"name": "[examples/modules] golem build",
 			"type": "debugpy",
 			"request": "launch",

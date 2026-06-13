@@ -122,6 +122,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.artifacts_dev)
         conf_file.configuration.artifacts_run = context.translate_cache_dir_paths(
             conf_file.configuration.artifacts_run)
+        conf_file.configuration.module_indices = context.translate_cache_dir_paths(
+            conf_file.configuration.module_indices)
         conf_file.configuration.licenses = context.translate_cache_dir_paths(
             conf_file.configuration.licenses)
         conf_file.configuration.rpath_link = context.translate_cache_dir_paths(
@@ -155,6 +157,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.artifacts_dev)
         conf_file.configuration.artifacts_run = context.make_cache_dir_paths(
             conf_file.configuration.artifacts_run)
+        conf_file.configuration.module_indices = context.make_cache_dir_paths(
+            conf_file.configuration.module_indices)
         conf_file.configuration.licenses = context.make_cache_dir_paths(
             conf_file.configuration.licenses)
         conf_file.configuration.rpath_link = context.make_cache_dir_paths(
