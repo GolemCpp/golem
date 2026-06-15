@@ -27,3 +27,11 @@
 #define MYLOGGER_API
 #define MYLOGGER_LOCAL
 #endif
+
+#if defined(MYLOGGER_API_EXPORT)
+#define MYLOGGER_CALLER "mylogger"
+#elif defined(MYLOGGER_API_IMPORT)
+#define MYLOGGER_CALLER "consumer"
+#else
+#define MYLOGGER_CALLER "static"
+#endif

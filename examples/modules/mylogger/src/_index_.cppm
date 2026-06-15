@@ -1,6 +1,6 @@
 module;
 
-#include "MyLogger.h"
+#include <mylogger/MyLogger.h>
 
 export module golemcpp.examples.modules.mylogger;
 

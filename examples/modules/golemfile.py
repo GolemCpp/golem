@@ -8,9 +8,15 @@ def configure(project):
                    header_only=True,
                    cxx_standard=26)
 
-    project.library(name='myfigures',
-                    source=['myfigures/src'],
-                    use=['config'])
+    build_task = project.library(name='myfigures',
+                                 source=['myfigures/src'],
+                                 use=['config'])
+    
+    export_task = project.export(name='myfigures')
+    
+    build_task.when(link='shared', defines=['MYFIGURES_API_EXPORT'])
+    export_task.when(link='shared', defines=['MYFIGURES_API_IMPORT'])
+    build_task.when(osystem='linux', cxxflags=['-fvisibility=hidden', '-fvisibility-inlines-hidden'])
     
     project.program(name='hello-modules',
                     source=['src'],

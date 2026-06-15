@@ -1,10 +1,14 @@
+module;
+
+#include "../api.h"
+
 export module golemcpp.examples.modules.myfigures.Figures:Rectangle;
 
 import :Point;
 
 export namespace golemcpp::examples::modules::myfigures::Figures
 {
-	struct Rectangle // Make this struct visible to importers
+	struct MYFIGURES_API Rectangle // Make this struct visible to importers
 	{
 		Point ul, lr;
 

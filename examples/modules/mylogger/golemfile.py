@@ -1,9 +1,9 @@
 def configure(project):
 
     build_task = project.library(name='mylogger',
-                                 includes=['include'],
+                                 includes=['include', 'include/mylogger'],
                                  source=['src'],
-                                 cxx_standard=26)
+                                 cxx_standard=23)
     
     export_task = project.export(name='mylogger',
                                  includes=['include'])
