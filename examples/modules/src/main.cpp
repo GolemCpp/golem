@@ -25,6 +25,9 @@ int main()
 
     std::println("=> mylogger/MyLogger");
     MyLogger::info("This is an info message");
+
+    // MSVC 14.51.36231 returns "Caller: mylogger" instead of "Caller: consumer"
+    // Likely to be a bug
     std::println("Caller: {}", MyLogger::getCaller());
 
     return 0;

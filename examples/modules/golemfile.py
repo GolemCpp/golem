@@ -4,13 +4,9 @@ def configure(project):
     project.dependency(name='mylogger',
                        repository='./mylogger')
 
-    project.export(name='config',
-                   header_only=True,
-                   cxx_standard=26)
-
     build_task = project.library(name='myfigures',
                                  source=['myfigures/src'],
-                                 use=['config'])
+                                 cxx_standard=23)
     
     export_task = project.export(name='myfigures')
     
@@ -20,5 +16,6 @@ def configure(project):
     
     project.program(name='hello-modules',
                     source=['src'],
-                    use=['config', 'myfigures'],
-                    deps=['mylogger'])
+                    use=['myfigures'],
+                    deps=['mylogger'],
+                    cxx_standard=26)
