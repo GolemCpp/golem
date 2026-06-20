@@ -4,7 +4,7 @@ module;
 
 export module golemcpp.examples.modules.mylogger;
 
-// import std; // TODO: CRC mistmatch needs to be solved
+import std;
 
 export namespace golemcpp::examples::modules::mylogger
 {
