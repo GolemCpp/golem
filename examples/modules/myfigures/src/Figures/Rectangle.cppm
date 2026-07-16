@@ -8,12 +8,12 @@ import :Point;
 
 export namespace golemcpp::examples::modules::myfigures::Figures
 {
-	struct MYFIGURES_API Rectangle // Make this struct visible to importers
-	{
-		Point ul, lr;
+    struct MYFIGURES_API Rectangle  // Make this struct visible to importers
+    {
+        Point ul, lr;
 
-		int area() const;
-		int width() const;
-		int height() const;
-	};
+        int area() const;
+        int width() const;
+        int height() const;
+    };
 }

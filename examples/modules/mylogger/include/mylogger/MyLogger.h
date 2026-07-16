@@ -7,7 +7,7 @@
 class MYLOGGER_API MyLogger
 {
 public:
-	MyLogger() = default;
+    MyLogger() = default;
 
 	static std::string getCaller()
 	{

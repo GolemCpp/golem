@@ -6,6 +6,7 @@ def configure(project):
 
     build_task = project.library(name='myfigures',
                                  source=['myfigures/src'],
+                                 deps=['mylogger'],
                                  cxx_standard=23)
     
     export_task = project.export(name='myfigures')
