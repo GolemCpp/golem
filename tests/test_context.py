@@ -172,6 +172,7 @@ def make_runtime_context(*,
             CFLAGS=[],
             LINKFLAGS=[],
             ARFLAGS=[],
+            ISYSTEMS=[],
         ),
     )
     context.is_windows = lambda: True
@@ -260,6 +261,7 @@ def make_build_target_context(*, variant='release', no_defaults=False):
             CFLAGS=['/env-c'],
             LINKFLAGS=['/env-link'],
             ARFLAGS=[],
+            ISYSTEMS=[],
         ),
         root=SimpleNamespace(
             find_or_declare=lambda path: path,

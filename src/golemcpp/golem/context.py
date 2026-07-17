@@ -1294,6 +1294,8 @@ class Context:
             self.context.env.LINKFLAGS = []
         if not self.context.env.ARFLAGS:
             self.context.env.ARFLAGS = []
+        if not self.context.env.ISYSTEMS:
+            self.context.env.ISYSTEMS = []
 
     def find_cache_conf(self):
         settings_path = self.make_project_path('settings.glm')
