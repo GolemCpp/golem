@@ -12,7 +12,7 @@ class Configuration(Condition):
                  shared_targets=None,
                  defines=None,
                  includes=None,
-                 isystem=None,
+                 isystems=None,
                  source=None,
                  c_standard=None,
                  cxx_standard=None,
@@ -77,7 +77,7 @@ class Configuration(Condition):
 
         self.defines = helpers.parameter_to_list(defines)
         self.includes = helpers.parameter_to_list(includes)
-        self.isystem = helpers.parameter_to_list(isystem)
+        self.isystems = helpers.parameter_to_list(isystems)
         self.source = helpers.parameter_to_list(source)
         self.moc = helpers.parameter_to_list(moc)
 
@@ -168,8 +168,8 @@ class Configuration(Condition):
 
         self.defines = helpers.filter_unique(self.defines + config.defines)
         self.includes = helpers.filter_unique(self.includes + config.includes)
-        if hasattr(config, 'isystem'):
-            self.isystem = helpers.filter_unique(self.isystem + config.isystem)
+        if hasattr(config, 'isystems'):
+            self.isystems = helpers.filter_unique(self.isystems + config.isystems)
         self.source = helpers.filter_unique(self.source + config.source)
 
         if hasattr(config, 'moc'):
@@ -548,7 +548,7 @@ class Configuration(Condition):
     def serialized_members_list():
         return [
             'targets', 'static_targets', 'shared_targets', 'dlls', 'defines',
-            'includes', 'isystem', 'source', 'moc', 'lib', 'libpath', 'stlib',
+            'includes', 'isystems', 'source', 'moc', 'lib', 'libpath', 'stlib',
             'stlibpath', 'rpath', 'rpath_link', 'cflags', 'cppflags',
             'cxxdeps', 'ccdeps', 'linkdeps', 'framework', 'frameworkpath',
             'program_cxxflags', 'program_linkflags', 'library_cxxflags',

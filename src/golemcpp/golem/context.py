@@ -882,6 +882,9 @@ class Context:
     
     def is_msvc_like(self):
         return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
+    
+    def is_isystem_supported(self):
+        return getattr(self.context.env, 'ISYSTEM_AVAILABLE', 0) != 0
 
     @staticmethod
     def strip_language_standard_flags(flags, language):
@@ -1365,12 +1368,12 @@ class Context:
             flags['cflags'] += default_flags
             flags['cxxflags'] += default_flags
 
-            # Set /external ON
-            # TODO: Need to find a way to discover if the compiler supports /external to use /I if it can't
+            # Set /external flags if supported
 
-            default_flags = ['/experimental:external', '/external:W0']
-            flags['cflags'] += default_flags
-            flags['cxxflags'] += default_flags
+            if self.is_isystem_supported():
+                default_flags = ['/external:W0']
+                flags['cflags'] += default_flags
+                flags['cxxflags'] += default_flags
 
             # Serialized writes to the program database (PDB) to avoid fatal error C1041
 
@@ -1706,7 +1709,7 @@ class Context:
 
             if config is not None:
                 dependency_configuration.type = []
-                dependency_configuration.isystem += dependency_configuration.includes
+                dependency_configuration.isystems += dependency_configuration.includes
                 dependency_configuration.includes = []
                 dependency_configuration.licenses = []
                 dependency_configuration.artifacts_dev = []
@@ -2829,28 +2832,19 @@ class Context:
         if context_tasks_added:
             self.context.add_group()
 
-        env_isystem = []
+        env_isystems = self.context.env.ISYSTEMS.copy()
         for key in list(self.context.env.keys()):
-            if key.startswith("ISYSTEM_"):
+            if key.startswith("ISYSTEMS_"):
                 for path in self.context.env[key]:
-                    env_isystem.append(str(path))
+                    env_isystems.append(str(path))
 
-        isystem_argument = '-isystem'
-        if self.is_windows():
-            isystem_argument = '/external:I'
-
-        isystemflags = []
-        for include in config.isystem:
-            isystemflags.append('{}{}'.format(isystem_argument, include))
-            env_isystem.append(include)
-
+        isystems = []
         for key in list(self.context.env.keys()):
             if key.startswith(
                     "INCLUDES_") and not key.startswith("INCLUDES_QT5") and not key.startswith("INCLUDES_QT6"):
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
-                        isystemflags.append('-isystem' + str(Path(str(path))))
-                        env_isystem.append(str(Path(str(path))))
+                        isystems.append(str(Path(str(path))))
 
         config_all_use = helpers.filter_unique(config.use + config.features)
         for config_use in config_all_use:
@@ -2858,9 +2852,7 @@ class Context:
                 for key in list(self.context.env.keys()):
                     if (key.startswith("INCLUDES_QT5") or key.startswith("INCLUDES_QT6")) and config_use in key:
                         for path in self.context.env[key]:
-                            isystemflags.append('{}{}'.format(
-                                isystem_argument, str(Path(str(path)))))
-                            env_isystem.append(str(Path(str(path))))
+                            isystems.append(str(Path(str(path))))
 
         if self.is_windows():
             version_short = None
@@ -2927,13 +2919,13 @@ class Context:
         if cxx_standard_flag:
             final_cxxflags = self.strip_language_standard_flags(final_cxxflags, language='cxx')
             final_cxxflags = [cxx_standard_flag] + final_cxxflags
-        final_cxxflags = helpers.filter_unique(final_cxxflags + isystemflags + qt_cxxflags)
+        final_cxxflags = helpers.filter_unique(final_cxxflags + qt_cxxflags)
 
         final_cflags = default_cflags + config.cflags + target_cxxflags
         if c_standard_flag:
             final_cflags = self.strip_language_standard_flags(final_cflags, language='c')
             final_cflags = [c_standard_flag] + final_cflags
-        final_cflags = helpers.filter_unique(final_cflags + isystemflags + qt_cxxflags)
+        final_cflags = helpers.filter_unique(final_cflags + qt_cxxflags)
 
         for flag in final_cxxflags:
             if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
@@ -3029,6 +3021,7 @@ class Context:
             config=config,
             defines=final_defines,
             includes=listinclude,
+            isystems=helpers.filter_unique(isystems + config.isystems),
             source=helpers.filter_unique(listsource + version_source),
             target=[
                 os.path.join(self.make_target_out(), decorated_target)
@@ -3065,7 +3058,7 @@ class Context:
             env_defines=env_defines,
             env_cxxflags=env_cxxflags,
             env_includes=env_includes,
-            env_isystem=env_isystem)
+            env_isystems=env_isystems)
 
     def initialize_compiler_commands(self):
         self.compiler_commands = []
@@ -3085,25 +3078,22 @@ class Context:
     def make_compiler_commands(self, build_target):
         compiler_commands = []
 
-        # TODO: There are duplicates between build_target.cxxflags and 
-        # build_target.env_isystem. But we can't just remove any duplicates
-        # since sometimes duplicates may be used to override a behavior if 
-        # they are placed in last position. Therefore, we need to find a 
-        # different approach.
-
-        windows_isystem = '/external:I'
-
+        isystem_f = '-isystem'
+        if self.is_msvc_like():
+            isystem_f = '/external:I'
+        if not self.is_isystem_supported():
+            isystem_f = '-I'
+        
         for source in build_target.source:
             file = {
                 "directory": self.get_build_path(),
                 "arguments": [
                     self.context.env.get_flat('CXX')
                 ] + build_target.env_cxxflags + build_target.cxxflags +
-                [(windows_isystem
-                  if self.is_msvc_like() else '-isystem') + str(d)
-                 for d in build_target.env_isystem] +
                 ['-I' + str(d) for d in build_target.env_includes] +
                 ['-I' + str(d) for d in build_target.includes] +
+                [isystem_f + str(d) for d in build_target.env_isystems] +
+                [isystem_f + str(d) for d in build_target.isystems] +
                 ['-D' + d for d in build_target.env_defines] +
                 ['-D' + d for d in build_target.defines] +
                 [str(source), '-c'] + build_target.cppflags,
@@ -3133,7 +3123,8 @@ class Context:
 
         targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
         targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_isystems]
+        targets_includes += [str(item) for item in build_target.isystems]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
 
@@ -3194,7 +3185,8 @@ class Context:
 
             targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
             targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_isystems]
+            targets_includes += [str(item) for item in build_target.isystems]
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
@@ -3275,7 +3267,8 @@ class Context:
 
         targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
         targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_isystems]
+        targets_includes += [str(item) for item in build_target.isystems]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
 
@@ -3297,7 +3290,8 @@ class Context:
 
             targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
             targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_isystems]
+            targets_includes += [str(item) for item in build_target.isystems]
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
@@ -3346,7 +3340,8 @@ class Context:
 
         targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
         targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_isystems]
+        targets_includes += [str(item) for item in build_target.isystems]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
 
@@ -3368,7 +3363,8 @@ class Context:
             
             targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
             targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_isystems]
+            targets_includes += [str(item) for item in build_target.isystems]
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
@@ -3531,6 +3527,7 @@ class Context:
 
         build_fun(defines=build_target.defines,
                   includes=build_target.includes,
+                  isystems=build_target.isystems,
                   source=build_target.source,
                   target=build_target.target[0],
                   name=build_target.name,
@@ -3592,7 +3589,7 @@ class Context:
                                                        targets=targets,
                                                        config=config)
 
-        all_includes = build_target.env_isystem + \
+        all_includes = build_target.env_isystems + build_target.isystems + \
             build_target.env_includes + build_target.includes
         all_includes = ['-I' + str(d) for d in all_includes]
 
@@ -5647,7 +5644,7 @@ class Context:
         export_path_conf = self.make_outpath_conf()
 
         config.includes = []
-        config.isystem += [os.path.join(export_path, 'include')]
+        config.isystems += [os.path.join(export_path, 'include')]
 
         out_path = self.make_out_path()
         self.make_config_absolute(config=config,

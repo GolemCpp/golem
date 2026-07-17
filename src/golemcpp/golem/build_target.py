@@ -2,12 +2,12 @@ from golemcpp.golem import helpers
 
 
 class BuildTarget:
-    def __init__(self, config, defines, includes, source, target, name,
+    def __init__(self, config, defines, includes, isystems, source, target, name,
                  cxxflags, cflags, linkflags, arflags, cpp2flags, ldflags, use, uselib, moc,
                  features, install_path, vnum, depends_on, lib, libpath, stlib,
                  stlibpath, cppflags, framework, frameworkpath, module_indices, rpath, cxxdeps,
                  ccdeps, linkdeps, env_defines, env_cxxflags, env_includes,
-                 env_isystem):
+                 env_isystems):
 
         self.config = config
 
@@ -20,6 +20,8 @@ class BuildTarget:
         self.defines = helpers.filter_unique(self.defines)
         self.includes = includes
         self.includes = helpers.filter_unique(self.includes)
+        self.isystems = isystems
+        self.isystems = helpers.filter_unique(self.isystems)
         self.source = source
         # self.source = helpers.filter_unique(self.source)
         self.cxxflags = cxxflags
@@ -74,5 +76,5 @@ class BuildTarget:
         self.env_cxxflags = helpers.filter_unique(self.env_cxxflags)
         self.env_includes = env_includes
         self.env_includes = helpers.filter_unique(self.env_includes)
-        self.env_isystem = env_isystem
-        self.env_isystem = helpers.filter_unique(self.env_isystem)
+        self.env_isystems = env_isystems
+        self.env_isystems = helpers.filter_unique(self.env_isystems)

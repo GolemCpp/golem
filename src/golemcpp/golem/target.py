@@ -136,8 +136,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.libpath)
         conf_file.configuration.stlibpath = context.translate_cache_dir_paths(
             conf_file.configuration.stlibpath)
-        conf_file.configuration.isystem = context.translate_cache_dir_paths(
-            conf_file.configuration.isystem)
+        conf_file.configuration.isystems = context.translate_cache_dir_paths(
+            conf_file.configuration.isystems)
 
         artifacts = conf_file.configuration.artifacts.copy()
         for artifact in artifacts:
@@ -171,8 +171,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.libpath)
         conf_file.configuration.stlibpath = context.make_cache_dir_paths(
             conf_file.configuration.stlibpath)
-        conf_file.configuration.isystem = context.make_cache_dir_paths(
-            conf_file.configuration.isystem)
+        conf_file.configuration.isystems = context.make_cache_dir_paths(
+            conf_file.configuration.isystems)
 
         artifacts = conf_file.configuration.artifacts.copy()
         for artifact in artifacts:
