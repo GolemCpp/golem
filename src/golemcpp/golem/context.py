@@ -622,7 +622,7 @@ class Context:
         return result
 
     def list_source(self, source):
-        return self.list_files(self.get_project_dir(), source, ['cpp', 'c', 'cxx', 'cc', 'C', 'c++', 'cpp2'] +
+        return self.list_files(self.get_project_dir(), source, ['cxx', 'cpp', 'c++', 'c', 'cc', 'C', 'ixx', 'cppm', 'cxxm', 'cpp2'] +
                                (['mm'] if self.is_darwin() else []))
 
     def list_moc(self, source):
@@ -882,6 +882,9 @@ class Context:
     
     def is_msvc_like(self):
         return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
+    
+    def is_isystem_supported(self):
+        return getattr(self.context.env, 'ISYSTEM_AVAILABLE', 0) != 0
 
     @staticmethod
     def strip_language_standard_flags(flags, language):
@@ -1291,6 +1294,8 @@ class Context:
             self.context.env.LINKFLAGS = []
         if not self.context.env.ARFLAGS:
             self.context.env.ARFLAGS = []
+        if not self.context.env.ISYSTEMS:
+            self.context.env.ISYSTEMS = []
 
     def find_cache_conf(self):
         settings_path = self.make_project_path('settings.glm')
@@ -1365,12 +1370,12 @@ class Context:
             flags['cflags'] += default_flags
             flags['cxxflags'] += default_flags
 
-            # Set /external ON
-            # TODO: Need to find a way to discover if the compiler supports /external to use /I if it can't
+            # Set /external flags if supported
 
-            default_flags = ['/experimental:external', '/external:W0']
-            flags['cflags'] += default_flags
-            flags['cxxflags'] += default_flags
+            if self.is_isystem_supported():
+                default_flags = ['/external:W0']
+                flags['cflags'] += default_flags
+                flags['cxxflags'] += default_flags
 
             # Serialized writes to the program database (PDB) to avoid fatal error C1041
 
@@ -1706,7 +1711,7 @@ class Context:
 
             if config is not None:
                 dependency_configuration.type = []
-                dependency_configuration.isystem += dependency_configuration.includes
+                dependency_configuration.isystems += dependency_configuration.includes
                 dependency_configuration.includes = []
                 dependency_configuration.licenses = []
                 dependency_configuration.artifacts_dev = []
@@ -1973,6 +1978,31 @@ class Context:
             '--cache-resolution-policy={}'.format(self.make_cache_resolution_policy_option())
         ]
 
+        if hasattr(self.context.options, 'check_c_compiler') and self.context.options.check_c_compiler:
+            configure_options += [
+                '--check-c-compiler={}'.format(self.context.options.check_c_compiler)
+            ]
+
+        if hasattr(self.context.options, 'check_cxx_compiler') and self.context.options.check_c_compiler:
+            configure_options += [
+                '--check-cxx-compiler={}'.format(self.context.options.check_cxx_compiler)
+            ]
+
+        if hasattr(self.context.options, 'msvc_version') and self.context.options.msvc_version:
+            configure_options += [
+                '--msvc_version={}'.format(self.context.options.msvc_version)
+            ]
+
+        if hasattr(self.context.options, 'msvc_targets') and self.context.options.msvc_targets:
+            configure_options += [
+                '--msvc_targets={}'.format(self.context.options.msvc_targets)
+            ]
+
+        if hasattr(self.context.options, 'no_msvc_lazy'):
+            configure_options += [
+                '--no-msvc-lazy={}'.format(self.context.options.no_msvc_lazy)
+            ]
+
         if dep.shallow:
             configure_options += [
                 '--force-version="{}"'.format(dep.resolved_version)
@@ -2187,6 +2217,21 @@ class Context:
                 self.make_decorated_target_from_context(config, target_name))
 
         return decorated_targets
+
+    def make_module_index_path(self, path, decorated_target):
+        return os.path.join(path, decorated_target + '.modules.json')
+
+    def make_module_index_artifact_from_context(self, config, decorated_target):
+        
+        decorated_target_path = os.path.dirname(decorated_target)
+        decorated_target_base = os.path.basename(decorated_target)
+
+        artifacts = []
+        
+        module_index = self.make_module_index_path(decorated_target_path, decorated_target_base)
+        artifacts.append(module_index)
+
+        return artifacts
 
     @staticmethod
     def default_artifacts_generator(decorated_target, config, context):
@@ -2762,8 +2807,8 @@ class Context:
             filename, filename_ext = os.path.splitext(filename)
 
             include_path = None
-            source_extensions = ['.cpp', '.cxx', '.c', '.cc']
-            header_extensions = ['.hpp', '.hxx', '.h', '.hh']
+            source_extensions = ['.cxx', '.cpp', '.c++', '.c', '.cc', '.C', '.ixx', '.cppm', '.cxxm', '.cpp2']
+            header_extensions = ['.hpp', '.h', '.hxx', '.hh']
 
             is_build_default = template_to_process.build is None
             is_build_enabled = template_to_process.build == True
@@ -2789,28 +2834,19 @@ class Context:
         if context_tasks_added:
             self.context.add_group()
 
-        env_isystem = []
+        env_isystems = self.context.env.ISYSTEMS.copy()
         for key in list(self.context.env.keys()):
-            if key.startswith("ISYSTEM_"):
+            if key.startswith("ISYSTEMS_"):
                 for path in self.context.env[key]:
-                    env_isystem.append(str(path))
+                    env_isystems.append(str(path))
 
-        isystem_argument = '-isystem'
-        if self.is_windows():
-            isystem_argument = '/external:I'
-
-        isystemflags = []
-        for include in config.isystem:
-            isystemflags.append('{}{}'.format(isystem_argument, include))
-            env_isystem.append(include)
-
+        isystems = []
         for key in list(self.context.env.keys()):
             if key.startswith(
                     "INCLUDES_") and not key.startswith("INCLUDES_QT5") and not key.startswith("INCLUDES_QT6"):
                 for path in self.context.env[key]:
                     if path.startswith('/usr'):
-                        isystemflags.append('-isystem' + str(Path(str(path))))
-                        env_isystem.append(str(Path(str(path))))
+                        isystems.append(str(Path(str(path))))
 
         config_all_use = helpers.filter_unique(config.use + config.features)
         for config_use in config_all_use:
@@ -2818,9 +2854,7 @@ class Context:
                 for key in list(self.context.env.keys()):
                     if (key.startswith("INCLUDES_QT5") or key.startswith("INCLUDES_QT6")) and config_use in key:
                         for path in self.context.env[key]:
-                            isystemflags.append('{}{}'.format(
-                                isystem_argument, str(Path(str(path)))))
-                            env_isystem.append(str(Path(str(path))))
+                            isystems.append(str(Path(str(path))))
 
         if self.is_windows():
             version_short = None
@@ -2887,13 +2921,13 @@ class Context:
         if cxx_standard_flag:
             final_cxxflags = self.strip_language_standard_flags(final_cxxflags, language='cxx')
             final_cxxflags = [cxx_standard_flag] + final_cxxflags
-        final_cxxflags = helpers.filter_unique(final_cxxflags + isystemflags + qt_cxxflags)
+        final_cxxflags = helpers.filter_unique(final_cxxflags + qt_cxxflags)
 
         final_cflags = default_cflags + config.cflags + target_cxxflags
         if c_standard_flag:
             final_cflags = self.strip_language_standard_flags(final_cflags, language='c')
             final_cflags = [c_standard_flag] + final_cflags
-        final_cflags = helpers.filter_unique(final_cflags + isystemflags + qt_cxxflags)
+        final_cflags = helpers.filter_unique(final_cflags + qt_cxxflags)
 
         for flag in final_cxxflags:
             if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
@@ -2989,6 +3023,7 @@ class Context:
             config=config,
             defines=final_defines,
             includes=listinclude,
+            isystems=helpers.filter_unique(isystems + config.isystems),
             source=helpers.filter_unique(listsource + version_source),
             target=[
                 os.path.join(self.make_target_out(), decorated_target)
@@ -3017,6 +3052,7 @@ class Context:
             cppflags=config.cppflags,
             framework=config.framework,
             frameworkpath=config.frameworkpath,
+            module_indices=config.module_indices,
             rpath=rpath_option,
             cxxdeps=config.cxxdeps,
             ccdeps=config.ccdeps,
@@ -3024,7 +3060,7 @@ class Context:
             env_defines=env_defines,
             env_cxxflags=env_cxxflags,
             env_includes=env_includes,
-            env_isystem=env_isystem)
+            env_isystems=env_isystems)
 
     def initialize_compiler_commands(self):
         self.compiler_commands = []
@@ -3044,25 +3080,22 @@ class Context:
     def make_compiler_commands(self, build_target):
         compiler_commands = []
 
-        # TODO: There are duplicates between build_target.cxxflags and 
-        # build_target.env_isystem. But we can't just remove any duplicates
-        # since sometimes duplicates may be used to override a behavior if 
-        # they are placed in last position. Therefore, we need to find a 
-        # different approach.
-
-        windows_isystem = '/external:I'
-
+        isystem_f = '-isystem'
+        if self.is_msvc_like():
+            isystem_f = '/external:I'
+        if not self.is_isystem_supported():
+            isystem_f = '-I'
+        
         for source in build_target.source:
             file = {
                 "directory": self.get_build_path(),
                 "arguments": [
                     self.context.env.get_flat('CXX')
                 ] + build_target.env_cxxflags + build_target.cxxflags +
-                [(windows_isystem
-                  if self.is_msvc_like() else '-isystem') + str(d)
-                 for d in build_target.env_isystem] +
                 ['-I' + str(d) for d in build_target.env_includes] +
                 ['-I' + str(d) for d in build_target.includes] +
+                [isystem_f + str(d) for d in build_target.env_isystems] +
+                [isystem_f + str(d) for d in build_target.isystems] +
                 ['-D' + d for d in build_target.env_defines] +
                 ['-D' + d for d in build_target.defines] +
                 [str(source), '-c'] + build_target.cppflags,
@@ -3092,7 +3125,8 @@ class Context:
 
         targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
         targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_isystems]
+        targets_includes += [str(item) for item in build_target.isystems]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
 
@@ -3153,7 +3187,8 @@ class Context:
 
             targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
             targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_isystems]
+            targets_includes += [str(item) for item in build_target.isystems]
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
@@ -3234,7 +3269,8 @@ class Context:
 
         targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
         targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_isystems]
+        targets_includes += [str(item) for item in build_target.isystems]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
 
@@ -3243,6 +3279,9 @@ class Context:
     def generate_clangd_config(self, compiler_commands_path):
         if not self.context.options.clangd:
             return
+
+        # TODO: Continue clangd support for C++ Modules commands by using the compile_commands.json generated by Waf
+        compile_command_json_from_waf = self.make_build_path('compile_commands.json')
 
         targets_cxxflags = []
         targets_includes = []
@@ -3256,7 +3295,8 @@ class Context:
 
             targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
             targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_isystems]
+            targets_includes += [str(item) for item in build_target.isystems]
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
@@ -3274,7 +3314,7 @@ class Context:
         targets_includes = helpers.filter_unique(targets_includes)
 
         data = {
-            'compilation_database_path': os.path.abspath(os.path.dirname(compiler_commands_path))
+            'compilation_database_path': os.path.abspath(os.path.dirname(compile_command_json_from_waf))
         }
         
         config_file_template_path = os.path.join(helpers.get_golemcpp_data_dir(), 'clangd.template')
@@ -3305,7 +3345,8 @@ class Context:
 
         targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
         targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystem]
+        targets_includes += [str(item) for item in build_target.env_isystems]
+        targets_includes += [str(item) for item in build_target.isystems]
         targets_includes += [str(item) for item in build_target.env_includes]
         targets_includes += [str(item) for item in build_target.includes]
 
@@ -3327,7 +3368,8 @@ class Context:
             
             targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
             targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystem]
+            targets_includes += [str(item) for item in build_target.env_isystems]
+            targets_includes += [str(item) for item in build_target.isystems]
             targets_includes += [str(item) for item in build_target.env_includes]
             targets_includes += [str(item) for item in build_target.includes]
             targets_cxxflags += config.cxxflags
@@ -3490,6 +3532,7 @@ class Context:
 
         build_fun(defines=build_target.defines,
                   includes=build_target.includes,
+                  isystems=build_target.isystems,
                   source=build_target.source,
                   target=build_target.target[0],
                   name=build_target.name,
@@ -3513,6 +3556,7 @@ class Context:
                   cppflags=build_target.cppflags,
                   framework=build_target.framework,
                   frameworkpath=build_target.frameworkpath,
+                  module_indices=build_target.module_indices,
                   rpath=build_target.rpath,
                   cxxdeps=build_target.cxxdeps,
                   ccdeps=build_target.ccdeps,
@@ -3550,7 +3594,7 @@ class Context:
                                                        targets=targets,
                                                        config=config)
 
-        all_includes = build_target.env_isystem + \
+        all_includes = build_target.env_isystems + build_target.isystems + \
             build_target.env_includes + build_target.includes
         all_includes = ['-I' + str(d) for d in all_includes]
 
@@ -4679,6 +4723,10 @@ class Context:
         # features list
         features_to_load = ['compiler_c', 'compiler_cxx']
 
+        # compile_commands.json generated by Waf
+        if self.context.options.compile_commands or self.context.options.vscode or self.context.options.clangd:
+            features_to_load.append('clang_compilation_database')
+
         # qt check
         if self.project.qt:
             self.ensures_qt_is_installed()
@@ -5243,6 +5291,9 @@ class Context:
                         export_target_config.stlib.append(target_artifact_path)
                     if target_path not in export_target_config.stlibpath:
                         export_target_config.stlibpath.append(target_path)
+                
+                module_index = self.make_module_index_path(target_path, decorated_target)
+                export_target_config.module_indices.append(module_index)
 
             artifacts_dev = self.make_binary_artifact_from_context(
                 export_target_config,
@@ -5269,12 +5320,31 @@ class Context:
                         target=target_name,
                         decorated_target=decorated_target))
 
+            module_index_artifacts = self.make_module_index_artifact_from_context(
+                export_target_config,
+                decorated_target
+            )
+
+            for artifact in module_index_artifacts:
+                export_target_config.artifacts.append(
+                    self.create_artifact(
+                        path=artifact,
+                        location='',
+                        type='module_index',
+                        scope='dev',
+                        target=target_name,
+                        decorated_target=decorated_target))
+
+            export_target_config.artifacts = helpers.filter_unique(
+                build_config.artifacts + export_target_config.artifacts)
             export_target_config.artifacts_dev = helpers.filter_unique(
-                build_config.artifacts_dev +
-                export_target_config.artifacts_dev)
+                build_config.artifacts_dev + export_target_config.artifacts_dev + artifacts_dev)
             export_target_config.artifacts_run = helpers.filter_unique(
-                build_config.artifacts_run +
-                export_target_config.artifacts_run)
+                build_config.artifacts_run + export_target_config.artifacts_run + artifacts_run)
+
+            export_target_config.module_indices = helpers.filter_unique(
+                build_config.module_indices + export_target_config.module_indices)
+            
             export_target_config.rpath_link = helpers.filter_unique(
                 build_config.rpath_link + export_target_config.rpath_link)
             export_target_config.packages = helpers.filter_unique(
@@ -5283,13 +5353,6 @@ class Context:
                 build_config.packages_dev + export_target_config.packages_dev)
             export_target_config.licenses = helpers.filter_unique(
                 build_config.licenses + export_target_config.licenses)
-            export_target_config.artifacts_dev = helpers.filter_unique(
-                artifacts_dev + export_target_config.artifacts_dev)
-            export_target_config.artifacts_run = helpers.filter_unique(
-                artifacts_run + export_target_config.artifacts_run)
-            export_target_config.artifacts = helpers.filter_unique(
-                build_config.artifacts + export_target_config.artifacts)
-            
             export_target_config.qmldirs = helpers.filter_unique(
                 build_config.qmldirs + export_target_config.qmldirs)
             
@@ -5590,7 +5653,7 @@ class Context:
         export_path_conf = self.make_outpath_conf()
 
         config.includes = []
-        config.isystem += [os.path.join(export_path, 'include')]
+        config.isystems += [os.path.join(export_path, 'include')]
 
         out_path = self.make_out_path()
         self.make_config_absolute(config=config,

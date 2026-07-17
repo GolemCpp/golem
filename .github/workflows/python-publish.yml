@@ -10,7 +10,7 @@ permissions:
 jobs:
   test-golemcpp:
     name: Test golemcpp
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -46,7 +46,7 @@ jobs:
 
   test-golemcpp-examples:
     name: Test golemcpp examples
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
         with:

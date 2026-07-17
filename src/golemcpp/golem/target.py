@@ -122,6 +122,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.artifacts_dev)
         conf_file.configuration.artifacts_run = context.translate_cache_dir_paths(
             conf_file.configuration.artifacts_run)
+        conf_file.configuration.module_indices = context.translate_cache_dir_paths(
+            conf_file.configuration.module_indices)
         conf_file.configuration.licenses = context.translate_cache_dir_paths(
             conf_file.configuration.licenses)
         conf_file.configuration.rpath_link = context.translate_cache_dir_paths(
@@ -134,8 +136,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.libpath)
         conf_file.configuration.stlibpath = context.translate_cache_dir_paths(
             conf_file.configuration.stlibpath)
-        conf_file.configuration.isystem = context.translate_cache_dir_paths(
-            conf_file.configuration.isystem)
+        conf_file.configuration.isystems = context.translate_cache_dir_paths(
+            conf_file.configuration.isystems)
 
         artifacts = conf_file.configuration.artifacts.copy()
         for artifact in artifacts:
@@ -155,6 +157,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.artifacts_dev)
         conf_file.configuration.artifacts_run = context.make_cache_dir_paths(
             conf_file.configuration.artifacts_run)
+        conf_file.configuration.module_indices = context.make_cache_dir_paths(
+            conf_file.configuration.module_indices)
         conf_file.configuration.licenses = context.make_cache_dir_paths(
             conf_file.configuration.licenses)
         conf_file.configuration.rpath_link = context.make_cache_dir_paths(
@@ -167,8 +171,8 @@ class TargetConfigurationFile(object):
             conf_file.configuration.libpath)
         conf_file.configuration.stlibpath = context.make_cache_dir_paths(
             conf_file.configuration.stlibpath)
-        conf_file.configuration.isystem = context.make_cache_dir_paths(
-            conf_file.configuration.isystem)
+        conf_file.configuration.isystems = context.make_cache_dir_paths(
+            conf_file.configuration.isystems)
 
         artifacts = conf_file.configuration.artifacts.copy()
         for artifact in artifacts:

@@ -1,0 +1,11 @@
+{
+    "targets": [
+        {
+            "name": "hello-modules",
+            "type": "program",
+            "source": [
+                "src"
+            ]
+        }
+    ]
+}
