@@ -204,6 +204,7 @@ Here is a list of important features to add as a priority:
 - Detect when `/external:I` or `-isystem` are available before using them
 - Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
 - Generate by default `qmldir` and a `qrc` file for all the found QML files (allow to customize the namespace, or to disable generation)
+- Add a meaningful example that mixes the best of Golem (dependencies, Qt/QML, cppfront, modules, etc.)
 
 Here is a list of important improvements to work on the long term:
 
