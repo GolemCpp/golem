@@ -402,6 +402,46 @@ def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path
     ]
 
 
+def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(example_tmp_path):
+    require_cxx_compiler()
+    require_long_paths()
+
+    project_dir = copy_example_project('modules', example_tmp_path)
+    cache_dir = example_tmp_path / 'cache'
+
+    run_golem(project_dir, cache_dir, 'configure', '--variant=debug')
+    run_golem(project_dir, cache_dir, 'resolve')
+    run_golem(project_dir, cache_dir, 'dependencies')
+    run_golem(project_dir, cache_dir, 'build')
+
+    binary = program_path(project_dir, 'hello-modules-debug')
+    assert binary.exists()
+
+    result = run_binary(binary, project_dir)
+
+    assert result.returncode == 0, result.stderr
+
+    if 'Caller: mylogger' in result.stdout:
+        pytest.xfail('MSVC returns "Caller: mylogger" instead of "Caller: consumer", see src/main.cpp')
+
+    assert result.stdout == (
+        '=> mylogger/MyLogger\n'
+        '[INFO] This is an info message\n'
+        'Caller: consumer\n'
+        '=> myfigures/Figures\n'
+        '[INFO] Rectangle::area() called\n'
+        '[INFO] Rectangle::width() called\n'
+        '[INFO] Rectangle::height() called\n'
+        'Rectangle Area: 50\n'
+        '[INFO] Rectangle::width() called\n'
+        'Rectangle Width: 10\n'
+        '=> hello_modules/Greetings\n'
+        'Hello\n'
+        '=> hello_modules/Media\n'
+        'Playing: Test\n'
+    )
+
+
 @pytest.mark.parametrize('project_variant', PROJECT_VARIANTS)
 def test_minimal_example_builds_and_runs(example_tmp_path, project_variant):
     require_cxx_compiler()
