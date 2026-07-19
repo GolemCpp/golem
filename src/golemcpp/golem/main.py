@@ -2,6 +2,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem import cli_arguments
 from golemcpp.golem import command_help
 from golemcpp.golem import command_init
+from golemcpp.golem import command_config
 from golemcpp.golem import command_tools
 from golemcpp.golem import command_version
 from string import Template
@@ -36,6 +37,10 @@ def main() -> int:
         return command_init.handle_init_command(project_dir=project_dir,
                                                 data_dir=golemcpp_data_path,
                                                 args=command_args)
+
+    if command == 'config':
+        return command_config.handle_config_command(project_dir=project_dir,
+                                                    args=command_args)
 
     if command == 'tools':
         return command_tools.handle_tools_command(project_dir=project_dir,

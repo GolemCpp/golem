@@ -19,6 +19,7 @@ from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, Cac
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
 from golemcpp.golem import helpers
+from golemcpp.golem import config_store
 from golemcpp.golem import tools_cache
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
@@ -282,7 +283,7 @@ class Context:
         if cache_dir:
             return cache_dir
 
-        cache_dir = helpers.get_environ('GOLEM_CACHE_DIRECTORY')
+        cache_dir = config_store.resolve_environ('GOLEM_CACHE_DIRECTORY', project_dir=self.get_project_dir())
         if cache_dir:
             return cache_dir
 
@@ -312,7 +313,7 @@ class Context:
         if static_cache_dependencies_regex:
             return static_cache_dependencies_regex
 
-        static_cache_dependencies_regex = helpers.get_environ('GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX')
+        static_cache_dependencies_regex = config_store.resolve_environ('GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX', project_dir=self.get_project_dir())
         if static_cache_dependencies_regex:
             return static_cache_dependencies_regex
 
@@ -323,7 +324,7 @@ class Context:
         if static_cache_dir:
             return static_cache_dir
         
-        static_cache_dir = helpers.get_environ('GOLEM_STATIC_CACHE_DIRECTORY')
+        static_cache_dir = config_store.resolve_environ('GOLEM_STATIC_CACHE_DIRECTORY', project_dir=self.get_project_dir())
         if static_cache_dir:
             return static_cache_dir
         
@@ -353,7 +354,7 @@ class Context:
         if master_dependencies_configuration:
             return master_dependencies_configuration
 
-        master_dependencies_configuration = helpers.get_environ('GOLEM_MASTER_DEPENDENCIES_CONFIGURATION')
+        master_dependencies_configuration = config_store.resolve_environ('GOLEM_MASTER_DEPENDENCIES_CONFIGURATION', project_dir=self.get_project_dir())
         if master_dependencies_configuration:
             return master_dependencies_configuration
         
@@ -370,7 +371,7 @@ class Context:
                 url=master_dependencies_repository,
                 project_dir=self.get_project_dir())
 
-        master_dependencies_repository = helpers.get_environ('GOLEM_MASTER_DEPENDENCIES_REPOSITORY')
+        master_dependencies_repository = config_store.resolve_environ('GOLEM_MASTER_DEPENDENCIES_REPOSITORY', project_dir=self.get_project_dir())
         if master_dependencies_repository:
             return Repository.from_url(
                 url=master_dependencies_repository,
@@ -449,7 +450,7 @@ class Context:
         if static_cache_directories_string:
             return static_cache_directories_string
 
-        static_cache_directories_string = helpers.get_environ('GOLEM_DEFINE_STATIC_CACHE_DIRECTORIES')
+        static_cache_directories_string = config_store.resolve_environ('GOLEM_DEFINE_STATIC_CACHE_DIRECTORIES', project_dir=self.get_project_dir())
         if static_cache_directories_string:
             return static_cache_directories_string
 
@@ -501,7 +502,7 @@ class Context:
         if cache_directories_string:
             return cache_directories_string
 
-        cache_directories_string = helpers.get_environ('GOLEM_DEFINE_CACHE_DIRECTORIES')
+        cache_directories_string = config_store.resolve_environ('GOLEM_DEFINE_CACHE_DIRECTORIES', project_dir=self.get_project_dir())
         if cache_directories_string:
             return cache_directories_string
 
@@ -2508,7 +2509,7 @@ class Context:
         if cache_resolution_policy:
             return cache_resolution_policy
 
-        cache_resolution_policy = helpers.get_environ('GOLEM_CACHE_RESOLUTION_POLICY')
+        cache_resolution_policy = config_store.resolve_environ('GOLEM_CACHE_RESOLUTION_POLICY', project_dir=self.get_project_dir())
         if cache_resolution_policy:
             return cache_resolution_policy
 
@@ -4543,7 +4544,7 @@ class Context:
         return repo_path
 
     def load_recipes_repositories(self):
-        recipes_repositories = helpers.get_environ('GOLEM_RECIPES_REPOSITORIES')
+        recipes_repositories = config_store.resolve_environ('GOLEM_RECIPES_REPOSITORIES', project_dir=self.get_project_dir())
         if recipes_repositories:
             recipes_repositories = [
                 Repository.from_url(
