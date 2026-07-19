@@ -164,10 +164,11 @@ All the commands are meant to be called at the root of your project, where the p
 
 If you need to run them from somewhere else, use `--project-dir=<project_dir>`. If you need to customize the build directory, use `--build-dir=<build_dir>`.
 
+### Building
+
 The commands are presented in the order they are expected to be called, when needed to be called.
 
 - [golem init](https://golemcpp.org/docs/commands/golem-init/) to generate a documented starter `golemfile.py`
-- [golem tools](https://golemcpp.org/docs/commands/golem-tools/) to install, uninstall, and list external tools (for example cppfront)
 - [golem configure](https://golemcpp.org/docs/commands/golem-configure/) to configure your project
 - [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to retrieve and configure dependencies
   * About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
@@ -178,6 +179,13 @@ The commands are presented in the order they are expected to be called, when nee
 - [golem package](https://golemcpp.org/docs/commands/golem-package/) to generate a package (the project is expected have built successfully)
 - [golem clean](https://golemcpp.org/docs/commands/golem-clean/) to clean up built object files
 - [golem distclean](https://golemcpp.org/docs/commands/golem-distclean/) to delete the build directory
+
+### Managing
+
+These commands are not part of the build workflow. Call them whenever you need to.
+
+- [golem config](https://golemcpp.org/docs/commands/golem-config/) to get and set global or project-local settings
+- [golem tools](https://golemcpp.org/docs/commands/golem-tools/) to install, uninstall, and list external tools (for example cppfront)
 
 ## 🚀 Roadmap
 
