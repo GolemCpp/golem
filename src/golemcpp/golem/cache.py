@@ -17,9 +17,9 @@ def get_default_cache_directory_path():
     return os.path.join(home_directory, '.cache', 'golem')
 
 class CacheDir:
-    def __init__(self, location, is_static=False, regex=None):
+    def __init__(self, location, is_read_only=False, regex=None):
         self._location = location
-        self._is_static = is_static
+        self._is_read_only = is_read_only
         self._regex = regex
 
     def __str__(self):
@@ -30,8 +30,8 @@ class CacheDir:
         return self._location
 
     @property
-    def is_static(self):
-        return self._is_static
+    def is_read_only(self):
+        return self._is_read_only
 
     @property
     def regex(self):
@@ -74,7 +74,7 @@ class CachedResourceResolver:
                 continue
             if not with_regex and cache_dir.regex:
                 continue
-            if is_read_only and not cache_dir.is_static:
+            if is_read_only and not cache_dir.is_read_only:
                 continue
             if with_regex:
                 pattern = re.compile(cache_dir.regex)

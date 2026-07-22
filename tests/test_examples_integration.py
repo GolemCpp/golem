@@ -140,8 +140,7 @@ def make_golem_env(cache_dir: Path) -> dict[str, str]:
 
     env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)
     env['GOLEM_RECIPES_REPOSITORIES'] = ''
-    env['GOLEM_STATIC_CACHE_DIRECTORY'] = ''
-    env['GOLEM_DEFINE_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
+    env['GOLEM_ADDITIONAL_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
     env['GOLEM_OVERRIDES_REPOSITORY'] = ''
 
     return env
@@ -518,7 +517,8 @@ def test_cache_example_respects_custom_cache_directories(example_tmp_path):
         cache_dir,
         'configure',
         '--cache-directory=cache-default',
-        '--define-cache-directories=cache-recipes=.*GolemCpp/recipes.*|cache-json=.*nlohmann.*',
+        '--additional-cache-directory=cache-recipes=.*GolemCpp/recipes.*',
+        '--additional-cache-directory=cache-json=.*nlohmann.*',
         '--variant=release',
     )
     run_golem(project_dir, cache_dir, 'resolve')

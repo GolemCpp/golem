@@ -19,21 +19,13 @@ KNOWN_SETTINGS = {
         'GOLEM_CACHE_DIRECTORY',
         'Directory used as the writable dependency cache.',
     ),
-    'cache.directories': (
-        'GOLEM_DEFINE_CACHE_DIRECTORIES',
-        'Extra writable cache directories (pipe-separated).',
+    'cache.additional-directories': (
+        'GOLEM_ADDITIONAL_CACHE_DIRECTORIES',
+        'Additional writable cache directories (pipe-separated PATH[=URL_REGEX]).',
     ),
-    'cache.static-directory': (
-        'GOLEM_STATIC_CACHE_DIRECTORY',
-        'Read-only static cache directory for dependencies.',
-    ),
-    'cache.static-directories': (
-        'GOLEM_DEFINE_STATIC_CACHE_DIRECTORIES',
-        'Extra read-only static cache directories (pipe-separated).',
-    ),
-    'cache.static-dependencies-regex': (
-        'GOLEM_STATIC_CACHE_DEPENDENCIES_REGEX',
-        'Regex selecting which dependencies use the static cache.',
+    'cache.additional-read-only-directories': (
+        'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES',
+        'Additional read-only cache directories (pipe-separated PATH[=URL_REGEX]).',
     ),
     'cache.resolution-policy': (
         'GOLEM_CACHE_RESOLUTION_POLICY',
