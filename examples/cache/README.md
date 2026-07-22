@@ -7,7 +7,7 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 To showcase how to control where dependencies get cached, we suggest to run the following:
 
 ``` bash
-golem configure --cache-directory=cache-default --define-cache-directories="cache-recipes=.*GolemCpp\/recipes.*|cache-json=.*nlohmann.*"
+golem configure --cache-directory=cache-default --additional-cache-directory="cache-recipes=.*GolemCpp\/recipes.*" --additional-cache-directory="cache-json=.*nlohmann.*"
 golem resolve
 golem dependencies
 golem build
@@ -28,7 +28,7 @@ If we set the cache resolution policy to `weak`, a dependency is allowed to be f
 To illustrate this behavior, we suggest to run the following:
 
 ``` bash
-golem configure --cache-directory=cache-default --define-cache-directories="cache-recipes=.*GolemCpp\/recipes.*|cache-json=.*nlohmann.*|cache-gsl=.*microsoft.*" --cache-resolution-policy=weak
+golem configure --cache-directory=cache-default --additional-cache-directory="cache-recipes=.*GolemCpp\/recipes.*" --additional-cache-directory="cache-json=.*nlohmann.*" --additional-cache-directory="cache-gsl=.*microsoft.*" --cache-resolution-policy=weak
 golem resolve
 golem dependencies
 golem build
@@ -41,7 +41,7 @@ Switching the cache resolution policy to `strict`, or removing the option (since
 To illustrate this behavior, we suggest to run the following:
 
 ``` bash
-golem configure --cache-directory=cache-default --define-cache-directories="cache-recipes=.*GolemCpp\/recipes.*|cache-json=.*nlohmann.*|cache-gsl=.*microsoft.*" --cache-resolution-policy=strict
+golem configure --cache-directory=cache-default --additional-cache-directory="cache-recipes=.*GolemCpp\/recipes.*" --additional-cache-directory="cache-json=.*nlohmann.*" --additional-cache-directory="cache-gsl=.*microsoft.*" --cache-resolution-policy=strict
 golem resolve
 golem dependencies
 golem build

@@ -443,8 +443,8 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context.get_global_dependencies_configuration_file = lambda: '/tmp/global-dependencies.json'
     context.make_cache_dir_option = lambda: '/tmp/cache'
     context.get_only_update_dependencies_regex = lambda: ''
-    context.make_define_cache_directories_option = lambda: ''
-    context.make_define_static_cache_directories_option = lambda: ''
+    context.make_additional_cache_directories_args = lambda: []
+    context.make_additional_read_only_cache_directories_args = lambda: []
     context.make_cache_resolution_policy_option = lambda: 'strict'
 
     dep = SimpleNamespace(
@@ -492,8 +492,8 @@ def make_cache_conf(*cache_dirs):
 
 def test_cached_resource_resolver_strict_policy_returns_first_match_without_probe():
     cache_conf = make_cache_conf(
-        CacheDir('/static-regex', is_static=True, regex='.*recipes.*'),
-        CacheDir('/writable', is_static=False),
+        CacheDir('/static-regex', is_read_only=True, regex='.*recipes.*'),
+        CacheDir('/writable', is_read_only=False),
     )
 
     resolver = CachedResourceResolver(
@@ -507,9 +507,9 @@ def test_cached_resource_resolver_strict_policy_returns_first_match_without_prob
 
 def test_cached_resource_resolver_weak_policy_without_probe_returns_none_for_phase():
     cache_conf = make_cache_conf(
-        CacheDir('/static-default', is_static=True),
-        CacheDir('/writable-regex', is_static=False, regex='.*recipes.*'),
-        CacheDir('/writable-default', is_static=False),
+        CacheDir('/static-default', is_read_only=True),
+        CacheDir('/writable-regex', is_read_only=False, regex='.*recipes.*'),
+        CacheDir('/writable-default', is_read_only=False),
     )
 
     resolver = CachedResourceResolver(
@@ -522,8 +522,8 @@ def test_cached_resource_resolver_weak_policy_without_probe_returns_none_for_pha
 
 
 def test_cached_resource_resolver_weak_policy_checks_existing_caches():
-    static_missing = CacheDir('/static-missing', is_static=True, regex='.*json.*')
-    static_present = CacheDir('/static-present', is_static=True, regex='.*json.*')
+    static_missing = CacheDir('/static-missing', is_read_only=True, regex='.*json.*')
+    static_present = CacheDir('/static-present', is_read_only=True, regex='.*json.*')
     cache_conf = make_cache_conf(static_missing, static_present)
 
     resolver = CachedResourceResolver(
@@ -537,8 +537,8 @@ def test_cached_resource_resolver_weak_policy_checks_existing_caches():
 
 
 def test_cached_resource_resolver_weak_policy_falls_back_to_first_writable_cache():
-    writable_regex = CacheDir('/writable-regex', is_static=False, regex='.*json.*')
-    writable_default = CacheDir('/writable-default', is_static=False)
+    writable_regex = CacheDir('/writable-regex', is_read_only=False, regex='.*json.*')
+    writable_default = CacheDir('/writable-default', is_read_only=False)
     cache_conf = make_cache_conf(writable_regex, writable_default)
 
     resolver = CachedResourceResolver(
@@ -555,8 +555,8 @@ def test_find_repository_cache_dir_uses_repository_probe_under_weak_policy(tmp_p
     context = make_repository_context(project_dir=tmp_path)
     context.context.options.cache_resolution_policy = 'weak'
     context.cache_conf = make_cache_conf(
-        CacheDir('/static-regex', is_static=True, regex='.*recipes.*'),
-        CacheDir('/writable-default', is_static=False),
+        CacheDir('/static-regex', is_read_only=True, regex='.*recipes.*'),
+        CacheDir('/writable-default', is_read_only=False),
     )
 
     context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: cache_dir.location == '/static-regex'
@@ -572,8 +572,8 @@ def test_find_repository_cache_dir_weak_policy_skips_read_only_hit_when_probe_fa
     context = make_repository_context(project_dir=tmp_path)
     context.context.options.cache_resolution_policy = 'weak'
     context.cache_conf = make_cache_conf(
-        CacheDir('/static-regex', is_static=True, regex='.*recipes.*'),
-        CacheDir('/writable-default', is_static=False),
+        CacheDir('/static-regex', is_read_only=True, regex='.*recipes.*'),
+        CacheDir('/writable-default', is_read_only=False),
     )
 
     context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: False
@@ -765,8 +765,8 @@ def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path
 
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    context.cache_conf = make_cache_conf(CacheDir('/cache', is_static=False))
-    context.find_repository_cache_dir = lambda repository, subdir=None: CacheDir('/cache', is_static=False)
+    context.cache_conf = make_cache_conf(CacheDir('/cache', is_read_only=False))
+    context.find_repository_cache_dir = lambda repository, subdir=None: CacheDir('/cache', is_read_only=False)
 
     repository = Repository(url='https://github.com/GolemCpp/recipes.git')
 
@@ -778,7 +778,7 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
 
 def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
 
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
@@ -795,7 +795,7 @@ def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_pa
 
 def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
     os.makedirs(cache_dir.location, exist_ok=True)
 
     dep = Dependency(
@@ -811,7 +811,7 @@ def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):
 
 def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
 
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
@@ -835,7 +835,7 @@ def test_get_dependency_resolved_version_prefers_hash_prefix():
 
 def test_is_resource_in_cache_dir_uses_repository_base(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_static=False)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
     os.makedirs(cache_dir.location, exist_ok=True)
 
     repository = Repository(url='https://github.com/GolemCpp/recipes.git')
