@@ -4,6 +4,14 @@ from enum import Enum
 from golemcpp.golem import helpers
 
 
+# Canonical subdirectories carved out of a cache directory, one per resource
+# kind, so every consumer agrees on the on-disk layout.
+DEPENDENCIES_SUBDIR = 'dependencies'
+RECIPES_SUBDIR = 'recipes'
+OVERRIDES_SUBDIR = 'overrides'
+TOOLS_SUBDIR = 'tools'
+
+
 def get_default_cache_directory_path():
     home_directory = helpers.get_environ('HOME') or os.path.expanduser('~')
     return os.path.join(home_directory, '.cache', 'golem')

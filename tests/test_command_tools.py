@@ -1,7 +1,14 @@
+import os
+
 from golemcpp.golem import helpers
 from golemcpp.golem import command_tools
 from golemcpp.golem import cppfront_tool
 from golemcpp.golem import tools_manager
+
+
+def expected_tools_cache(project_dir):
+    return helpers.make_absolute_path(
+        os.path.join('/tmp/custom-cache', 'tools'), str(project_dir))
 
 
 def test_handle_tools_command_prints_help(capsys, tmp_path):
@@ -112,7 +119,7 @@ def test_handle_tools_command_accepts_explicit_version(monkeypatch, tmp_path):
     assert captured['version'] == 'v0.8.0'
 
 
-def test_handle_tools_command_accepts_explicit_tools_cache_directory(monkeypatch, tmp_path):
+def test_handle_tools_command_accepts_explicit_cache_directory(monkeypatch, tmp_path):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()
 
@@ -130,11 +137,11 @@ def test_handle_tools_command_accepts_explicit_tools_cache_directory(monkeypatch
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
-        args=['install', 'cppfront', '--tools-cache-directory=/tmp/custom-tools-cache'],
+        args=['install', 'cppfront', '--cache-directory=/tmp/custom-cache'],
     )
 
     assert result == 0
-    assert captured['cache_directory'] == helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))
+    assert captured['cache_directory'] == expected_tools_cache(project_dir)
 
 
 def test_handle_tools_command_uninstalls_cppfront(monkeypatch, capsys, tmp_path):
@@ -152,15 +159,15 @@ def test_handle_tools_command_uninstalls_cppfront(monkeypatch, capsys, tmp_path)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
-        args=['uninstall', 'cppfront', '--tools-cache-directory=/tmp/custom-tools-cache'],
+        args=['uninstall', 'cppfront', '--cache-directory=/tmp/custom-cache'],
     )
 
     assert result == 0
     assert captured['tool_name'] == 'cppfront'
-    assert captured['cache_directory'] == helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))
+    assert captured['cache_directory'] == expected_tools_cache(project_dir)
 
     stdout = capsys.readouterr().out
-    assert 'Uninstalled cppfront from {}'.format(helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))) in stdout
+    assert 'Uninstalled cppfront from {}'.format(expected_tools_cache(project_dir)) in stdout
 
 
 def test_handle_tools_command_reports_when_tool_is_not_installed(monkeypatch, capsys, tmp_path):
@@ -171,13 +178,13 @@ def test_handle_tools_command_reports_when_tool_is_not_installed(monkeypatch, ca
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
-        args=['uninstall', 'cppfront', '--tools-cache-directory=/tmp/custom-tools-cache'],
+        args=['uninstall', 'cppfront', '--cache-directory=/tmp/custom-cache'],
     )
 
     assert result == 0
 
     stdout = capsys.readouterr().out
-    assert 'cppfront is not installed in {}'.format(helpers.make_absolute_path('/tmp/custom-tools-cache', str(project_dir))) in stdout
+    assert 'cppfront is not installed in {}'.format(expected_tools_cache(project_dir)) in stdout
 
 
 def test_handle_tools_command_lists_available_tools(capsys, tmp_path):

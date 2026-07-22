@@ -61,7 +61,7 @@ Have a look at the full example in [examples/minimal](/examples/minimal).
 - [examples/cache](/examples/cache) - Control cache directories and cache resolution policy.
 - [examples/conditions](/examples/conditions) - Build with platform-aware conditions in the project file.
 - [examples/cppfront](/examples/cppfront) - Basic cppfront program.
-- [examples/dependencies](/examples/dependencies) - Override resolved dependency versions with `master_dependencies.json`.
+- [examples/dependencies](/examples/dependencies) - Override resolved dependency versions with `overrides.json`.
 - [examples/hello](/examples/hello) - Smallest Hello World program.
 - [examples/minimal](/examples/minimal) - Basic library plus program with a dependency.
 - [examples/modules](/examples/modules) - Basic library plus program with a dependency using C++ modules.
@@ -262,7 +262,7 @@ After the neccessary improvements, I'll advertise Golem to a broader audience.
 - Failure on a dependency processed by `golem resolve` may put this dependency in an unrecoverable state, requiring to delete it manually from the cache
 - Errors of often not user friendly (raised exceptions)
 - In some specific environments, such as NixOS, the path to the compiler is not a full path (not a blocking issue, need to fixed on Waf's side)
-- When dealing with conflicting variants of a same dependency, there is no message to warn the user, and Golem attemps to link both anyway (master_dependencies.json is a good workaround for most cases)
+- When dealing with conflicting variants of a same dependency, there is no message to warn the user, and Golem attemps to link both anyway (overrides.json is a good workaround for most cases)
 - Only 1 template among those having the same source will get processed (bug caused by `if str(version_template_src) in self.context_tasks: continue`)
 - No support for specifying header files in include parameter to export a library (needs to be a directory for now)
 

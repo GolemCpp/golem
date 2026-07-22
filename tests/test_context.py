@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import json
 
 from golemcpp.golem import context as golem_context, helpers, qt_discovery
+from golemcpp.golem import cache
 from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, CachedResourceResolver
 from golemcpp.golem.context import Context
 from golemcpp.golem.dependency import Dependency
@@ -435,7 +436,7 @@ def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_en
 
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context = make_runtime_context(runtime_variant='release')
-    context.resolved_master_dependencies = '/tmp/master-dependencies.json'
+    context.resolved_overrides = '/tmp/overrides.json'
     context.get_dep_location = lambda dep, cache_dir: '/tmp/dep-export'
     context.make_repo_ready = lambda dep, cache_dir, should_clean=False: '/tmp/repo'
     context.get_dep_build_location = lambda dep, cache_dir: '/tmp/repo/build'
@@ -472,7 +473,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):
     context = Context.__new__(Context)
-    context.project = SimpleNamespace(master_dependencies_repository=None)
+    context.project = SimpleNamespace(overrides_repository=None)
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             project_dir=str(project_dir),
@@ -558,11 +559,11 @@ def test_find_repository_cache_dir_uses_repository_probe_under_weak_policy(tmp_p
         CacheDir('/writable-default', is_static=False),
     )
 
-    context.is_resource_in_cache_dir = lambda resource, cache_dir: cache_dir.location == '/static-regex'
+    context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: cache_dir.location == '/static-regex'
 
     repository = Repository(url='https://github.com/GolemCpp/recipes.git')
 
-    cache_dir = context.find_repository_cache_dir(repository)
+    cache_dir = context.find_repository_cache_dir(repository, subdir=cache.RECIPES_SUBDIR)
 
     assert cache_dir.location == '/static-regex'
 
@@ -575,11 +576,11 @@ def test_find_repository_cache_dir_weak_policy_skips_read_only_hit_when_probe_fa
         CacheDir('/writable-default', is_static=False),
     )
 
-    context.is_resource_in_cache_dir = lambda resource, cache_dir: False
+    context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: False
 
     repository = Repository(url='https://github.com/GolemCpp/recipes.git')
 
-    cache_dir = context.find_repository_cache_dir(repository)
+    cache_dir = context.find_repository_cache_dir(repository, subdir=cache.RECIPES_SUBDIR)
 
     assert cache_dir.location == '/static-regex'
 
@@ -629,14 +630,14 @@ def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path)
     assert [repository.url for repository in repositories] == [recipes_dir.resolve().as_uri()]
 
 
-def test_get_master_dependencies_repository_normalizes_local_paths(monkeypatch, tmp_path):
+def test_get_overrides_repository_normalizes_local_paths(monkeypatch, tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    master_dir = tmp_path / 'master-dependencies'
-    master_dir.mkdir()
+    overrides_dir = tmp_path / 'overrides'
+    overrides_dir.mkdir()
 
-    monkeypatch.setenv('GOLEM_MASTER_DEPENDENCIES_REPOSITORY', 'master-dependencies')
+    monkeypatch.setenv('GOLEM_OVERRIDES_REPOSITORY', 'overrides')
 
-    assert context.get_master_dependencies_repository().url == master_dir.resolve().as_uri()
+    assert context.get_overrides_repository().url == overrides_dir.resolve().as_uri()
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -765,13 +766,13 @@ def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     context.cache_conf = make_cache_conf(CacheDir('/cache', is_static=False))
-    context.find_repository_cache_dir = lambda repository: CacheDir('/cache', is_static=False)
+    context.find_repository_cache_dir = lambda repository, subdir=None: CacheDir('/cache', is_static=False)
 
     repository = Repository(url='https://github.com/GolemCpp/recipes.git')
 
-    repo_path = context.make_basic_dependency_repo_path(repository)
+    repo_path = context.make_basic_dependency_repo_path(repository, subdir=cache.RECIPES_SUBDIR)
 
-    assert repo_path == os.path.join('/cache', Repository.make_repository_base(
+    assert repo_path == os.path.join('/cache', cache.RECIPES_SUBDIR, Repository.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
     )
 
@@ -789,7 +790,7 @@ def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_pa
         reference=helpers.get_dependency_resolved_version(dep))
 
     assert context.get_resource_location(dep, cache_dir) == os.path.join(
-        cache_dir.location, expected_repository.get_cache_key())
+        cache_dir.location, cache.DEPENDENCIES_SUBDIR, expected_repository.get_cache_key())
 
 
 def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):
@@ -838,7 +839,7 @@ def test_is_resource_in_cache_dir_uses_repository_base(tmp_path):
     os.makedirs(cache_dir.location, exist_ok=True)
 
     repository = Repository(url='https://github.com/GolemCpp/recipes.git')
-    resource_path = context.get_resource_location(repository, cache_dir)
+    resource_path = context.get_resource_location(repository, cache_dir, subdir=cache.RECIPES_SUBDIR)
     os.makedirs(resource_path, exist_ok=True)
 
-    assert context.is_resource_in_cache_dir(repository, cache_dir) is True
+    assert context.is_resource_in_cache_dir(repository, cache_dir, subdir=cache.RECIPES_SUBDIR) is True

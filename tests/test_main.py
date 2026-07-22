@@ -127,7 +127,7 @@ def test_main_config_dispatches_to_command_config(tmp_path, monkeypatch):
     project_dir.mkdir()
 
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(main.sys, 'argv', ['golem', 'config', 'tools.cache-directory', '/opt/tools'])
+    monkeypatch.setattr(main.sys, 'argv', ['golem', 'config', 'overrides.repository', '/opt/overrides'])
 
     captured = {}
 
@@ -147,8 +147,8 @@ def test_main_config_dispatches_to_command_config(tmp_path, monkeypatch):
     assert result == 13
     assert captured['project_dir'] == str(project_dir)
     assert captured['args'] == [
-        'tools.cache-directory',
-        '/opt/tools',
+        'overrides.repository',
+        '/opt/overrides',
         '--project-dir=' + str(project_dir),
         '--build-dir=' + str(project_dir / 'build'),
     ]
