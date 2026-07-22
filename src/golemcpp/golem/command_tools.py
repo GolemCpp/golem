@@ -18,7 +18,7 @@ def build_tools_parser() -> ArgumentParser:
     parser.add_argument('--version', default='')
     parser.add_argument('--project-dir', dest='project_dir', default='')
     parser.add_argument('--build-dir', dest='build_dir', default='')
-    parser.add_argument('--tools-cache-directory', dest='tools_cache_directory', default='')
+    parser.add_argument('--cache-directory', dest='cache_directory', default='')
     parser.add_argument('--available', action='store_true', dest='available')
     parser.add_argument('-h', '--help', action='store_true', dest='help')
     return parser
@@ -35,9 +35,9 @@ class ToolsCommandHandler:
 
     @staticmethod
     def print_help() -> None:
-        print('Usage: golem tools install <tool> [--version=<version>] [--tools-cache-directory=<path>]')
-        print('       golem tools uninstall <tool> [--tools-cache-directory=<path>]')
-        print('       golem tools list [--available] [--tools-cache-directory=<path>]')
+        print('Usage: golem tools install <tool> [--version=<version>] [--cache-directory=<path>]')
+        print('       golem tools uninstall <tool> [--cache-directory=<path>]')
+        print('       golem tools list [--available] [--cache-directory=<path>]')
         print('Manage installable external tools stored in the Golem tools cache.')
         print('')
         print('Subcommands:')
@@ -48,7 +48,7 @@ class ToolsCommandHandler:
         print('Options:')
         print('  --version=<version>                Tool version to install when supported')
         print('  --available                        List supported installable tools')
-        print('  --tools-cache-directory=<path>     Select the tools cache directory')
+        print('  --cache-directory=<path>           Select the cache directory (tools live in its tools/ subdir)')
         print('')
         print('Available tools:')
         for tool in tools_manager.ToolsManager.list_available_tools():

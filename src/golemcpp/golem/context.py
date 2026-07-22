@@ -60,7 +60,7 @@ class Context:
         self.built_tasks = []
         self.build_on = False
 
-        self.resolved_master_dependencies = ''
+        self.resolved_overrides = ''
 
         self.cache_conf = None
         self.repository = None
@@ -122,27 +122,27 @@ class Context:
                                        dependency.runtime_variant)
 
     def load_resolved_dependencies(self):
-        master_dependencies = self.load_master_dependencies_configuration()
-        if master_dependencies:
+        overrides = self.load_overrides_configuration()
+        if overrides:
             for dependency in self.project.deps:
-                for master_dependency in master_dependencies:
-                    if dependency.repository == master_dependency.repository:
-                        if master_dependency.version:
-                            dependency.version = master_dependency.version
-                        if master_dependency.resolved_version:
-                            dependency.resolved_version = master_dependency.resolved_version
-                        if master_dependency.resolved_hash:
-                            dependency.resolved_hash = master_dependency.resolved_hash
-                        if master_dependency.shallow:
-                            dependency.shallow = master_dependency.shallow
-                        if master_dependency.link:
-                            dependency.link = master_dependency.link
-                        if master_dependency.variant:
-                            dependency.variant = master_dependency.variant
-                        if master_dependency.runtime_link:
-                            dependency.runtime_link = master_dependency.runtime_link
-                        if master_dependency.runtime_variant:
-                            dependency.runtime_variant = master_dependency.runtime_variant
+                for override in overrides:
+                    if dependency.repository == override.repository:
+                        if override.version:
+                            dependency.version = override.version
+                        if override.resolved_version:
+                            dependency.resolved_version = override.resolved_version
+                        if override.resolved_hash:
+                            dependency.resolved_hash = override.resolved_hash
+                        if override.shallow:
+                            dependency.shallow = override.shallow
+                        if override.link:
+                            dependency.link = override.link
+                        if override.variant:
+                            dependency.variant = override.variant
+                        if override.runtime_link:
+                            dependency.runtime_link = override.runtime_link
+                        if override.runtime_variant:
+                            dependency.runtime_variant = override.runtime_variant
                         break
 
         if self.resolved_dependencies_path is not None:
@@ -345,75 +345,75 @@ class Context:
                         is_static=True,
                         regex=static_cache_regex)
 
-    def get_master_dependencies_configuration(self):
-        master_dependencies_configuration = self.context.options.master_dependencies_configuration
-        if master_dependencies_configuration:
-            return master_dependencies_configuration
+    def get_overrides_configuration(self):
+        overrides_configuration = self.context.options.overrides_configuration
+        if overrides_configuration:
+            return overrides_configuration
 
-        master_dependencies_configuration = self.project.master_dependencies_configuration
-        if master_dependencies_configuration:
-            return master_dependencies_configuration
+        overrides_configuration = self.project.overrides_configuration
+        if overrides_configuration:
+            return overrides_configuration
 
-        master_dependencies_configuration = config_store.resolve_environ('GOLEM_MASTER_DEPENDENCIES_CONFIGURATION', project_dir=self.get_project_dir())
-        if master_dependencies_configuration:
-            return master_dependencies_configuration
-        
+        overrides_configuration = config_store.resolve_environ('GOLEM_OVERRIDES_CONFIGURATION', project_dir=self.get_project_dir())
+        if overrides_configuration:
+            return overrides_configuration
+
         return ''
 
-    def make_master_dependencies_configuration(self):
+    def make_overrides_configuration(self):
         return self.make_local_path_absolute(
-            path=self.get_master_dependencies_configuration())
+            path=self.get_overrides_configuration())
 
-    def get_master_dependencies_repository(self):
-        master_dependencies_repository = self.project.master_dependencies_repository
-        if master_dependencies_repository:
+    def get_overrides_repository(self):
+        overrides_repository = self.project.overrides_repository
+        if overrides_repository:
             return Repository.from_url(
-                url=master_dependencies_repository,
+                url=overrides_repository,
                 project_dir=self.get_project_dir())
 
-        master_dependencies_repository = config_store.resolve_environ('GOLEM_MASTER_DEPENDENCIES_REPOSITORY', project_dir=self.get_project_dir())
-        if master_dependencies_repository:
+        overrides_repository = config_store.resolve_environ('GOLEM_OVERRIDES_REPOSITORY', project_dir=self.get_project_dir())
+        if overrides_repository:
             return Repository.from_url(
-                url=master_dependencies_repository,
+                url=overrides_repository,
                 project_dir=self.get_project_dir())
 
         return None
 
-    def load_master_dependencies_configuration(self):
+    def load_overrides_configuration(self):
 
-        if not self.resolved_master_dependencies:
-            master_dependencies_configuration = self.make_master_dependencies_configuration()
-            master_dependencies_repository = self.get_master_dependencies_repository()
-            if not master_dependencies_configuration and master_dependencies_repository:
-                repo_path = self.clone_master_dependencies_repository(
-                    master_dependencies_repository)
-                master_dependencies_json = os.path.join(
-                    repo_path, 'master_dependencies.json')
-                if os.path.exists(master_dependencies_json):
-                    master_dependencies_configuration = master_dependencies_json
+        if not self.resolved_overrides:
+            overrides_configuration = self.make_overrides_configuration()
+            overrides_repository = self.get_overrides_repository()
+            if not overrides_configuration and overrides_repository:
+                repo_path = self.clone_overrides_repository(
+                    overrides_repository)
+                overrides_json = os.path.join(
+                    repo_path, 'overrides.json')
+                if os.path.exists(overrides_json):
+                    overrides_configuration = overrides_json
 
-            if master_dependencies_configuration:
-                self.resolved_master_dependencies = master_dependencies_configuration
+            if overrides_configuration:
+                self.resolved_overrides = overrides_configuration
 
-        if not self.resolved_master_dependencies or not os.path.exists(
-                self.resolved_master_dependencies):
+        if not self.resolved_overrides or not os.path.exists(
+                self.resolved_overrides):
             return None
 
-        if not os.path.exists(self.resolved_master_dependencies):
+        if not os.path.exists(self.resolved_overrides):
             raise RuntimeError(
-                "Can't find master dependencies configuration: {}".format(
-                    self.resolved_master_dependencies))
+                "Can't find overrides configuration: {}".format(
+                    self.resolved_overrides))
 
         cache = None
-        with open(self.resolved_master_dependencies, 'r') as fp:
+        with open(self.resolved_overrides, 'r') as fp:
             cache = json.load(fp)
 
-        master_dependencies = []
+        overrides = []
         for entry in cache:
             cached_dependency = Dependency.unserialize_from_json(entry)
-            master_dependencies.append(cached_dependency)
+            overrides.append(cached_dependency)
 
-        return master_dependencies
+        return overrides
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
@@ -537,9 +537,9 @@ class Context:
 
         return cache_directories_string
 
-    def get_options_master_dependencies_configuration(self):
+    def get_options_overrides_configuration(self):
         return self.make_local_path_absolute(
-            path=self.context.options.master_dependencies_configuration)
+            path=self.context.options.overrides_configuration)
 
     def make_local_path_absolute(self, path):
         abolute_path = path
@@ -1185,11 +1185,11 @@ class Context:
         )
 
         context.add_option(
-            "--master-dependencies-configuration",
+            "--overrides-configuration",
             action="store",
             default='',
             help=
-            "Master configuration file to resolve dependencies for the build")
+            "Overrides configuration file to resolve dependencies for the build")
 
         context.add_option("--recipe",
                            action="store",
@@ -1259,12 +1259,6 @@ class Context:
             action="store",
             default='',
             help="Output file for static analysis results (e.g. cppcheck)")
-
-        context.add_option(
-            "--tools-cache-directory",
-            action="store",
-            default='',
-            help="Directory where cache-backed local tools are stored")
 
         context.add_option(
             "--cache-dir",
@@ -1972,7 +1966,7 @@ class Context:
             '--cache-directory={}'.format(self.make_cache_dir_option()),
             '--resolved-dependencies-directory={}'.format(build_path),
             '--only-update-dependencies-regex={}'.format(self.get_only_update_dependencies_regex()),
-            '--master-dependencies-configuration={}'.format(self.resolved_master_dependencies),
+            '--overrides-configuration={}'.format(self.resolved_overrides),
             '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
             '--define-cache-directories={}'.format(self.make_define_cache_directories_option()),
             '--define-static-cache-directories={}'.format(self.make_define_static_cache_directories_option()),
@@ -2521,21 +2515,27 @@ class Context:
     def make_cache_resolution_policy_option(self):
         return self.make_cache_resolution_policy().value
 
-    def get_resource_location(self, resource, cache_dir):
+    def get_resource_location(self, resource, cache_dir, subdir=None):
         if isinstance(resource, Dependency):
             cache_resource = Repository(
                 url=resource.repository,
                 reference=helpers.get_dependency_resolved_version(resource))
+            if subdir is None:
+                subdir = cache.DEPENDENCIES_SUBDIR
         elif isinstance(resource, Repository):
             cache_resource = resource
+            if subdir is None:
+                raise RuntimeError(
+                    "subdir is required for repository resources")
         else:
             raise RuntimeError(
                 "resource must be a Dependency or Repository")
 
-        return os.path.join(cache_dir.location, cache_resource.get_cache_key())
+        return os.path.join(cache_dir.location, subdir,
+                            cache_resource.get_cache_key())
 
-    def is_resource_in_cache_dir(self, resource, cache_dir):
-        path = self.get_resource_location(resource, cache_dir)
+    def is_resource_in_cache_dir(self, resource, cache_dir, subdir=None):
+        path = self.get_resource_location(resource, cache_dir, subdir=subdir)
         return os.path.exists(path)
 
     def export_dependency(self, config, dep):
@@ -2572,10 +2572,10 @@ class Context:
             return foldername + '-' + self.make_dependencies_slug(
                 dependencies=self.project.deps)
 
-        # NOTE: 'conf' and 'bin-HASH' can conflict with use of master
-        # dependencies configurations which bypass "default" dependencies
+        # NOTE: 'conf' and 'bin-HASH' can conflict with use of overrides
+        # configurations which bypass "default" dependencies
         # resolution process using versions declared in project file
-        # TODO: Find a solution to tamper the conflict of master dependencies
+        # TODO: Find a solution to tamper the conflict of overrides
         # configuration with "default" caching process of dependencies
 
         return foldername
@@ -4481,19 +4481,19 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
-    def find_repository_cache_dir(self, repository):
+    def find_repository_cache_dir(self, repository, subdir):
         resolver = CachedResourceResolver(
             identifier=repository.url,
             cache_conf=self.cache_conf,
             policy=self.make_cache_resolution_policy(),
             exists_in_cache=lambda cache_dir: self.is_resource_in_cache_dir(
-                repository, cache_dir))
+                repository, cache_dir, subdir=subdir))
         return resolver.resolve()
 
-    def make_basic_dependency_repo_path(self, repository):
+    def make_basic_dependency_repo_path(self, repository, subdir):
         cache_dir = self.find_repository_cache_dir(
-            repository=repository)
-        return self.get_resource_location(repository, cache_dir)
+            repository=repository, subdir=subdir)
+        return self.get_resource_location(repository, cache_dir, subdir=subdir)
 
     def clone_repository(self, path, repository):
         local_path = repository.get_local_path()
@@ -4522,8 +4522,9 @@ class Context:
         helpers.run_git(['reset', '--hard', 'origin/' + repository.reference],
                          cwd=path)
 
-    def clone_master_dependencies_repository(self, repository):
-        repo_path = self.make_basic_dependency_repo_path(repository)
+    def clone_overrides_repository(self, repository):
+        repo_path = self.make_basic_dependency_repo_path(
+            repository, subdir=cache.OVERRIDES_SUBDIR)
 
         if not self.deps_resolve:
             return repo_path
@@ -4534,7 +4535,8 @@ class Context:
         return repo_path
 
     def clone_recipes_repository(self, repository):
-        repo_path = self.make_basic_dependency_repo_path(repository)
+        repo_path = self.make_basic_dependency_repo_path(
+            repository, subdir=cache.RECIPES_SUBDIR)
 
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
             return repo_path

@@ -142,7 +142,7 @@ def make_golem_env(cache_dir: Path) -> dict[str, str]:
     env['GOLEM_RECIPES_REPOSITORIES'] = ''
     env['GOLEM_STATIC_CACHE_DIRECTORY'] = ''
     env['GOLEM_DEFINE_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
-    env['GOLEM_MASTER_DEPENDENCIES_REPOSITORY'] = ''
+    env['GOLEM_OVERRIDES_REPOSITORY'] = ''
 
     return env
 
@@ -242,7 +242,7 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     project_dir = example_tmp_path / 'project'
     project_dir.mkdir()
     cache_dir = example_tmp_path / 'cache'
-    tools_cache_dir = example_tmp_path / 'tools-cache'
+    tools_cache_dir = cache_dir / 'tools'
 
     result = run_golem(
         project_dir,
@@ -250,7 +250,7 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
         'tools',
         'install',
         'cppfront',
-        '--tools-cache-directory=' + str(tools_cache_dir),
+        '--cache-directory=' + str(cache_dir),
     )
 
     cache_info = cppfront_tool.CppFrontCacheInfo.from_cache_root(
@@ -294,7 +294,6 @@ def test_cppfront_example_installs_builds_and_runs(example_tmp_path, project_var
 
     project_dir = prepare_example_project('cppfront', example_tmp_path, project_variant)
     cache_dir = example_tmp_path / f'cache-{project_variant}'
-    tools_cache_dir = example_tmp_path / f'tools-cache-{project_variant}'
 
     run_golem(
         project_dir,
@@ -302,20 +301,20 @@ def test_cppfront_example_installs_builds_and_runs(example_tmp_path, project_var
         'tools',
         'install',
         'cppfront',
-        '--tools-cache-directory=' + str(tools_cache_dir),
+        '--cache-directory=' + str(cache_dir),
     )
     run_golem(
         project_dir,
         cache_dir,
         'configure',
         '--variant=debug',
-        '--tools-cache-directory=' + str(tools_cache_dir),
+        '--cache-directory=' + str(cache_dir),
     )
     run_golem(
         project_dir,
         cache_dir,
         'build',
-        '--tools-cache-directory=' + str(tools_cache_dir),
+        '--cache-directory=' + str(cache_dir),
     )
 
     binary = program_path(project_dir, 'hello-cppfront-debug')
@@ -469,7 +468,7 @@ def test_minimal_example_builds_and_runs(example_tmp_path, project_variant):
     assert 'FOO!' in result.stdout
 
 
-def test_dependencies_example_honors_master_dependencies_configuration(example_tmp_path):
+def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
     require_cxx_compiler()
     require_git_remote_access(
         'https://github.com/GolemCpp/recipes.git',
@@ -484,7 +483,7 @@ def test_dependencies_example_honors_master_dependencies_configuration(example_t
         cache_dir,
         'configure',
         '--variant=debug',
-        '--master-dependencies-configuration=master_dependencies.json',
+        '--overrides-configuration=overrides.json',
     )
     run_golem(project_dir, cache_dir, 'resolve')
     run_golem(project_dir, cache_dir, 'dependencies')

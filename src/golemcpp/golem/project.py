@@ -28,8 +28,8 @@ class Project:
         self.configuration_paths = []
 
         # TODO: Serialize these new members to/from JSON
-        self.master_dependencies_configuration = None
-        self.master_dependencies_repository = None
+        self.overrides_configuration = None
+        self.overrides_repository = None
         self.clang_tidy_checks = None
         self.cppcheck_enable = None
         self.enable_build_number = False

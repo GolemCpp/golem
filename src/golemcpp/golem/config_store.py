@@ -39,21 +39,17 @@ KNOWN_SETTINGS = {
         'GOLEM_CACHE_RESOLUTION_POLICY',
         'Cache resolution policy (strict or weak).',
     ),
-    'tools.cache-directory': (
-        'GOLEM_TOOLS_CACHE_DIRECTORY',
-        'Directory where installable tools are cached.',
-    ),
     'recipes.repositories': (
         'GOLEM_RECIPES_REPOSITORIES',
         'Recipe repositories used to resolve dependencies.',
     ),
-    'master-dependencies.configuration': (
-        'GOLEM_MASTER_DEPENDENCIES_CONFIGURATION',
-        'Path to a master dependencies configuration file.',
+    'overrides.configuration': (
+        'GOLEM_OVERRIDES_CONFIGURATION',
+        'Path to an overrides configuration file.',
     ),
-    'master-dependencies.repository': (
-        'GOLEM_MASTER_DEPENDENCIES_REPOSITORY',
-        'Repository providing a master dependencies configuration.',
+    'overrides.repository': (
+        'GOLEM_OVERRIDES_REPOSITORY',
+        'Repository providing an overrides configuration.',
     ),
 }
 
