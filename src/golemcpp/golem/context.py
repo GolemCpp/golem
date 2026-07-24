@@ -2823,6 +2823,27 @@ class Context:
             final_cflags = [c_standard_flag] + final_cflags
         final_cflags = helpers.filter_unique(final_cflags + qt_cxxflags)
 
+        # Visual-Studio-style per-target compile PDB.
+        #
+        # MSVC writes debug info for every object into a single shared PDB (the
+        # default "vcNNN.pdb" in the compiler's working directory). Waf compiles
+        # one cl.exe per source file in parallel, so they all race on that one
+        # file (fatal error C1041). MSBuild avoids this by pointing /Fd at a
+        # per-project PDB in the project intermediate directory; we do the same
+        # by giving each target a uniquely named /Fd. /FS still serializes the
+        # objects of a single target that compile at the same time.
+        #
+        # Only applied when the serializing /FS flag is actually in effect (so
+        # stripping /FS from the default flags disables this too) and when no
+        # explicit /Fd was already provided.
+        if self.is_msvc_like() and decorated_targets:
+            target_pdb_flag = '/Fd:' + decorated_targets[0] + '.pdb'
+            for target_flags in (final_cxxflags, final_cflags):
+                has_fs = any(flag[1:].lower() == 'fs' for flag in target_flags)
+                has_fd = any(flag[1:3].lower() == 'fd' for flag in target_flags)
+                if has_fs and not has_fd:
+                    target_flags.append(target_pdb_flag)
+
         for flag in final_cxxflags:
             if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
                 if 'CXXFLAGS_qt5' in self.context.env:
