@@ -12,4 +12,5 @@ def handle_help_command() -> None:
     print('Managing:')
     print('  config        Get and set global or project-local settings')
     print('  tools         Manage installable tools stored in the cache')
+    print('  cache         Inspect and clean cached resources across caches')
     print('Documentation: https://golemcpp.org/docs/guides/getting-started/')

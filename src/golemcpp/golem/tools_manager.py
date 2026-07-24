@@ -1,37 +1,17 @@
-import json
 import os
 from dataclasses import dataclass
 
+from golemcpp.golem import cache_manifest
 from golemcpp.golem import helpers
 from golemcpp.golem import tools_registry
 
 
 @dataclass(frozen=True)
 class ToolManifest:
+    # Lightweight view over the unified cache manifest, kept for callers that
+    # only care about a tool's name and installed version.
     tool: str
     version: str
-
-    @classmethod
-    def read(cls, manifest_path: str):
-        if not os.path.isfile(manifest_path):
-            return None
-
-        with open(manifest_path, 'r', encoding='utf-8') as filein:
-            manifest = json.load(filein)
-
-        return cls(
-            tool=manifest['tool'],
-            version=manifest['version'],
-        )
-
-    def write(self, manifest_path: str) -> None:
-        os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
-        with open(manifest_path, 'w', encoding='utf-8') as fileout:
-            json.dump({
-                'tool': self.tool,
-                'version': self.version,
-            }, fileout, indent=2)
-            fileout.write('\n')
 
 
 @dataclass(frozen=True)
@@ -75,13 +55,20 @@ class ToolsManager:
         return self.tool_cache_root(tool_name) + '.tmp'
 
     def tool_manifest_path(self, tool_name: str) -> str:
-        return os.path.join(self.tool_cache_root(tool_name), 'manifest.json')
+        return os.path.join(self.tool_cache_root(tool_name),
+                            cache_manifest.MANIFEST_FILENAME)
 
     def read_tool_manifest(self, tool_name: str) -> ToolManifest | None:
-        return ToolManifest.read(self.tool_manifest_path(tool_name))
+        manifest = cache_manifest.ResourceManifest.read(
+            self.tool_manifest_path(tool_name))
+        if manifest is None:
+            return None
 
-    def write_tool_manifest(self, tool_name: str, manifest: ToolManifest) -> None:
-        manifest.write(self.tool_manifest_path(tool_name))
+        identity = manifest.identity or {}
+        return ToolManifest(
+            tool=identity.get('name', tool_name),
+            version=identity.get('version', ''),
+        )
 
     def list_installed_tools(self) -> list[InstalledToolInfo]:
         installed_tools = []
@@ -112,8 +99,15 @@ class ToolsManager:
                 install_root=staging_root,
             )
 
-            manifest = ToolManifest(tool=tool.name, version=resolved_version)
-            manifest.write(os.path.join(staging_root, 'manifest.json'))
+            manifest = cache_manifest.ResourceManifest.create(
+                kind=cache_manifest.ResourceKind.TOOL,
+                cache_key=tool.name,
+                identity={
+                    'name': tool.name,
+                    'version': resolved_version,
+                    'repository_url': tool.repository_url,
+                })
+            manifest.write(os.path.join(staging_root, cache_manifest.MANIFEST_FILENAME))
 
             helpers.remove_tree(cache_root)
             os.makedirs(os.path.dirname(cache_root), exist_ok=True)

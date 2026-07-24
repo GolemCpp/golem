@@ -283,6 +283,97 @@ def parameter_to_list(input):
         return input
 
 def make_absolute_path(path: str, cwd: str) -> str:
+    if not path:
+        return ''
     if os.path.isabs(path):
         return path
-    return os.path.join(cwd, path)
+    if cwd:
+        return os.path.join(cwd, path)
+    return os.path.abspath(path)
+
+
+def _allocated_size(stat_result):
+    # st_blocks counts 512-byte units actually allocated on disk (matching what
+    # `du` reports), so small files are rounded up to the filesystem block size.
+    # It is absent on platforms such as Windows, where we fall back to the
+    # apparent size.
+    st_blocks = getattr(stat_result, 'st_blocks', None)
+    if st_blocks is not None:
+        return st_blocks * 512
+    return stat_result.st_size
+
+
+def get_tree_size(path):
+    '''
+    Total allocated disk space of a file or directory tree, matching `du`: each
+    file, directory, and symlink counts the blocks it actually occupies, and
+    hard-linked files are counted only once. Falls back to the apparent size on
+    platforms that do not expose st_blocks (e.g. Windows).
+    '''
+    try:
+        root_stat = os.lstat(path)
+    except OSError:
+        return 0
+
+    if not os.path.isdir(path) or os.path.islink(path):
+        return _allocated_size(root_stat)
+
+    total = 0
+    seen_inodes = set()
+
+    def add_entry(entry_path):
+        nonlocal total
+        try:
+            stat_result = os.lstat(entry_path)
+        except OSError:
+            return
+        # Count hard-linked files only once, like `du`.
+        if stat_result.st_nlink > 1:
+            key = (stat_result.st_dev, stat_result.st_ino)
+            if key in seen_inodes:
+                return
+            seen_inodes.add(key)
+        total += _allocated_size(stat_result)
+
+    for dir_path, dir_names, file_names in os.walk(path):
+        add_entry(dir_path)  # the directory itself
+        for name in file_names:
+            add_entry(os.path.join(dir_path, name))
+        # os.walk does not recurse into symlinked directories, so count them
+        # here; real subdirectories are counted when they become dir_path.
+        for name in dir_names:
+            entry_path = os.path.join(dir_path, name)
+            if os.path.islink(entry_path):
+                add_entry(entry_path)
+
+    return total
+
+
+def format_size(num_bytes):
+    size = float(num_bytes)
+    for unit in ('B', 'KiB', 'MiB', 'GiB', 'TiB'):
+        if size < 1024.0 or unit == 'TiB':
+            if unit == 'B':
+                return '{} {}'.format(int(size), unit)
+            return '{:.1f} {}'.format(size, unit)
+        size /= 1024.0
+
+
+def confirm(prompt, assume_yes=False):
+    '''
+    Ask the user to confirm a destructive action. Returns True only on an
+    explicit yes. When stdin is not interactive (e.g. CI) and the caller did not
+    pass assume_yes, defaults to False so nothing is deleted by accident.
+    '''
+    if assume_yes:
+        return True
+
+    if not sys.stdin or not sys.stdin.isatty():
+        return False
+
+    try:
+        answer = input('{} [y/N] '.format(prompt))
+    except EOFError:
+        return False
+
+    return answer.strip().lower() in ('y', 'yes')
