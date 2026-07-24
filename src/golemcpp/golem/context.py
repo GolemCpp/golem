@@ -18,6 +18,7 @@ from golemcpp.golem.module import Module
 from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, CachedResourceResolver
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import cache
+from golemcpp.golem import cache_manifest
 from golemcpp.golem import helpers
 from golemcpp.golem import config_store
 from golemcpp.golem import tools_cache
@@ -374,30 +375,6 @@ class Context:
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
 
-    def parse_cache_entries(self, entries, is_read_only):
-        dirs = []
-        for entry in entries:
-            if not entry:
-                continue
-
-            cache_path, _, cache_regex = entry.partition('=')
-            if not cache_path:
-                raise RuntimeError(
-                    "Bad cache definition: {}".format(entry))
-
-            if cache_regex:
-                _ = re.compile(cache_regex)
-            else:
-                cache_regex = None
-
-            cache_path = self.make_local_path_absolute(path=cache_path)
-
-            dirs.append(CacheDir(location=cache_path,
-                                 is_read_only=is_read_only,
-                                 regex=cache_regex))
-
-        return dirs
-
     def get_additional_cache_directories(self):
         entries = list(self.context.options.additional_cache_directory or [])
         if entries:
@@ -421,14 +398,16 @@ class Context:
         return []
 
     def make_additional_cache_directories(self):
-        return self.parse_cache_entries(
+        return cache.parse_cache_entries(
             entries=self.get_additional_cache_directories(),
-            is_read_only=False)
+            is_read_only=False,
+            base_dir=self.get_project_dir())
 
     def make_additional_read_only_cache_directories(self):
-        return self.parse_cache_entries(
+        return cache.parse_cache_entries(
             entries=self.get_additional_read_only_cache_directories(),
-            is_read_only=True)
+            is_read_only=True,
+            base_dir=self.get_project_dir())
 
     def make_cache_directory_entry(self, cache_dir):
         if cache_dir.regex:
@@ -1816,10 +1795,29 @@ class Context:
         if os.path.exists(repo_path):
             if should_clean:
                 self.clean_repo(dep, repo_path)
+            cache_manifest.touch_last_used(self.get_dep_location(dep, cache_dir))
         else:
             self.clone_repo(dep, repo_path)
+            self.write_dependency_manifest(dep, cache_dir)
 
         return repo_path
+
+    def write_dependency_manifest(self, dep, cache_dir):
+        if cache_dir.is_read_only:
+            return
+        resource_root = self.get_dep_location(dep, cache_dir)
+        cache_manifest.write_manifest(
+            resource_root=resource_root,
+            kind=cache_manifest.ResourceKind.DEPENDENCY,
+            cache_key=os.path.basename(resource_root),
+            identity={
+                'name': dep.name,
+                'repository': dep.repository,
+                'version': dep.version,
+                'resolved_version': dep.resolved_version,
+                'resolved_hash': dep.resolved_hash,
+                'shallow': dep.shallow,
+            })
 
     def run_dep_command(self, dep, cache_dir, command):
 
@@ -4390,7 +4388,7 @@ class Context:
             repository=repository, subdir=subdir)
         return self.get_resource_location(repository, cache_dir, subdir=subdir)
 
-    def clone_repository(self, path, repository):
+    def clone_repository(self, path, repository, kind=None):
         local_path = repository.get_local_path()
         if local_path is not None:
             if not os.path.exists(local_path):
@@ -4406,16 +4404,36 @@ class Context:
         if non_git_directory_path is not None:
             print("Copying repository {} into {}".format(repository.url, path))
             self.copy_non_git_repo(repository.url, non_git_directory_path, path)
+            self.write_repository_manifest(path, repository, kind)
             return
 
         if not os.path.exists(path):
             os.makedirs(path)
             helpers.run_git(['clone', '--', repository.url, '.'], cwd=path)
+            is_fresh_clone = True
         else:
             helpers.run_git(['fetch', 'origin'], cwd=path)
+            is_fresh_clone = False
 
         helpers.run_git(['reset', '--hard', 'origin/' + repository.reference],
                          cwd=path)
+
+        if is_fresh_clone:
+            self.write_repository_manifest(path, repository, kind)
+        else:
+            cache_manifest.touch_last_used(path)
+
+    def write_repository_manifest(self, path, repository, kind):
+        if kind is None:
+            return
+        cache_manifest.write_manifest(
+            resource_root=path,
+            kind=kind,
+            cache_key=os.path.basename(path),
+            identity={
+                'url': repository.url,
+                'reference': repository.reference,
+            })
 
     def clone_overrides_repository(self, repository):
         repo_path = self.make_basic_dependency_repo_path(
@@ -4425,7 +4443,8 @@ class Context:
             return repo_path
 
         self.clone_repository(path=repo_path,
-                              repository=repository)
+                              repository=repository,
+                              kind=cache_manifest.ResourceKind.OVERRIDES_REPOSITORY)
 
         return repo_path
 
@@ -4436,7 +4455,8 @@ class Context:
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
             return repo_path
 
-        self.clone_repository(path=repo_path, repository=repository)
+        self.clone_repository(path=repo_path, repository=repository,
+                              kind=cache_manifest.ResourceKind.RECIPES_REPOSITORY)
 
         return repo_path
 
@@ -4478,6 +4498,7 @@ class Context:
             directory = os.path.join(repo, recipe_id)
             if os.path.exists(directory):
                 found_recipe_dir = directory
+                cache_manifest.touch_last_used(repo)
 
         if not found_recipe_dir:
             raise RuntimeError(

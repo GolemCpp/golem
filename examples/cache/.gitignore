@@ -5,3 +5,5 @@
 /cache-deps
 /cache-recipes
 /cache-static
+/cache-json
+/cache-gsl

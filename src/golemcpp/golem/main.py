@@ -4,6 +4,7 @@ from golemcpp.golem import command_help
 from golemcpp.golem import command_init
 from golemcpp.golem import command_config
 from golemcpp.golem import command_tools
+from golemcpp.golem import command_cache
 from golemcpp.golem import command_version
 from string import Template
 import shutil
@@ -44,6 +45,10 @@ def main() -> int:
 
     if command == 'tools':
         return command_tools.handle_tools_command(project_dir=project_dir,
+                                                  args=command_args)
+
+    if command == 'cache':
+        return command_cache.handle_cache_command(project_dir=project_dir,
                                                   args=command_args)
 
     # For other commands, we only keep the arguments that are relevant for waf, which are the ones after the command

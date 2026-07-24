@@ -1,7 +1,16 @@
 from dataclasses import replace
 
+from golemcpp.golem import cache_manifest
 from golemcpp.golem import tools_manager
 from golemcpp.golem import tools_registry
+
+
+def write_tool_manifest(cache_root, *, name='cppfront', version='v0.8.1'):
+    cache_manifest.ResourceManifest.create(
+        kind=cache_manifest.ResourceKind.TOOL,
+        cache_key=name,
+        identity={'name': name, 'version': version},
+    ).write_to_root(str(cache_root))
 
 
 def replace_cppfront_tool(monkeypatch, **changes):
@@ -88,10 +97,7 @@ def test_list_installed_tools_returns_registry_installed_tools(monkeypatch, tmp_
     tools_cache_directory = tmp_path / 'tools-cache'
     cache_root = tools_cache_directory / 'cppfront'
     cache_root.mkdir(parents=True)
-    (cache_root / 'manifest.json').write_text(
-        '{"tool": "cppfront", "version": "v0.8.1"}\n',
-        encoding='utf-8',
-    )
+    write_tool_manifest(cache_root)
 
     installed_tools = make_tools_manager(tmp_path, tools_cache_directory=str(tools_cache_directory)).list_installed_tools()
 
