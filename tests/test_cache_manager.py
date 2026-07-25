@@ -138,6 +138,29 @@ def test_scan_detects_legacy_flat_entries_as_unidentified(tmp_path):
     assert legacy.size_bytes > 0
 
 
+def test_scan_identifies_top_level_entries_via_manifest(tmp_path):
+    root = str(tmp_path / 'cache')
+    # A minimized resource stored flat at the cache root under a short hashed
+    # name. It is identified purely by its manifest, which is the source of truth
+    # for identity regardless of where the resource lives.
+    resource_root = make_resource(root, '', 'a1b2c3d4')
+    cache_manifest.write_manifest(
+        resource_root=resource_root,
+        kind=cache_manifest.ResourceKind.DEPENDENCY,
+        cache_key='json@com.github.nlohmann+abc',
+        identity={})
+
+    manager = make_manager(cache.CacheDir(location=root, is_read_only=False))
+    resources = manager.scan()
+
+    assert len(resources) == 1
+    resource = resources[0]
+    assert resource.is_identified is True
+    assert resource.kind == cache_manifest.ResourceKind.DEPENDENCY.value
+    # The real cache_key comes from the manifest, not the flat hashed dir name.
+    assert resource.cache_key == 'json@com.github.nlohmann+abc'
+
+
 def test_scan_does_not_treat_known_subdirs_as_resources(tmp_path):
     root = str(tmp_path / 'cache')
     make_resource(root, cache.DEPENDENCIES_SUBDIR, 'json@h+abc',
@@ -161,18 +184,3 @@ def test_scan_ignores_stray_files_at_cache_root(tmp_path):
 
     manager = make_manager(cache.CacheDir(location=root, is_read_only=False))
     assert manager.scan() == []
-
-
-def test_scan_forces_unexpected_top_level_dir_unidentified_even_with_manifest(tmp_path):
-    root = str(tmp_path / 'cache')
-    # An unexpected top-level directory that happens to carry a manifest is still
-    # reported as unidentified because it sits at an unexpected location.
-    make_resource(root, '', 'weird@host+1',
-                  manifest_kind=cache_manifest.ResourceKind.DEPENDENCY)
-
-    manager = make_manager(cache.CacheDir(location=root, is_read_only=False))
-    resources = manager.scan()
-
-    assert len(resources) == 1
-    assert resources[0].is_identified is False
-    assert resources[0].kind == cache_manager.UNKNOWN_KIND

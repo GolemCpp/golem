@@ -3,6 +3,7 @@ from argparse import Namespace
 from dataclasses import dataclass
 from dataclasses import field
 
+from golemcpp.golem import cache
 from golemcpp.golem import tools_cache
 from golemcpp.golem import tools_manager
 
@@ -19,6 +20,8 @@ def build_tools_parser() -> ArgumentParser:
     parser.add_argument('--project-dir', dest='project_dir', default='')
     parser.add_argument('--build-dir', dest='build_dir', default='')
     parser.add_argument('--cache-directory', dest='cache_directory', default='')
+    parser.add_argument('--cache-minimization-enabled', dest='cache_minimization_enabled', nargs='?', const='on', default='')
+    parser.add_argument('--cache-minimization-length', dest='cache_minimization_length', type=int, default=0)
     parser.add_argument('--available', action='store_true', dest='available')
     parser.add_argument('-h', '--help', action='store_true', dest='help')
     return parser
@@ -48,7 +51,10 @@ class ToolsCommandHandler:
         print('Options:')
         print('  --version=<version>                Tool version to install when supported')
         print('  --available                        List supported installable tools')
-        print('  --cache-directory=<path>           Select the cache directory (tools live in its tools/ subdir)')
+        print('  --cache-directory=<path>           Select the base cache directory')
+        print('  --cache-minimization-enabled[=<on|off>]  Store tools under short hashed flat paths;')
+        print('                                           bare flag means on, omit for the automatic default (on)')
+        print('  --cache-minimization-length=<n>    Number of hash characters for minimized tool names (default 8)')
         print('')
         print('Available tools:')
         for tool in tools_manager.ToolsManager.list_available_tools():
@@ -67,6 +73,10 @@ class ToolsCommandHandler:
                     project_dir=self.project_dir,
                     options=self.options,
                 ),
+                minimization_enabled=cache.resolve_minimization_enabled(
+                    self.options, self.project_dir),
+                minimization_length=cache.resolve_minimization_length(
+                    self.options, self.project_dir),
             )
 
         return self._manager

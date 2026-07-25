@@ -41,11 +41,16 @@ class CppFrontCacheInfo:
         has_include = os.path.isdir(self.include_path)
         return has_executable and has_include
 
-def find_cppfront_cache(cache_directory: str) -> CppFrontCacheInfo | None:
-    if not cache_directory:
+
+def find_cppfront_cache_root(tool_cache_root: str) -> CppFrontCacheInfo | None:
+    '''
+    Locate an installed cppfront given the already-resolved tool cache root
+    (which may be the classic tools/<name> location or a minimized flat path).
+    '''
+    if not tool_cache_root:
         return None
 
-    cache_info = CppFrontCacheInfo.from_cache_root(os.path.join(cache_directory, CPPFRONT_NAME))
+    cache_info = CppFrontCacheInfo.from_cache_root(tool_cache_root)
 
     if not cache_info.is_valid():
         return None

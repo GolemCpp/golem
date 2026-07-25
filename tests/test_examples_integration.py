@@ -241,7 +241,6 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     project_dir = example_tmp_path / 'project'
     project_dir.mkdir()
     cache_dir = example_tmp_path / 'cache'
-    tools_cache_dir = cache_dir / 'tools'
 
     result = run_golem(
         project_dir,
@@ -252,15 +251,20 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
         '--cache-directory=' + str(cache_dir),
     )
 
+    assert result.returncode == 0
+
+    # Resolve the installed tool the same way the code does: from the base cache
+    # root, honoring path minimization (on by default). This finds the tool
+    # whether it landed under tools/<name> or a minimized flat path.
+    manager = tools_manager.ToolsManager(str(cache_dir))
     cache_info = cppfront_tool.CppFrontCacheInfo.from_cache_root(
-        str(tools_cache_dir / cppfront_tool.CPPFRONT_NAME)
+        manager.tool_cache_root(cppfront_tool.CPPFRONT_NAME)
     )
 
-    assert result.returncode == 0
     assert Path(cache_info.executable_path).is_file()
     assert Path(cache_info.include_path).is_dir()
 
-    manifest = tools_manager.ToolsManager(str(tools_cache_dir)).read_tool_manifest(tool_name=cppfront_tool.CPPFRONT_NAME)
+    manifest = manager.read_tool_manifest(tool_name=cppfront_tool.CPPFRONT_NAME)
 
     assert manifest.version == cppfront_tool.DEFAULT_CPPFRONT_VERSION
     assert manifest.tool == cppfront_tool.CPPFRONT_NAME

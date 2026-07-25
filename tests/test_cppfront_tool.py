@@ -13,8 +13,8 @@ def test_find_cppfront_cache_uses_cache_directory(tmp_path):
     executable_path.parent.mkdir(parents=True)
     executable_path.write_text('', encoding='utf-8')
 
-    found = cppfront_tool.find_cppfront_cache(
-        cache_directory=str(cache_directory),
+    found = cppfront_tool.find_cppfront_cache_root(
+        tool_cache_root=str(cache_dir),
     )
 
     assert found is not None

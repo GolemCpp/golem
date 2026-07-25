@@ -74,9 +74,12 @@ class CacheManager:
         return summaries
 
     def _make_resource(self, cache_dir, subdir, entry, entry_path,
-                       compute_size, read_manifest=True):
-        manifest = (cache_manifest.ResourceManifest.read_from_root(entry_path)
-                    if read_manifest else None)
+                       compute_size):
+        # The manifest is the source of truth for a resource's identity,
+        # wherever it lives: an entry with a valid manifest is identified (by its
+        # own kind and cache_key), one without stays unidentified. Storage layout
+        # (classic subdir vs minimized flat) is not the resource's concern.
+        manifest = cache_manifest.ResourceManifest.read_from_root(entry_path)
         size = helpers.get_tree_size(entry_path) if compute_size else 0
 
         return CachedResource(
@@ -95,9 +98,10 @@ class CacheManager:
 
         - The known resource-kind subdirectories: entries without a valid
           manifest come back with manifest=None (unidentified).
-        - Any unexpected directory sitting directly at the cache root (e.g. a
-          legacy flat resource predating the subdirectory layout): always
-          reported as an unidentified resource of unknown kind.
+        - Any directory sitting directly at the cache root: this covers both
+          minimized flat resources (short hashed names, identified by their
+          manifest) and legacy flat resources predating the subdirectory layout
+          (no manifest, reported as unknown kind).
         '''
         resources = []
         for cache_dir in self.locations:
@@ -126,8 +130,7 @@ class CacheManager:
                     continue
 
                 resources.append(self._make_resource(
-                    cache_dir, '', entry, entry_path, compute_size,
-                    read_manifest=False))
+                    cache_dir, '', entry, entry_path, compute_size))
 
         return resources
 

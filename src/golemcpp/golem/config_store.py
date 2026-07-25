@@ -31,6 +31,16 @@ KNOWN_SETTINGS = {
         'GOLEM_CACHE_RESOLUTION_POLICY',
         'Cache resolution policy (strict or weak).',
     ),
+    'cache.minimization.enabled': (
+        'GOLEM_CACHE_MINIMIZATION_ENABLED',
+        'Store cached resources under short hashed flat paths to avoid long-path '
+        'limits (e.g. Windows CL.exe). on/off, default on.',
+    ),
+    'cache.minimization.length': (
+        'GOLEM_CACHE_MINIMIZATION_LENGTH',
+        'Number of hash characters used for minimized cache resource names '
+        '(default 8).',
+    ),
     'recipes.repositories': (
         'GOLEM_RECIPES_REPOSITORIES',
         'Recipe repositories used to resolve dependencies.',
