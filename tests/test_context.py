@@ -446,6 +446,8 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context.make_additional_cache_directories_args = lambda: []
     context.make_additional_read_only_cache_directories_args = lambda: []
     context.make_cache_resolution_policy_option = lambda: 'strict'
+    context.make_cache_minimization_enabled_option = lambda: 'off'
+    context.get_cache_minimization_length = lambda: 12
 
     dep = SimpleNamespace(
         name='demo',
@@ -469,6 +471,10 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     assert '--runtime-link=shared' in calls[0]
     assert '--runtime-variant=release' in calls[0]
     assert '--runtime=shared' not in calls[0]
+    # Path minimization settings are forwarded to the dependency sub-build so it
+    # resolves cache paths with the same layout as the parent.
+    assert '--cache-minimization-enabled=off' in calls[0]
+    assert '--cache-minimization-length=12' in calls[0]
 
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):
@@ -479,6 +485,8 @@ def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_reposi
             project_dir=str(project_dir),
             no_recipes_repositories_fetch=no_recipes_repositories_fetch,
             cache_resolution_policy='strict',
+            cache_minimization_enabled='',
+            cache_minimization_length=0,
         ))
     context.deps_resolve = deps_resolve
     return context
@@ -765,6 +773,7 @@ def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path
 
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
+    context.context.options.cache_minimization_enabled = 'off'
     context.cache_conf = make_cache_conf(CacheDir('/cache', is_read_only=False))
     context.find_repository_cache_dir = lambda repository, subdir=None: CacheDir('/cache', is_read_only=False)
 
@@ -778,6 +787,7 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
 
 def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
+    context.context.options.cache_minimization_enabled = 'off'
     cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
 
     dep = Dependency(
@@ -791,6 +801,64 @@ def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_pa
 
     assert context.get_resource_location(dep, cache_dir) == os.path.join(
         cache_dir.location, cache.DEPENDENCIES_SUBDIR, expected_repository.get_cache_key())
+
+
+def test_get_resource_location_minimized_flat_when_enabled(tmp_path):
+    import hashlib
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
+
+    dep = Dependency(
+        repository='https://github.com/nlohmann/json.git',
+        version='^3.0.0')
+    dep.resolved_hash = '1234567890abcdef'
+
+    cache_key = Repository(
+        url=dep.repository,
+        reference=helpers.get_dependency_resolved_version(dep)).get_cache_key()
+    expected_name = hashlib.sha1(
+        '{}/{}'.format(cache.DEPENDENCIES_SUBDIR, cache_key).encode('utf-8')
+    ).hexdigest()[:8]
+
+    location = context.get_resource_location(dep, cache_dir)
+    assert location == os.path.join(cache_dir.location, expected_name)
+    # Flat: no per-kind subdirectory in the path.
+    assert cache.DEPENDENCIES_SUBDIR not in os.path.relpath(location, cache_dir.location)
+
+
+def test_get_resource_location_prefers_existing_non_minimized(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
+
+    dep = Dependency(
+        repository='https://github.com/nlohmann/json.git',
+        version='^3.0.0')
+    dep.resolved_hash = '1234567890abcdef'
+
+    cache_key = Repository(
+        url=dep.repository,
+        reference=helpers.get_dependency_resolved_version(dep)).get_cache_key()
+    non_minimized = os.path.join(
+        cache_dir.location, cache.DEPENDENCIES_SUBDIR, cache_key)
+    os.makedirs(non_minimized, exist_ok=True)
+
+    # A resource already present under the classic layout keeps its location even
+    # though minimization is enabled.
+    assert context.get_resource_location(dep, cache_dir) == non_minimized
+
+
+def test_cache_minimization_length_and_toggle_resolution(tmp_path):
+    context = make_repository_context(project_dir=tmp_path)
+
+    # Defaults: enabled, length 8.
+    assert context.is_cache_minimization_enabled() is True
+    assert context.get_cache_minimization_length() == 8
+
+    context.context.options.cache_minimization_length = 16
+    assert context.get_cache_minimization_length() == 16
+
+    context.context.options.cache_minimization_enabled = 'off'
+    assert context.is_cache_minimization_enabled() is False
 
 
 def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):

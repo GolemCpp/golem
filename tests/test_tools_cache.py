@@ -22,7 +22,7 @@ def test_cache_defaults_under_home_cache(tmp_path, monkeypatch):
         options=make_options(),
     )
 
-    assert tools_cache_directory == os.path.join(str(home_dir), '.cache', 'golem', 'tools')
+    assert tools_cache_directory == os.path.join(str(home_dir), '.cache', 'golem')
 
 def test_get_cache_directory_prefers_environment_variable(tmp_path, monkeypatch):
     monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', '/tmp/env-cache')
@@ -33,7 +33,7 @@ def test_get_cache_directory_prefers_environment_variable(tmp_path, monkeypatch)
     )
 
     assert tools_cache_directory == helpers.make_absolute_path(
-        os.path.join('/tmp/env-cache', 'tools'), str(tmp_path))
+        '/tmp/env-cache', str(tmp_path))
 
 
 def test_get_cache_directory_prefers_explicit_option(tmp_path, monkeypatch):
@@ -44,4 +44,4 @@ def test_get_cache_directory_prefers_explicit_option(tmp_path, monkeypatch):
         options=make_options(cache_directory='relative-cache'),
     )
 
-    assert tools_cache_directory == str(tmp_path / 'relative-cache' / 'tools')
+    assert tools_cache_directory == str(tmp_path / 'relative-cache')

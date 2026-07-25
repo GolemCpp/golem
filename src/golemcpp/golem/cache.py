@@ -1,9 +1,19 @@
+import hashlib
 import json
 import os
 import re
 from enum import Enum
 from golemcpp.golem import config_store
 from golemcpp.golem import helpers
+
+
+# Default minimization mode for paths in cache
+DEFAULT_MINIMIZATION_ENABLED = True
+
+# Default number of hash characters used for a minimized (flat, hashed) cache
+# resource name. Kept small to keep on-disk paths short (see path minimization),
+# matching the 8-hex idiom used elsewhere for short ids.
+DEFAULT_MINIMIZATION_LENGTH = 8
 
 
 # Canonical subdirectories carved out of a cache directory, one per resource
@@ -50,6 +60,77 @@ class CacheDir:
 
 def default_cached_dir():
     return CacheDir(get_default_cache_directory_path())
+
+
+# --- Path minimization -----------------------------------------------------
+# Shared by every cache resource kind (dependencies, recipes, overrides, tools)
+# so they all resolve on-disk locations identically. Minimization stores a
+# resource flat at the cache root under a short hash of "<subdir>/<cache_key>"
+# instead of the classic "<subdir>/<cache_key>" layout, to keep paths short
+# enough for long-path-limited toolchains (e.g. Windows CL.exe).
+
+
+def resolve_minimization_enabled(options=None, project_dir=None):
+    '''
+    Whether cache path minimization is enabled, resolved with precedence
+    CLI option -> environment / config store -> built-in default (enabled).
+    '''
+    value = getattr(options, 'cache_minimization_enabled', '') if options else ''
+    if not value:
+        value = config_store.resolve_environ(
+            'GOLEM_CACHE_MINIMIZATION_ENABLED', project_dir=project_dir)
+    if not value:
+        return DEFAULT_MINIMIZATION_ENABLED
+    return str(value).strip().lower() not in ('off', 'false', '0', 'no')
+
+
+def resolve_minimization_length(options=None, project_dir=None):
+    '''
+    Number of hash characters used for minimized resource names, resolved with
+    precedence CLI option -> environment / config store -> built-in default.
+    '''
+    length = getattr(options, 'cache_minimization_length', 0) if options else 0
+    if not length:
+        value = config_store.resolve_environ(
+            'GOLEM_CACHE_MINIMIZATION_LENGTH', project_dir=project_dir)
+        if value:
+            try:
+                length = int(value)
+            except ValueError:
+                length = 0
+    if length and length > 0:
+        return length
+    return DEFAULT_MINIMIZATION_LENGTH
+
+
+def make_minimized_resource_name(subdir, cache_key, length):
+    '''
+    Short flat directory name for a minimized resource. Hashing
+    "<subdir>/<cache_key>" keeps names unique across resource kinds once the
+    per-kind subdirectory is dropped.
+    '''
+    digest = hashlib.sha1(
+        '{}/{}'.format(subdir, cache_key).encode('utf-8')).hexdigest()
+    return digest[:length]
+
+
+def make_resource_location(cache_root, subdir, cache_key,
+                           minimization_enabled, minimization_length):
+    '''
+    On-disk root of a cache resource. When minimization is disabled the classic
+    "<cache_root>/<subdir>/<cache_key>" layout is used. When enabled, a
+    pre-existing classic location keeps priority (so caches populated before
+    minimization stay usable); otherwise the resource is stored flat at
+    "<cache_root>/<hash>".
+    '''
+    normal_path = os.path.join(cache_root, subdir, cache_key)
+    if not minimization_enabled:
+        return normal_path
+    if os.path.exists(normal_path):
+        return normal_path
+    return os.path.join(
+        cache_root,
+        make_minimized_resource_name(subdir, cache_key, minimization_length))
 
 
 class CacheConf:

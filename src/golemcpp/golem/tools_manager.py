@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 
+from golemcpp.golem import cache
 from golemcpp.golem import cache_manifest
 from golemcpp.golem import helpers
 from golemcpp.golem import tools_registry
@@ -34,8 +35,15 @@ class ToolUninstallResult:
 
 
 class ToolsManager:
-    def __init__(self, cache_directory: str):
+    def __init__(self, cache_directory: str,
+                 minimization_enabled: bool = cache.DEFAULT_MINIMIZATION_ENABLED,
+                 minimization_length: int | None = None):
+        # cache_directory is the base cache root; tools are resolved like every
+        # other resource kind, living under its `tools/` subdir or flat under a
+        # short hash when path minimization is enabled.
         self.cache_directory = cache_directory
+        self.minimization_enabled = minimization_enabled
+        self.minimization_length = (minimization_length or cache.DEFAULT_MINIMIZATION_LENGTH)
 
     @staticmethod
     def get_tool(tool_name: str):
@@ -49,7 +57,10 @@ class ToolsManager:
         return tools_registry.list_available_tools()
 
     def tool_cache_root(self, tool_name: str) -> str:
-        return os.path.join(self.cache_directory, tool_name)
+        return cache.make_resource_location(
+            self.cache_directory, cache.TOOLS_SUBDIR, tool_name,
+            minimization_enabled=self.minimization_enabled,
+            minimization_length=self.minimization_length)
 
     def tool_staging_root(self, tool_name: str) -> str:
         return self.tool_cache_root(tool_name) + '.tmp'

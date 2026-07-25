@@ -63,6 +63,49 @@ def test_list_empty(capsys, tmp_path):
     assert 'No cached resources found.' in capsys.readouterr().out
 
 
+def test_list_shows_path_without_long(capsys, tmp_path):
+    resource_root = seed_resource(
+        str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+        kind=cache_manifest.ResourceKind.DEPENDENCY,
+        identity={'name': 'json', 'resolved_version': 'v3.12.0'})
+
+    assert run(tmp_path, 'list') == 0
+    out = capsys.readouterr().out
+
+    # The path is shown without asking for --long.
+    assert 'path: {}'.format(resource_root) in out
+    # The resource is listed under a per-cache header (the cache location).
+    assert '{}:'.format(str(tmp_path)) in out
+    # The redundant inline "cache:" annotation is gone.
+    assert 'cache: ' not in out
+
+
+def test_list_separates_resources_per_cache(capsys, tmp_path, monkeypatch):
+    primary = tmp_path / 'primary'
+    secondary = tmp_path / 'secondary'
+
+    primary_resource = seed_resource(
+        str(primary), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+        kind=cache_manifest.ResourceKind.DEPENDENCY,
+        identity={'name': 'json', 'resolved_version': 'v3.12.0'})
+    secondary_resource = seed_resource(
+        str(secondary), cache.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def',
+        kind=cache_manifest.ResourceKind.DEPENDENCY,
+        identity={'name': 'fmt', 'resolved_version': 'v10.0.0'})
+
+    monkeypatch.setenv('GOLEM_ADDITIONAL_CACHE_DIRECTORIES', str(secondary))
+
+    assert run(primary, 'list') == 0
+    out = capsys.readouterr().out
+
+    # Each cache is a separate group header, and each resource shows under its own
+    # cache with its full path.
+    assert '{}:'.format(str(primary)) in out
+    assert '{}:'.format(str(secondary)) in out
+    assert 'path: {}'.format(primary_resource) in out
+    assert 'path: {}'.format(secondary_resource) in out
+
+
 def test_caches_lists_configured_location(capsys, tmp_path):
     assert run(tmp_path, 'caches') == 0
     out = capsys.readouterr().out

@@ -7,8 +7,7 @@ from golemcpp.golem import tools_manager
 
 
 def expected_tools_cache(project_dir):
-    return helpers.make_absolute_path(
-        os.path.join('/tmp/custom-cache', 'tools'), str(project_dir))
+    return helpers.make_absolute_path('/tmp/custom-cache', str(project_dir))
 
 
 def test_handle_tools_command_prints_help(capsys, tmp_path):
@@ -243,3 +242,27 @@ def test_handle_tools_command_reports_no_installed_tools(monkeypatch, capsys, tm
 
     stdout = capsys.readouterr().out
     assert 'No installed tools found.' in stdout
+
+
+def test_cache_minimization_enabled_optional_value_states(monkeypatch):
+    from golemcpp.golem import cache
+
+    monkeypatch.delenv('GOLEM_CACHE_MINIMIZATION_ENABLED', raising=False)
+
+    def resolve(args):
+        options = command_tools.parse_tools_args(args)
+        return command_tools.cache.resolve_minimization_enabled(options, None)
+
+    # Absent -> automatic default (on).
+    assert resolve(['list']) is True
+    # Bare flag -> forced on.
+    assert resolve(['list', '--cache-minimization-enabled']) is True
+    # Explicit values.
+    assert resolve(['list', '--cache-minimization-enabled=on']) is True
+    assert resolve(['list', '--cache-minimization-enabled=off']) is False
+
+    # Bare flag forces on even when the environment would disable it, because an
+    # explicit option wins over env/config.
+    monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_ENABLED', 'off')
+    assert resolve(['list']) is False
+    assert resolve(['list', '--cache-minimization-enabled']) is True

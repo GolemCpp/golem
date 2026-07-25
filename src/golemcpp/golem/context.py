@@ -1146,6 +1146,20 @@ class Context:
             help="Cache resolution policy controls how dependencies are found (strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)")
 
         context.add_option(
+            "--cache-minimization-enabled",
+            nargs='?',
+            const='on',
+            default='',
+            help="Store cached resources under short hashed flat paths to avoid long-path limits (e.g. Windows CL.exe). Omit for the automatic default; pass the bare flag for on; or =on/=off to force (default on)")
+
+        context.add_option(
+            "--cache-minimization-length",
+            action="store",
+            type=int,
+            default=0,
+            help="Number of hash characters used for minimized cache resource names (default 8)")
+
+        context.add_option(
             "--output-file",
             action="store",
             default='',
@@ -1809,7 +1823,7 @@ class Context:
         cache_manifest.write_manifest(
             resource_root=resource_root,
             kind=cache_manifest.ResourceKind.DEPENDENCY,
-            cache_key=os.path.basename(resource_root),
+            cache_key=self.get_resource_cache_key(dep),
             identity={
                 'name': dep.name,
                 'repository': dep.repository,
@@ -1860,7 +1874,9 @@ class Context:
             '--only-update-dependencies-regex={}'.format(self.get_only_update_dependencies_regex()),
             '--overrides-configuration={}'.format(self.resolved_overrides),
             '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
-            '--cache-resolution-policy={}'.format(self.make_cache_resolution_policy_option())
+            '--cache-resolution-policy={}'.format(self.make_cache_resolution_policy_option()),
+            '--cache-minimization-enabled={}'.format(self.make_cache_minimization_enabled_option()),
+            '--cache-minimization-length={}'.format(self.get_cache_minimization_length())
         ]
 
         configure_options += self.make_additional_cache_directories_args()
@@ -2408,6 +2424,35 @@ class Context:
     def make_cache_resolution_policy_option(self):
         return self.make_cache_resolution_policy().value
 
+    def is_cache_minimization_enabled(self):
+        return cache.resolve_minimization_enabled(
+            self.context.options, self.get_project_dir())
+
+    def get_cache_minimization_length(self):
+        return cache.resolve_minimization_length(
+            self.context.options, self.get_project_dir())
+
+    def make_cache_minimization_enabled_option(self):
+        # Forward the resolved on/off value to dependency sub-builds so they use
+        # exactly the same layout as the parent (mirrors how the cache directory
+        # and resolution policy are forwarded).
+        return 'on' if self.is_cache_minimization_enabled() else 'off'
+
+    def get_resource_cache_key(self, resource):
+        '''
+        The logical cache key of a resource, independent of how it is stored on
+        disk. For a minimized resource the on-disk directory name is a hash, so
+        this is what the manifest records to keep the resource identifiable.
+        '''
+        if isinstance(resource, Dependency):
+            return Repository(
+                url=resource.repository,
+                reference=helpers.get_dependency_resolved_version(resource)
+            ).get_cache_key()
+        if isinstance(resource, Repository):
+            return resource.get_cache_key()
+        raise RuntimeError("resource must be a Dependency or Repository")
+
     def get_resource_location(self, resource, cache_dir, subdir=None):
         if isinstance(resource, Dependency):
             cache_resource = Repository(
@@ -2424,8 +2469,10 @@ class Context:
             raise RuntimeError(
                 "resource must be a Dependency or Repository")
 
-        return os.path.join(cache_dir.location, subdir,
-                            cache_resource.get_cache_key())
+        return cache.make_resource_location(
+            cache_dir.location, subdir, cache_resource.get_cache_key(),
+            minimization_enabled=self.is_cache_minimization_enabled(),
+            minimization_length=self.get_cache_minimization_length())
 
     def is_resource_in_cache_dir(self, resource, cache_dir, subdir=None):
         path = self.get_resource_location(resource, cache_dir, subdir=subdir)
@@ -4450,7 +4497,7 @@ class Context:
         cache_manifest.write_manifest(
             resource_root=path,
             kind=kind,
-            cache_key=os.path.basename(path),
+            cache_key=repository.get_cache_key(),
             identity={
                 'url': repository.url,
                 'reference': repository.reference,
@@ -4632,9 +4679,18 @@ class Context:
             options=self.context.options,
         )
 
-        cppfront_cache_info = cppfront_tool.find_cppfront_cache(
-            cache_directory=cache_directory,
-        )
+        if not cache_directory:
+            return
+
+        # Resolve the tool root exactly like it was installed (classic tools/
+        # subdir or a minimized flat path) so the build finds it either way.
+        tool_cache_root = cache.make_resource_location(
+            cache_directory, cache.TOOLS_SUBDIR, cppfront_tool.CPPFRONT_NAME,
+            minimization_enabled=self.is_cache_minimization_enabled(),
+            minimization_length=self.get_cache_minimization_length())
+
+        cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(
+            tool_cache_root)
 
         if cppfront_cache_info is None:
             return

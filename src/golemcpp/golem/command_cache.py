@@ -113,7 +113,7 @@ class CacheCommandHandler:
         print('                         recipes-repository, overrides-repository)')
         print('  --cache=<path>         Restrict to a single cache location')
         print('  --regex                Treat the remove pattern as a regular expression')
-        print('  --long, -l             Show created/last-used/version/path details')
+        print('  --long, -l             Show created/last-used/manifest-version details')
         print('  --json                 Emit machine-readable JSON')
         print('  --dry-run              Show the selection without deleting anything')
         print('  --yes, -y              Do not prompt for confirmation before deleting')
@@ -166,9 +166,35 @@ class CacheCommandHandler:
             return 0
 
         print('Cached resources:')
-        for resource in resources:
-            self._print_resource(resource)
+        for location, group in self._group_by_cache(resources):
+            read_only = any(resource.is_read_only for resource in group)
+            print('')
+            print('{}{}:'.format(location, ' (read-only)' if read_only else ''))
+            for resource in group:
+                self._print_resource(resource)
         return 0
+
+    def _group_by_cache(self, resources):
+        '''
+        Group resources by their cache location, yielding (location, resources)
+        in the order the caches are configured (primary first) so the listing is
+        stable and separated per cache.
+        '''
+        groups = {}
+        for resource in resources:
+            groups.setdefault(resource.cache_location, []).append(resource)
+
+        emitted = set()
+        for cache_dir in self.make_manager().locations:
+            group = groups.get(cache_dir.location)
+            if group is not None and cache_dir.location not in emitted:
+                emitted.add(cache_dir.location)
+                yield cache_dir.location, group
+
+        for location, group in groups.items():
+            if location not in emitted:
+                emitted.add(location)
+                yield location, group
 
     def _resource_to_dict(self, resource) -> dict:
         return {
@@ -189,17 +215,16 @@ class CacheCommandHandler:
         label = resource_label(resource)
         marker = ' (unidentified)' if not resource.is_identified else ''
         print('  [{}] {}{}'.format(resource.kind, label, marker))
-        print('    size: {}  cache: {}{}'.format(
+        # The path is always shown (the cache location is the group header above).
+        print('    size: {}  path: {}'.format(
             helpers.format_size(resource.size_bytes),
-            resource.cache_location,
-            ' (read-only)' if resource.is_read_only else ''))
+            resource.path))
         if self.options.long:
             print('    created: {}  last used: {}'.format(
                 humanize_age(resource.created_at),
                 humanize_age(resource.last_used_at)))
             print('    manifest version: {}'.format(
                 resource.manifest_version if resource.manifest_version is not None else '-'))
-            print('    path: {}'.format(resource.path))
 
     # -- caches -----------------------------------------------------------
 
