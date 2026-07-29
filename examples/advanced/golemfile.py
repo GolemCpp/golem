@@ -1,7 +1,7 @@
 def configure(project):
     
     task = project.dependency(name='hello-advanced-lib',
-                              repository='./lib',
+                              directory='./lib',
                               variant='release',
                               defines=['ADVANCED_LIB_MESSAGE=Hello'])
     

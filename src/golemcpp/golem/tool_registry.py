@@ -7,7 +7,7 @@ from golemcpp.golem import cppfront_tool
 class ToolDefinition:
     name: str
     description: str
-    repository_url: str
+    repository: str
     default_version: str | None
     install_handler: callable
 
@@ -16,7 +16,7 @@ TOOLS = {
     cppfront_tool.CPPFRONT_NAME: ToolDefinition(
         name=cppfront_tool.CPPFRONT_NAME,
         description=cppfront_tool.CPPFRONT_DESCRIPTION,
-        repository_url=cppfront_tool.CPPFRONT_REPOSITORY_URL,
+        repository=cppfront_tool.CPPFRONT_REPOSITORY,
         default_version=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
         install_handler=cppfront_tool.install_cppfront,
     ),

@@ -4,16 +4,71 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from golemcpp.golem import helpers
+
+
+# A cached resource is obtained from a Source. Today a Source is one of two kinds:
+# a git repository (cloned) or a local directory (copied as-is).
+SOURCE_TYPE_GIT = 'git'
+SOURCE_TYPE_DIRECTORY = 'directory'
+
 
 @dataclass(frozen=True)
-class Repository:
-    url: str
+class Source:
+    # `location` is the URL (git) or the folder path (directory). `version` is the
+    # requested git ref (only meaningful for a git source).
+    location: str
     reference: str = 'main'
+    type: str = SOURCE_TYPE_GIT
 
     @classmethod
-    def from_url(cls, url, project_dir, reference='main'):
-        return cls(url=cls.normalize_url(url=url, project_dir=project_dir),
-                   reference=reference)
+    def for_repository(cls, location, reference='main'):
+        return cls(location=location, reference=reference, type=SOURCE_TYPE_GIT)
+
+    @classmethod
+    def for_directory(cls, location):
+        return cls(location=location, reference='', type=SOURCE_TYPE_DIRECTORY)
+
+    @classmethod
+    def detect(cls, locator, project_dir, reference='main'):
+        '''
+        Classify a bare locator string (used where a source is configured as a
+        single value, e.g. recipes/overrides repositories) into a git repository
+        or a local directory to copy.
+        '''
+        normalized = cls.normalize_url(url=locator, project_dir=project_dir)
+        if cls.parse_local_non_git_repository(normalized) is not None:
+            return cls.for_directory(normalized)
+        return cls.for_repository(normalized, reference)
+
+    # -- identity serialization (recorded in a resource manifest) ---------
+
+    def to_dict(self) -> dict:
+        return {
+            'type': self.type,
+            'location': self.location,
+            'reference': self.reference,
+        }
+
+    @classmethod
+    def from_dict(cls, source: dict) -> 'Source':
+        return cls(
+            location=helpers.first_non_empty_among_keys(source, 'location'),
+            reference=helpers.first_non_empty_among_keys(source, 'reference'),
+            type=helpers.first_non_empty_among_keys(source, 'type') or SOURCE_TYPE_GIT)
+
+    @classmethod
+    def from_manifest(cls, manifest) -> 'Source':
+        return cls.from_dict((manifest.source or {}) if manifest else {})
+
+    @property
+    def label(self) -> str:
+        '''Human label, e.g. "<location> <reference>"; empty when no location.'''
+        if not self.location:
+            return ''
+        if self.reference:
+            return '{} {}'.format(self.location, self.reference)
+        return self.location
 
     @staticmethod
     def normalize_url(url, project_dir):
@@ -113,18 +168,15 @@ class Repository:
         return ''.join(repo_id)
 
     @classmethod
-    def make_repository_base(cls, repository, resolved_version):
-        repo_id = cls.generate_recipe_id(repository)
-        return repo_id + '+' + str(resolved_version)
+    def make_repository_base(cls, location, reference):
+        repo_id = cls.generate_recipe_id(location)
+        return repo_id + '+' + str(reference)
 
     def get_local_path(self):
-        return self.parse_local_directory_path(self.url)
-
-    def get_non_git_directory_path(self):
-        return self.parse_local_non_git_repository(self.url)
+        return self.parse_local_directory_path(self.location)
 
     def get_recipe_id(self):
-        return self.generate_recipe_id(self.url)
+        return self.generate_recipe_id(self.location)
 
     def get_cache_key(self):
-        return self.make_repository_base(self.url, self.reference)
+        return self.make_repository_base(self.location, self.reference)

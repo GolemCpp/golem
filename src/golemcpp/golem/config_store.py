@@ -5,66 +5,14 @@ import sys
 from golemcpp.golem import helpers
 
 
+# The JSON configuration store `golem config` reads and writes, and one of the
+# sources a setting resolves against (see settings.Settings). It knows
+# about scopes and files, not about which settings exist.
+
 # Configuration scopes, mirroring `git config --global` / `--local`.
 GLOBAL_SCOPE = 'global'
 LOCAL_SCOPE = 'local'
 SCOPES = (LOCAL_SCOPE, GLOBAL_SCOPE)
-
-# Single source of truth for the settings Golem understands.
-# Maps a dotted config key to the environment variable that overrides it and a
-# short human-readable description. Keeping the mapping here lets both the
-# `golem config` command and the settings consumers agree on the same keys.
-KNOWN_SETTINGS = {
-    'cache.directory': (
-        'GOLEM_CACHE_DIRECTORY',
-        'Directory used as the writable dependency cache.',
-    ),
-    'cache.additional-directories': (
-        'GOLEM_ADDITIONAL_CACHE_DIRECTORIES',
-        'Additional writable cache directories (pipe-separated PATH[=URL_REGEX]).',
-    ),
-    'cache.additional-read-only-directories': (
-        'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES',
-        'Additional read-only cache directories (pipe-separated PATH[=URL_REGEX]).',
-    ),
-    'cache.resolution-policy': (
-        'GOLEM_CACHE_RESOLUTION_POLICY',
-        'Cache resolution policy (strict or weak).',
-    ),
-    'cache.minimization.enabled': (
-        'GOLEM_CACHE_MINIMIZATION_ENABLED',
-        'Store cached resources under short hashed flat paths to avoid long-path '
-        'limits (e.g. Windows CL.exe). on/off, default on.',
-    ),
-    'cache.minimization.length': (
-        'GOLEM_CACHE_MINIMIZATION_LENGTH',
-        'Number of hash characters used for minimized cache resource names '
-        '(default 8).',
-    ),
-    'recipes.repositories': (
-        'GOLEM_RECIPES_REPOSITORIES',
-        'Recipe repositories used to resolve dependencies.',
-    ),
-    'overrides.configuration': (
-        'GOLEM_OVERRIDES_CONFIGURATION',
-        'Path to an overrides configuration file.',
-    ),
-    'overrides.repository': (
-        'GOLEM_OVERRIDES_REPOSITORY',
-        'Repository providing an overrides configuration.',
-    ),
-}
-
-# Reverse lookup used by resolve_environ to turn an env var back into its key.
-ENV_TO_KEY = {env_name: key for key, (env_name, _) in KNOWN_SETTINGS.items()}
-
-
-def is_known_key(key):
-    return key in KNOWN_SETTINGS
-
-
-def known_keys():
-    return sorted(KNOWN_SETTINGS.keys())
 
 
 def get_config_home():
@@ -176,20 +124,3 @@ def list_merged(project_dir=None):
         merged.update(list_scoped(scope=LOCAL_SCOPE, project_dir=project_dir))
     return merged
 
-
-def resolve_environ(env_name, project_dir=None):
-    '''
-    Resolves a setting following Golem's precedence: an explicit environment
-    variable wins, otherwise the value is read from the local then global
-    configuration store. Returns None when the setting is unset, so callers can
-    keep their existing `if value:` fallthrough to built-in defaults.
-    '''
-    value = helpers.get_environ(env_name)
-    if value:
-        return value
-
-    key = ENV_TO_KEY.get(env_name)
-    if key is None:
-        return None
-
-    return get_value(key=key, project_dir=project_dir)

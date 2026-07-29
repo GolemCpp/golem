@@ -1,14 +1,11 @@
-import re
-import os
 import subprocess
 import pickle
 from golemcpp.golem import helpers
-from golemcpp.golem.cache import CacheConf
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
-from golemcpp.golem.repository import Repository
-from semver import max_satisfying
+from golemcpp.golem.source import Source
+from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
 
 
@@ -16,6 +13,7 @@ class Dependency(Configuration):
     def __init__(self,
                  name=None,
                  repository=None,
+                 directory=None,
                  version=None,
                  version_regex=None,
                  shallow=False,
@@ -23,7 +21,10 @@ class Dependency(Configuration):
         super(Dependency, self).__init__(type='library',
                                          **kwargs)
         self.name = '' if name is None else name
+        # A dependency comes from one of two mutually-exclusive sources: a git
+        # `repository` (cloned) or a local `directory` (copied as-is).
         self.repository = '' if repository is None else repository
+        self.directory = '' if directory is None else directory
         self.version = '' if version is None else version
         self.version_regex = '' if version_regex is None else version_regex
         self.resolved_version = ''
@@ -35,69 +36,44 @@ class Dependency(Configuration):
     def __str__(self):
         return helpers.print_obj(self)
 
+    def get_source_location(self):
+        if self.directory:
+            return self.directory
+        return self.repository
+
+    def to_source(self):
+        # View the dependency as a Source to compute cache keys / identity the same
+        # way as every other resource kind.
+        if self.directory:
+            return Source.for_directory(self.directory)
+        return Source.for_repository(
+            self.repository,
+            helpers.resolved_reference(self.resolved_version, self.resolved_hash))
+
     def update_cache_dir(self, context):
         self.cache_dir = context.find_dep_cache_dir(
-            dep=self, cache_conf=context.cache_conf)
+            dep=self, cache_configuration=context.cache_configuration)
 
-    def update_repository(self, project_dir):
-        self.repository = Repository.from_url(url=self.repository,
-                                              project_dir=project_dir).url
+    def update_source(self, project_dir):
+        if self.directory:
+            self.directory = Source.normalize_url(self.directory, project_dir)
+        elif self.repository:
+            self.repository = Source.normalize_url(self.repository, project_dir)
 
     def is_non_git_directory(self):
-        path = Repository.parse_local_non_git_repository(self.repository)
-        return path is not None
+        return bool(self.directory)
 
     def resolve(self):
         if self.resolved_hash:
             return self.resolved_hash
 
-        if self.is_non_git_directory():
+        if self.directory:
+            # A copied directory has no version to resolve.
             self.resolved_version = '-'
             self.resolved_hash = '-'
         else:
-            tags = helpers.check_git_output(
-                ['ls-remote', '--tags', self.repository],
-                cwd=os.getcwd())
-            tags = tags.split('\n')
-            tmp = ''
-            for line in tags:
-                if '^{}' not in line:
-                    tmp += line + '\n'
-            tags = tmp
-            versions_list = re.findall(r'refs\/tags\/(.*)', tags)
-            versions_list = set(versions_list)
-            versions_list = list(versions_list)
-
-            if self.version_regex:
-                p = re.compile(self.version_regex)
-                versions_list = [s for s in versions_list if p.match(s)]
-
-            found_version = Dependency.find_version(versions_list, self.version)
-            if found_version:
-                hash = helpers.check_git_output([
-                    'ls-remote', '--tags', self.repository,
-                    'refs/tags/' + found_version
-                ],
-                cwd=os.getcwd())
-                if not hash:
-                    raise RuntimeError(
-                        "Can't find any hash related to found tag {}".format(
-                            found_version))
-                hash = hash.splitlines()[0]
-                hash = hash.split('\t')[0]
-                self.resolved_hash = hash
-                self.resolved_version = found_version
-            else:
-                self.resolved_version = self.version
-                hash = helpers.check_git_output(
-                    ['ls-remote', '--heads', self.repository, self.version],
-                    cwd=os.getcwd())
-                if hash:
-                    hash = hash.splitlines()[0]
-                    hash = hash.split('\t')[0]
-                    self.resolved_hash = hash
-                else:
-                    self.resolved_hash = self.version
+            self.resolved_version, self.resolved_hash = VersionResolver.resolve(
+                self.repository, self.version, self.version_regex)
 
         if not self.resolved_hash:
             raise RuntimeError(
@@ -118,7 +94,7 @@ class Dependency(Configuration):
     @staticmethod
     def serialized_members():
         return [
-            'name', 'repository', 'version', 'version_regex',
+            'name', 'repository', 'directory', 'version', 'version_regex',
             'resolved_version', 'resolved_hash', 'shallow'
         ]
 
@@ -165,70 +141,3 @@ class Dependency(Configuration):
             dependencies.append(dependency)
 
         return dependencies
-
-    @staticmethod
-    def find_version(versions, ver):
-        semver_regex = r'^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
-
-        semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._\-](?P<minor>0|[1-9]\d*)[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?'
-
-        semver_short_regex_like = r'(?P<major>0|[1-9]\d*)(?:[\._\-](?P<minor>0|[1-9]\d*)(?:[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?)?)?'        
-
-        semver_list = []
-
-        transformed_versions = dict()
-
-        for v in versions:
-            semver = re.search(semver_regex, v)
-            if not semver:
-                matches = re.search(semver_regex_like, v)
-                if not matches:
-                    matches = re.search(semver_short_regex_like, v)
-                    if not matches:
-                        continue
-                new_version = matches.group('major')
-                new_version += '.' + (matches.group('minor') or '0')
-                new_version += '.' + (matches.group('patch') or '0')
-                if matches.group('prerelease'):
-                    new_version += '-' + matches.group('prerelease')
-                if matches.group('buildmetadata'):
-                    new_version += '+' + matches.group('buildmetadata')
-
-                if new_version not in semver_list:
-                    semver_list.append(new_version)
-                if new_version not in transformed_versions:
-                    transformed_versions[new_version] = []
-                transformed_versions[new_version].append(v)
-                continue
-            if v not in semver_list:
-                semver_list.append(v)
-            if v not in transformed_versions:
-                transformed_versions[v] = []
-            transformed_versions[v].append(v)
-
-        v = max_satisfying(semver_list, ver)
-
-        if not v:
-            return None
-
-        if v in transformed_versions:
-
-            # OpenSSL convention is OpenSSL_1_1_1j
-            # The problem is the letter at the end
-            # So ~1.1.1 matches multiple versions
-
-            # Having no solution at the moment for this use case, matching
-            # multiple versions is accepted and the list of versions is reverse
-            # sorted...
-
-            v_list = transformed_versions[v]
-            if not v_list:
-                return None
-            v_list.sort(reverse=True)
-
-            #if len(v_list) > 1:
-            #    raise RuntimeError(
-            #        "Found more than one matching version: {} -> {}".format(
-            #            ver, v_list))
-
-            return v_list[0]

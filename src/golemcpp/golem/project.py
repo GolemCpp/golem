@@ -159,7 +159,7 @@ class Project:
 
     def dependency(self, **kwargs):
         dep = Dependency(**kwargs)
-        dep.update_repository(self.project_dir)
+        dep.update_source(self.project_dir)
         self.deps.append(dep)
         return dep
 

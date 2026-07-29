@@ -2,7 +2,7 @@
 def configure(project):
 
     project.dependency(name='mylogger',
-                       repository='./mylogger')
+                       directory='./mylogger')
 
     build_task = project.library(name='myfigures',
                                  source=['myfigures/src'],

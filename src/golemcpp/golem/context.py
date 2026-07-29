@@ -9,33 +9,37 @@ import fnmatch
 import shutil
 import platform
 import subprocess
-import configparser
 import stat
 import string
+import copy
+
 from datetime import datetime
-from copy import deepcopy
+from collections import OrderedDict
+from pathlib import Path
+
+from waflib import Logs, Task
+
 from golemcpp.golem.module import Module
-from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, CachedResourceResolver
+from golemcpp.golem.cache_configuration import get_cache_configuration
+from golemcpp.golem import cache_configuration
 from golemcpp.golem.configuration import Configuration
-from golemcpp.golem import cache
-from golemcpp.golem import cache_manifest
+from golemcpp.golem import resource_manifest
+from golemcpp.golem.cache_manager import get_cache_manager
+from golemcpp.golem.tool_manager import get_tool_manager
+from golemcpp.golem.resource_manager import (
+    DependencyResourceManager, RepositoryResourceManager,
+    get_dependency_manager, get_repository_manager)
 from golemcpp.golem import helpers
-from golemcpp.golem import config_store
-from golemcpp.golem import tools_cache
+from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
-from golemcpp.golem.repository import Repository
+from golemcpp.golem.source import Source
 from golemcpp.golem.template import Template
-import copy
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
 from golemcpp.golem import qt_discovery
 from golemcpp.golem import cppfront_tool
-from functools import partial
-from pathlib import Path
-from waflib import Logs, Task
-from collections import OrderedDict
 from golemcpp.golem.target import Target
 from golemcpp.golem.artifact import Artifact
 from golemcpp.golem.package_msi import package_msi
@@ -46,6 +50,7 @@ class Context:
     def __init__(self, context):
         self.context = context
         self.project = None
+        self.settings = None
 
         self.load_project()
 
@@ -63,7 +68,7 @@ class Context:
 
         self.resolved_overrides = ''
 
-        self.cache_conf = None
+        self.cache_configuration = None
         self.repository = None
 
         self.context_tasks = []
@@ -77,6 +82,19 @@ class Context:
         if build_number_key:
             return int(build_number_key)
         return 0
+
+    def get_settings(self):
+        '''
+        The Settings of this build, rebuilt when load_project() replaces the
+        project. No build directory is bound: the live options are exactly what
+        `golem configure` would persist.
+        '''
+        if self.settings is None or self.settings.project is not self.project:
+            self.settings = settings.get_settings(
+                options=self.context.options,
+                project_dir=self.get_project_dir(),
+                project=self.project)
+        return self.settings
 
     def load_project(self, directory=None):
         if directory is None:
@@ -260,81 +278,23 @@ class Context:
     def get_project_dir(self):
         return self.context.options.project_dir
 
-    def make_cache_dirs(self):
-        cache_dir_list = []
-
-        cache_dir = self.make_cache_directory()
-        if cache_dir:
-            cache_dir_list.append(cache_dir)
-
-        cache_dir_list += self.make_additional_cache_directories()
-        cache_dir_list += self.make_additional_read_only_cache_directories()
-
-        return cache_dir_list
-
-    def get_cache_directory(self):
-        cache_dir = self.context.options.cache_directory
-        if cache_dir:
-            return cache_dir
-
-        cache_dir = config_store.resolve_environ('GOLEM_CACHE_DIRECTORY', project_dir=self.get_project_dir())
-        if cache_dir:
-            return cache_dir
-
-        return cache.default_cached_dir().location
-
-    def make_cache_directory(self):
-        cache_dir = self.get_cache_directory()
-        if not cache_dir:
-            return None
-
-        cache_dir = self.make_local_path_absolute(path=cache_dir)
-
-        return CacheDir(location=cache_dir,
-                        is_read_only=False)
-
-    def make_cache_dir_option(self):
-        cache_dir = self.get_cache_directory()
-        if not cache_dir:
-            return ''
-
-        cache_dir = self.make_local_path_absolute(path=cache_dir)
-
-        return cache_dir
-
     def get_overrides_configuration(self):
-        overrides_configuration = self.context.options.overrides_configuration
-        if overrides_configuration:
-            return overrides_configuration
-
-        overrides_configuration = self.project.overrides_configuration
-        if overrides_configuration:
-            return overrides_configuration
-
-        overrides_configuration = config_store.resolve_environ('GOLEM_OVERRIDES_CONFIGURATION', project_dir=self.get_project_dir())
-        if overrides_configuration:
-            return overrides_configuration
-
-        return ''
+        # The --overrides-configuration option, the golemfile and the
+        # environment / config store are all steps of the same resolution.
+        return self.get_settings().get('GOLEM_OVERRIDES_CONFIGURATION')
 
     def make_overrides_configuration(self):
         return self.make_local_path_absolute(
             path=self.get_overrides_configuration())
 
     def get_overrides_repository(self):
-        overrides_repository = self.project.overrides_repository
-        if overrides_repository:
-            return Repository.from_url(
-                url=overrides_repository,
-                project_dir=self.get_project_dir())
+        overrides_repository = self.get_settings().get('GOLEM_OVERRIDES_REPOSITORY')
+        if not overrides_repository:
+            return None
 
-        overrides_repository = config_store.resolve_environ('GOLEM_OVERRIDES_REPOSITORY', project_dir=self.get_project_dir())
-        if overrides_repository:
-            return Repository.from_url(
-                url=overrides_repository,
-                project_dir=self.get_project_dir())
-
-        return None
+        return Source.detect(
+            overrides_repository,
+            project_dir=self.get_project_dir())
 
     def load_overrides_configuration(self):
 
@@ -374,59 +334,6 @@ class Context:
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
-
-    def get_additional_cache_directories(self):
-        entries = list(self.context.options.additional_cache_directory or [])
-        if entries:
-            return entries
-
-        entries_string = config_store.resolve_environ('GOLEM_ADDITIONAL_CACHE_DIRECTORIES', project_dir=self.get_project_dir())
-        if entries_string:
-            return entries_string.split('|')
-
-        return []
-
-    def get_additional_read_only_cache_directories(self):
-        entries = list(self.context.options.additional_read_only_cache_directory or [])
-        if entries:
-            return entries
-
-        entries_string = config_store.resolve_environ('GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES', project_dir=self.get_project_dir())
-        if entries_string:
-            return entries_string.split('|')
-
-        return []
-
-    def make_additional_cache_directories(self):
-        return cache.parse_cache_entries(
-            entries=self.get_additional_cache_directories(),
-            is_read_only=False,
-            base_dir=self.get_project_dir())
-
-    def make_additional_read_only_cache_directories(self):
-        return cache.parse_cache_entries(
-            entries=self.get_additional_read_only_cache_directories(),
-            is_read_only=True,
-            base_dir=self.get_project_dir())
-
-    def make_cache_directory_entry(self, cache_dir):
-        if cache_dir.regex:
-            return '{}={}'.format(cache_dir.location, cache_dir.regex)
-        return cache_dir.location
-
-    def make_additional_cache_directories_args(self):
-        return [
-            '--additional-cache-directory={}'.format(
-                self.make_cache_directory_entry(cache_dir))
-            for cache_dir in self.make_additional_cache_directories()
-        ]
-
-    def make_additional_read_only_cache_directories_args(self):
-        return [
-            '--additional-read-only-cache-directory={}'.format(
-                self.make_cache_directory_entry(cache_dir))
-            for cache_dir in self.make_additional_read_only_cache_directories()
-        ]
 
     def get_options_overrides_configuration(self):
         return self.make_local_path_absolute(
@@ -1142,8 +1049,8 @@ class Context:
         context.add_option(
             "--cache-resolution-policy",
             action="store",
-            default='strict',
-            help="Cache resolution policy controls how dependencies are found (strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)")
+            default='',
+            help="Cache resolution policy controls how dependencies are found (default strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)")
 
         context.add_option(
             "--cache-minimization-enabled",
@@ -1178,42 +1085,6 @@ class Context:
             self.context.env.ARFLAGS = []
         if not self.context.env.ISYSTEMS:
             self.context.env.ISYSTEMS = []
-
-    def find_cache_conf(self):
-        settings_path = self.make_project_path('settings.glm')
-        if not os.path.exists(settings_path):
-            return None
-        raise Exception("Not implemented")
-
-        config = configparser.RawConfigParser()
-        config.read(settings_path)
-
-        if not config.has_section('GOLEM'):
-            return None
-
-        cacheconf = CacheConf()
-        cacheconf.locations = self.make_cache_dirs()
-
-        # cache remote
-        if not config.has_option('GOLEM', 'cache.remote'):
-            return None
-
-        remote = config.get('GOLEM', 'cache.remote')
-
-        if not remote:
-            return None
-
-        cacheconf.remote = remote.strip('\'"')
-
-        # cache location
-        # if config.has_option('GOLEM', 'cache.location'):
-        #	location = config.get('GOLEM', 'cache.location')
-
-        #if cacheconf.location:
-        #    cacheconf.locations = [CacheDir(cacheconf.location.strip('\'"'))]
-
-        # return cache configuration
-        return cacheconf
 
     def configure_default(self):
         if self.is_msvc_like():
@@ -1427,7 +1298,7 @@ class Context:
         self.append_android_linkflags()
         self.append_android_ldflags()
 
-        self.cache_conf = self.make_cache_conf()
+        self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
 
         if resolve_dependencies:
@@ -1476,13 +1347,11 @@ class Context:
         else:
             self.context.env['LIB_' + name] = lib
 
-    def make_cache_conf(self):
-        cache_conf = self.find_cache_conf()
-        if not cache_conf:
-            cache_conf = CacheConf()
-            cache_conf.locations = self.make_cache_dirs()
-
-        return cache_conf
+    def make_cache_configuration(self):
+        # The single cache-configuration factory, fed this build's Settings.
+        # Locations, resolution policy and path-minimization settings all come
+        # back on one CacheConfiguration.
+        return get_cache_configuration(self.get_settings())
 
     def get_local_dep_pkl(self, dep):
         return os.path.join(self.make_out_path(), dep.name + '.pkl')
@@ -1492,7 +1361,7 @@ class Context:
 
     def get_dep_repo_location(self, dep, cache_dir, base=None):
         path = self.get_dep_location(dep, cache_dir) if base is None else base
-        return os.path.join(path, 'repository')
+        return os.path.join(path, cache_configuration.SOURCE_DIRNAME)
 
     def get_dep_include_location(self, dep, cache_dir, base=None):
         path = self.get_dep_location(dep, cache_dir) if base is None else base
@@ -1543,7 +1412,7 @@ class Context:
     def make_dep_artifact_filename(self,
                                    dep,
                                    target_name=None,
-                                   repository=None):
+                                   source_location=None):
 
         name = []
 
@@ -1552,11 +1421,11 @@ class Context:
 
         name.append(dep.name)
 
-        if repository is None:
-            repository = self.load_git_remote_origin_url()
+        if source_location is None:
+            source_location = self.load_git_remote_origin_url()
 
         config_filename = "{}@{}.json".format(
-            '@'.join(name), Repository.generate_recipe_id(repository))
+            '@'.join(name), Source.generate_recipe_id(source_location))
 
         return config_filename
 
@@ -1567,7 +1436,7 @@ class Context:
             path,
             self.make_dep_artifact_filename(dep=dep,
                                             target_name=target_name,
-                                            repository=dep.repository))
+                                            source_location=dep.get_source_location()))
 
     def get_dep_artifact_json_list(self, dep, cache_dir):
         if dep.targets:
@@ -1665,7 +1534,7 @@ class Context:
     def find_dependency_id(self, path):
         common_path = None
 
-        for cache_dir in self.cache_conf.locations:
+        for cache_dir in self.cache_configuration.locations:
             try:
                 common_path = os.path.commonpath([os.path.realpath(path), os.path.realpath(cache_dir.location)])
             except Exception:
@@ -1737,11 +1606,11 @@ class Context:
             f.write(repository)
 
     def clean_repo(self, dep, repo_path):
-        local_path = Repository.parse_local_non_git_repository(dep.repository)
-        if local_path:
-            self.copy_non_git_repo(dep.repository, local_path, repo_path)
+        if dep.is_non_git_directory():
+            local_path = Source.parse_local_directory_path(dep.directory)
+            self.copy_non_git_repo(dep.directory, local_path, repo_path)
             return
-        
+
         helpers.run_git(['clean', '-ffxd'],
                          cwd=repo_path,
                          stdout=subprocess.DEVNULL)
@@ -1771,10 +1640,10 @@ class Context:
 
         os.makedirs(repo_path)
 
-        local_path = Repository.parse_local_non_git_repository(dep.repository)
-        if local_path:
-            print("Copying repository {} into {}".format(dep.repository, repo_path))
-            self.copy_non_git_repo(dep.repository, local_path, repo_path)
+        if dep.is_non_git_directory():
+            local_path = Source.parse_local_directory_path(dep.directory)
+            print("Copying directory {} into {}".format(dep.directory, repo_path))
+            self.copy_non_git_repo(dep.directory, local_path, repo_path)
             return
 
         print("Cloning repository {} into {}".format(dep.repository,
@@ -1809,29 +1678,17 @@ class Context:
         if os.path.exists(repo_path):
             if should_clean:
                 self.clean_repo(dep, repo_path)
-            cache_manifest.touch_last_used(self.get_dep_location(dep, cache_dir))
+            resource_manifest.touch_last_used(self.get_dep_location(dep, cache_dir))
         else:
-            self.clone_repo(dep, repo_path)
-            self.write_dependency_manifest(dep, cache_dir)
+            # Clone the source atomically through the dependency manager: it stages
+            # the whole resource root (with the clone under source/) and its manifest
+            # in a sibling .tmp dir, then swaps it into place in one step.
+            get_dependency_manager(self.cache_configuration).staged_install(
+                cache_dir, dep,
+                lambda staging_root: self.clone_repo(
+                    dep, os.path.join(staging_root, cache_configuration.SOURCE_DIRNAME)))
 
         return repo_path
-
-    def write_dependency_manifest(self, dep, cache_dir):
-        if cache_dir.is_read_only:
-            return
-        resource_root = self.get_dep_location(dep, cache_dir)
-        cache_manifest.write_manifest(
-            resource_root=resource_root,
-            kind=cache_manifest.ResourceKind.DEPENDENCY,
-            cache_key=self.get_resource_cache_key(dep),
-            identity={
-                'name': dep.name,
-                'repository': dep.repository,
-                'version': dep.version,
-                'resolved_version': dep.resolved_version,
-                'resolved_hash': dep.resolved_hash,
-                'shallow': dep.shallow,
-            })
 
     def run_dep_command(self, dep, cache_dir, command):
 
@@ -1869,18 +1726,16 @@ class Context:
             '--arch={}'.format(self.context.options.arch),
             '--variant={}'.format(self.context.options.variant if not dep.variant else dep.variant[0]),
             '--export={}'.format(dep_path),
-            '--cache-directory={}'.format(self.make_cache_dir_option()),
             '--resolved-dependencies-directory={}'.format(build_path),
             '--only-update-dependencies-regex={}'.format(self.get_only_update_dependencies_regex()),
             '--overrides-configuration={}'.format(self.resolved_overrides),
             '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
-            '--cache-resolution-policy={}'.format(self.make_cache_resolution_policy_option()),
-            '--cache-minimization-enabled={}'.format(self.make_cache_minimization_enabled_option()),
-            '--cache-minimization-length={}'.format(self.get_cache_minimization_length())
         ]
 
-        configure_options += self.make_additional_cache_directories_args()
-        configure_options += self.make_additional_read_only_cache_directories_args()
+        # The sub-build must reach the same caches with the same layout, so every
+        # cache setting is forwarded as the flag the settings themselves spell.
+        for name in cache_configuration.CACHE_SETTINGS:
+            configure_options += self.get_settings().make_flag(name)
 
         if hasattr(self.context.options, 'check_c_compiler') and self.context.options.check_c_compiler:
             configure_options += [
@@ -2398,45 +2253,19 @@ class Context:
 
         self.use_dep(config, dep, cache_dir)
 
-    def find_dep_cache_dir(self, dep, cache_conf):
-        resolver = CachedResourceResolver(
-            identifier=dep.repository,
-            cache_conf=cache_conf,
-            policy=self.make_cache_resolution_policy(),
-            exists_in_cache=lambda cache_dir: self.is_resource_in_cache_dir(
-                dep, cache_dir))
-        return resolver.resolve()
 
-    def get_cache_resolution_policy(self):
-        cache_resolution_policy = self.context.options.cache_resolution_policy
-        if cache_resolution_policy:
-            return cache_resolution_policy
+    def make_resource_spec(self, resource, subdir=None):
+        if isinstance(resource, Dependency):
+            return DependencyResourceManager.spec_for(resource)
+        if isinstance(resource, Source):
+            if subdir is None:
+                raise RuntimeError("subdir is required for repository resources")
+            return RepositoryResourceManager.spec_for(
+                resource, resource_manifest.ResourceKind.from_subdir(subdir))
+        raise RuntimeError("resource must be a Dependency or Source")
 
-        cache_resolution_policy = config_store.resolve_environ('GOLEM_CACHE_RESOLUTION_POLICY', project_dir=self.get_project_dir())
-        if cache_resolution_policy:
-            return cache_resolution_policy
-
-        return ''
-
-    def make_cache_resolution_policy(self):
-        return CacheResolutionPolicy(self.get_cache_resolution_policy())
-
-    def make_cache_resolution_policy_option(self):
-        return self.make_cache_resolution_policy().value
-
-    def is_cache_minimization_enabled(self):
-        return cache.resolve_minimization_enabled(
-            self.context.options, self.get_project_dir())
-
-    def get_cache_minimization_length(self):
-        return cache.resolve_minimization_length(
-            self.context.options, self.get_project_dir())
-
-    def make_cache_minimization_enabled_option(self):
-        # Forward the resolved on/off value to dependency sub-builds so they use
-        # exactly the same layout as the parent (mirrors how the cache directory
-        # and resolution policy are forwarded).
-        return 'on' if self.is_cache_minimization_enabled() else 'off'
+    def find_dep_cache_dir(self, dep, cache_configuration):
+        return get_dependency_manager(cache_configuration).resolve_cache_directory(dep)
 
     def get_resource_cache_key(self, resource):
         '''
@@ -2445,38 +2274,18 @@ class Context:
         this is what the manifest records to keep the resource identifiable.
         '''
         if isinstance(resource, Dependency):
-            return Repository(
-                url=resource.repository,
-                reference=helpers.get_dependency_resolved_version(resource)
-            ).get_cache_key()
-        if isinstance(resource, Repository):
+            return resource.to_source().get_cache_key()
+        if isinstance(resource, Source):
             return resource.get_cache_key()
-        raise RuntimeError("resource must be a Dependency or Repository")
+        raise RuntimeError("resource must be a Dependency or Source")
 
     def get_resource_location(self, resource, cache_dir, subdir=None):
-        if isinstance(resource, Dependency):
-            cache_resource = Repository(
-                url=resource.repository,
-                reference=helpers.get_dependency_resolved_version(resource))
-            if subdir is None:
-                subdir = cache.DEPENDENCIES_SUBDIR
-        elif isinstance(resource, Repository):
-            cache_resource = resource
-            if subdir is None:
-                raise RuntimeError(
-                    "subdir is required for repository resources")
-        else:
-            raise RuntimeError(
-                "resource must be a Dependency or Repository")
-
-        return cache.make_resource_location(
-            cache_dir.location, subdir, cache_resource.get_cache_key(),
-            minimization_enabled=self.is_cache_minimization_enabled(),
-            minimization_length=self.get_cache_minimization_length())
+        spec = self.make_resource_spec(resource, subdir=subdir)
+        return get_cache_manager(self.cache_configuration).get_resource_location(cache_dir, spec)
 
     def is_resource_in_cache_dir(self, resource, cache_dir, subdir=None):
-        path = self.get_resource_location(resource, cache_dir, subdir=subdir)
-        return os.path.exists(path)
+        spec = self.make_resource_spec(resource, subdir=subdir)
+        return get_cache_manager(self.cache_configuration).is_resource_in_cache_directory(cache_dir, spec)
 
     def export_dependency(self, config, dep):
         self.dep_command(config, dep, 'export', True)
@@ -4442,121 +4251,110 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
-    def find_repository_cache_dir(self, repository, subdir):
-        resolver = CachedResourceResolver(
-            identifier=repository.url,
-            cache_conf=self.cache_conf,
-            policy=self.make_cache_resolution_policy(),
-            exists_in_cache=lambda cache_dir: self.is_resource_in_cache_dir(
-                repository, cache_dir, subdir=subdir))
-        return resolver.resolve()
+    def find_repository_cache_dir(self, source, subdir):
+        return get_repository_manager(self.cache_configuration).resolve_cache_directory(
+            source, resource_manifest.ResourceKind.from_subdir(subdir))
 
-    def make_basic_dependency_repo_path(self, repository, subdir):
-        cache_dir = self.find_repository_cache_dir(
-            repository=repository, subdir=subdir)
-        return self.get_resource_location(repository, cache_dir, subdir=subdir)
-
-    def clone_repository(self, path, repository, kind=None):
-        local_path = repository.get_local_path()
+    def clone_repository(self, path, source):
+        '''Materialize a repository source freshly into `path`: git-clone (and reset
+        to the requested ref) a git source, or copy a local directory source. Used
+        as the populate step of a staged install, so it never writes a manifest.'''
+        local_path = source.get_local_path()
         if local_path is not None:
             if not os.path.exists(local_path):
                 raise RuntimeError(
-                    "Can't find local repository directory: {}".format(
-                        local_path))
+                    "Can't find local source directory: {}".format(local_path))
             if not os.path.isdir(local_path):
                 raise RuntimeError(
-                    "Local repository path is not a directory: {}".format(
-                        local_path))
+                    "Local source path is not a directory: {}".format(local_path))
 
-        non_git_directory_path = repository.get_non_git_directory_path()
-        if non_git_directory_path is not None:
-            print("Copying repository {} into {}".format(repository.url, path))
-            self.copy_non_git_repo(repository.url, non_git_directory_path, path)
-            self.write_repository_manifest(path, repository, kind)
+        if source.type == 'directory':
+            print("Copying directory {} into {}".format(source.location, path))
+            self.copy_non_git_repo(source.location, local_path, path)
             return
 
         if not os.path.exists(path):
             os.makedirs(path)
-            helpers.run_git(['clone', '--', repository.url, '.'], cwd=path)
-            is_fresh_clone = True
-        else:
-            helpers.run_git(['fetch', 'origin'], cwd=path)
-            is_fresh_clone = False
-
-        helpers.run_git(['reset', '--hard', 'origin/' + repository.reference],
+        helpers.run_git(['clone', '--', source.location, '.'], cwd=path)
+        helpers.run_git(['reset', '--hard', 'origin/' + source.reference],
                          cwd=path)
 
-        if is_fresh_clone:
-            self.write_repository_manifest(path, repository, kind)
+    def update_repository_source(self, path, source):
+        '''Refresh an already-cached repository in place (no re-clone), preserving
+        its cache root: recopy a directory source, or fetch + reset a git source.'''
+        if source.type == 'directory':
+            local_path = source.get_local_path()
+            self.copy_non_git_repo(source.location, local_path, path)
         else:
-            cache_manifest.touch_last_used(path)
+            helpers.run_git(['fetch', 'origin'], cwd=path)
+            helpers.run_git(['reset', '--hard', 'origin/' + source.reference],
+                            cwd=path)
+        resource_manifest.touch_last_used(path)
 
-    def write_repository_manifest(self, path, repository, kind):
-        if kind is None:
-            return
-        cache_manifest.write_manifest(
-            resource_root=path,
-            kind=kind,
-            cache_key=repository.get_cache_key(),
-            identity={
-                'url': repository.url,
-                'reference': repository.reference,
-            })
+    def install_repository(self, source, kind, cache_dir, repo_path):
+        # Fresh: clone the source atomically through the repository manager (staging
+        # + manifest + swap). Existing: update in place, keeping the cache root.
+        if os.path.exists(repo_path):
+            self.update_repository_source(repo_path, source)
+        else:
+            get_repository_manager(self.cache_configuration).staged_install(
+                cache_dir, source, kind,
+                lambda staging_root: self.clone_repository(staging_root, source))
 
-    def clone_overrides_repository(self, repository):
-        repo_path = self.make_basic_dependency_repo_path(
-            repository, subdir=cache.OVERRIDES_SUBDIR)
+    def clone_overrides_repository(self, source):
+        cache_dir = self.find_repository_cache_dir(
+            source, subdir=cache_configuration.OVERRIDES_SUBDIR)
+        repo_path = self.get_resource_location(
+            source, cache_dir, subdir=cache_configuration.OVERRIDES_SUBDIR)
 
         if not self.deps_resolve:
             return repo_path
 
-        self.clone_repository(path=repo_path,
-                              repository=repository,
-                              kind=cache_manifest.ResourceKind.OVERRIDES_REPOSITORY)
+        self.install_repository(
+            source, resource_manifest.ResourceKind.OVERRIDES_REPOSITORY,
+            cache_dir, repo_path)
 
         return repo_path
 
-    def clone_recipes_repository(self, repository):
-        repo_path = self.make_basic_dependency_repo_path(
-            repository, subdir=cache.RECIPES_SUBDIR)
+    def clone_recipes_repository(self, source):
+        cache_dir = self.find_repository_cache_dir(
+            source, subdir=cache_configuration.RECIPES_SUBDIR)
+        repo_path = self.get_resource_location(
+            source, cache_dir, subdir=cache_configuration.RECIPES_SUBDIR)
 
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
             return repo_path
 
-        self.clone_repository(path=repo_path, repository=repository,
-                              kind=cache_manifest.ResourceKind.RECIPES_REPOSITORY)
+        self.install_repository(
+            source, resource_manifest.ResourceKind.RECIPES_REPOSITORY,
+            cache_dir, repo_path)
 
         return repo_path
 
     def load_recipes_repositories(self):
-        recipes_repositories = config_store.resolve_environ('GOLEM_RECIPES_REPOSITORIES', project_dir=self.get_project_dir())
-        if recipes_repositories:
-            recipes_repositories = [
-                Repository.from_url(
-                    url=url,
-                    project_dir=self.get_project_dir())
-                for url in recipes_repositories.split('|')
-            ]
-        else:
-            # Default recipes repository
-            recipes_repositories = [Repository(url='https://github.com/GolemCpp/recipes.git')]
+        # The built-in default (the GolemCpp recipes repository) is part of the
+        # setting definition, so an unset setting still yields a repository.
+        urls = self.get_settings().get('GOLEM_RECIPES_REPOSITORIES')
 
-        return recipes_repositories
+        return [
+            Source.detect(url, project_dir=self.get_project_dir())
+            for url in urls
+        ]
 
     def load_recipe(self):
         recipe_id = self.context.options.recipe
 
         recipes_repositories = self.load_recipes_repositories()
         recipes_repos_paths = []
-        for repository in recipes_repositories:
-            repo_path = self.clone_recipes_repository(repository=repository)
+        for source in recipes_repositories:
+            repo_path = self.clone_recipes_repository(source=source)
             recipes_repos_paths.append(repo_path)
 
         if not recipe_id and self.project is None:
             recipe_url = self.load_git_remote_origin_url()
             if not recipe_url:
                 return
-            recipe_id = Repository(url=recipe_url).get_recipe_id()
+            recipe_id = Source.generate_recipe_id(recipe_url)
 
         if not recipe_id:
             return
@@ -4566,7 +4364,7 @@ class Context:
             directory = os.path.join(repo, recipe_id)
             if os.path.exists(directory):
                 found_recipe_dir = directory
-                cache_manifest.touch_last_used(repo)
+                resource_manifest.touch_last_used(repo)
 
         if not found_recipe_dir:
             raise RuntimeError(
@@ -4674,20 +4472,9 @@ class Context:
         return self.is_cpp2_in_source_files(config=config)
 
     def autodiscover_cppfront(self):
-        cache_directory = tools_cache.get_cache_directory(
-            project_dir=self.get_project_dir(),
-            options=self.context.options,
-        )
-
-        if not cache_directory:
-            return
-
         # Resolve the tool root exactly like it was installed (classic tools/
         # subdir or a minimized flat path) so the build finds it either way.
-        tool_cache_root = cache.make_resource_location(
-            cache_directory, cache.TOOLS_SUBDIR, cppfront_tool.CPPFRONT_NAME,
-            minimization_enabled=self.is_cache_minimization_enabled(),
-            minimization_length=self.get_cache_minimization_length())
+        tool_cache_root = get_tool_manager(self.cache_configuration).tool_cache_root(cppfront_tool.CPPFRONT_NAME)
 
         cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(
             tool_cache_root)
@@ -4703,7 +4490,7 @@ class Context:
 
     def configure(self):
 
-        self.cache_conf = self.make_cache_conf()
+        self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
 
         tasks_and_targets = self.get_tasks_and_targets_to_process()
@@ -4784,20 +4571,20 @@ class Context:
 
     def find_dependency_includes(self, dep_name):
         dep_include = []
-        cache_conf = self.cache_conf
+        cache_configuration = self.cache_configuration
         for dep in self.project.deps:
             if dep_name == dep.name:
-                cache_dir = self.find_dep_cache_dir(dep, cache_conf)
+                cache_dir = self.find_dep_cache_dir(dep, cache_configuration)
                 dep_include.append(
                     self.get_dep_include_location(dep, cache_dir))
         return dep_include
 
     def find_dependency_libraries(self, dep_name):
         dep_lib_paths = []
-        cache_conf = self.cache_conf
+        cache_configuration = self.cache_configuration
         for dep in self.project.deps:
             if dep_name == dep.name:
-                cache_dir = self.find_dep_cache_dir(dep, cache_conf)
+                cache_dir = self.find_dep_cache_dir(dep, cache_configuration)
                 dep_lib_paths.append(
                     self.get_dep_artifact_location(dep, cache_dir))
         return dep_lib_paths
@@ -4836,13 +4623,6 @@ class Context:
         config.deps = [dep_name]
         self.recursively_link_dependencies(config)
         return config
-
-    def find_dep_artifact_location(self, dep_name):
-        cache_dir = self.cache_conf
-        for dep in self.project.deps:
-            if dep_name == dep.name:
-                return self.get_dep_artifact_location(dep, cache_dir)
-        return None
 
     def build(self):
         vscode_dir = self.get_vscode_path()
@@ -4916,7 +4696,7 @@ class Context:
         return found_dep
 
     def find_dep_cache_include(self, dep):
-        cache_dir = self.find_dep_cache_dir(dep, self.cache_conf)
+        cache_dir = self.find_dep_cache_dir(dep, self.cache_configuration)
         return self.get_dep_include_location(dep, cache_dir)
 
     def merge_export_config_against_build_condition(self,
@@ -5516,7 +5296,7 @@ class Context:
 
                 common_path = None
 
-                for cache_dir in self.cache_conf.locations:
+                for cache_dir in self.cache_configuration.locations:
                     try:
                         common_path = os.path.commonpath(
                             [path, cache_dir.location])
@@ -5543,7 +5323,7 @@ class Context:
 
                 candidate_path = None
 
-                for cache_dir in self.cache_conf.locations:
+                for cache_dir in self.cache_configuration.locations:
                     candidate_path = path.replace(cache_prefix,
                                                   cache_dir.location,
                                                   len(cache_prefix))
@@ -6222,7 +6002,7 @@ class Context:
         artifacts_list = []
 
         def internal(config, dep, artifacts_list=artifacts_list):
-            cache_dir = self.find_dep_cache_dir(dep, self.cache_conf)
+            cache_dir = self.find_dep_cache_dir(dep, self.cache_configuration)
             artifacts_list += self.list_dep_binary_artifacts(
                 config, dep, cache_dir)
 

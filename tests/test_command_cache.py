@@ -1,22 +1,22 @@
 import os
 
-from golemcpp.golem import cache
-from golemcpp.golem import cache_manifest
+from golemcpp.golem import cache_configuration
+from golemcpp.golem import resource_manifest
 from golemcpp.golem import command_cache
 from golemcpp.golem import helpers
 
 
-def seed_resource(cache_root, subdir, name, *, kind=None, identity=None, size=64):
+def seed_resource(cache_root, subdir, name, *, kind=None, source=None, size=64):
     resource_root = os.path.join(cache_root, subdir, name)
     os.makedirs(resource_root, exist_ok=True)
     with open(os.path.join(resource_root, 'payload'), 'w', encoding='utf-8') as fp:
         fp.write('x' * size)
     if kind is not None:
-        cache_manifest.write_manifest(
+        resource_manifest.write_manifest(
             resource_root=resource_root,
             kind=kind,
             cache_key=name,
-            identity=identity or {})
+            source=source or {})
     return resource_root
 
 
@@ -48,14 +48,16 @@ def test_unknown_action_is_error(capsys, tmp_path):
 
 
 def test_list_reports_resources(capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY,
-                  identity={'name': 'json', 'resolved_version': 'v3.12.0'})
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY,
+                  source={'type': 'git',
+                            'location': 'https://github.com/nlohmann/json.git',
+                            'reference': 'v3.12.0'})
 
     result = run(tmp_path, 'list')
     assert result == 0
     out = capsys.readouterr().out
-    assert '[dependency] json v3.12.0' in out
+    assert '[dependency] https://github.com/nlohmann/json.git v3.12.0' in out
 
 
 def test_list_empty(capsys, tmp_path):
@@ -65,9 +67,9 @@ def test_list_empty(capsys, tmp_path):
 
 def test_list_shows_path_without_long(capsys, tmp_path):
     resource_root = seed_resource(
-        str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
-        kind=cache_manifest.ResourceKind.DEPENDENCY,
-        identity={'name': 'json', 'resolved_version': 'v3.12.0'})
+        str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+        kind=resource_manifest.ResourceKind.DEPENDENCY,
+        source={'name': 'json', 'resolved_version': 'v3.12.0'})
 
     assert run(tmp_path, 'list') == 0
     out = capsys.readouterr().out
@@ -85,13 +87,13 @@ def test_list_separates_resources_per_cache(capsys, tmp_path, monkeypatch):
     secondary = tmp_path / 'secondary'
 
     primary_resource = seed_resource(
-        str(primary), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
-        kind=cache_manifest.ResourceKind.DEPENDENCY,
-        identity={'name': 'json', 'resolved_version': 'v3.12.0'})
+        str(primary), cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+        kind=resource_manifest.ResourceKind.DEPENDENCY,
+        source={'name': 'json', 'resolved_version': 'v3.12.0'})
     secondary_resource = seed_resource(
-        str(secondary), cache.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def',
-        kind=cache_manifest.ResourceKind.DEPENDENCY,
-        identity={'name': 'fmt', 'resolved_version': 'v10.0.0'})
+        str(secondary), cache_configuration.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def',
+        kind=resource_manifest.ResourceKind.DEPENDENCY,
+        source={'name': 'fmt', 'resolved_version': 'v10.0.0'})
 
     monkeypatch.setenv('GOLEM_ADDITIONAL_CACHE_DIRECTORIES', str(secondary))
 
@@ -115,8 +117,8 @@ def test_caches_lists_configured_location(capsys, tmp_path):
 
 
 def test_size_totals(capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'a@h+1',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY, size=100)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'a@h+1',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY, size=100)
     assert run(tmp_path, 'size') == 0
     out = capsys.readouterr().out
     assert 'Cache storage usage:' in out
@@ -125,9 +127,9 @@ def test_size_totals(capsys, tmp_path):
 
 
 def test_unidentified_lists_and_removes(monkeypatch, capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.RECIPES_SUBDIR, 'mystery@host+main')  # no manifest
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.RECIPES_SUBDIR, 'mystery@host+main')  # no manifest
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     assert run(tmp_path, 'unidentified') == 0
     out = capsys.readouterr().out
@@ -136,9 +138,9 @@ def test_unidentified_lists_and_removes(monkeypatch, capsys, tmp_path):
 
     monkeypatch.setattr(helpers, 'confirm', lambda prompt, assume_yes=False: True)
     assert run(tmp_path, 'unidentified', '--remove') == 0
-    assert not os.path.exists(os.path.join(str(tmp_path), cache.RECIPES_SUBDIR, 'mystery@host+main'))
+    assert not os.path.exists(os.path.join(str(tmp_path), cache_configuration.RECIPES_SUBDIR, 'mystery@host+main'))
     # Identified resource is untouched.
-    assert os.path.exists(os.path.join(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc'))
+    assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 
 
 def test_remove_requires_pattern(capsys, tmp_path):
@@ -147,52 +149,52 @@ def test_remove_requires_pattern(capsys, tmp_path):
 
 
 def test_remove_with_yes_deletes_match(capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     assert run(tmp_path, 'remove', 'nlohmann', '--yes') == 0
     out = capsys.readouterr().out
     assert 'Removed 1 resource(s)' in out
-    assert not os.path.exists(os.path.join(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc'))
-    assert os.path.exists(os.path.join(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def'))
+    assert not os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc'))
+    assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def'))
 
 
 def test_remove_declined_keeps_resource(monkeypatch, capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     monkeypatch.setattr(helpers, 'confirm', lambda prompt, assume_yes=False: False)
     assert run(tmp_path, 'remove', 'json') == 0
     out = capsys.readouterr().out
     assert 'Aborted' in out
-    assert os.path.exists(os.path.join(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc'))
+    assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 
 
 def test_remove_dry_run_keeps_resource(capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     assert run(tmp_path, 'remove', 'json', '--dry-run') == 0
     out = capsys.readouterr().out
     assert 'Dry run' in out
-    assert os.path.exists(os.path.join(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc'))
+    assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 
 
 def test_remove_no_match(capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
     assert run(tmp_path, 'remove', 'nonexistent', '--yes') == 0
     assert 'No matching resources.' in capsys.readouterr().out
 
 
 def test_purge_removes_everything(capsys, tmp_path):
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'a@h+1',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
-    seed_resource(str(tmp_path), cache.TOOLS_SUBDIR, 'cppfront',
-                  kind=cache_manifest.ResourceKind.TOOL,
-                  identity={'name': 'cppfront', 'version': 'v0.8.1'})
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'a@h+1',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.TOOLS_SUBDIR, 'cppfront',
+                  kind=resource_manifest.ResourceKind.TOOL,
+                  source={'name': 'cppfront', 'version': 'v0.8.1'})
 
     assert run(tmp_path, 'purge', '--yes') == 0
     assert 'Removed 2 resource(s)' in capsys.readouterr().out
@@ -204,8 +206,8 @@ def test_unidentified_lists_and_removes_legacy_flat_entry(monkeypatch, capsys, t
     # Legacy flat resource stored directly at the cache root (pre-subdir layout).
     seed_resource(str(tmp_path), '', 'mylogger@fsys.home+-')
     # A well-formed resource that must be left alone.
-    seed_resource(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc',
-                  kind=cache_manifest.ResourceKind.DEPENDENCY)
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     assert run(tmp_path, 'unidentified') == 0
     out = capsys.readouterr().out
@@ -215,7 +217,7 @@ def test_unidentified_lists_and_removes_legacy_flat_entry(monkeypatch, capsys, t
     monkeypatch.setattr(helpers, 'confirm', lambda prompt, assume_yes=False: True)
     assert run(tmp_path, 'unidentified', '--remove') == 0
     assert not os.path.exists(os.path.join(str(tmp_path), 'mylogger@fsys.home+-'))
-    assert os.path.exists(os.path.join(str(tmp_path), cache.DEPENDENCIES_SUBDIR, 'json@h+abc'))
+    assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 
 
 def test_purge_removes_legacy_flat_entry(capsys, tmp_path):

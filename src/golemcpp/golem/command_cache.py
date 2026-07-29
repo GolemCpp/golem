@@ -7,10 +7,11 @@ from dataclasses import field
 from datetime import datetime
 from datetime import timezone
 
-from golemcpp.golem import cache
+from golemcpp.golem.cache_configuration import get_cache_configuration
+from golemcpp.golem.settings import get_settings
 from golemcpp.golem import cache_manager
-from golemcpp.golem import cache_manifest
 from golemcpp.golem import helpers
+from golemcpp.golem.source import Source
 
 
 def build_cache_parser() -> ArgumentParser:
@@ -75,13 +76,10 @@ def humanize_age(value: str) -> str:
 
 
 def resource_label(resource: cache_manager.CachedResource) -> str:
-    identity = resource.identity
-    name = identity.get('name') or identity.get('url') or resource.cache_key
-    version = (identity.get('resolved_version') or identity.get('version')
-               or identity.get('reference') or '')
-    if version:
-        return '{} {}'.format(name, version)
-    return str(name)
+    if resource.manifest is None:
+        return str(resource.cache_key)
+    source = Source.from_manifest(resource.manifest)
+    return source.label or str(resource.cache_key)
 
 
 @dataclass
@@ -121,12 +119,13 @@ class CacheCommandHandler:
 
     def make_manager(self) -> cache_manager.CacheManager:
         if self._manager is None:
-            locations = cache.resolve_cache_locations(
-                project_dir=self.project_dir or None,
-                build_dir=self.options.build_dir or None,
+            settings = get_settings(
                 options=self.options,
+                build_dir=self.options.build_dir or None,
+                project_dir=self.project_dir or None,
             )
-            self._manager = cache_manager.CacheManager(locations=locations)
+            cache_configuration = get_cache_configuration(settings)
+            self._manager = cache_manager.get_cache_manager(cache_configuration)
         return self._manager
 
     def _cache_filter(self):
@@ -200,7 +199,7 @@ class CacheCommandHandler:
         return {
             'kind': resource.kind,
             'cache_key': resource.cache_key,
-            'identity': resource.identity,
+            'source': resource.source,
             'identified': resource.is_identified,
             'manifest_version': resource.manifest_version,
             'cache_location': resource.cache_location,
