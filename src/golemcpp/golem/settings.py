@@ -97,7 +97,6 @@ SETTINGS = (
         key='overrides.configuration',
         env_name='GOLEM_OVERRIDES_CONFIGURATION',
         option_name='overrides_configuration',
-        project_attribute='overrides_configuration',
         description='Path to an overrides configuration file.',
         default='',
         is_path=True,
@@ -105,7 +104,6 @@ SETTINGS = (
     SettingDescriptor(
         key='overrides.repository',
         env_name='GOLEM_OVERRIDES_REPOSITORY',
-        project_attribute='overrides_repository',
         description='Repository providing an overrides configuration.',
         default='',
     ),
@@ -198,11 +196,10 @@ class Settings:
     re-reads its sources, so a `golem config` write is picked up right away.
     '''
 
-    def __init__(self, options=None, build_dir=None, project_dir=None, project=None):
+    def __init__(self, options=None, build_dir=None, project_dir=None):
         self.options = options
         self.build_dir = build_dir
         self.project_dir = project_dir
-        self.project = project
         self.context = SettingProcessingContext(project_dir=project_dir)
 
     def __str__(self):
@@ -213,11 +210,18 @@ class Settings:
 
     def get(self, name):
         '''
-        The value of a setting: converted to its type, deserialized into the
-        object it denotes, or the built-in default. None for an unknown name.
-        Precedence, highest first: CLI option -> persisted `golem configure`
-        option -> project -> environment -> local configuration store -> global
-        configuration store -> built-in default.
+        The value of a setting.
+        
+        Converted to its type, deserialized into the object it denotes, 
+        or the built-in default. None for an unknown name.
+
+        Precedence:
+        1. CLI option
+        2. Persisted `golem configure` option
+        3. Environment
+        4. Local configuration store
+        5. Global configuration store
+        6. Built-in default
         '''
         setting = get_setting(name)
         if setting is None:
@@ -304,11 +308,6 @@ class Settings:
             if has_value(value):
                 return value
 
-        # The project itself, for the settings a golemfile can state.
-        value = self._get_project_value(setting)
-        if has_value(value):
-            return value
-
         # Environment variable.
         for env_name in setting.env_names:
             value = helpers.get_environ(env_name)
@@ -344,16 +343,10 @@ class Settings:
 
         return None
 
-    def _get_project_value(self, setting):
-        if self.project is None or not setting.project_attribute:
-            return None
-        return getattr(self.project, setting.project_attribute, None)
 
-
-def get_settings(options=None, build_dir=None, project_dir=None, project=None):
+def get_settings(options=None, build_dir=None, project_dir=None):
     '''The single factory for a Settings.'''
     return Settings(
         options=options,
         build_dir=build_dir,
-        project_dir=project_dir,
-        project=project)
+        project_dir=project_dir)

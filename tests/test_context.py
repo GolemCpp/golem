@@ -494,7 +494,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):
     context = Context.__new__(Context)
-    context.project = SimpleNamespace(overrides_repository=None)
+    context.project = SimpleNamespace()
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             project_dir=str(project_dir),

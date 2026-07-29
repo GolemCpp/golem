@@ -47,9 +47,9 @@ class SettingProcessingContext:
 class SettingDescriptor:
     '''
     Definition of one setting: the name it answers to in each source (config
-    key, environment variable, CLI option dest, project attribute), its type and
-    its default. Renaming one means moving the old spelling into the matching
-    `legacy_*` tuple, which keeps resolving after the current one.
+    key, environment variable, CLI option dest), its type and its default.
+    Renaming one means moving the old spelling into the matching `legacy_*`
+    tuple, which keeps resolving after the current one.
 
     A setting whose text denotes an object carries the functor pair that reads
     and writes it, `deserialize(text, context)` and `serialize(value, context)`,
@@ -59,13 +59,11 @@ class SettingDescriptor:
 
     def __init__(self, key, env_name, description,
                  value_type=SettingType.STRING, default=None, option_name=None,
-                 project_attribute=None, is_path=False,
-                 deserialize=None, serialize=None,
+                 is_path=False, deserialize=None, serialize=None,
                  legacy_keys=(), legacy_env_names=(), legacy_option_names=()):
         self.key = key
         self.env_name = env_name
         self.option_name = option_name
-        self.project_attribute = project_attribute
         self.description = description
         self.value_type = value_type
         self.default = default

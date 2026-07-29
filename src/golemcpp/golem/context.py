@@ -85,15 +85,13 @@ class Context:
 
     def get_settings(self):
         '''
-        The Settings of this build, rebuilt when load_project() replaces the
-        project. No build directory is bound: the live options are exactly what
-        `golem configure` would persist.
+        The Settings of this build. No build directory is bound: the live
+        options are exactly what `golem configure` would persist.
         '''
-        if self.settings is None or self.settings.project is not self.project:
+        if self.settings is None:
             self.settings = settings.get_settings(
                 options=self.context.options,
-                project_dir=self.get_project_dir(),
-                project=self.project)
+                project_dir=self.get_project_dir())
         return self.settings
 
     def load_project(self, directory=None):
@@ -279,8 +277,6 @@ class Context:
         return self.context.options.project_dir
 
     def get_overrides_configuration(self):
-        # The --overrides-configuration option, the golemfile and the
-        # environment / config store are all steps of the same resolution.
         return self.get_settings().get('GOLEM_OVERRIDES_CONFIGURATION')
 
     def make_overrides_configuration(self):
@@ -334,10 +330,6 @@ class Context:
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
-
-    def get_options_overrides_configuration(self):
-        return self.make_local_path_absolute(
-            path=self.context.options.overrides_configuration)
 
     def make_local_path_absolute(self, path):
         abolute_path = path

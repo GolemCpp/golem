@@ -78,38 +78,6 @@ def test_local_store_wins_over_global_store(monkeypatch, tmp_path):
     assert manager.get('GOLEM_OVERRIDES_REPOSITORY') == '/local/overrides'
 
 
-def test_project_wins_over_environment_and_loses_to_the_option(monkeypatch, tmp_path):
-    _isolate_home(monkeypatch, tmp_path)
-    project_dir = str(tmp_path / 'project')
-    monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', '/env/overrides.json')
-    project = SimpleNamespace(
-        overrides_configuration='/project/overrides.json', overrides_repository=None)
-
-    def resolve(options=None):
-        return settings.get_settings(
-            options=options, project_dir=project_dir,
-            project=project).get('GOLEM_OVERRIDES_CONFIGURATION')
-
-    assert resolve() == '/project/overrides.json'
-    assert resolve(options=SimpleNamespace(
-        overrides_configuration='/cli/overrides.json')) == '/cli/overrides.json'
-
-    # An unset project attribute falls through to the environment.
-    project.overrides_configuration = None
-    assert resolve() == '/env/overrides.json'
-
-
-def test_project_is_ignored_for_a_setting_it_cannot_state(monkeypatch, tmp_path):
-    _isolate_home(monkeypatch, tmp_path)
-    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', '/env/cache')
-    # The golemfile has no say on the cache directory, so an attribute that
-    # happens to be named alike must not be picked up.
-    project = SimpleNamespace(cache_directory='/project/cache')
-
-    assert settings.get_settings(
-        project=project).get('GOLEM_CACHE_DIRECTORY').location == '/env/cache'
-
-
 def test_reads_persisted_configure_options(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', '/env/cache')
