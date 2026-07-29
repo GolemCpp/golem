@@ -36,7 +36,7 @@ def test_resolve_and_locate(tmp_path):
     assert manager.resolve_cache_directory(spec).location == str(tmp_path / 'cache')
     assert manager.get_resource_location(cache_dir, spec) == os.path.join(
         str(tmp_path / 'cache'), cache_configuration.TOOLS_SUBDIR, 'demo')
-    assert manager.is_resource_in_cache_directory(cache_dir, spec) is False
+    assert manager.resolve_cached_resource(spec).exists() is False
 
 
 def test_write_and_read_source(tmp_path):
@@ -54,7 +54,30 @@ def test_write_and_read_source(tmp_path):
     source = manager.read_manifest_source(root)
     assert source.location == 'https://example.com/tool.git'
     assert source.reference == 'v1'
-    assert manager.is_resource_in_cache_directory(cache_dir, spec) is True
+    assert manager.resolve_cached_resource(spec).exists() is True
+
+
+def test_resolve_cached_resource_reads_size_and_manifest_on_demand(tmp_path):
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_cache_manager(cache_dir)
+    spec = make_spec()
+    root = manager.get_resource_location(cache_dir, spec)
+    os.makedirs(root)
+    with open(os.path.join(root, 'payload.txt'), 'w') as fileout:
+        fileout.write('hi')
+    manager.write_manifest(root, spec)
+
+    # Both are opt-in: resolving alone reports neither.
+    plain = manager.resolve_cached_resource(spec)
+    assert plain.size_bytes == 0
+    assert plain.manifest is None
+
+    detailed = manager.resolve_cached_resource(spec, compute_size=True, read_manifest=True)
+    assert detailed.path == root
+    assert detailed.cache_key == 'demo'
+    assert detailed.kind == ResourceKind.TOOL.value
+    assert detailed.size_bytes > 0
+    assert detailed.source['location'] == 'https://example.com/tool.git'
 
 
 def test_staged_install_swaps_atomically(tmp_path):
@@ -73,22 +96,39 @@ def test_staged_install_swaps_atomically(tmp_path):
     assert not os.path.exists(root + '.tmp')
 
 
-def test_remove_honors_read_only_guard(tmp_path):
+def test_remove_resources_honors_read_only_guard(tmp_path):
     writable = cache_directory.CacheDirectory(location=str(tmp_path / 'w'))
     read_only = cache_directory.CacheDirectory(location=str(tmp_path / 'ro'), is_read_only=True)
     spec = make_spec()
 
     manager = make_cache_manager(writable)
-    root = manager.get_resource_location(writable, spec)
-    os.makedirs(root)
-    assert manager.remove(writable, spec) is True
-    assert not os.path.exists(root)
+    resource = manager.resolve_cached_resource(spec)
+    os.makedirs(resource.path)
+
+    removed, skipped = manager.remove_resources([resource])
+
+    assert [entry.path for entry in removed] == [resource.path]
+    assert skipped == []
+    assert not os.path.exists(resource.path)
 
     ro_manager = make_cache_manager(read_only)
-    ro_root = ro_manager.get_resource_location(read_only, spec)
-    os.makedirs(ro_root)
-    assert ro_manager.remove(read_only, spec) is False
-    assert os.path.exists(ro_root)
+    ro_resource = ro_manager.resolve_cached_resource(spec)
+    os.makedirs(ro_resource.path)
+
+    removed, skipped = ro_manager.remove_resources([ro_resource])
+
+    assert removed == []
+    assert [entry.path for entry in skipped] == [ro_resource.path]
+    assert os.path.exists(ro_resource.path)
+
+
+def test_remove_resources_skips_a_resource_that_is_already_gone(tmp_path):
+    writable = cache_directory.CacheDirectory(location=str(tmp_path / 'w'))
+    manager = make_cache_manager(writable)
+
+    resource = manager.resolve_cached_resource(make_spec())
+
+    assert manager.remove_resources([resource]) == ([], [])
 
 
 # -- per-kind resource managers (delegating to the CacheManager) ------------
@@ -142,12 +182,12 @@ def test_dependency_manager_staged_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(source_dir, 'CMakeLists.txt'), 'w') as fileout:
             fileout.write('project(json)')
 
-    cache_root = manager.staged_install(cache_dir, dep, populate)
+    resource_root = manager.staged_install(cache_dir, dep, populate)
 
     assert os.path.isfile(
-        os.path.join(cache_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))
-    assert not os.path.exists(cache_root + '.tmp')
-    source = manager.cache_manager.read_manifest_source(cache_root)
+        os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))
+    assert not os.path.exists(resource_root + '.tmp')
+    source = manager.cache_manager.read_manifest_source(resource_root)
     assert source.location == 'https://example.com/json.git'
 
 
@@ -163,14 +203,14 @@ def test_repository_manager_staged_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(staging_root, 'recipes.json'), 'w') as fileout:
             fileout.write('{}')
 
-    cache_root = manager.staged_install(
+    resource_root = manager.staged_install(
         cache_dir, source, ResourceKind.RECIPES_REPOSITORY, populate)
 
-    assert os.path.isfile(os.path.join(cache_root, 'recipes.json'))
-    assert not os.path.exists(cache_root + '.tmp')
-    manifest = ResourceManifest.read_from_root(cache_root)
+    assert os.path.isfile(os.path.join(resource_root, 'recipes.json'))
+    assert not os.path.exists(resource_root + '.tmp')
+    manifest = ResourceManifest.read_from_root(resource_root)
     assert manifest.kind == ResourceKind.RECIPES_REPOSITORY.value
-    assert manager.cache_manager.read_manifest_source(cache_root).reference == 'main'
+    assert manager.cache_manager.read_manifest_source(resource_root).reference == 'main'
 
 
 def test_repository_manager_resolve(tmp_path):

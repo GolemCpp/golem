@@ -522,8 +522,6 @@ def test_find_repository_cache_dir_uses_repository_probe_under_weak_policy(tmp_p
         resolution_policy=CacheResolutionPolicy.WEAK,
     )
 
-    context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: cache_dir.location == '/static-regex'
-
     repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
     cache_dir = context.find_repository_cache_dir(repository, subdir=RECIPES_SUBDIR)
@@ -539,8 +537,6 @@ def test_find_repository_cache_dir_weak_policy_skips_read_only_hit_when_probe_fa
         CacheDirectory('/writable-default', is_read_only=False),
         resolution_policy=CacheResolutionPolicy.WEAK,
     )
-
-    context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: False
 
     repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
@@ -822,22 +818,6 @@ def test_cache_minimization_length_and_toggle_resolution(tmp_path):
     assert settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED') is False
 
 
-def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
-    os.makedirs(cache_dir.location, exist_ok=True)
-
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
-
-    resource_path = context.get_resource_location(dep, cache_dir)
-    os.makedirs(resource_path, exist_ok=True)
-
-    assert context.is_resource_in_cache_dir(dep, cache_dir) is True
-
-
 def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
@@ -856,15 +836,3 @@ def test_resolved_reference_prefers_hash_prefix():
     assert helpers.resolved_reference('3.11.3', '1234567890abcdef') == '12345678'
     # Falls back to the resolved version name when there is no hash.
     assert helpers.resolved_reference('3.11.3', '') == '3.11.3'
-
-
-def test_is_resource_in_cache_dir_uses_repository_base(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
-    os.makedirs(cache_dir.location, exist_ok=True)
-
-    repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
-    resource_path = context.get_resource_location(repository, cache_dir, subdir=RECIPES_SUBDIR)
-    os.makedirs(resource_path, exist_ok=True)
-
-    assert context.is_resource_in_cache_dir(repository, cache_dir, subdir=RECIPES_SUBDIR) is True

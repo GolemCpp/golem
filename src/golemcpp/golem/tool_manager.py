@@ -12,7 +12,7 @@ from golemcpp.golem.version_resolver import VersionResolver
 class InstalledToolInfo:
     name: str
     version: str
-    cache_location: str = ''
+    cache_root: str = ''
     is_read_only: bool = False
 
 
@@ -20,16 +20,8 @@ class InstalledToolInfo:
 class ToolInstallResult:
     name: str
     version: str
+    resource_root: str
     cache_root: str
-    cache_location: str
-
-
-@dataclass(frozen=True)
-class ToolUninstallResult:
-    name: str
-    removed: bool
-    cache_location: str = ''
-    is_read_only: bool = False
 
 
 class ToolManager(ResourceManager):
@@ -59,17 +51,19 @@ class ToolManager(ResourceManager):
             source=Source.for_repository(
                 tool.repository, reference=resolved_version))
 
-    def resolve_tool_cache_dir(self, tool_name: str):
-        return self.cache_manager.resolve_cache_directory(
-            self.spec_for(self.get_tool(tool_name)))
-
-    def tool_cache_root(self, tool_name: str) -> str:
-        spec = self.spec_for(self.get_tool(tool_name))
-        cache_dir = self.cache_manager.resolve_cache_directory(spec)
-        return self.cache_manager.get_resource_location(cache_dir, spec)
+    def resolve_cached_tool(self, tool_name: str, compute_size=False, read_manifest=False):
+        '''
+        The tool as a cached resource: where it lives, which cache it belongs to
+        and whether it is installed at all, resolved in one go.
+        '''
+        return self.cache_manager.resolve_cached_resource(
+            self.spec_for(self.get_tool(tool_name)),
+            compute_size=compute_size,
+            read_manifest=read_manifest)
 
     def read_tool_source(self, tool_name: str):
-        return self.cache_manager.read_manifest_source(self.tool_cache_root(tool_name))
+        cached_tool = self.resolve_cached_tool(tool_name)
+        return self.cache_manager.read_manifest_source(cached_tool.path)
 
     def list_installed_tools(self) -> list[InstalledToolInfo]:
         # Scan every configured cache location, like CacheManager.scan, so a tool
@@ -85,7 +79,7 @@ class ToolManager(ResourceManager):
                 installed_tools.append(InstalledToolInfo(
                     name=tool.name,
                     version=source.reference,
-                    cache_location=cache_dir.location,
+                    cache_root=cache_dir.location,
                     is_read_only=cache_dir.is_read_only))
         return installed_tools
 
@@ -104,23 +98,20 @@ class ToolManager(ResourceManager):
         def populate(staging_root):
             tool.install_handler(version=resolved_version, install_root=staging_root)
 
-        cache_root = self.cache_manager.staged_install(cache_dir, spec, populate)
+        resource_root = self.cache_manager.staged_install(cache_dir, spec, populate)
         return ToolInstallResult(
             name=tool.name,
             version=resolved_version,
-            cache_root=cache_root,
-            cache_location=cache_dir.location)
+            resource_root=resource_root,
+            cache_root=cache_dir.location)
 
-    def uninstall_tool(self, tool_name: str) -> ToolUninstallResult:
-        tool = self.get_tool(tool_name)
-        spec = self.spec_for(tool)
-        cache_dir = self.cache_manager.resolve_cache_directory(spec)
-        removed = self.cache_manager.remove(cache_dir, spec)
-        return ToolUninstallResult(
-            name=tool.name,
-            removed=removed,
-            cache_location=cache_dir.location,
-            is_read_only=cache_dir.is_read_only)
+    def uninstall_tool(self, resource) -> bool:
+        '''
+        Remove an already resolved tool resource, so what a caller inspected and
+        confirmed is exactly what gets deleted. Returns whether it was removed.
+        '''
+        removed, _ = self.cache_manager.remove_resources([resource])
+        return bool(removed)
 
 
 def get_tool_manager(cache_configuration) -> ToolManager:

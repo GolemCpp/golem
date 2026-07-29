@@ -58,9 +58,6 @@ class DependencyResourceManager(ResourceManager):
     def get_resource_location(self, cache_dir, dep) -> str:
         return self.cache_manager.get_resource_location(cache_dir, self.spec_for(dep))
 
-    def is_resource_in_cache_directory(self, cache_dir, dep) -> bool:
-        return self.cache_manager.is_resource_in_cache_directory(cache_dir, self.spec_for(dep))
-
     def staged_install(self, cache_dir, dep, populate) -> str:
         '''Clone the dependency's source into a staging dir, then atomically swap
         it into place with its manifest (see CacheManager.staged_install).'''
@@ -81,10 +78,6 @@ class RepositoryResourceManager(ResourceManager):
 
     def get_resource_location(self, cache_dir, source, kind) -> str:
         return self.cache_manager.get_resource_location(
-            cache_dir, self.spec_for(source, kind))
-
-    def is_resource_in_cache_directory(self, cache_dir, source, kind) -> bool:
-        return self.cache_manager.is_resource_in_cache_directory(
             cache_dir, self.spec_for(source, kind))
 
     def staged_install(self, cache_dir, source, kind, populate) -> str:

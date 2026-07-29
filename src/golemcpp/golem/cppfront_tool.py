@@ -18,21 +18,21 @@ def get_cppfront_binary_name() -> str:
 
 @dataclass(frozen=True)
 class CppFrontCacheInfo:
-    cache_root: str
+    resource_root: str
     source_path: str
     executable_path: str
     include_path: str
 
     @classmethod
-    def from_cache_root(cls, cache_root: str):
-        if not cache_root:
-            raise ValueError('cache_root is required')
+    def from_tool_root(cls, resource_root: str):
+        if not resource_root:
+            raise ValueError('resource_root is required')
 
-        source_path = os.path.join(cache_root, cache_configuration.SOURCE_DIRNAME)
-        executable_path = os.path.join(cache_root, 'bin', get_cppfront_binary_name())
+        source_path = os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME)
+        executable_path = os.path.join(resource_root, 'bin', get_cppfront_binary_name())
         include_path = os.path.join(source_path, 'include')
 
-        return cls(cache_root=cache_root,
+        return cls(resource_root=resource_root,
                    source_path=source_path,
                    executable_path=executable_path,
                    include_path=include_path)
@@ -43,15 +43,15 @@ class CppFrontCacheInfo:
         return has_executable and has_include
 
 
-def find_cppfront_cache_root(tool_cache_root: str) -> CppFrontCacheInfo | None:
+def find_cppfront_cache_root(cached_tool_root: str) -> CppFrontCacheInfo | None:
     '''
     Locate an installed cppfront given the already-resolved tool cache root
     (which may be the classic tools/<name> location or a minimized flat path).
     '''
-    if not tool_cache_root:
+    if not cached_tool_root:
         return None
 
-    cache_info = CppFrontCacheInfo.from_cache_root(tool_cache_root)
+    cache_info = CppFrontCacheInfo.from_tool_root(cached_tool_root)
 
     if not cache_info.is_valid():
         return None
@@ -103,11 +103,11 @@ def build_cppfront_executable(source_dir: str, executable_path: str) -> list[lis
 
 
 def install_cppfront(version: str, install_root: str) -> None:
-    cache_info = CppFrontCacheInfo.from_cache_root(install_root)
+    cache_info = CppFrontCacheInfo.from_tool_root(install_root)
     source_dir = cache_info.source_path
     executable_path = cache_info.executable_path
 
-    helpers.run_git(['clone', CPPFRONT_REPOSITORY, source_dir], cwd=cache_info.cache_root)
+    helpers.run_git(['clone', CPPFRONT_REPOSITORY, source_dir], cwd=cache_info.resource_root)
     helpers.run_git(['checkout', version], cwd=source_dir)
     build_cppfront_executable(source_dir=source_dir, executable_path=executable_path)
 

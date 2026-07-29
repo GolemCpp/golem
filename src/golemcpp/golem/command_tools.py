@@ -1,4 +1,3 @@
-import os
 from argparse import ArgumentParser
 from argparse import Namespace
 from dataclasses import dataclass
@@ -99,7 +98,7 @@ class ToolsCommandHandler:
         for tool in installed_tools:
             marker = ' (read-only)' if tool.is_read_only else ''
             print('{} {}  ({}{})'.format(
-                tool.name, tool.version, tool.cache_location, marker))
+                tool.name, tool.version, tool.cache_root, marker))
 
     def handle_install(self, manager: tool_manager.ToolManager) -> int:
         try:
@@ -112,42 +111,38 @@ class ToolsCommandHandler:
             print('ERROR: {}'.format(error))
             return 1
 
-        print('Installed {} {} in {}'.format(install_info.name, install_info.version, install_info.cache_root))
-        print('Selected cache location: {}'.format(install_info.cache_location))
+        print('Installed {} {} in {}'.format(install_info.name, install_info.version, install_info.resource_root))
+        print('Selected cache location: {}'.format(install_info.cache_root))
         return 0
 
     def handle_uninstall(self, manager: tool_manager.ToolManager) -> int:
         tool_name = self.options.tool
 
-        # Resolve where the tool lives before removing anything, so we can show
-        # what will be deleted and ask for confirmation (like `golem cache remove`).
+        # Resolve the tool once, so what is shown, confirmed and deleted is the
+        # same resource (like `golem cache remove`).
         try:
-            cache_dir = manager.resolve_tool_cache_dir(tool_name)
-            cache_root = manager.tool_cache_root(tool_name)
+            cached_tool = manager.resolve_cached_tool(tool_name)
         except ValueError as error:
             print('ERROR: {}'.format(error))
             self.print_help()
             return 1
 
-        if not os.path.isdir(cache_root):
-            print('{} is not installed in {}'.format(tool_name, cache_dir.location))
+        if not cached_tool.exists():
+            print('{} is not installed in {}'.format(tool_name, cached_tool.cache_root))
             return 0
 
-        if cache_dir.is_read_only:
+        if cached_tool.is_read_only:
             print('{} is in the read-only cache location {} and was not removed'.format(
-                tool_name, cache_dir.location))
+                tool_name, cached_tool.cache_root))
             return 0
 
-        print('Uninstall {} from {}'.format(tool_name, cache_root))
+        print('Uninstall {} from {}'.format(tool_name, cached_tool.path))
         if not helpers.confirm('Proceed?', assume_yes=self.options.yes):
             print('Aborted. Nothing was uninstalled.')
             return 0
 
-        uninstall_info = manager.uninstall_tool(tool_name=tool_name)
-        if uninstall_info.removed:
-            print('Uninstalled {} from {}'.format(uninstall_info.name, uninstall_info.cache_location))
-        else:
-            print('{} is not installed in {}'.format(uninstall_info.name, uninstall_info.cache_location))
+        manager.uninstall_tool(cached_tool)
+        print('Uninstalled {} from {}'.format(tool_name, cached_tool.cache_root))
         return 0
 
     def handle(self, args: list[str]) -> int:

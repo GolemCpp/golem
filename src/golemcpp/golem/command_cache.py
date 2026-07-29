@@ -142,7 +142,7 @@ class CacheCommandHandler:
         if cache_filter is not None:
             resources = [
                 resource for resource in resources
-                if os.path.abspath(resource.cache_location) == cache_filter
+                if os.path.abspath(resource.cache_root) == cache_filter
             ]
 
         if self.options.kind:
@@ -181,7 +181,7 @@ class CacheCommandHandler:
         '''
         groups = {}
         for resource in resources:
-            groups.setdefault(resource.cache_location, []).append(resource)
+            groups.setdefault(resource.cache_root, []).append(resource)
 
         emitted = set()
         for cache_dir in self.make_manager().locations:
@@ -202,7 +202,7 @@ class CacheCommandHandler:
             'source': resource.source,
             'identified': resource.is_identified,
             'manifest_version': resource.manifest_version,
-            'cache_location': resource.cache_location,
+            'cache_root': resource.cache_root,
             'read_only': resource.is_read_only,
             'size_bytes': resource.size_bytes,
             'created_at': resource.created_at,
@@ -258,7 +258,7 @@ class CacheCommandHandler:
         per_kind = {}
         total = 0
         for resource in resources:
-            per_cache[resource.cache_location] = per_cache.get(resource.cache_location, 0) + resource.size_bytes
+            per_cache[resource.cache_root] = per_cache.get(resource.cache_root, 0) + resource.size_bytes
             per_kind[resource.kind] = per_kind.get(resource.kind, 0) + resource.size_bytes
             total += resource.size_bytes
 
@@ -361,7 +361,7 @@ class CacheCommandHandler:
                 print('  {}  ({})  cache: {}'.format(
                     resource.path,
                     helpers.format_size(resource.size_bytes),
-                    resource.cache_location))
+                    resource.cache_root))
             return 0
 
         return self._delete_with_confirmation(

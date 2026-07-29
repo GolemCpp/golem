@@ -20,12 +20,16 @@ UNKNOWN_KIND = 'unknown'
 @dataclass
 class CachedResource:
     path: str
-    cache_location: str
+    cache_root: str
     is_read_only: bool
     subdir: str
     cache_key: str
     size_bytes: int
     manifest: object = None  # resource_manifest.ResourceManifest | None
+
+    def exists(self) -> bool:
+        '''Whether the resource root is present on disk.'''
+        return os.path.isdir(self.path)
 
     @property
     def is_identified(self) -> bool:
@@ -94,7 +98,7 @@ class CacheManager:
         Resolves the CacheDirectory corresponding to the resource and all the cache settings.
         '''
         identifier = spec.location
-        exists_in_cache = lambda cache_directory: self.is_resource_in_cache_directory(cache_directory, spec)
+        exists_in_cache = lambda cache_directory: self._make_spec_resource(cache_directory, spec).exists()
 
         read_only_caches_with_regex = self._find_matching_caches(
             identifier,
@@ -153,11 +157,31 @@ class CacheManager:
             cache_directory.location,
             self.make_minimized_resource_name(spec, self.minimization_length))
 
-    def is_resource_in_cache_directory(self, cache_directory, spec) -> bool:
+    def resolve_cached_resource(self, spec, compute_size=False, read_manifest=False):
         '''
-        Whether a resource root already exists in a given cache directory.
+        The CachedResource a spec denotes, in whichever cache directory the
+        resolution settles on.
         '''
-        return os.path.exists(self.get_resource_location(cache_directory, spec))
+        return self._make_spec_resource(
+            self.resolve_cache_directory(spec), spec,
+            compute_size=compute_size, read_manifest=read_manifest)
+
+    def _make_spec_resource(self, cache_directory, spec,
+                            compute_size=False, read_manifest=False):
+        # Built from the spec rather than from a directory entry, so the spec is
+        # what names the resource; resolve_cache_directory probes candidate
+        # directories through here and cannot go through the resolving entry
+        # point above.
+        path = self.get_resource_location(cache_directory, spec)
+
+        return CachedResource(
+            path=path,
+            cache_root=cache_directory.location,
+            is_read_only=cache_directory.is_read_only,
+            subdir=spec.subdir,
+            cache_key=spec.cache_key,
+            size_bytes=helpers.get_tree_size(path) if compute_size else 0,
+            manifest=ResourceManifest.read_from_root(path) if read_manifest else None)
 
     def make_minimized_resource_name(self, spec, length):
         '''
@@ -204,28 +228,28 @@ class CacheManager:
     # -- per-resource manifests -------------------------------------------
 
     @staticmethod
-    def read_manifest(cache_root: str):
-        return ResourceManifest.read_from_root(cache_root)
+    def read_manifest(resource_root: str):
+        return ResourceManifest.read_from_root(resource_root)
 
     @staticmethod
-    def read_manifest_source(cache_root: str):
+    def read_manifest_source(resource_root: str):
         '''The Source recorded in a resource's manifest, or None if unidentified.'''
-        manifest = ResourceManifest.read_from_root(cache_root)
+        manifest = ResourceManifest.read_from_root(resource_root)
         if manifest is None:
             return None
         return Source.from_manifest(manifest)
 
     @staticmethod
-    def write_manifest(cache_root: str, spec) -> None:
+    def write_manifest(resource_root: str, spec) -> None:
         resource_manifest.write_manifest(
-            resource_root=cache_root,
+            resource_root=resource_root,
             kind=spec.kind,
             cache_key=spec.cache_key,
             source=spec.source.to_dict())
 
     @staticmethod
-    def touch_last_used(cache_root: str) -> None:
-        resource_manifest.touch_last_used(cache_root)
+    def touch_last_used(resource_root: str) -> None:
+        resource_manifest.touch_last_used(resource_root)
 
     # -- per-resource mutations -------------------------------------------
 
@@ -235,29 +259,21 @@ class CacheManager:
         manifest, then atomically swap it into place. `populate(staging_root)`
         fills the staging directory with the resource's contents.
         '''
-        cache_root = self.get_resource_location(cache_directory, spec)
-        staging_root = cache_root + '.tmp'
+        resource_root = self.get_resource_location(cache_directory, spec)
+        staging_root = resource_root + '.tmp'
 
         helpers.remove_tree(staging_root)
         os.makedirs(staging_root, exist_ok=True)
         try:
             populate(staging_root)
             self.write_manifest(staging_root, spec)
-            helpers.remove_tree(cache_root)
-            os.makedirs(os.path.dirname(cache_root), exist_ok=True)
-            os.replace(staging_root, cache_root)
+            helpers.remove_tree(resource_root)
+            os.makedirs(os.path.dirname(resource_root), exist_ok=True)
+            os.replace(staging_root, resource_root)
         finally:
             helpers.remove_tree(staging_root)
 
-        return cache_root
-
-    def remove(self, cache_directory, spec) -> bool:
-        '''Remove a resource root, honoring the read-only guard. Returns whether it was removed.'''
-        cache_root = self.get_resource_location(cache_directory, spec)
-        if cache_directory.is_read_only or not os.path.isdir(cache_root):
-            return False
-        helpers.remove_tree(cache_root)
-        return True
+        return resource_root
 
     # -- cache inventory --------------------------------------------------
 
@@ -282,7 +298,7 @@ class CacheManager:
 
         return CachedResource(
             path=entry_path,
-            cache_location=cache_directory.location,
+            cache_root=cache_directory.location,
             is_read_only=cache_directory.is_read_only,
             subdir=subdir,
             cache_key=(manifest.cache_key if manifest and manifest.cache_key else entry),
@@ -364,13 +380,15 @@ class CacheManager:
         '''
         Delete the given resource roots. Resources living in a read-only cache
         are never touched and are returned separately so the caller can report
-        them.
+        them. A resource that is no longer on disk is not reported as removed.
         '''
         removed = []
         skipped_read_only = []
         for resource in resources:
             if resource.is_read_only:
                 skipped_read_only.append(resource)
+                continue
+            if not resource.exists():
                 continue
             helpers.remove_tree(resource.path)
             removed.append(resource)

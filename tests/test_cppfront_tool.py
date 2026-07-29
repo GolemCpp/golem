@@ -14,11 +14,11 @@ def test_find_cppfront_cache_uses_cache_directory(tmp_path):
     executable_path.write_text('', encoding='utf-8')
 
     found = cppfront_tool.find_cppfront_cache_root(
-        tool_cache_root=str(cache_dir),
+        cached_tool_root=str(cache_dir),
     )
 
     assert found is not None
-    assert found.cache_root == str(cache_directory / cppfront_tool.CPPFRONT_NAME)
+    assert found.resource_root == str(cache_directory / cppfront_tool.CPPFRONT_NAME)
 
 
 def test_install_cppfront_writes_into_install_root(monkeypatch, tmp_path):

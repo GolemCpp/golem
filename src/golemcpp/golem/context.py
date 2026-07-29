@@ -2275,10 +2275,6 @@ class Context:
         spec = self.make_resource_spec(resource, subdir=subdir)
         return get_cache_manager(self.cache_configuration).get_resource_location(cache_dir, spec)
 
-    def is_resource_in_cache_dir(self, resource, cache_dir, subdir=None):
-        spec = self.make_resource_spec(resource, subdir=subdir)
-        return get_cache_manager(self.cache_configuration).is_resource_in_cache_directory(cache_dir, spec)
-
     def export_dependency(self, config, dep):
         self.dep_command(config, dep, 'export', True)
 
@@ -4466,10 +4462,9 @@ class Context:
     def autodiscover_cppfront(self):
         # Resolve the tool root exactly like it was installed (classic tools/
         # subdir or a minimized flat path) so the build finds it either way.
-        tool_cache_root = get_tool_manager(self.cache_configuration).tool_cache_root(cppfront_tool.CPPFRONT_NAME)
+        cached_tool = get_tool_manager(self.cache_configuration).resolve_cached_tool(cppfront_tool.CPPFRONT_NAME)
 
-        cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(
-            tool_cache_root)
+        cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(cached_tool.path)
 
         if cppfront_cache_info is None:
             return

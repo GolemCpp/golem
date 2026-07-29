@@ -261,8 +261,8 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     # whether it landed under tools/<name> or a minimized flat path.
     manager = tool_manager.get_tool_manager(
         make_cache_configuration(cache_directory.CacheDirectory(location=str(cache_dir))))
-    cache_info = cppfront_tool.CppFrontCacheInfo.from_cache_root(
-        manager.tool_cache_root(cppfront_tool.CPPFRONT_NAME)
+    cache_info = cppfront_tool.CppFrontCacheInfo.from_tool_root(
+        manager.resolve_cached_tool(cppfront_tool.CPPFRONT_NAME).path
     )
 
     assert Path(cache_info.executable_path).is_file()

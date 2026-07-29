@@ -22,12 +22,12 @@ def stub_version_resolver(monkeypatch):
         staticmethod(lambda url, version, version_regex='': (version, 'deadbeef')))
 
 
-def write_tool_manifest(cache_root, *, name='cppfront', version='v0.8.1'):
+def write_tool_manifest(resource_root, *, name='cppfront', version='v0.8.1'):
     resource_manifest.ResourceManifest.create(
         kind=resource_manifest.ResourceKind.TOOL,
         cache_key=name,
         source={'type': 'git', 'location': 'u', 'reference': version},
-    ).write_to_root(str(cache_root))
+    ).write_to_root(str(resource_root))
 
 
 def replace_cppfront_tool(monkeypatch, **changes):
@@ -103,36 +103,36 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path):
     assert not (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront.tmp').exists()
 
 
-def test_uninstall_tool_removes_tool_named_cache_directory(tmp_path):
+def test_uninstall_tool_removes_the_resolved_tool_resource(tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
-    cache_root = tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
-    cache_root.mkdir(parents=True)
-    (cache_root / 'manifest.json').write_text('{}\n', encoding='utf-8')
+    resource_root = tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    resource_root.mkdir(parents=True)
+    (resource_root / 'manifest.json').write_text('{}\n', encoding='utf-8')
 
-    result = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory)).uninstall_tool(
-        tool_name='cppfront',
-    )
+    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
+    resource = manager.resolve_cached_tool('cppfront')
 
-    assert result.removed is True
-    assert make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory)).tool_cache_root('cppfront') == str(cache_root)
-    assert not cache_root.exists()
+    assert resource.path == str(resource_root)
+    assert resource.exists() is True
+    assert manager.uninstall_tool(resource) is True
+    assert not resource_root.exists()
 
 
 def test_uninstall_tool_reports_missing_tool_directory(tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
 
-    result = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory)).uninstall_tool(
-        tool_name='cppfront',
-    )
+    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
+    resource = manager.resolve_cached_tool('cppfront')
 
-    assert result.removed is False
+    assert resource.exists() is False
+    assert manager.uninstall_tool(resource) is False
 
 
 def test_list_installed_tools_returns_registry_installed_tools(monkeypatch, tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
-    cache_root = tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
-    cache_root.mkdir(parents=True)
-    write_tool_manifest(cache_root)
+    resource_root = tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    resource_root.mkdir(parents=True)
+    write_tool_manifest(resource_root)
 
     installed_tools = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory)).list_installed_tools()
 
@@ -163,10 +163,10 @@ def test_install_tool_uses_minimized_flat_layout_when_enabled(monkeypatch, tmp_p
     result = manager.install_tool(tool_name='cppfront', version='')
 
     # Flat under the cache root, no tools/ subdir, short hashed name.
-    assert result.cache_root == str(expected_root)
+    assert result.resource_root == str(expected_root)
     assert captured['install_root'] == str(expected_root) + '.tmp'
     assert cache_configuration.TOOLS_SUBDIR not in os.path.relpath(
-        result.cache_root, str(tools_cache_directory))
+        result.resource_root, str(tools_cache_directory))
 
     # The manifest records the real cache_key, so the scanner and
     # `golem cache list` identify it wherever it is stored.
@@ -186,7 +186,7 @@ def test_install_tool_prefers_existing_classic_tool_layout(monkeypatch, tmp_path
         tmp_path, tools_cache_directory=str(tools_cache_directory),
         minimization_enabled=True)
 
-    assert manager.tool_cache_root('cppfront') == str(classic_root)
+    assert manager.resolve_cached_tool('cppfront').path == str(classic_root)
 
 
 def test_list_installed_tools_scans_additional_cache(tmp_path):
@@ -194,9 +194,9 @@ def test_list_installed_tools_scans_additional_cache(tmp_path):
     # mirroring how `golem cache list` scans every configured location.
     primary = tmp_path / 'primary-cache'
     additional = tmp_path / 'additional-cache'
-    cache_root = additional / cache_configuration.TOOLS_SUBDIR / 'cppfront'
-    cache_root.mkdir(parents=True)
-    write_tool_manifest(cache_root)
+    resource_root = additional / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    resource_root.mkdir(parents=True)
+    write_tool_manifest(resource_root)
 
     manager = make_tool_manager(tmp_path, locations=[
         cache_directory.CacheDirectory(location=str(primary)),
@@ -207,16 +207,16 @@ def test_list_installed_tools_scans_additional_cache(tmp_path):
 
     assert len(installed_tools) == 1
     assert installed_tools[0].name == 'cppfront'
-    assert installed_tools[0].cache_location == str(additional)
+    assert installed_tools[0].cache_root == str(additional)
     assert installed_tools[0].is_read_only is False
 
 
 def test_uninstall_tool_finds_tool_in_additional_cache_under_weak_policy(tmp_path):
     primary = tmp_path / 'primary-cache'
     additional = tmp_path / 'additional-cache'
-    cache_root = additional / cache_configuration.TOOLS_SUBDIR / 'cppfront'
-    cache_root.mkdir(parents=True)
-    write_tool_manifest(cache_root)
+    resource_root = additional / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    resource_root.mkdir(parents=True)
+    write_tool_manifest(resource_root)
 
     manager = make_tool_manager(
         tmp_path,
@@ -226,11 +226,11 @@ def test_uninstall_tool_finds_tool_in_additional_cache_under_weak_policy(tmp_pat
             cache_directory.CacheDirectory(location=str(additional)),
         ])
 
-    result = manager.uninstall_tool(tool_name='cppfront')
+    resource = manager.resolve_cached_tool('cppfront')
 
-    assert result.removed is True
-    assert result.cache_location == str(additional)
-    assert not cache_root.exists()
+    assert resource.cache_root == str(additional)
+    assert manager.uninstall_tool(resource) is True
+    assert not resource_root.exists()
 
 
 def test_install_tool_refuses_read_only_cache(tmp_path):

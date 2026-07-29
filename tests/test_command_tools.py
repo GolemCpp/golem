@@ -75,8 +75,8 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
         return tool_manager.ToolInstallResult(
             name=tool_name,
             version=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
-            cache_root='/tmp/golem-tools-cache/cppfront',
-            cache_location=self.locations[0].location,
+            resource_root='/tmp/golem-tools-cache/cppfront',
+            cache_root=self.locations[0].location,
         )
 
     monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
@@ -107,8 +107,8 @@ def test_handle_tools_command_accepts_explicit_version(monkeypatch, tmp_path):
         return tool_manager.ToolInstallResult(
             name=tool_name,
             version=version,
-            cache_root='/tmp/golem-tools-cache/cppfront',
-            cache_location=self.locations[0].location,
+            resource_root='/tmp/golem-tools-cache/cppfront',
+            cache_root=self.locations[0].location,
         )
 
     monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
@@ -133,8 +133,8 @@ def test_handle_tools_command_accepts_explicit_cache_directory(monkeypatch, tmp_
         return tool_manager.ToolInstallResult(
             name=tool_name,
             version=version,
-            cache_root=self.locations[0].location + '/cppfront',
-            cache_location=self.locations[0].location,
+            resource_root=self.locations[0].location + '/cppfront',
+            cache_root=self.locations[0].location,
         )
 
     monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
@@ -169,8 +169,8 @@ def test_handle_tools_command_honors_persisted_configure_options(monkeypatch, tm
         captured['location'] = self.locations[0].location
         return tool_manager.ToolInstallResult(
             name=tool_name, version=version,
-            cache_root=self.locations[0].location + '/cppfront',
-            cache_location=self.locations[0].location)
+            resource_root=self.locations[0].location + '/cppfront',
+            cache_root=self.locations[0].location)
 
     monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
 
@@ -225,6 +225,29 @@ def test_handle_tools_command_uninstall_prompts_for_confirmation(capsys, tmp_pat
 
     stdout = capsys.readouterr().out
     assert 'Aborted. Nothing was uninstalled.' in stdout
+
+
+def test_handle_tools_command_refuses_to_uninstall_from_a_read_only_cache(
+        capsys, monkeypatch, tmp_path):
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+    writable_cache = tmp_path / 'cache'
+    read_only_cache = tmp_path / 'read-only-cache'
+    tool_root = install_fake_tool_on_disk(read_only_cache)
+    monkeypatch.setenv(
+        'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES', str(read_only_cache))
+
+    result = command_tools.handle_tools_command(
+        project_dir=str(project_dir),
+        args=['uninstall', 'cppfront', '--cache-directory=' + str(writable_cache), '--yes'],
+    )
+
+    assert result == 0
+    assert tool_root.exists()
+
+    stdout = capsys.readouterr().out
+    assert 'cppfront is in the read-only cache location {} and was not removed'.format(
+        str(read_only_cache)) in stdout
 
 
 def test_handle_tools_command_reports_when_tool_is_not_installed(capsys, tmp_path):
