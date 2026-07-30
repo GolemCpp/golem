@@ -18,11 +18,15 @@ class OverridesRepositoryManager(ResourceManager):
     def get_resource_location(self, cache_dir, source) -> str:
         return self.cache_manager.get_resource_location(cache_dir, self.resource_for(source))
 
-    def staged_install(self, cache_dir, source, populate) -> str:
+    def resolve_cached_resource(self, source):
+        '''The repository as a cached resource: which cache it belongs to, where
+        it lives there and whether it is already cloned, resolved in one go.'''
+        return self.cache_manager.resolve_cached_resource(self.resource_for(source))
+
+    def staged_install(self, cached_repository, populate) -> str:
         '''Clone the repository source into a staging dir, then atomically swap it
         into place with its manifest (see CacheManager.staged_install).'''
-        return self.cache_manager.staged_install(
-            cache_dir, self.resource_for(source), populate)
+        return self.cache_manager.staged_install(cached_repository, populate)
 
 
 def get_overrides_repository_manager(cache_configuration) -> OverridesRepositoryManager:

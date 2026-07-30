@@ -43,13 +43,13 @@ def test_resolve_and_locate(tmp_path):
 def test_staged_install_swaps_source_and_manifest(tmp_path):
     manager = make_manager(tmp_path)
     source = make_source()
-    cache_dir = manager.resolve_cache_directory(source)
 
     def populate(staging_root):
         with open(os.path.join(staging_root, 'overrides.json'), 'w') as fileout:
             fileout.write('[]')
 
-    resource_root = manager.staged_install(cache_dir, source, populate)
+    resource_root = manager.staged_install(
+        manager.resolve_cached_resource(source), populate)
 
     assert os.path.isfile(os.path.join(resource_root, 'overrides.json'))
     assert not os.path.exists(resource_root + '.tmp')

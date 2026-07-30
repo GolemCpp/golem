@@ -89,22 +89,22 @@ class ToolManager(ResourceManager):
         requested = version or tool.default_version or ''
         resolved_version, resolved_hash = VersionResolver.resolve(tool.repository, requested)
 
-        resource = self.resource_for(tool, resolved_version=resolved_version)
-        cache_dir = self.cache_manager.resolve_cache_directory(resource)
-        if cache_dir.is_read_only:
+        cached_tool = self.cache_manager.resolve_cached_resource(
+            self.resource_for(tool, resolved_version=resolved_version))
+        if cached_tool.is_read_only:
             raise RuntimeError(
                 'cannot install {} into read-only cache location {}'.format(
-                    tool.name, cache_dir.location))
+                    tool.name, cached_tool.cache_root))
 
         def populate(staging_root):
             tool.install_handler(version=resolved_version, install_root=staging_root)
 
-        resource_root = self.cache_manager.staged_install(cache_dir, resource, populate)
+        resource_root = self.cache_manager.staged_install(cached_tool, populate)
         return ToolInstallResult(
             name=tool.name,
             version=resolved_version,
             resource_root=resource_root,
-            cache_root=cache_dir.location)
+            cache_root=cached_tool.cache_root)
 
     def uninstall_tool(self, cached_tool) -> bool:
         '''

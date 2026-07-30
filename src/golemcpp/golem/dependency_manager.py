@@ -19,11 +19,15 @@ class DependencyManager(ResourceManager):
     def get_resource_location(self, cache_dir, dep) -> str:
         return self.cache_manager.get_resource_location(cache_dir, self.resource_for(dep))
 
-    def staged_install(self, cache_dir, dep, populate) -> str:
+    def get_cached_resource(self, cache_dir, dep):
+        '''The dependency as a cached resource in that cache directory: its
+        location and everything installing it needs, in one object.'''
+        return self.cache_manager._make_cached_resource(cache_dir, self.resource_for(dep))
+
+    def staged_install(self, cached_dep, populate) -> str:
         '''Clone the dependency's source into a staging dir, then atomically swap
         it into place with its manifest (see CacheManager.staged_install).'''
-        return self.cache_manager.staged_install(
-            cache_dir, self.resource_for(dep), populate)
+        return self.cache_manager.staged_install(cached_dep, populate)
 
 
 def get_dependency_manager(cache_configuration) -> DependencyManager:

@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem import resource_manifest
@@ -265,11 +267,27 @@ def test_staged_install_swaps_atomically(tmp_path):
         with open(os.path.join(staging_root, 'payload.txt'), 'w') as fileout:
             fileout.write('hi')
 
-    root = manager.staged_install(cache_dir, resource, populate)
+    root = manager.staged_install(
+        manager._make_cached_resource(cache_dir, resource), populate)
 
     assert os.path.isfile(os.path.join(root, 'payload.txt'))
     assert ResourceManifest.read_from_root(root) is not None
     assert not os.path.exists(root + '.tmp')
+
+
+def test_staged_install_refuses_a_scanned_resource(tmp_path):
+    cache_root = str(tmp_path / 'cache')
+    make_resource(cache_root, cache_configuration.TOOLS_SUBDIR, 'demo',
+                  manifest_kind=ResourceKind.TOOL)
+    manager = make_classic_manager(
+        cache_directory.CacheDirectory(location=cache_root))
+
+    # A scanned entry names itself from its own manifest, so it has no resource
+    # to write a fresh manifest from: installing through it is a programming error.
+    scanned = manager.scan(compute_size=False)[0]
+
+    with pytest.raises(ValueError):
+        manager.staged_install(scanned, lambda staging_root: None)
 
 
 def test_remove_resources_honors_read_only_guard(tmp_path):

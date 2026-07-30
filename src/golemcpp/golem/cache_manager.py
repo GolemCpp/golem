@@ -26,6 +26,9 @@ class CachedResource:
     cache_key: str
     size_bytes: int
     manifest: object = None  # resource_manifest.ResourceManifest | None
+    # The Resource this cached form was made from, when there is one. It carries
+    # the information that installing has to record in a manifest.
+    resource: object = None  # resource.Resource | None
 
     def exists(self) -> bool:
         '''Whether the resource root is present on disk.'''
@@ -181,7 +184,8 @@ class CacheManager:
             subdir=resource.subdir,
             cache_key=resource.cache_key,
             size_bytes=helpers.get_tree_size(path) if compute_size else 0,
-            manifest=ResourceManifest.read_from_root(path) if read_manifest else None)
+            manifest=ResourceManifest.read_from_root(path) if read_manifest else None,
+            resource=resource)
 
     def make_minimized_resource_name(self, resource, length):
         '''
@@ -253,20 +257,26 @@ class CacheManager:
 
     # -- per-resource mutations -------------------------------------------
 
-    def staged_install(self, cache_directory, resource, populate) -> str:
+    def staged_install(self, cached_resource, populate) -> str:
         '''
         Build a resource into a sibling `.tmp` staging directory, drop its
         manifest, then atomically swap it into place. `populate(staging_root)`
         fills the staging directory with the resource's contents.
         '''
-        resource_root = self.get_resource_location(cache_directory, resource)
+        if cached_resource.resource is None:
+            raise ValueError(
+                'cannot install {}: this cached resource was not made from a '
+                'resource, so it has no identity to write a manifest from'.format(
+                    cached_resource.path))
+
+        resource_root = cached_resource.path
         staging_root = resource_root + '.tmp'
 
         helpers.remove_tree(staging_root)
         os.makedirs(staging_root, exist_ok=True)
         try:
             populate(staging_root)
-            self.write_manifest(staging_root, resource)
+            self.write_manifest(staging_root, cached_resource.resource)
             helpers.remove_tree(resource_root)
             os.makedirs(os.path.dirname(resource_root), exist_ok=True)
             os.replace(staging_root, resource_root)

@@ -71,7 +71,8 @@ def test_staged_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(source_dir, 'CMakeLists.txt'), 'w') as fileout:
             fileout.write('project(json)')
 
-    resource_root = manager.staged_install(cache_dir, dep, populate)
+    resource_root = manager.staged_install(
+        manager.get_cached_resource(cache_dir, dep), populate)
 
     assert os.path.isfile(
         os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))

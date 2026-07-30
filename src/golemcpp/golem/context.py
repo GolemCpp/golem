@@ -1352,10 +1352,6 @@ class Context:
         return get_dependency_manager(
             self.cache_configuration).get_resource_location(cache_dir, dep)
 
-    def get_dep_repo_location(self, dep, cache_dir, base=None):
-        path = self.get_dep_location(dep, cache_dir) if base is None else base
-        return os.path.join(path, cache_configuration.SOURCE_DIRNAME)
-
     def get_dep_include_location(self, dep, cache_dir, base=None):
         path = self.get_dep_location(dep, cache_dir) if base is None else base
         return os.path.join(path, 'include')
@@ -1666,18 +1662,20 @@ class Context:
                          cwd=repo_path)
 
     def make_repo_ready(self, dep, cache_dir, should_clean=False):
-        repo_path = self.get_dep_repo_location(dep, cache_dir)
+        manager = get_dependency_manager(self.cache_configuration)
+        cached_dep = manager.get_cached_resource(cache_dir, dep)
+        repo_path = os.path.join(cached_dep.path, cache_configuration.SOURCE_DIRNAME)
 
         if os.path.exists(repo_path):
             if should_clean:
                 self.clean_repo(dep, repo_path)
-            resource_manifest.touch_last_used(self.get_dep_location(dep, cache_dir))
+            resource_manifest.touch_last_used(cached_dep.path)
         else:
             # Clone the source atomically through the dependency manager: it stages
             # the whole resource root (with the clone under source/) and its manifest
             # in a sibling .tmp dir, then swaps it into place in one step.
-            get_dependency_manager(self.cache_configuration).staged_install(
-                cache_dir, dep,
+            manager.staged_install(
+                cached_dep,
                 lambda staging_root: self.clone_repo(
                     dep, os.path.join(staging_root, cache_configuration.SOURCE_DIRNAME)))
 
@@ -4250,39 +4248,37 @@ class Context:
                             cwd=path)
         resource_manifest.touch_last_used(path)
 
-    def install_repository(self, manager, source, cache_dir, repo_path):
+    def install_repository(self, manager, source, cached_repository):
         # Fresh: clone the source atomically through the repository manager (staging
         # + manifest + swap). Existing: update in place, keeping the cache root.
-        if os.path.exists(repo_path):
-            self.update_repository_source(repo_path, source)
+        if cached_repository.exists():
+            self.update_repository_source(cached_repository.path, source)
         else:
             manager.staged_install(
-                cache_dir, source,
+                cached_repository,
                 lambda staging_root: self.clone_repository(staging_root, source))
 
     def clone_overrides_repository(self, source):
         manager = get_overrides_repository_manager(self.cache_configuration)
-        cache_dir = manager.resolve_cache_directory(source)
-        repo_path = manager.get_resource_location(cache_dir, source)
+        cached_repository = manager.resolve_cached_resource(source)
 
         if not self.deps_resolve:
-            return repo_path
+            return cached_repository.path
 
-        self.install_repository(manager, source, cache_dir, repo_path)
+        self.install_repository(manager, source, cached_repository)
 
-        return repo_path
+        return cached_repository.path
 
     def clone_recipes_repository(self, source):
         manager = get_recipes_repository_manager(self.cache_configuration)
-        cache_dir = manager.resolve_cache_directory(source)
-        repo_path = manager.get_resource_location(cache_dir, source)
+        cached_repository = manager.resolve_cached_resource(source)
 
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
-            return repo_path
+            return cached_repository.path
 
-        self.install_repository(manager, source, cache_dir, repo_path)
+        self.install_repository(manager, source, cached_repository)
 
-        return repo_path
+        return cached_repository.path
 
     def load_recipes_repositories(self):
         # The built-in default (the GolemCpp recipes repository) is part of the
