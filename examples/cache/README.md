@@ -15,7 +15,7 @@ golem build
 
 This will create 3 cache directories:
 - `cache-recipes` will contain any repository matching `.*GolemCpp\/recipes.*`  
-Such as the official recipes repository for Golem
+Such as the official Golem cookbook
 - `cache-json` will contain any repository matching `.*nlohmann.*`  
 Such as https://github.com/nlohmann/json.git
 - `cache-default` will contain any dependency not matched by other cache rules  

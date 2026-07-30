@@ -7,8 +7,8 @@ from golemcpp.golem import resource_manifest
 
 def test_resource_kind_subdir_mapping():
     assert resource_manifest.ResourceKind.DEPENDENCY.subdir == cache_configuration.DEPENDENCIES_SUBDIR
-    assert resource_manifest.ResourceKind.RECIPES_REPOSITORY.subdir == cache_configuration.RECIPES_SUBDIR
-    assert resource_manifest.ResourceKind.OVERRIDES_REPOSITORY.subdir == cache_configuration.OVERRIDES_SUBDIR
+    assert resource_manifest.ResourceKind.COOKBOOK.subdir == cache_configuration.COOKBOOKS_SUBDIR
+    assert resource_manifest.ResourceKind.OVERLAY.subdir == cache_configuration.OVERLAYS_SUBDIR
     assert resource_manifest.ResourceKind.TOOL.subdir == cache_configuration.TOOLS_SUBDIR
 
     assert resource_manifest.ResourceKind.from_subdir('dependencies') == resource_manifest.ResourceKind.DEPENDENCY

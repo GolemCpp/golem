@@ -11,7 +11,6 @@ import os
 import re
 
 from golemcpp.golem import helpers
-from golemcpp.golem.source import Source
 from semver import max_satisfying
 
 
@@ -23,16 +22,12 @@ class VersionResolver:
         `(resolved_version, resolved_hash)`.
 
         Semantics (unchanged from the original Dependency.resolve):
-        - A local non-git directory resolves to ('-', '-').
-        - Otherwise the semver spec is matched against the remote tags (optionally
+        - The semver spec is matched against the remote tags (optionally
           pre-filtered by `version_regex`); on a match the tag and its sha are
           returned.
         - With no tag match, the value is treated as a branch head (`ls-remote
           --heads`); failing that, it is used literally as both version and hash.
         '''
-        if Source.parse_local_non_git_repository(url) is not None:
-            return '-', '-'
-
         tags = helpers.check_git_output(
             ['ls-remote', '--tags', url], cwd=os.getcwd())
         tags = tags.split('\n')

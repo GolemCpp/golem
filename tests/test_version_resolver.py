@@ -44,18 +44,7 @@ def test_find_version_accepts_prefixed_short_underscore_tag():
     assert VersionResolver.find_version(['foo_1_1', 'foo_1_2'], '1.2') == 'foo_1_2'
 
 
-def test_resolve_returns_dash_for_local_non_git_directory(monkeypatch):
-    monkeypatch.setattr(
-        version_resolver.Source, 'parse_local_non_git_repository',
-        staticmethod(lambda url: '/some/local/dir'))
-    assert VersionResolver.resolve('file:///some/local/dir', '') == ('-', '-')
-
-
 def test_resolve_matches_tag_and_returns_hash(monkeypatch):
-    monkeypatch.setattr(
-        version_resolver.Source, 'parse_local_non_git_repository',
-        staticmethod(lambda url: None))
-
     def fake_git(args, cwd):
         if '--tags' in args and args[-1].startswith('refs/tags/'):
             return 'cafebabecafebabe\trefs/tags/v3.12.0\n'
@@ -72,10 +61,6 @@ def test_resolve_matches_tag_and_returns_hash(monkeypatch):
 
 
 def test_resolve_falls_back_to_branch_head(monkeypatch):
-    monkeypatch.setattr(
-        version_resolver.Source, 'parse_local_non_git_repository',
-        staticmethod(lambda url: None))
-
     def fake_git(args, cwd):
         if '--tags' in args:
             return ''  # no tags
