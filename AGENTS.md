@@ -32,6 +32,16 @@
 - Keep one source of truth. Before adding a constant, a default or a lookup table, check whether an existing module already owns it.
 - Change what the task needs. Unrelated renames and reformatting make a diff unreviewable, and a contributor is expected to own every line they submit (see [docs/Developers.md](docs/Developers.md)).
 
+## Cross-Platform
+
+- Golem is a cross-platform tool: the same code runs on Windows, Linux and macOS, drives their native toolchains, and is expected to behave identically from the user's point of view. Never assume the host you are on. Platform checks go through `Context.is_windows/is_linux/is_darwin` ([context.py](src/golemcpp/golem/context.py)) or `sys.platform` in the modules that have no context, never through a new detection scheme.
+- CI covers Linux and Windows only (see [.github/workflows/examples-integration.yml](.github/workflows/examples-integration.yml)); macOS paths (`is_darwin`, [package_dmg.py](src/golemcpp/golem/package_dmg.py)) are real code no job exercises, so changes there need a local run or an explicit note that they are unverified.
+- Paths: build them with `os.path.join`/`pathlib`, never by concatenating separators, and keep them absolute once resolved. A path can legitimately contain spaces, `#`, `%`, `&`, accents or any non-ASCII character — it must survive being written into a generated `wscript`/golemfile, passed to a subprocess and read back. Windows adds drive letters, `\` separators, case-insensitive comparison and the `file:///C:/...` URI shape handled in [source.py](src/golemcpp/golem/source.py).
+- Long paths are a Windows constraint, not a preference: cache path minimization exists because compilers such as CL.exe break past the limit (see the `cache.minimization.*` settings in [settings.py](src/golemcpp/golem/settings.py)). Keep cached layouts short, and do not add nesting under a resource root without weighing it.
+- Encoding: pass `encoding='utf-8'` to every `open()` for files Golem owns (manifests, config stores, generated project files), because the platform default is not UTF-8 everywhere. Decode subprocess output through `helpers.decode_output`, which falls back to the console encoding and then to UTF-8 with replacement instead of raising.
+- Subprocesses: build argument lists and run them with `shell=False` through `helpers.run_task`/`run_git`, so quoting is never hand-rolled per platform. Anything shelling out to a Windows built-in (`rmdir /s /q` in `helpers.remove_tree`) has to quote through `subprocess.list2cmdline`.
+- Cover platform-specific behavior with a test that fakes the platform rather than one that only passes on the host: patch the module's `sys.platform` as [tests/test_config_store.py](tests/test_config_store.py) does, or stub `is_windows` as [tests/test_qt_discovery.py](tests/test_qt_discovery.py) does.
+
 ## Editing Rules
 
 - Avoid editing [waflib](waflib) unless the task is explicitly about the vendored Waf subtree.
