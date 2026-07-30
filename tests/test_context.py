@@ -446,9 +446,9 @@ def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_en
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context = make_runtime_context(runtime_variant='release')
     context.resolved_overrides = '/tmp/overrides.json'
-    context.get_dep_location = lambda dep, cache_dir: '/tmp/dep-export'
-    context.make_repo_ready = lambda dep, cache_dir, should_clean=False: '/tmp/repo'
-    context.get_dep_build_location = lambda dep, cache_dir: '/tmp/repo/build'
+    context.get_dep_location = lambda dep: '/tmp/dep-export'
+    context.make_repo_ready = lambda dep, should_clean=False: '/tmp/repo'
+    context.get_dep_build_location = lambda dep: '/tmp/repo/build'
     context.get_global_dependencies_configuration_file = lambda: '/tmp/global-dependencies.json'
     context.get_only_update_dependencies_regex = lambda: ''
     # The cache options forwarded to the dependency sub-build are the flags the
@@ -479,7 +479,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
     monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: calls.append(args))
 
-    context.run_dep_command(dep=dep, cache_dir='/tmp/cache', command='resolve')
+    context.run_dep_command(dep=dep, command='resolve')
 
     assert '--runtime-link=shared' in calls[0]
     assert '--runtime-variant=release' in calls[0]
@@ -701,8 +701,7 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
     repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
     manager = get_recipes_repository_manager(context.cache_configuration)
-    cache_dir = manager.resolve_cache_directory(repository)
-    repo_path = manager.get_resource_location(cache_dir, repository)
+    repo_path = manager.resolve_cached_resource(repository).path
 
     assert repo_path == os.path.join('/cache', RECIPES_SUBDIR, Source.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
@@ -729,17 +728,44 @@ def test_cache_minimization_length_and_toggle_resolution(tmp_path):
 def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
+    context.cache_configuration = make_cache_configuration(cache_dir)
 
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
         version='^3.0.0')
     dep.resolved_hash = '1234567890abcdef'
-    dep.cache_dir = cache_dir
+    # Primed the way configure does, so the path comes from that resolution.
+    dep.update_cached_resource(context.cache_configuration)
 
     assert context.make_dependency_path(dep, 'artifact') == os.path.join(
-        get_dependency_manager(context.cache_configuration).get_resource_location(
-            cache_dir, dep),
+        get_dependency_manager(
+            context.cache_configuration).resolve_cached_resource(dep).path,
         'artifact')
+
+
+def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
+    # A dependency restored from a dependencies.json comes back without a cached
+    # resource: it resolves its own on first use rather than needing a caller to
+    # prime it.
+    context = make_repository_context(project_dir=tmp_path)
+    cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
+    context.cache_configuration = make_cache_configuration(cache_dir)
+
+    dep = Dependency.unserialize_from_json({
+        'name': 'json',
+        'repository': 'https://github.com/nlohmann/json.git',
+        'resolved_version': '3.11.3',
+        'resolved_hash': '1234567890abcdef',
+    })
+    assert dep.cached_resource is None
+
+    location = context.get_dep_location(dep)
+
+    assert location == get_dependency_manager(
+        context.cache_configuration).resolve_cached_resource(dep).path
+    # Resolved once and kept: the same cached resource answers every later path.
+    assert dep.cached_resource.path == location
+    assert context.get_dep_cached_resource(dep) is dep.cached_resource
 
 
 def test_resolved_reference_prefers_hash_prefix():

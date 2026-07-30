@@ -12,12 +12,6 @@ class RecipesRepositoryManager(ResourceManager):
             cache_key=source.get_cache_key(),
             source=source)
 
-    def resolve_cache_directory(self, source):
-        return self.cache_manager.resolve_cache_directory(self.resource_for(source))
-
-    def get_resource_location(self, cache_dir, source) -> str:
-        return self.cache_manager.get_resource_location(cache_dir, self.resource_for(source))
-
     def resolve_cached_resource(self, source):
         '''The repository as a cached resource: which cache it belongs to, where
         it lives there and whether it is already cloned, resolved in one go.'''

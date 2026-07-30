@@ -35,10 +35,10 @@ def test_resolve_and_locate(tmp_path):
     manager = make_manager(tmp_path)
     source = make_source()
 
-    cache_dir = manager.resolve_cache_directory(source)
+    cached_repository = manager.resolve_cached_resource(source)
 
-    assert cache_dir.location == str(tmp_path / 'cache')
-    assert manager.get_resource_location(cache_dir, source) == os.path.join(
+    assert cached_repository.cache_root == str(tmp_path / 'cache')
+    assert cached_repository.path == os.path.join(
         str(tmp_path / 'cache'), cache_configuration.RECIPES_SUBDIR, source.get_cache_key())
 
 
@@ -69,7 +69,8 @@ def test_weak_policy_falls_back_to_the_regex_cache_when_no_probe_hits():
         CacheDirectory('/writable-default', is_read_only=False),
         resolution_policy=CacheResolutionPolicy.WEAK))
 
-    cache_dir = manager.resolve_cache_directory(
+    cached_repository = manager.resolve_cached_resource(
         Source.for_repository(location='https://github.com/GolemCpp/recipes.git'))
 
-    assert cache_dir.location == '/static-regex'
+    assert cached_repository.cache_root == '/static-regex'
+    assert cached_repository.is_read_only is True

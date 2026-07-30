@@ -33,10 +33,10 @@ def test_resolve_and_locate(tmp_path):
     manager = make_manager(tmp_path)
     source = make_source()
 
-    cache_dir = manager.resolve_cache_directory(source)
+    cached_repository = manager.resolve_cached_resource(source)
 
-    assert cache_dir.location == str(tmp_path / 'cache')
-    assert manager.get_resource_location(cache_dir, source) == os.path.join(
+    assert cached_repository.cache_root == str(tmp_path / 'cache')
+    assert cached_repository.path == os.path.join(
         str(tmp_path / 'cache'), cache_configuration.OVERRIDES_SUBDIR, source.get_cache_key())
 
 

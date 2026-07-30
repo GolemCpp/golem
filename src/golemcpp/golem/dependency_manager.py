@@ -13,16 +13,10 @@ class DependencyManager(ResourceManager):
             cache_key=source.get_cache_key(),
             source=source)
 
-    def resolve_cache_directory(self, dep):
-        return self.cache_manager.resolve_cache_directory(self.resource_for(dep))
-
-    def get_resource_location(self, cache_dir, dep) -> str:
-        return self.cache_manager.get_resource_location(cache_dir, self.resource_for(dep))
-
-    def get_cached_resource(self, cache_dir, dep):
-        '''The dependency as a cached resource in that cache directory: its
-        location and everything installing it needs, in one object.'''
-        return self.cache_manager._make_cached_resource(cache_dir, self.resource_for(dep))
+    def resolve_cached_resource(self, dep):
+        '''The dependency as a cached resource: which cache it belongs to, where it
+        lives there and whether it is already cloned, resolved in one go.'''
+        return self.cache_manager.resolve_cached_resource(self.resource_for(dep))
 
     def staged_install(self, cached_dep, populate) -> str:
         '''Clone the dependency's source into a staging dir, then atomically swap

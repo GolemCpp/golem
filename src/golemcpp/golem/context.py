@@ -1302,7 +1302,7 @@ class Context:
             self.version.force_version(self.context.options.force_version)
 
         for dependency in self.project.deps:
-            dependency.update_cache_dir(context=self)
+            dependency.update_cached_resource(self.cache_configuration)
 
     def dep_system(self, context, libs):
         context.env['LIB'] += libs
@@ -1348,17 +1348,22 @@ class Context:
     def get_local_dep_pkl(self, dep):
         return os.path.join(self.make_out_path(), dep.name + '.pkl')
 
-    def get_dep_location(self, dep, cache_dir):
-        return get_dependency_manager(
-            self.cache_configuration).get_resource_location(cache_dir, dep)
+    def get_dep_cached_resource(self, dep):
+        '''
+        Where the dependency lives in the caches. The dependency resolves it once
+        and holds on to it, so every path below is derived from the same resolution.
+        '''
+        return dep.get_cached_resource(self.cache_configuration)
 
-    def get_dep_include_location(self, dep, cache_dir, base=None):
-        path = self.get_dep_location(dep, cache_dir) if base is None else base
+    def get_dep_location(self, dep):
+        return self.get_dep_cached_resource(dep).path
+
+    def get_dep_include_location(self, dep, base=None):
+        path = self.get_dep_location(dep) if base is None else base
         return os.path.join(path, 'include')
 
     def make_dependency_path(self, dependency, path):
-        return os.path.join(
-            self.get_dep_location(dependency, dependency.cache_dir), path)
+        return os.path.join(self.get_dep_location(dependency), path)
 
     def make_dependency_build_path(self, dependency, path):
         return self.make_dependency_path(dependency=dependency,
@@ -1385,17 +1390,16 @@ class Context:
         with open(path, 'w') as fp:
             json.dump(cache, fp, indent=4)
 
-    def get_dep_artifact_location(self, dependency, cache_dir, base=None):
+    def get_dep_artifact_location(self, dependency, base=None):
         cached_dependencies = self.load_dependency_dependencies_json(
             dependency=dependency)
-        path = self.get_dep_location(
-            dep=dependency, cache_dir=cache_dir) if base is None else base
+        path = self.get_dep_location(dep=dependency) if base is None else base
         return os.path.join(
             path, self.build_path(dep=dependency),
             self.make_binary_foldername(dependencies=cached_dependencies))
 
-    def get_dep_build_location(self, dep, cache_dir, base=None):
-        path = self.get_dep_location(dep, cache_dir) if base is None else base
+    def get_dep_build_location(self, dep, base=None):
+        path = self.get_dep_location(dep) if base is None else base
         return os.path.join(path, self.build_path(dep))
 
     def make_dep_artifact_filename(self,
@@ -1418,32 +1422,24 @@ class Context:
 
         return config_filename
 
-    def get_dep_artifact_json(self, dep, cache_dir, target_name=None):
-        path = os.path.join(self.get_dep_build_location(dep, cache_dir),
-                            'conf')
+    def get_dep_artifact_json(self, dep, target_name=None):
+        path = os.path.join(self.get_dep_build_location(dep), 'conf')
         return os.path.join(
             path,
             self.make_dep_artifact_filename(dep=dep,
                                             target_name=target_name,
                                             source_location=dep.get_source_location()))
 
-    def get_dep_artifact_json_list(self, dep, cache_dir):
+    def get_dep_artifact_json_list(self, dep):
         if dep.targets:
             return [
-                self.get_dep_artifact_json(dep=dep,
-                                           cache_dir=cache_dir,
-                                           target_name=target_name)
+                self.get_dep_artifact_json(dep=dep, target_name=target_name)
                 for target_name in dep.targets
             ]
-        return [
-            self.get_dep_artifact_json(dep=dep,
-                                       cache_dir=cache_dir,
-                                       target_name=None)
-        ]
+        return [self.get_dep_artifact_json(dep=dep, target_name=None)]
 
-    def use_dep(self, config, dep, cache_dir):
-        dep_configs = self.read_dep_config_file_list(dep=dep,
-                                                     cache_dir=cache_dir)
+    def use_dep(self, config, dep):
+        dep_configs = self.read_dep_config_file_list(dep=dep)
 
         for dep_config in dep_configs:
             dependency_dependencies = dep_config.dependencies
@@ -1540,12 +1536,11 @@ class Context:
         new_path = Path(os.path.relpath(path=os.path.realpath(path), start=common_path))
         return new_path.parts[0]
 
-    def list_dep_binary_artifacts(self, config, dep, cache_dir):
+    def list_dep_binary_artifacts(self, config, dep):
         artifacts_list = []
-        dep_path_build = self.get_dep_artifact_location(dep, cache_dir)
+        dep_path_build = self.get_dep_artifact_location(dep)
         expected_files = self.get_expected_files(config,
                                                  dep,
-                                                 cache_dir,
                                                  True,
                                                  only_binaries=True,
                                                  allow_executable=True,
@@ -1661,9 +1656,8 @@ class Context:
         ],
                          cwd=repo_path)
 
-    def make_repo_ready(self, dep, cache_dir, should_clean=False):
-        manager = get_dependency_manager(self.cache_configuration)
-        cached_dep = manager.get_cached_resource(cache_dir, dep)
+    def make_repo_ready(self, dep, should_clean=False):
+        cached_dep = self.get_dep_cached_resource(dep)
         repo_path = os.path.join(cached_dep.path, cache_configuration.SOURCE_DIRNAME)
 
         if os.path.exists(repo_path):
@@ -1674,14 +1668,14 @@ class Context:
             # Clone the source atomically through the dependency manager: it stages
             # the whole resource root (with the clone under source/) and its manifest
             # in a sibling .tmp dir, then swaps it into place in one step.
-            manager.staged_install(
+            get_dependency_manager(self.cache_configuration).staged_install(
                 cached_dep,
                 lambda staging_root: self.clone_repo(
                     dep, os.path.join(staging_root, cache_configuration.SOURCE_DIRNAME)))
 
         return repo_path
 
-    def run_dep_command(self, dep, cache_dir, command):
+    def run_dep_command(self, dep, command):
 
         should_clean_repo = False
         if command == 'resolve':
@@ -1693,11 +1687,9 @@ class Context:
             Logs.info("Running {} on {} ({})...".format(
                 command, dep.name, dep.version))
 
-        dep_path = self.get_dep_location(dep, cache_dir)
-        repo_path = self.make_repo_ready(dep,
-                                         cache_dir,
-                                         should_clean=should_clean_repo)
-        build_path = self.get_dep_build_location(dep, cache_dir)
+        dep_path = self.get_dep_location(dep)
+        repo_path = self.make_repo_ready(dep, should_clean=should_clean_repo)
+        build_path = self.get_dep_build_location(dep)
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file()
 
@@ -1783,75 +1775,60 @@ class Context:
                 cwd=repo_path,
                 stdout=subprocess.DEVNULL)
 
-    def can_open_json(self, dep, cache_dir, target_name=None):
+    def can_open_json(self, dep, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep,
-                                               cache_dir=cache_dir,
                                                target_name=target_name)
         return os.path.exists(json_path)
 
-    def open_json(self, dep, cache_dir, target_name=None):
+    def open_json(self, dep, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep,
-                                               cache_dir=cache_dir,
                                                target_name=target_name)
         return open(json_path, 'r')
 
-    def read_json(self, dep, cache_dir, target_name=None):
+    def read_json(self, dep, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep,
-                                               cache_dir=cache_dir,
                                                target_name=target_name)
-        if not self.can_open_json(
-                dep=dep, cache_dir=cache_dir, target_name=target_name):
+        if not self.can_open_json(dep=dep, target_name=target_name):
             raise RuntimeError("Can't read file {}".format(json_path))
-        with self.open_json(dep=dep,
-                            cache_dir=cache_dir,
-                            target_name=target_name) as file_json:
+        with self.open_json(dep=dep, target_name=target_name) as file_json:
             return json.load(file_json)
         return None
 
-    def read_dep_config_file(self, dep, cache_dir, target_name=None):
+    def read_dep_config_file(self, dep, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep,
-                                               cache_dir=cache_dir,
                                                target_name=target_name)
-        if not self.can_open_json(
-                dep=dep, cache_dir=cache_dir, target_name=target_name):
+        if not self.can_open_json(dep=dep, target_name=target_name):
             raise RuntimeError("Can't read file {}".format(json_path))
 
         return TargetConfigurationFile.load_file(path=json_path, context=self)
 
-    def read_dep_configs(self, dep, cache_dir, target_name=None):
+    def read_dep_configs(self, dep, target_name=None):
         config_file = self.read_dep_config_file(dep=dep,
-                                                cache_dir=cache_dir,
                                                 target_name=target_name)
         if config_file is None:
             return None
         return config_file.configuration
 
-    def read_dep_config_file_list(self, dep, cache_dir):
+    def read_dep_config_file_list(self, dep):
         dep_configs = []
         if not dep.targets:
-            config = self.read_dep_config_file(dep=dep,
-                                               cache_dir=cache_dir,
-                                               target_name=None)
+            config = self.read_dep_config_file(dep=dep, target_name=None)
             dep_configs.append(config)
         else:
             for target_name in dep.targets:
                 config = self.read_dep_config_file(dep=dep,
-                                                   cache_dir=cache_dir,
                                                    target_name=target_name)
                 dep_configs.append(config)
         return dep_configs
 
-    def read_dep_configs_list(self, dep, cache_dir):
+    def read_dep_configs_list(self, dep):
         dep_configs = []
         if not dep.targets:
-            config = self.read_dep_configs(dep=dep,
-                                           cache_dir=cache_dir,
-                                           target_name=None)
+            config = self.read_dep_configs(dep=dep, target_name=None)
             dep_configs.append(config)
         else:
             for target_name in dep.targets:
                 config = self.read_dep_configs(dep=dep,
-                                               cache_dir=cache_dir,
                                                target_name=target_name)
                 dep_configs.append(config)
         return dep_configs
@@ -2091,9 +2068,9 @@ class Context:
             enable_run_libs=True,
             enable_exes=allow_executable)
 
-    def get_expected_artifacts(self, dep, cache_dir):
+    def get_expected_artifacts(self, dep):
 
-        dep_configs = self.read_dep_configs_list(dep=dep, cache_dir=cache_dir)
+        dep_configs = self.read_dep_configs_list(dep=dep)
         artifacts = []
         for config in dep_configs:
             if not config:
@@ -2106,7 +2083,6 @@ class Context:
     def get_expected_files(self,
                            config,
                            dep,
-                           cache_dir,
                            has_artifacts,
                            only_binaries=False,
                            allow_executable=False,
@@ -2117,15 +2093,13 @@ class Context:
         for target in dep.targets:
             if not only_binaries:
                 json_file_path = self.get_dep_artifact_json(
-                    dep=dep, cache_dir=cache_dir, target_name=target)
+                    dep=dep, target_name=target)
                 expected_files.append(json_file_path)
 
             if not has_artifacts:
                 return expected_files
 
-            dep_configs = self.read_dep_configs(dep,
-                                                cache_dir,
-                                                target_name=target)
+            dep_configs = self.read_dep_configs(dep, target_name=target)
             if dep_configs is None or dep_configs.header_only:
                 return expected_files
 
@@ -2150,14 +2124,13 @@ class Context:
         if not dep.targets:
 
             if not only_binaries:
-                json_file_path = self.get_dep_artifact_json(
-                    dep=dep, cache_dir=cache_dir)
+                json_file_path = self.get_dep_artifact_json(dep=dep)
                 expected_files.append(json_file_path)
 
             if not has_artifacts:
                 return expected_files
 
-            dep_configs = self.read_dep_configs(dep, cache_dir)
+            dep_configs = self.read_dep_configs(dep)
             if dep_configs is None or dep_configs.header_only:
                 return expected_files
 
@@ -2175,9 +2148,9 @@ class Context:
 
         return expected_files
 
-    def is_header_only(self, dep, cache_dir):
+    def is_header_only(self, dep):
 
-        dep_configs = self.read_dep_configs(dep, cache_dir)
+        dep_configs = self.read_dep_configs(dep)
         if dep_configs is None:
             return False
 
@@ -2189,9 +2162,9 @@ class Context:
     def dep_command(self, config, dep, command, enable_env):
         dep.resolve()
 
-        cache_dir = dep.cache_dir
+        cached_dep = self.get_dep_cached_resource(dep)
 
-        json_paths = self.get_dep_artifact_json_list(dep, cache_dir)
+        json_paths = self.get_dep_artifact_json_list(dep)
 
         all_json_paths_exists = True
         for json_path in json_paths:
@@ -2204,14 +2177,13 @@ class Context:
                     json_path))
 
         are_headers_available = os.path.exists(
-            self.get_dep_include_location(dep, cache_dir))
+            self.get_dep_include_location(dep=dep))
 
         missing_artifacts = []
         are_artifacts_availables = True
 
         if all_json_paths_exists:
-            expected_files = self.get_expected_artifacts(dep=dep,
-                                                         cache_dir=cache_dir)
+            expected_files = self.get_expected_artifacts(dep=dep)
             for path in expected_files:
                 if not os.path.exists(path):
                     are_artifacts_availables = False
@@ -2235,18 +2207,14 @@ class Context:
             if missing_artifacts:
                 Logs.warn("Missing artifacts: {} requires {}".format(
                     dep.name, missing_artifacts))
-            if cache_dir.is_read_only:
+            if cached_dep.is_read_only:
                 raise RuntimeError(
                     "Cannot find artifacts {} for {} from the read-only cache location {}"
-                    .format(missing_artifacts, dep.name, cache_dir.location))
-            self.run_dep_command(dep, cache_dir, command)
+                    .format(missing_artifacts, dep.name, cached_dep.cache_root))
+            self.run_dep_command(dep, command)
             self.deps_to_resolve.append(dep.name)
 
-        self.use_dep(config, dep, cache_dir)
-
-
-    def find_dep_cache_dir(self, dep, cache_configuration):
-        return get_dependency_manager(cache_configuration).resolve_cache_directory(dep)
+        self.use_dep(config, dep)
 
     def export_dependency(self, config, dep):
         self.dep_command(config, dep, 'export', True)
@@ -4513,28 +4481,25 @@ class Context:
             return self.build_path(dep) + '-build'
 
     def find_dependency(self, dep_name):
+        found_dep = None
         for dep in self.project.deps:
             if dep_name == dep.name:
-                return dep
+                found_dep = dep
+                break
+        return found_dep
 
     def find_dependency_includes(self, dep_name):
         dep_include = []
-        cache_configuration = self.cache_configuration
         for dep in self.project.deps:
             if dep_name == dep.name:
-                cache_dir = self.find_dep_cache_dir(dep, cache_configuration)
-                dep_include.append(
-                    self.get_dep_include_location(dep, cache_dir))
+                dep_include.append(self.get_dep_include_location(dep))
         return dep_include
 
     def find_dependency_libraries(self, dep_name):
         dep_lib_paths = []
-        cache_configuration = self.cache_configuration
         for dep in self.project.deps:
             if dep_name == dep.name:
-                cache_dir = self.find_dep_cache_dir(dep, cache_configuration)
-                dep_lib_paths.append(
-                    self.get_dep_artifact_location(dep, cache_dir))
+                dep_lib_paths.append(self.get_dep_artifact_location(dep))
         return dep_lib_paths
 
     def find_dependency_artifacts_dev(self, dep_name, target_name=None):
@@ -4542,7 +4507,6 @@ class Context:
         for dep in self.project.deps:
             if dep_name == dep.name:
                 dep_config = self.read_dep_configs(dep=dep,
-                                                   cache_dir=dep.cache_dir,
                                                    target_name=target_name)
                 results.append(dep_config.artifacts_dev)
 
@@ -4634,18 +4598,6 @@ class Context:
             ',') if self.context.options.targets else [
                 target.name for target in self.project.exports
             ]
-
-    def find_dep(self, name):
-        found_dep = None
-        for dep in self.project.deps:
-            if dep.name == name:
-                found_dep = dep
-                break
-        return found_dep
-
-    def find_dep_cache_include(self, dep):
-        cache_dir = self.find_dep_cache_dir(dep, self.cache_configuration)
-        return self.get_dep_include_location(dep, cache_dir)
 
     def merge_export_config_against_build_condition(self,
                                                     export,
@@ -5351,7 +5303,6 @@ class Context:
 
         export_path = self.make_outpath()
         export_path_build = self.get_dep_build_location(dep=None,
-                                                        cache_dir=None,
                                                         base=export_path)
 
         export_path_lib = self.make_outpath_lib()
@@ -5950,9 +5901,7 @@ class Context:
         artifacts_list = []
 
         def internal(config, dep, artifacts_list=artifacts_list):
-            cache_dir = self.find_dep_cache_dir(dep, self.cache_configuration)
-            artifacts_list += self.list_dep_binary_artifacts(
-                config, dep, cache_dir)
+            artifacts_list += self.list_dep_binary_artifacts(config, dep)
 
         self.recursively_apply_to_deps(config, internal)
 
