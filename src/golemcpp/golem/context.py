@@ -26,9 +26,9 @@ from golemcpp.golem.configuration import Configuration
 from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.tool_manager import get_tool_manager
-from golemcpp.golem.resource_manager import (
-    DependencyResourceManager, RepositoryResourceManager,
-    get_dependency_manager, get_repository_manager)
+from golemcpp.golem.dependency_manager import get_dependency_manager
+from golemcpp.golem.overrides_repository_manager import get_overrides_repository_manager
+from golemcpp.golem.recipes_repository_manager import get_recipes_repository_manager
 from golemcpp.golem import helpers
 from golemcpp.golem import settings
 from golemcpp.golem.project import Project
@@ -1349,7 +1349,8 @@ class Context:
         return os.path.join(self.make_out_path(), dep.name + '.pkl')
 
     def get_dep_location(self, dep, cache_dir):
-        return self.get_resource_location(dep, cache_dir)
+        return get_dependency_manager(
+            self.cache_configuration).get_resource_location(cache_dir, dep)
 
     def get_dep_repo_location(self, dep, cache_dir, base=None):
         path = self.get_dep_location(dep, cache_dir) if base is None else base
@@ -1361,7 +1362,7 @@ class Context:
 
     def make_dependency_path(self, dependency, path):
         return os.path.join(
-            self.get_resource_location(dependency, dependency.cache_dir), path)
+            self.get_dep_location(dependency, dependency.cache_dir), path)
 
     def make_dependency_build_path(self, dependency, path):
         return self.make_dependency_path(dependency=dependency,
@@ -1417,7 +1418,7 @@ class Context:
             source_location = self.load_git_remote_origin_url()
 
         config_filename = "{}@{}.json".format(
-            '@'.join(name), Source.generate_recipe_id(source_location))
+            '@'.join(name), Source.generate_id(source_location))
 
         return config_filename
 
@@ -2246,34 +2247,8 @@ class Context:
         self.use_dep(config, dep, cache_dir)
 
 
-    def make_resource_spec(self, resource, subdir=None):
-        if isinstance(resource, Dependency):
-            return DependencyResourceManager.spec_for(resource)
-        if isinstance(resource, Source):
-            if subdir is None:
-                raise RuntimeError("subdir is required for repository resources")
-            return RepositoryResourceManager.spec_for(
-                resource, resource_manifest.ResourceKind.from_subdir(subdir))
-        raise RuntimeError("resource must be a Dependency or Source")
-
     def find_dep_cache_dir(self, dep, cache_configuration):
         return get_dependency_manager(cache_configuration).resolve_cache_directory(dep)
-
-    def get_resource_cache_key(self, resource):
-        '''
-        The logical cache key of a resource, independent of how it is stored on
-        disk. For a minimized resource the on-disk directory name is a hash, so
-        this is what the manifest records to keep the resource identifiable.
-        '''
-        if isinstance(resource, Dependency):
-            return resource.to_source().get_cache_key()
-        if isinstance(resource, Source):
-            return resource.get_cache_key()
-        raise RuntimeError("resource must be a Dependency or Source")
-
-    def get_resource_location(self, resource, cache_dir, subdir=None):
-        spec = self.make_resource_spec(resource, subdir=subdir)
-        return get_cache_manager(self.cache_configuration).get_resource_location(cache_dir, spec)
 
     def export_dependency(self, config, dep):
         self.dep_command(config, dep, 'export', True)
@@ -4239,10 +4214,6 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
-    def find_repository_cache_dir(self, source, subdir):
-        return get_repository_manager(self.cache_configuration).resolve_cache_directory(
-            source, resource_manifest.ResourceKind.from_subdir(subdir))
-
     def clone_repository(self, path, source):
         '''Materialize a repository source freshly into `path`: git-clone (and reset
         to the requested ref) a git source, or copy a local directory source. Used
@@ -4279,43 +4250,37 @@ class Context:
                             cwd=path)
         resource_manifest.touch_last_used(path)
 
-    def install_repository(self, source, kind, cache_dir, repo_path):
+    def install_repository(self, manager, source, cache_dir, repo_path):
         # Fresh: clone the source atomically through the repository manager (staging
         # + manifest + swap). Existing: update in place, keeping the cache root.
         if os.path.exists(repo_path):
             self.update_repository_source(repo_path, source)
         else:
-            get_repository_manager(self.cache_configuration).staged_install(
-                cache_dir, source, kind,
+            manager.staged_install(
+                cache_dir, source,
                 lambda staging_root: self.clone_repository(staging_root, source))
 
     def clone_overrides_repository(self, source):
-        cache_dir = self.find_repository_cache_dir(
-            source, subdir=cache_configuration.OVERRIDES_SUBDIR)
-        repo_path = self.get_resource_location(
-            source, cache_dir, subdir=cache_configuration.OVERRIDES_SUBDIR)
+        manager = get_overrides_repository_manager(self.cache_configuration)
+        cache_dir = manager.resolve_cache_directory(source)
+        repo_path = manager.get_resource_location(cache_dir, source)
 
         if not self.deps_resolve:
             return repo_path
 
-        self.install_repository(
-            source, resource_manifest.ResourceKind.OVERRIDES_REPOSITORY,
-            cache_dir, repo_path)
+        self.install_repository(manager, source, cache_dir, repo_path)
 
         return repo_path
 
     def clone_recipes_repository(self, source):
-        cache_dir = self.find_repository_cache_dir(
-            source, subdir=cache_configuration.RECIPES_SUBDIR)
-        repo_path = self.get_resource_location(
-            source, cache_dir, subdir=cache_configuration.RECIPES_SUBDIR)
+        manager = get_recipes_repository_manager(self.cache_configuration)
+        cache_dir = manager.resolve_cache_directory(source)
+        repo_path = manager.get_resource_location(cache_dir, source)
 
         if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
             return repo_path
 
-        self.install_repository(
-            source, resource_manifest.ResourceKind.RECIPES_REPOSITORY,
-            cache_dir, repo_path)
+        self.install_repository(manager, source, cache_dir, repo_path)
 
         return repo_path
 
@@ -4342,7 +4307,7 @@ class Context:
             recipe_url = self.load_git_remote_origin_url()
             if not recipe_url:
                 return
-            recipe_id = Source.generate_recipe_id(recipe_url)
+            recipe_id = Source.generate_id(recipe_url)
 
         if not recipe_id:
             return

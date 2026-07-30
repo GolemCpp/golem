@@ -110,11 +110,11 @@ def test_uninstall_tool_removes_the_resolved_tool_resource(tmp_path):
     (resource_root / 'manifest.json').write_text('{}\n', encoding='utf-8')
 
     manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
-    resource = manager.resolve_cached_tool('cppfront')
+    cached_tool = manager.resolve_cached_tool('cppfront')
 
-    assert resource.path == str(resource_root)
-    assert resource.exists() is True
-    assert manager.uninstall_tool(resource) is True
+    assert cached_tool.path == str(resource_root)
+    assert cached_tool.exists() is True
+    assert manager.uninstall_tool(cached_tool) is True
     assert not resource_root.exists()
 
 
@@ -122,10 +122,10 @@ def test_uninstall_tool_reports_missing_tool_directory(tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
 
     manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
-    resource = manager.resolve_cached_tool('cppfront')
+    cached_tool = manager.resolve_cached_tool('cppfront')
 
-    assert resource.exists() is False
-    assert manager.uninstall_tool(resource) is False
+    assert cached_tool.exists() is False
+    assert manager.uninstall_tool(cached_tool) is False
 
 
 def test_list_installed_tools_returns_registry_installed_tools(monkeypatch, tmp_path):
@@ -156,7 +156,7 @@ def test_install_tool_uses_minimized_flat_layout_when_enabled(monkeypatch, tmp_p
         minimization_enabled=True)
 
     expected_name = manager.cache_manager.make_minimized_resource_name(
-        manager.spec_for(manager.get_tool('cppfront')),
+        manager.resource_for(manager.get_tool('cppfront')),
         default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'))
     expected_root = tools_cache_directory / expected_name
 
@@ -226,10 +226,10 @@ def test_uninstall_tool_finds_tool_in_additional_cache_under_weak_policy(tmp_pat
             cache_directory.CacheDirectory(location=str(additional)),
         ])
 
-    resource = manager.resolve_cached_tool('cppfront')
+    cached_tool = manager.resolve_cached_tool('cppfront')
 
-    assert resource.cache_root == str(additional)
-    assert manager.uninstall_tool(resource) is True
+    assert cached_tool.cache_root == str(additional)
+    assert manager.uninstall_tool(cached_tool) is True
     assert not resource_root.exists()
 
 

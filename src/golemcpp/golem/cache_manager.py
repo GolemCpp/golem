@@ -93,12 +93,12 @@ class CacheManager:
 
     # -- per-resource resolution & on-disk location -----------------------
 
-    def resolve_cache_directory(self, spec):
+    def resolve_cache_directory(self, resource):
         '''
         Resolves the CacheDirectory corresponding to the resource and all the cache settings.
         '''
-        identifier = spec.location
-        exists_in_cache = lambda cache_directory: self._make_spec_resource(cache_directory, spec).exists()
+        identifier = resource.location
+        exists_in_cache = lambda cache_directory: self._make_cached_resource(cache_directory, resource).exists()
 
         read_only_caches_with_regex = self._find_matching_caches(
             identifier,
@@ -139,7 +139,7 @@ class CacheManager:
 
         raise RuntimeError("Can't find any writable cache location")
 
-    def get_resource_location(self, cache_directory, spec) -> str:
+    def get_resource_location(self, cache_directory, resource) -> str:
         '''
         When minimization is disabled the classic "<cache_root>/<subdir>/<cache_key>" 
         layout is used.
@@ -148,49 +148,49 @@ class CacheManager:
         (so caches populated before minimization stay usable); otherwise the resource 
         is stored flat at "<cache_root>/<hash>".
         '''
-        normal_path = os.path.join(cache_directory.location, spec.subdir, spec.cache_key)
+        normal_path = os.path.join(cache_directory.location, resource.subdir, resource.cache_key)
         if not self.minimization_enabled:
             return normal_path
         if os.path.exists(normal_path):
             return normal_path
         return os.path.join(
             cache_directory.location,
-            self.make_minimized_resource_name(spec, self.minimization_length))
+            self.make_minimized_resource_name(resource, self.minimization_length))
 
-    def resolve_cached_resource(self, spec, compute_size=False, read_manifest=False):
+    def resolve_cached_resource(self, resource, compute_size=False, read_manifest=False):
         '''
-        The CachedResource a spec denotes, in whichever cache directory the
+        The cached form of a resource, in whichever cache directory the
         resolution settles on.
         '''
-        return self._make_spec_resource(
-            self.resolve_cache_directory(spec), spec,
+        return self._make_cached_resource(
+            self.resolve_cache_directory(resource), resource,
             compute_size=compute_size, read_manifest=read_manifest)
 
-    def _make_spec_resource(self, cache_directory, spec,
-                            compute_size=False, read_manifest=False):
-        # Built from the spec rather than from a directory entry, so the spec is
-        # what names the resource; resolve_cache_directory probes candidate
-        # directories through here and cannot go through the resolving entry
-        # point above.
-        path = self.get_resource_location(cache_directory, spec)
+    def _make_cached_resource(self, cache_directory, resource,
+                              compute_size=False, read_manifest=False):
+        # The resource is what names its cached form here, where a scanned entry
+        # names itself (see _make_scanned_resource). resolve_cache_directory
+        # probes candidate directories through this one, so it cannot go through
+        # the resolving entry point above.
+        path = self.get_resource_location(cache_directory, resource)
 
         return CachedResource(
             path=path,
             cache_root=cache_directory.location,
             is_read_only=cache_directory.is_read_only,
-            subdir=spec.subdir,
-            cache_key=spec.cache_key,
+            subdir=resource.subdir,
+            cache_key=resource.cache_key,
             size_bytes=helpers.get_tree_size(path) if compute_size else 0,
             manifest=ResourceManifest.read_from_root(path) if read_manifest else None)
 
-    def make_minimized_resource_name(self, spec, length):
+    def make_minimized_resource_name(self, resource, length):
         '''
         Short flat directory name for a minimized resource.
         
         Hashing "<subdir>/<cache_key>" keeps names unique across resource kinds once 
         the per-kind subdirectory is dropped.
         '''
-        digest = hashlib.sha1('{}/{}'.format(spec.subdir, spec.cache_key).encode('utf-8')).hexdigest()
+        digest = hashlib.sha1('{}/{}'.format(resource.subdir, resource.cache_key).encode('utf-8')).hexdigest()
         return digest[:length]
 
     def _find_matching_caches(self, identifier, is_read_only, with_regex):
@@ -240,12 +240,12 @@ class CacheManager:
         return Source.from_manifest(manifest)
 
     @staticmethod
-    def write_manifest(resource_root: str, spec) -> None:
+    def write_manifest(resource_root: str, resource) -> None:
         resource_manifest.write_manifest(
             resource_root=resource_root,
-            kind=spec.kind,
-            cache_key=spec.cache_key,
-            source=spec.source.to_dict())
+            kind=resource.kind,
+            cache_key=resource.cache_key,
+            source=resource.source.to_dict())
 
     @staticmethod
     def touch_last_used(resource_root: str) -> None:
@@ -253,20 +253,20 @@ class CacheManager:
 
     # -- per-resource mutations -------------------------------------------
 
-    def staged_install(self, cache_directory, spec, populate) -> str:
+    def staged_install(self, cache_directory, resource, populate) -> str:
         '''
         Build a resource into a sibling `.tmp` staging directory, drop its
         manifest, then atomically swap it into place. `populate(staging_root)`
         fills the staging directory with the resource's contents.
         '''
-        resource_root = self.get_resource_location(cache_directory, spec)
+        resource_root = self.get_resource_location(cache_directory, resource)
         staging_root = resource_root + '.tmp'
 
         helpers.remove_tree(staging_root)
         os.makedirs(staging_root, exist_ok=True)
         try:
             populate(staging_root)
-            self.write_manifest(staging_root, spec)
+            self.write_manifest(staging_root, resource)
             helpers.remove_tree(resource_root)
             os.makedirs(os.path.dirname(resource_root), exist_ok=True)
             os.replace(staging_root, resource_root)
@@ -287,7 +287,7 @@ class CacheManager:
                 exists=os.path.isdir(cache_directory.location)))
         return summaries
 
-    def _make_resource(self, cache_directory, subdir, entry, entry_path,
+    def _make_scanned_resource(self, cache_directory, subdir, entry, entry_path,
                        compute_size):
         # The manifest is the source of truth for a resource's identity,
         # wherever it lives: an entry with a valid manifest is identified (by its
@@ -329,7 +329,7 @@ class CacheManager:
                     if not os.path.isdir(entry_path):
                         continue
 
-                    resources.append(self._make_resource(
+                    resources.append(self._make_scanned_resource(
                         cache_directory, subdir, entry, entry_path, compute_size))
 
             if not os.path.isdir(cache_directory.location):
@@ -343,7 +343,7 @@ class CacheManager:
                 if not os.path.isdir(entry_path):
                     continue
 
-                resources.append(self._make_resource(
+                resources.append(self._make_scanned_resource(
                     cache_directory, '', entry, entry_path, compute_size))
 
         return resources

@@ -115,7 +115,7 @@ class Source:
         return path
 
     @staticmethod
-    def generate_recipe_id(url):
+    def generate_id(url):
         is_filesystem = False
         is_http = False
         is_ssh = False
@@ -169,14 +169,14 @@ class Source:
 
     @classmethod
     def make_repository_base(cls, location, reference):
-        repo_id = cls.generate_recipe_id(location)
+        repo_id = cls.generate_id(location)
         return repo_id + '+' + str(reference)
 
     def get_local_path(self):
         return self.parse_local_directory_path(self.location)
 
-    def get_recipe_id(self):
-        return self.generate_recipe_id(self.location)
+    def get_id(self):
+        return self.generate_id(self.location)
 
     def get_cache_key(self):
         return self.make_repository_base(self.location, self.reference)

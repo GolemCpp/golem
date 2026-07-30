@@ -6,7 +6,7 @@ from golemcpp.golem import cache_directory
 from golemcpp.golem import cache_resolution_policy
 from golemcpp.golem import settings
 from golemcpp.golem.cache_manager import CacheManager
-from golemcpp.golem.resource_manager import ResourceSpec
+from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
 from conftest import make_cache_configuration
@@ -89,10 +89,10 @@ def test_cache_resolution_policy_from_env(monkeypatch):
         'GOLEM_CACHE_RESOLUTION_POLICY') == cache_resolution_policy.CacheResolutionPolicy.WEAK
 
 
-def _tool_spec(identifier, cache_key='cppfront'):
-    # A resource resolves by its spec: `location` is the identifier matched against
+def _tool_resource(identifier, cache_key='cppfront'):
+    # A resource resolves by its resource: `location` is the identifier matched against
     # per-cache regexes, `kind` gives the subdir, and `cache_key` the on-disk name.
-    return ResourceSpec(
+    return Resource(
         kind=ResourceKind.TOOL,
         cache_key=cache_key,
         source=Source.for_repository(identifier))
@@ -106,7 +106,7 @@ def test_resolve_resource_cache_dir_prefers_regex_matching_cache(tmp_path):
         resolution_policy=cache_resolution_policy.CacheResolutionPolicy.STRICT,
         minimization_enabled=False)
     cache_dir = CacheManager(conf).resolve_cache_directory(
-        _tool_spec('https://github.com/hsutter/cppfront.git'))
+        _tool_resource('https://github.com/hsutter/cppfront.git'))
 
     assert cache_dir.location == str(tmp_path / 'github')
 
@@ -121,7 +121,7 @@ def test_resolve_resource_cache_dir_weak_finds_existing(tmp_path):
         cache_directory.CacheDirectory(location=str(extra)),
         resolution_policy=cache_resolution_policy.CacheResolutionPolicy.WEAK,
         minimization_enabled=False)
-    cache_dir = CacheManager(conf).resolve_cache_directory(_tool_spec('cppfront'))
+    cache_dir = CacheManager(conf).resolve_cache_directory(_tool_resource('cppfront'))
 
     assert cache_dir.location == str(extra)
 
@@ -142,7 +142,7 @@ def test_strict_policy_takes_the_first_matching_cache_without_probing(tmp_path):
         minimization_enabled=False)
 
     cache_dir = CacheManager(conf).resolve_cache_directory(
-        _tool_spec('https://github.com/GolemCpp/recipes.git'))
+        _tool_resource('https://github.com/GolemCpp/recipes.git'))
 
     assert cache_dir.location == str(tmp_path / 'static-regex')
 
@@ -159,7 +159,7 @@ def test_weak_policy_picks_the_matching_cache_that_holds_the_resource(tmp_path):
         minimization_enabled=False)
 
     cache_dir = CacheManager(conf).resolve_cache_directory(
-        _tool_spec('https://github.com/nlohmann/json.git', cache_key='json'))
+        _tool_resource('https://github.com/nlohmann/json.git', cache_key='json'))
 
     assert cache_dir.location == str(present)
 
@@ -175,6 +175,6 @@ def test_weak_policy_falls_back_to_the_first_writable_cache(tmp_path):
         minimization_enabled=False)
 
     cache_dir = CacheManager(conf).resolve_cache_directory(
-        _tool_spec('https://github.com/nlohmann/json.git', cache_key='json'))
+        _tool_resource('https://github.com/nlohmann/json.git', cache_key='json'))
 
     assert cache_dir.location == str(tmp_path / 'writable-regex')

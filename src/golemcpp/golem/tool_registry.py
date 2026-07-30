@@ -4,7 +4,7 @@ from golemcpp.golem import cppfront_tool
 
 
 @dataclass(frozen=True)
-class ToolDefinition:
+class Tool:
     name: str
     description: str
     repository: str
@@ -13,7 +13,7 @@ class ToolDefinition:
 
 
 TOOLS = {
-    cppfront_tool.CPPFRONT_NAME: ToolDefinition(
+    cppfront_tool.CPPFRONT_NAME: Tool(
         name=cppfront_tool.CPPFRONT_NAME,
         description=cppfront_tool.CPPFRONT_DESCRIPTION,
         repository=cppfront_tool.CPPFRONT_REPOSITORY,
@@ -23,9 +23,9 @@ TOOLS = {
 }
 
 
-def get_tool(name: str) -> ToolDefinition | None:
+def get_tool(name: str) -> Tool | None:
     return TOOLS.get(name)
 
 
-def list_available_tools() -> list[ToolDefinition]:
+def list_available_tools() -> list[Tool]:
     return [TOOLS[name] for name in sorted(TOOLS)]

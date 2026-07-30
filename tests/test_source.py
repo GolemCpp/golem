@@ -42,29 +42,29 @@ def test_detect_normalizes_local_path_under_non_ascii_parent(tmp_path):
     assert source.get_local_path() == str(recipes_dir.resolve())
 
 
-def test_generate_recipe_id_accepts_local_path_under_non_ascii_parent(tmp_path):
+def test_generate_id_accepts_local_path_under_non_ascii_parent(tmp_path):
     project_dir = tmp_path / '日本 語 project'
     recipes_dir = project_dir / 'recipes'
     recipes_dir.mkdir(parents=True)
 
-    recipe_id = Source.generate_recipe_id(str(recipes_dir))
+    source_id = Source.generate_id(str(recipes_dir))
 
-    assert recipe_id.startswith('recipes@fsys.')
-    assert 'project' in recipe_id
+    assert source_id.startswith('recipes@fsys.')
+    assert 'project' in source_id
 
 
-def test_generate_recipe_id_uses_hash_for_local_path_uniqueness(tmp_path):
+def test_generate_id_uses_hash_for_local_path_uniqueness(tmp_path):
     parent_one = tmp_path / 'alpha' / 'recipes'
     parent_two = tmp_path / 'beta' / 'recipes'
     parent_one.mkdir(parents=True)
     parent_two.mkdir(parents=True)
 
-    recipe_id_one = Source.generate_recipe_id(str(parent_one))
-    recipe_id_two = Source.generate_recipe_id(str(parent_two))
+    source_id_one = Source.generate_id(str(parent_one))
+    source_id_two = Source.generate_id(str(parent_two))
 
-    assert recipe_id_one != recipe_id_two
-    assert recipe_id_one.startswith('recipes@fsys.')
-    assert recipe_id_two.startswith('recipes@fsys.')
+    assert source_id_one != source_id_two
+    assert source_id_one.startswith('recipes@fsys.')
+    assert source_id_two.startswith('recipes@fsys.')
 
 
 def test_detect_classifies_local_non_git_directory(tmp_path):
@@ -96,17 +96,17 @@ def test_for_directory_is_directory_type():
     assert source.location == '/tmp/mylib'
 
 
-def test_cache_key_uses_recipe_id_and_reference():
+def test_cache_key_uses_source_id_and_reference():
     source = Source.for_repository(
         'https://github.com/GolemCpp/recipes.git', reference='main')
 
     assert source.get_cache_key() == 'recipes@com.github.golemcpp+main'
 
 
-def test_get_recipe_id_matches_existing_format():
+def test_get_id_matches_existing_format():
     source = Source.for_repository('https://github.com/GolemCpp/recipes.git')
 
-    assert source.get_recipe_id() == 'recipes@com.github.golemcpp'
+    assert source.get_id() == 'recipes@com.github.golemcpp'
 
 
 # -- Source as a resource identity (recorded in a manifest) -----------------

@@ -4,6 +4,9 @@ from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import cache_manager
+from golemcpp.golem.resource import Resource
+from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
+from golemcpp.golem.source import Source
 from conftest import make_cache_configuration
 
 
@@ -186,3 +189,119 @@ def test_scan_ignores_stray_files_at_cache_root(tmp_path):
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     assert manager.scan() == []
+
+
+# -- the per-resource API (resolving one resource rather than scanning) ------
+
+
+def make_tool_resource():
+    source = Source.for_repository('https://example.com/tool.git', reference='v1')
+    return Resource(kind=ResourceKind.TOOL, cache_key='demo', source=source)
+
+
+def make_classic_manager(*locations):
+    return cache_manager.get_cache_manager(
+        make_cache_configuration(*locations, minimization_enabled=False))
+
+
+def test_resolve_and_locate(tmp_path):
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    resource = make_tool_resource()
+
+    assert manager.resolve_cache_directory(resource).location == str(tmp_path / 'cache')
+    assert manager.get_resource_location(cache_dir, resource) == os.path.join(
+        str(tmp_path / 'cache'), cache_configuration.TOOLS_SUBDIR, 'demo')
+    assert manager.resolve_cached_resource(resource).exists() is False
+
+
+def test_write_and_read_source(tmp_path):
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    resource = make_tool_resource()
+    root = manager.get_resource_location(cache_dir, resource)
+    os.makedirs(root)
+
+    manager.write_manifest(root, resource)
+
+    manifest = ResourceManifest.read_from_root(root)
+    assert manifest.kind == ResourceKind.TOOL.value
+    assert manifest.cache_key == 'demo'
+    source = manager.read_manifest_source(root)
+    assert source.location == 'https://example.com/tool.git'
+    assert source.reference == 'v1'
+    assert manager.resolve_cached_resource(resource).exists() is True
+
+
+def test_resolve_cached_resource_reads_size_and_manifest_on_demand(tmp_path):
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    resource = make_tool_resource()
+    root = manager.get_resource_location(cache_dir, resource)
+    os.makedirs(root)
+    with open(os.path.join(root, 'payload.txt'), 'w') as fileout:
+        fileout.write('hi')
+    manager.write_manifest(root, resource)
+
+    # Both are opt-in: resolving alone reports neither.
+    plain = manager.resolve_cached_resource(resource)
+    assert plain.size_bytes == 0
+    assert plain.manifest is None
+
+    detailed = manager.resolve_cached_resource(resource, compute_size=True, read_manifest=True)
+    assert detailed.path == root
+    assert detailed.cache_key == 'demo'
+    assert detailed.kind == ResourceKind.TOOL.value
+    assert detailed.size_bytes > 0
+    assert detailed.source['location'] == 'https://example.com/tool.git'
+
+
+def test_staged_install_swaps_atomically(tmp_path):
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    resource = make_tool_resource()
+
+    def populate(staging_root):
+        with open(os.path.join(staging_root, 'payload.txt'), 'w') as fileout:
+            fileout.write('hi')
+
+    root = manager.staged_install(cache_dir, resource, populate)
+
+    assert os.path.isfile(os.path.join(root, 'payload.txt'))
+    assert ResourceManifest.read_from_root(root) is not None
+    assert not os.path.exists(root + '.tmp')
+
+
+def test_remove_resources_honors_read_only_guard(tmp_path):
+    writable = cache_directory.CacheDirectory(location=str(tmp_path / 'w'))
+    read_only = cache_directory.CacheDirectory(location=str(tmp_path / 'ro'), is_read_only=True)
+    resource = make_tool_resource()
+
+    manager = make_classic_manager(writable)
+    cached = manager.resolve_cached_resource(resource)
+    os.makedirs(cached.path)
+
+    removed, skipped = manager.remove_resources([cached])
+
+    assert [entry.path for entry in removed] == [cached.path]
+    assert skipped == []
+    assert not os.path.exists(cached.path)
+
+    ro_manager = make_classic_manager(read_only)
+    ro_cached = ro_manager.resolve_cached_resource(resource)
+    os.makedirs(ro_cached.path)
+
+    removed, skipped = ro_manager.remove_resources([ro_cached])
+
+    assert removed == []
+    assert [entry.path for entry in skipped] == [ro_cached.path]
+    assert os.path.exists(ro_cached.path)
+
+
+def test_remove_resources_skips_a_resource_that_is_already_gone(tmp_path):
+    manager = make_classic_manager(
+        cache_directory.CacheDirectory(location=str(tmp_path / 'w')))
+
+    cached = manager.resolve_cached_resource(make_tool_resource())
+
+    assert manager.remove_resources([cached]) == ([], [])

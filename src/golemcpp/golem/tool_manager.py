@@ -2,7 +2,8 @@ from dataclasses import dataclass
 
 from golemcpp.golem import tool_registry
 from golemcpp.golem.cache_manager import get_cache_manager
-from golemcpp.golem.resource_manager import ResourceManager, ResourceSpec
+from golemcpp.golem.resource import Resource
+from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
@@ -44,8 +45,8 @@ class ToolManager(ResourceManager):
         return tool_registry.list_available_tools()
 
     @staticmethod
-    def spec_for(tool, resolved_version='') -> ResourceSpec:
-        return ResourceSpec(
+    def resource_for(tool, resolved_version='') -> Resource:
+        return Resource(
             kind=ResourceKind.TOOL,
             cache_key=tool.name,
             source=Source.for_repository(
@@ -57,7 +58,7 @@ class ToolManager(ResourceManager):
         and whether it is installed at all, resolved in one go.
         '''
         return self.cache_manager.resolve_cached_resource(
-            self.spec_for(self.get_tool(tool_name)),
+            self.resource_for(self.get_tool(tool_name)),
             compute_size=compute_size,
             read_manifest=read_manifest)
 
@@ -70,10 +71,10 @@ class ToolManager(ResourceManager):
         # installed in an additional (or read-only) cache is listed too.
         installed_tools = []
         for tool in self.list_available_tools():
-            spec = self.spec_for(tool)
+            resource = self.resource_for(tool)
             for cache_dir in self.cache_manager.locations:
                 source = self.cache_manager.read_manifest_source(
-                    self.cache_manager.get_resource_location(cache_dir, spec))
+                    self.cache_manager.get_resource_location(cache_dir, resource))
                 if source is None:
                     continue
                 installed_tools.append(InstalledToolInfo(
@@ -88,8 +89,8 @@ class ToolManager(ResourceManager):
         requested = version or tool.default_version or ''
         resolved_version, resolved_hash = VersionResolver.resolve(tool.repository, requested)
 
-        spec = self.spec_for(tool, resolved_version=resolved_version)
-        cache_dir = self.cache_manager.resolve_cache_directory(spec)
+        resource = self.resource_for(tool, resolved_version=resolved_version)
+        cache_dir = self.cache_manager.resolve_cache_directory(resource)
         if cache_dir.is_read_only:
             raise RuntimeError(
                 'cannot install {} into read-only cache location {}'.format(
@@ -98,19 +99,19 @@ class ToolManager(ResourceManager):
         def populate(staging_root):
             tool.install_handler(version=resolved_version, install_root=staging_root)
 
-        resource_root = self.cache_manager.staged_install(cache_dir, spec, populate)
+        resource_root = self.cache_manager.staged_install(cache_dir, resource, populate)
         return ToolInstallResult(
             name=tool.name,
             version=resolved_version,
             resource_root=resource_root,
             cache_root=cache_dir.location)
 
-    def uninstall_tool(self, resource) -> bool:
+    def uninstall_tool(self, cached_tool) -> bool:
         '''
         Remove an already resolved tool resource, so what a caller inspected and
         confirmed is exactly what gets deleted. Returns whether it was removed.
         '''
-        removed, _ = self.cache_manager.remove_resources([resource])
+        removed, _ = self.cache_manager.remove_resources([cached_tool])
         return bool(removed)
 
 
