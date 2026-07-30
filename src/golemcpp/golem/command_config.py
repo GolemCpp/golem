@@ -127,7 +127,8 @@ class ConfigCommandHandler:
         try:
             # Refused here rather than at the next command reading the store,
             # which is the only other place the value is checked.
-            settings.get_setting_by_key(self.options.key).parse(self.options.value)
+            settings.get_settings(project_dir=self.project_dir).parse_value(
+                self.options.key, self.options.value)
             config_store.set_value(
                 key=self.options.key,
                 value=self.options.value,

@@ -23,8 +23,8 @@ MANIFEST_VERSION = 1
 
 class ResourceKind(Enum):
     DEPENDENCY = 'dependency'
-    RECIPES_REPOSITORY = 'recipes-repository'
-    OVERRIDES_REPOSITORY = 'overrides-repository'
+    COOKBOOK = 'cookbook'
+    OVERLAY = 'overlay'
     TOOL = 'tool'
 
     @property
@@ -38,8 +38,8 @@ class ResourceKind(Enum):
 
 _KIND_TO_SUBDIR = {
     ResourceKind.DEPENDENCY: cache_configuration.DEPENDENCIES_SUBDIR,
-    ResourceKind.RECIPES_REPOSITORY: cache_configuration.RECIPES_SUBDIR,
-    ResourceKind.OVERRIDES_REPOSITORY: cache_configuration.OVERRIDES_SUBDIR,
+    ResourceKind.COOKBOOK: cache_configuration.COOKBOOKS_SUBDIR,
+    ResourceKind.OVERLAY: cache_configuration.OVERLAYS_SUBDIR,
     ResourceKind.TOOL: cache_configuration.TOOLS_SUBDIR,
 }
 

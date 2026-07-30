@@ -4,15 +4,15 @@ from golemcpp.golem import helpers
 # Canonical subdirectories carved out of a cache directory, one per resource
 # kind, so every consumer agrees on the on-disk layout.
 DEPENDENCIES_SUBDIR = 'dependencies'
-RECIPES_SUBDIR = 'recipes'
-OVERRIDES_SUBDIR = 'overrides'
+COOKBOOKS_SUBDIR = 'cookbooks'
+OVERLAYS_SUBDIR = 'overlays'
 TOOLS_SUBDIR = 'tools'
 
 # All resource-kind subdirectories, for consumers iterating a cache directory.
 RESOURCE_SUBDIRS = (
     DEPENDENCIES_SUBDIR,
-    RECIPES_SUBDIR,
-    OVERRIDES_SUBDIR,
+    COOKBOOKS_SUBDIR,
+    OVERLAYS_SUBDIR,
     TOOLS_SUBDIR,
 )
 

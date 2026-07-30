@@ -108,7 +108,7 @@ class CacheCommandHandler:
         print('')
         print('Options:')
         print('  --kind=<kind>          Filter by resource kind (dependency, tool,')
-        print('                         recipes-repository, overrides-repository)')
+        print('                         cookbook, overlay)')
         print('  --cache=<path>         Restrict to a single cache location')
         print('  --regex                Treat the remove pattern as a regular expression')
         print('  --long, -l             Show created/last-used/manifest-version details')

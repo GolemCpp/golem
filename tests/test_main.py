@@ -127,7 +127,7 @@ def test_main_config_dispatches_to_command_config(tmp_path, monkeypatch):
     project_dir.mkdir()
 
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(main.sys, 'argv', ['golem', 'config', 'overrides.repository', '/opt/overrides'])
+    monkeypatch.setattr(main.sys, 'argv', ['golem', 'config', 'overlays.locations', '/opt/overrides'])
 
     captured = {}
 
@@ -147,7 +147,7 @@ def test_main_config_dispatches_to_command_config(tmp_path, monkeypatch):
     assert result == 13
     assert captured['project_dir'] == str(project_dir)
     assert captured['args'] == [
-        'overrides.repository',
+        'overlays.locations',
         '/opt/overrides',
         '--project-dir=' + str(project_dir),
         '--build-dir=' + str(project_dir / 'build'),
