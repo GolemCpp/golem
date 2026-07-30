@@ -5,6 +5,7 @@ from golemcpp.golem import cache_directory
 from golemcpp.golem import cache_resolution_policy
 from golemcpp.golem import config_store
 from golemcpp.golem import helpers
+from golemcpp.golem.setting_descriptor import format_option_flag
 from golemcpp.golem.setting_descriptor import has_value
 from golemcpp.golem.setting_descriptor import require_positive
 from golemcpp.golem.setting_descriptor import SettingDescriptor
@@ -211,9 +212,10 @@ class Settings:
     def get(self, name):
         '''
         The value of a setting.
-        
-        Converted to its type, deserialized into the object it denotes, 
-        or the built-in default. None for an unknown name.
+
+        Converted to its type, deserialized into the object it denotes,
+        or the built-in default. None for an unknown name. Raises ValueError on
+        a value a source does provide but the setting cannot read.
 
         Precedence:
         1. CLI option
@@ -227,12 +229,17 @@ class Settings:
         if setting is None:
             return None
 
-        raw = self._find_raw_value(setting)
-        value = setting.parse(raw) if raw is not None else None
-        if value is None:
-            value = setting.get_default()
+        raw, origin = self._find_raw_value(setting)
+        if raw is None:
+            return self._process(setting, setting.get_default())
 
-        return self._process(setting, value)
+        # Naming the source is the whole point of the error: the same setting
+        # answers to an option, a variable and two stores, and the user has no
+        # other way to tell which one carries the value being refused.
+        try:
+            return self._process(setting, setting.parse(raw))
+        except (TypeError, ValueError) as error:
+            raise ValueError('{} (from {})'.format(error, origin)) from error
 
     def get_default(self, name):
         '''
@@ -294,25 +301,30 @@ class Settings:
         return setting.format_value(value)
 
     def _find_raw_value(self, setting):
+        '''
+        The value of the first source that answers, paired with the way to name
+        that source in an error. (None, None) when no source provides one.
+        '''
         # CLI option, either the live waf options or a native command Namespace.
-        value = self._get_option_value(self.options, setting.option_names)
+        value, option_name = self._get_option_value(self.options, setting.option_names)
         if has_value(value):
-            return value
+            return value, 'option {}'.format(format_option_flag(option_name))
 
         # Persisted `golem configure` options, so a command reached through a
         # build directory honours what the project was configured with, without
         # the user re-passing the option.
         if self.build_dir:
-            value = self._get_option_value(
+            value, option_name = self._get_option_value(
                 get_persisted_configure_options(self.build_dir), setting.option_names)
             if has_value(value):
-                return value
+                return value, 'option {} persisted by golem configure'.format(
+                    format_option_flag(option_name))
 
         # Environment variable.
         for env_name in setting.env_names:
             value = helpers.get_environ(env_name)
             if has_value(value):
-                return value
+                return value, 'environment variable {}'.format(env_name)
 
         # Configuration store, project-local scope first, then the user-global one.
         for scope in (config_store.LOCAL_SCOPE, config_store.GLOBAL_SCOPE):
@@ -322,16 +334,17 @@ class Settings:
                 value = config_store.get_scoped_value(
                     key=key, scope=scope, project_dir=self.project_dir)
                 if has_value(value):
-                    return value
+                    return value, '{} configuration key {}'.format(scope, key)
 
-        return None
+        return None, None
 
     @staticmethod
     def _get_option_value(options, option_names):
         # `options` is a Namespace when it comes from a live CLI/waf parse, and a
         # plain dict when it comes from the persisted `golem configure` options.
+        # Answers with the name that matched, which may be a legacy spelling.
         if not options:
-            return None
+            return None, None
 
         for option_name in option_names:
             if isinstance(options, dict):
@@ -339,9 +352,9 @@ class Settings:
             else:
                 value = getattr(options, option_name, None)
             if has_value(value):
-                return value
+                return value, option_name
 
-        return None
+        return None, None
 
 
 def get_settings(options=None, build_dir=None, project_dir=None):

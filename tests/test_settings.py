@@ -110,11 +110,33 @@ def test_converts_to_the_setting_type(monkeypatch, tmp_path):
         ('/first', None, False), ('/second', 'github', False)]
 
 
-def test_ignores_an_unparsable_value(monkeypatch, tmp_path):
+def test_reports_an_unparsable_value_with_the_source_it_comes_from(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_LENGTH', 'not-a-number')
 
-    assert settings.get_settings().get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 8
+    with pytest.raises(ValueError) as error:
+        settings.get_settings().get('GOLEM_CACHE_MINIMIZATION_LENGTH')
+
+    assert str(error.value) == (
+        "cache.minimization.length expects an integer, got 'not-a-number' "
+        '(from environment variable GOLEM_CACHE_MINIMIZATION_LENGTH)')
+
+
+def test_reports_the_option_and_the_store_an_unparsable_value_comes_from(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.delenv('GOLEM_CACHE_MINIMIZATION_LENGTH', raising=False)
+    monkeypatch.delenv('GOLEM_CACHE_MINIMIZATION_ENABLED', raising=False)
+    project_dir = str(tmp_path / 'project')
+    config_store.set_value(
+        'cache.minimization.enabled', 'maybe', config_store.LOCAL_SCOPE, project_dir)
+
+    with pytest.raises(ValueError, match='from option --cache-minimization-length'):
+        settings.get_settings(
+            options=SimpleNamespace(cache_minimization_length='not-a-number')).get(
+                'cache.minimization.length')
+
+    with pytest.raises(ValueError, match='from local configuration key cache.minimization.enabled'):
+        settings.get_settings(project_dir=project_dir).get('cache.minimization.enabled')
 
 
 def test_honors_a_stored_boolean(monkeypatch, tmp_path):
@@ -277,12 +299,9 @@ def test_a_length_the_setting_cannot_accept_raises(monkeypatch, tmp_path):
 
     for length in ('0', '-3'):
         monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_LENGTH', length)
-        with pytest.raises(ValueError):
+        # A value the type can hold but the setting refuses names its source too.
+        with pytest.raises(ValueError, match='GOLEM_CACHE_MINIMIZATION_LENGTH'):
             manager.get('GOLEM_CACHE_MINIMIZATION_LENGTH')
-
-    # Text that is not a number is not a value at all, so the default applies.
-    monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_LENGTH', 'abc')
-    assert manager.get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 8
 
 
 def test_an_unknown_resolution_policy_raises(monkeypatch, tmp_path):

@@ -1,3 +1,5 @@
+import pytest
+
 from golemcpp.golem.setting_descriptor import has_value
 from golemcpp.golem.setting_descriptor import SettingDescriptor
 from golemcpp.golem.setting_descriptor import SettingType
@@ -64,21 +66,37 @@ def test_parse_string():
     assert setting.parse(None) is None
 
 
-def test_parse_bool_accepts_the_off_spellings():
+def test_parse_bool_accepts_the_on_and_off_spellings():
     setting = _setting(value_type=SettingType.BOOL)
 
     for value in ('off', 'OFF', ' false ', '0', 'no', False):
         assert setting.parse(value) is False, value
-    for value in ('on', 'true', '1', 'anything', True):
+    for value in ('on', 'ON', ' true ', '1', 'yes', True):
         assert setting.parse(value) is True, value
 
 
-def test_parse_int_returns_none_when_unparsable():
+def test_parse_rejects_a_value_the_type_cannot_hold():
+    with pytest.raises(ValueError) as error:
+        _setting(value_type=SettingType.INT).parse('not-a-number')
+    # The message names the setting, what it expects and what it got, whichever
+    # source the value came from.
+    assert str(error.value) == "cache.directory expects an integer, got 'not-a-number'"
+
+    with pytest.raises(ValueError, match='on, true'):
+        _setting(value_type=SettingType.BOOL).parse('maybe')
+
+    with pytest.raises(ValueError, match='separated by'):
+        _setting(value_type=SettingType.LIST).parse(16)
+
+    with pytest.raises(ValueError, match='a single text value'):
+        _setting().parse(['/first', '/second'])
+
+
+def test_parse_int():
     setting = _setting(value_type=SettingType.INT)
 
     assert setting.parse('16') == 16
     assert setting.parse(16) == 16
-    assert setting.parse('not-a-number') is None
 
 
 def test_parse_list_splits_a_packed_string_and_keeps_a_sequence():

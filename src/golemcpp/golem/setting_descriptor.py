@@ -5,8 +5,9 @@ from enum import Enum
 # configuration store entry (e.g. PATH1|PATH2=url-regex).
 LIST_SEPARATOR = '|'
 
-# Spellings that turn a boolean setting off; anything else present means on.
+# Spellings a boolean setting answers to; anything else is a typo, not an answer.
 FALSE_VALUES = ('off', 'false', '0', 'no')
+TRUE_VALUES = ('on', 'true', '1', 'yes')
 
 
 class SettingType(Enum):
@@ -25,6 +26,11 @@ def has_value(value):
     if isinstance(value, bool):
         return True
     return bool(value)
+
+
+def format_option_flag(option_name):
+    '''The command-line spelling of an option dest, for help and error output.'''
+    return '--{}'.format(option_name.replace('_', '-'))
 
 
 def require_positive(value, context):
@@ -93,10 +99,9 @@ class SettingDescriptor:
 
     @property
     def option_flag(self):
-        # The command-line spelling of the option dest, for help output.
         if not self.option_name:
             return ''
-        return '--{}'.format(self.option_name.replace('_', '-'))
+        return format_option_flag(self.option_name)
 
     def get_default(self):
         # Callable defaults let a setting depend on the environment (e.g. the
@@ -111,7 +116,8 @@ class SettingDescriptor:
         '''
         Convert a raw value to the setting type: a string from the environment,
         an already typed value from a CLI option, the project or the JSON store.
-        None when it cannot be converted, so the caller tries the next source.
+        Raises ValueError on a value the type cannot hold: a misspelled setting
+        is worth reporting, where falling back to the default hides it.
         '''
         if value is None:
             return None
@@ -119,20 +125,34 @@ class SettingDescriptor:
         if self.value_type == SettingType.BOOL:
             if isinstance(value, bool):
                 return value
-            return str(value).strip().lower() not in FALSE_VALUES
+            text = str(value).strip().lower()
+            if text in TRUE_VALUES:
+                return True
+            if text in FALSE_VALUES:
+                return False
+            raise self._type_error(value, 'one of {}'.format(
+                ', '.join(TRUE_VALUES + FALSE_VALUES)))
 
         if self.value_type == SettingType.INT:
             try:
                 return int(value)
             except (TypeError, ValueError):
-                return None
+                raise self._type_error(value, 'an integer') from None
 
         if self.value_type == SettingType.LIST:
             if isinstance(value, (list, tuple)):
                 return [str(entry) for entry in value if entry]
-            return [entry for entry in str(value).split(LIST_SEPARATOR) if entry]
+            if not isinstance(value, str):
+                raise self._type_error(value, 'entries separated by {}'.format(LIST_SEPARATOR))
+            return [entry for entry in value.split(LIST_SEPARATOR) if entry]
+
+        if isinstance(value, (list, tuple, dict, set)):
+            raise self._type_error(value, 'a single text value')
 
         return str(value)
+
+    def _type_error(self, value, expected):
+        return ValueError('{} expects {}, got {!r}'.format(self.key, expected, value))
 
     def format_value(self, value):
         '''

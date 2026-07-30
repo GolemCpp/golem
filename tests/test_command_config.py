@@ -49,6 +49,19 @@ def test_set_global_scope(monkeypatch, tmp_path):
     assert config_store.get_scoped_value('overrides.repository', config_store.GLOBAL_SCOPE, project_dir) == '/global/overrides'
 
 
+def test_set_refuses_a_value_the_setting_cannot_read(monkeypatch, capsys, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    project_dir = _project_dir(tmp_path)
+
+    result = command_config.handle_config_command(
+        project_dir=project_dir, args=['cache.minimization.length', 'eight'])
+
+    assert result == 1
+    assert 'expects an integer' in capsys.readouterr().out
+    assert config_store.get_scoped_value(
+        'cache.minimization.length', config_store.LOCAL_SCOPE, project_dir) is None
+
+
 def test_get_prints_resolved_value(monkeypatch, capsys, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = _project_dir(tmp_path)
