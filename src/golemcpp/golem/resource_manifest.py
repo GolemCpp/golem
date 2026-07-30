@@ -6,9 +6,8 @@ from datetime import datetime
 from datetime import timezone
 from enum import Enum
 
-from golemcpp.golem import cache
+from golemcpp.golem import cache_configuration
 from golemcpp.golem import command_version
-from golemcpp.golem import helpers
 
 
 # Filename of the descriptor dropped at the root of every cached resource. It is
@@ -38,10 +37,10 @@ class ResourceKind(Enum):
 
 
 _KIND_TO_SUBDIR = {
-    ResourceKind.DEPENDENCY: cache.DEPENDENCIES_SUBDIR,
-    ResourceKind.RECIPES_REPOSITORY: cache.RECIPES_SUBDIR,
-    ResourceKind.OVERRIDES_REPOSITORY: cache.OVERRIDES_SUBDIR,
-    ResourceKind.TOOL: cache.TOOLS_SUBDIR,
+    ResourceKind.DEPENDENCY: cache_configuration.DEPENDENCIES_SUBDIR,
+    ResourceKind.RECIPES_REPOSITORY: cache_configuration.RECIPES_SUBDIR,
+    ResourceKind.OVERRIDES_REPOSITORY: cache_configuration.OVERRIDES_SUBDIR,
+    ResourceKind.TOOL: cache_configuration.TOOLS_SUBDIR,
 }
 
 _SUBDIR_TO_KIND = {subdir: kind for kind, subdir in _KIND_TO_SUBDIR.items()}
@@ -59,21 +58,22 @@ def manifest_path(resource_root: str) -> str:
 class ResourceManifest:
     kind: str
     cache_key: str
-    identity: dict = field(default_factory=dict)
+    # The serialized Source that produced this resource ({type, location, reference}).
+    source: dict = field(default_factory=dict)
     version: int = MANIFEST_VERSION
     golem_version: str = ''
     created_at: str = ''
     last_used_at: str = ''
 
     @classmethod
-    def create(cls, kind, cache_key: str, identity: dict) -> 'ResourceManifest':
+    def create(cls, kind, cache_key: str, source: dict) -> 'ResourceManifest':
         if isinstance(kind, ResourceKind):
             kind = kind.value
         now = utc_now()
         return cls(
             kind=kind,
             cache_key=cache_key,
-            identity=dict(identity),
+            source=dict(source),
             version=MANIFEST_VERSION,
             golem_version=command_version.get_golem_version(),
             created_at=now,
@@ -97,7 +97,7 @@ class ResourceManifest:
         return cls(
             kind=data.get('kind', ''),
             cache_key=data.get('cache_key', ''),
-            identity=data.get('identity', {}) or {},
+            source=data.get('source', {}),
             version=data.get('version', MANIFEST_VERSION),
             golem_version=data.get('golem_version', ''),
             created_at=data.get('created_at', ''),
@@ -114,7 +114,7 @@ class ResourceManifest:
             'kind': self.kind,
             'cache_key': self.cache_key,
             'golem_version': self.golem_version,
-            'identity': self.identity,
+            'source': self.source,
             'created_at': self.created_at,
             'last_used_at': self.last_used_at,
         }
@@ -132,8 +132,25 @@ class ResourceManifest:
     def write_to_root(self, resource_root: str) -> None:
         self.write(manifest_path(resource_root))
 
+    @classmethod
+    def touch(cls, resource_root: str) -> None:
+        '''
+        Refresh the `last_used_at` timestamp of an already-cached resource.
+        Best-effort: does nothing when the resource has no manifest or cannot be
+        written (e.g. a read-only cache), so it never interferes with a build.
+        '''
+        path = manifest_path(resource_root)
+        manifest = cls.read(path)
+        if manifest is None:
+            return
+        manifest.last_used_at = utc_now()
+        try:
+            manifest.write(path)
+        except OSError:
+            pass
 
-def write_manifest(resource_root: str, kind, cache_key: str, identity: dict) -> None:
+
+def write_manifest(resource_root: str, kind, cache_key: str, source: dict) -> None:
     '''
     Write a fresh manifest at the root of a newly created cache resource.
     Best-effort: a failure here must never break a build, so errors are
@@ -141,26 +158,12 @@ def write_manifest(resource_root: str, kind, cache_key: str, identity: dict) -> 
     '''
     try:
         manifest = ResourceManifest.create(
-            kind=kind, cache_key=cache_key, identity=identity)
+            kind=kind, cache_key=cache_key, source=source)
         manifest.write_to_root(resource_root)
     except OSError:
         pass
 
 
 def touch_last_used(resource_root: str) -> None:
-    '''
-    Refresh the `last_used_at` timestamp of an already-cached resource when it
-    is used during a build. Best-effort: silently does nothing when the resource
-    has no manifest or cannot be written (e.g. a read-only cache), so it never
-    interferes with a build.
-    '''
-    path = manifest_path(resource_root)
-    manifest = ResourceManifest.read(path)
-    if manifest is None:
-        return
-
-    manifest.last_used_at = utc_now()
-    try:
-        manifest.write(path)
-    except OSError:
-        pass
+    '''Module-level wrapper over ResourceManifest.touch for existing callers.'''
+    ResourceManifest.touch(resource_root)

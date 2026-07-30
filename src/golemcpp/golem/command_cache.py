@@ -7,10 +7,11 @@ from dataclasses import field
 from datetime import datetime
 from datetime import timezone
 
-from golemcpp.golem import cache
+from golemcpp.golem.cache_configuration import get_cache_configuration
+from golemcpp.golem.settings import get_settings
 from golemcpp.golem import cache_manager
-from golemcpp.golem import cache_manifest
 from golemcpp.golem import helpers
+from golemcpp.golem.source import Source
 
 
 def build_cache_parser() -> ArgumentParser:
@@ -75,13 +76,10 @@ def humanize_age(value: str) -> str:
 
 
 def resource_label(resource: cache_manager.CachedResource) -> str:
-    identity = resource.identity
-    name = identity.get('name') or identity.get('url') or resource.cache_key
-    version = (identity.get('resolved_version') or identity.get('version')
-               or identity.get('reference') or '')
-    if version:
-        return '{} {}'.format(name, version)
-    return str(name)
+    if resource.manifest is None:
+        return str(resource.cache_key)
+    source = Source.from_manifest(resource.manifest)
+    return source.label or str(resource.cache_key)
 
 
 @dataclass
@@ -121,12 +119,13 @@ class CacheCommandHandler:
 
     def make_manager(self) -> cache_manager.CacheManager:
         if self._manager is None:
-            locations = cache.resolve_cache_locations(
-                project_dir=self.project_dir or None,
-                build_dir=self.options.build_dir or None,
+            settings = get_settings(
                 options=self.options,
+                build_dir=self.options.build_dir or None,
+                project_dir=self.project_dir or None,
             )
-            self._manager = cache_manager.CacheManager(locations=locations)
+            cache_configuration = get_cache_configuration(settings)
+            self._manager = cache_manager.get_cache_manager(cache_configuration)
         return self._manager
 
     def _cache_filter(self):
@@ -143,7 +142,7 @@ class CacheCommandHandler:
         if cache_filter is not None:
             resources = [
                 resource for resource in resources
-                if os.path.abspath(resource.cache_location) == cache_filter
+                if os.path.abspath(resource.cache_root) == cache_filter
             ]
 
         if self.options.kind:
@@ -182,7 +181,7 @@ class CacheCommandHandler:
         '''
         groups = {}
         for resource in resources:
-            groups.setdefault(resource.cache_location, []).append(resource)
+            groups.setdefault(resource.cache_root, []).append(resource)
 
         emitted = set()
         for cache_dir in self.make_manager().locations:
@@ -200,10 +199,10 @@ class CacheCommandHandler:
         return {
             'kind': resource.kind,
             'cache_key': resource.cache_key,
-            'identity': resource.identity,
+            'source': resource.source,
             'identified': resource.is_identified,
             'manifest_version': resource.manifest_version,
-            'cache_location': resource.cache_location,
+            'cache_root': resource.cache_root,
             'read_only': resource.is_read_only,
             'size_bytes': resource.size_bytes,
             'created_at': resource.created_at,
@@ -259,7 +258,7 @@ class CacheCommandHandler:
         per_kind = {}
         total = 0
         for resource in resources:
-            per_cache[resource.cache_location] = per_cache.get(resource.cache_location, 0) + resource.size_bytes
+            per_cache[resource.cache_root] = per_cache.get(resource.cache_root, 0) + resource.size_bytes
             per_kind[resource.kind] = per_kind.get(resource.kind, 0) + resource.size_bytes
             total += resource.size_bytes
 
@@ -362,7 +361,7 @@ class CacheCommandHandler:
                 print('  {}  ({})  cache: {}'.format(
                     resource.path,
                     helpers.format_size(resource.size_bytes),
-                    resource.cache_location))
+                    resource.cache_root))
             return 0
 
         return self._delete_with_confirmation(

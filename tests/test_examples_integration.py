@@ -11,8 +11,11 @@ from typing import Iterator
 
 import pytest
 
+from golemcpp.golem import cache_configuration
+from golemcpp.golem import cache_directory
 from golemcpp.golem import cppfront_tool
-from golemcpp.golem import tools_manager
+from golemcpp.golem import tool_manager
+from conftest import make_cache_configuration
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -236,7 +239,7 @@ def assert_package_artifact_exists(project_dir: Path) -> None:
 
 def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_path):
     require_cxx_compiler()
-    require_git_remote_access(cppfront_tool.CPPFRONT_REPOSITORY_URL)
+    require_git_remote_access(cppfront_tool.CPPFRONT_REPOSITORY)
 
     project_dir = example_tmp_path / 'project'
     project_dir.mkdir()
@@ -256,18 +259,20 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     # Resolve the installed tool the same way the code does: from the base cache
     # root, honoring path minimization (on by default). This finds the tool
     # whether it landed under tools/<name> or a minimized flat path.
-    manager = tools_manager.ToolsManager(str(cache_dir))
-    cache_info = cppfront_tool.CppFrontCacheInfo.from_cache_root(
-        manager.tool_cache_root(cppfront_tool.CPPFRONT_NAME)
+    manager = tool_manager.get_tool_manager(
+        make_cache_configuration(cache_directory.CacheDirectory(location=str(cache_dir))))
+    cache_info = cppfront_tool.CppFrontCacheInfo.from_tool_root(
+        manager.resolve_cached_tool(cppfront_tool.CPPFRONT_NAME).path
     )
 
     assert Path(cache_info.executable_path).is_file()
     assert Path(cache_info.include_path).is_dir()
 
-    manifest = manager.read_tool_manifest(tool_name=cppfront_tool.CPPFRONT_NAME)
+    source = manager.read_tool_source(tool_name=cppfront_tool.CPPFRONT_NAME)
 
-    assert manifest.version == cppfront_tool.DEFAULT_CPPFRONT_VERSION
-    assert manifest.tool == cppfront_tool.CPPFRONT_NAME
+    assert source.type == 'git'
+    assert source.reference == cppfront_tool.DEFAULT_CPPFRONT_VERSION
+    assert source.location == cppfront_tool.CPPFRONT_REPOSITORY
 
 
 def test_tools_list_available_mentions_supported_tools(example_tmp_path):
@@ -286,14 +291,14 @@ def test_tools_list_available_mentions_supported_tools(example_tmp_path):
     assert result.returncode == 0
     assert 'Supported installable tools:' in result.stdout
     assert 'cppfront\n  Description:' in result.stdout
-    assert '  Repository: {}'.format(cppfront_tool.CPPFRONT_REPOSITORY_URL) in result.stdout
+    assert '  Repository: {}'.format(cppfront_tool.CPPFRONT_REPOSITORY) in result.stdout
     assert '  Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in result.stdout
 
 
 @pytest.mark.parametrize('project_variant', PROJECT_VARIANTS)
 def test_cppfront_example_installs_builds_and_runs(example_tmp_path, project_variant):
     require_cxx_compiler()
-    require_git_remote_access(cppfront_tool.CPPFRONT_REPOSITORY_URL)
+    require_git_remote_access(cppfront_tool.CPPFRONT_REPOSITORY)
 
     project_dir = prepare_example_project('cppfront', example_tmp_path, project_variant)
     cache_dir = example_tmp_path / f'cache-{project_variant}'

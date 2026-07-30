@@ -4,11 +4,17 @@ from types import SimpleNamespace
 import json
 
 from golemcpp.golem import context as golem_context, helpers, qt_discovery
-from golemcpp.golem import cache
-from golemcpp.golem.cache import CacheConf, CacheDir, CacheResolutionPolicy, CachedResourceResolver
+from golemcpp.golem.settings import get_settings
+from golemcpp.golem.cache_configuration import (
+    CacheConfiguration, DEPENDENCIES_SUBDIR, RECIPES_SUBDIR)
+from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
+from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
 from golemcpp.golem.dependency import Dependency
-from golemcpp.golem.repository import Repository
+from golemcpp.golem.dependency_manager import get_dependency_manager
+from golemcpp.golem.recipes_repository_manager import get_recipes_repository_manager
+from golemcpp.golem.source import Source
+from conftest import absolute_path, make_cache_configuration
 
 
 class AttrDict(dict):
@@ -49,7 +55,7 @@ def make_configure_context(project_qt=True, project_qtdir=''):
         load=lambda _: None,
     )
     context.version = SimpleNamespace(force_version=lambda _: None)
-    context.make_cache_conf = lambda: None
+    context.make_cache_configuration = lambda: None
     context.load_recipe = lambda: None
     context.get_tasks_and_targets_to_process = lambda: []
     context.ensures_qt_is_installed = lambda: None
@@ -161,6 +167,9 @@ def make_runtime_context(*,
                          runtime_variant=None,
                          link='shared'):
     context = Context.__new__(Context)
+    # Both are set by Context.__init__, which building through __new__ skips.
+    context.project = None
+    context.settings = None
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             variant=variant,
@@ -437,17 +446,23 @@ def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_en
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context = make_runtime_context(runtime_variant='release')
     context.resolved_overrides = '/tmp/overrides.json'
-    context.get_dep_location = lambda dep, cache_dir: '/tmp/dep-export'
-    context.make_repo_ready = lambda dep, cache_dir, should_clean=False: '/tmp/repo'
-    context.get_dep_build_location = lambda dep, cache_dir: '/tmp/repo/build'
+    context.get_dep_location = lambda dep: '/tmp/dep-export'
+    context.make_repo_ready = lambda dep, should_clean=False: '/tmp/repo'
+    context.get_dep_build_location = lambda dep: '/tmp/repo/build'
     context.get_global_dependencies_configuration_file = lambda: '/tmp/global-dependencies.json'
-    context.make_cache_dir_option = lambda: '/tmp/cache'
     context.get_only_update_dependencies_regex = lambda: ''
-    context.make_additional_cache_directories_args = lambda: []
-    context.make_additional_read_only_cache_directories_args = lambda: []
-    context.make_cache_resolution_policy_option = lambda: 'strict'
-    context.make_cache_minimization_enabled_option = lambda: 'off'
-    context.get_cache_minimization_length = lambda: 12
+    # The cache options forwarded to the dependency sub-build are the flags the
+    # settings spell, so the sub-build reaches the same caches with the same layout.
+    project_dir = absolute_path('tmp', 'project')
+    cache_dir = absolute_path('tmp', 'cache')
+    context.settings = get_settings(
+        project_dir=project_dir,
+        options=SimpleNamespace(
+            cache_directory=cache_dir,
+            cache_minimization_enabled='off',
+            cache_minimization_length=12,
+            additional_cache_directory=['shared=github'],
+        ))
 
     dep = SimpleNamespace(
         name='demo',
@@ -466,20 +481,25 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
     monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: calls.append(args))
 
-    context.run_dep_command(dep=dep, cache_dir='/tmp/cache', command='resolve')
+    context.run_dep_command(dep=dep, command='resolve')
 
     assert '--runtime-link=shared' in calls[0]
     assert '--runtime-variant=release' in calls[0]
     assert '--runtime=shared' not in calls[0]
     # Path minimization settings are forwarded to the dependency sub-build so it
     # resolves cache paths with the same layout as the parent.
+    assert '--cache-directory={}'.format(cache_dir) in calls[0]
     assert '--cache-minimization-enabled=off' in calls[0]
     assert '--cache-minimization-length=12' in calls[0]
+    # A relative cache directory is forwarded absolute: the sub-build runs
+    # elsewhere and would otherwise resolve it against its own directory.
+    assert '--additional-cache-directory={}=github'.format(
+        os.path.join(project_dir, 'shared')) in calls[0]
 
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):
     context = Context.__new__(Context)
-    context.project = SimpleNamespace(overrides_repository=None)
+    context.project = SimpleNamespace()
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             project_dir=str(project_dir),
@@ -489,117 +509,22 @@ def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_reposi
             cache_minimization_length=0,
         ))
     context.deps_resolve = deps_resolve
+    # Built lazily by Context.get_settings(), which __init__ would have reset.
+    context.settings = None
+    # Cache settings now live on the CacheConfiguration the CacheManager is built from
+    # (default: path-minimization enabled). Tests that need a different layout or
+    # specific cache locations override context.cache_configuration explicitly.
+    context.cache_configuration = make_cache_configuration()
     return context
 
+def test_directory_dependency_is_detected_as_non_git(tmp_path):
+    directory = tmp_path / 'recipes'
+    directory.mkdir()
 
-def make_cache_conf(*cache_dirs):
-    cache_conf = CacheConf()
-    cache_conf.locations = list(cache_dirs)
-    return cache_conf
+    dependency = Dependency(directory=directory.resolve().as_uri())
 
-
-def test_cached_resource_resolver_strict_policy_returns_first_match_without_probe():
-    cache_conf = make_cache_conf(
-        CacheDir('/static-regex', is_read_only=True, regex='.*recipes.*'),
-        CacheDir('/writable', is_read_only=False),
-    )
-
-    resolver = CachedResourceResolver(
-        identifier='https://github.com/GolemCpp/recipes.git',
-        cache_conf=cache_conf,
-        policy=CacheResolutionPolicy.WEAK,
-    )
-
-    assert resolver.resolve().location == '/static-regex'
-
-
-def test_cached_resource_resolver_weak_policy_without_probe_returns_none_for_phase():
-    cache_conf = make_cache_conf(
-        CacheDir('/static-default', is_read_only=True),
-        CacheDir('/writable-regex', is_read_only=False, regex='.*recipes.*'),
-        CacheDir('/writable-default', is_read_only=False),
-    )
-
-    resolver = CachedResourceResolver(
-        identifier='https://github.com/GolemCpp/recipes.git',
-        cache_conf=cache_conf,
-        policy=CacheResolutionPolicy.WEAK,
-    )
-
-    assert resolver._select_cache(cache_conf.locations) is None
-
-
-def test_cached_resource_resolver_weak_policy_checks_existing_caches():
-    static_missing = CacheDir('/static-missing', is_read_only=True, regex='.*json.*')
-    static_present = CacheDir('/static-present', is_read_only=True, regex='.*json.*')
-    cache_conf = make_cache_conf(static_missing, static_present)
-
-    resolver = CachedResourceResolver(
-        identifier='https://github.com/nlohmann/json.git',
-        cache_conf=cache_conf,
-        policy=CacheResolutionPolicy.WEAK,
-        exists_in_cache=lambda cache_dir: cache_dir.location == '/static-present',
-    )
-
-    assert resolver.resolve().location == '/static-present'
-
-
-def test_cached_resource_resolver_weak_policy_falls_back_to_first_writable_cache():
-    writable_regex = CacheDir('/writable-regex', is_read_only=False, regex='.*json.*')
-    writable_default = CacheDir('/writable-default', is_read_only=False)
-    cache_conf = make_cache_conf(writable_regex, writable_default)
-
-    resolver = CachedResourceResolver(
-        identifier='https://github.com/nlohmann/json.git',
-        cache_conf=cache_conf,
-        policy=CacheResolutionPolicy.WEAK,
-        exists_in_cache=lambda cache_dir: False,
-    )
-
-    assert resolver.resolve().location == '/writable-regex'
-
-
-def test_find_repository_cache_dir_uses_repository_probe_under_weak_policy(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    context.context.options.cache_resolution_policy = 'weak'
-    context.cache_conf = make_cache_conf(
-        CacheDir('/static-regex', is_read_only=True, regex='.*recipes.*'),
-        CacheDir('/writable-default', is_read_only=False),
-    )
-
-    context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: cache_dir.location == '/static-regex'
-
-    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
-
-    cache_dir = context.find_repository_cache_dir(repository, subdir=cache.RECIPES_SUBDIR)
-
-    assert cache_dir.location == '/static-regex'
-
-
-def test_find_repository_cache_dir_weak_policy_skips_read_only_hit_when_probe_fails(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    context.context.options.cache_resolution_policy = 'weak'
-    context.cache_conf = make_cache_conf(
-        CacheDir('/static-regex', is_read_only=True, regex='.*recipes.*'),
-        CacheDir('/writable-default', is_read_only=False),
-    )
-
-    context.is_resource_in_cache_dir = lambda resource, cache_dir, subdir=None: False
-
-    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
-
-    cache_dir = context.find_repository_cache_dir(repository, subdir=cache.RECIPES_SUBDIR)
-
-    assert cache_dir.location == '/static-regex'
-
-
-def test_parse_local_non_git_repository_returns_local_path_for_non_git_directory(tmp_path):
-    repository_dir = tmp_path / 'recipes'
-    repository_dir.mkdir()
-
-    dependency = Dependency(repository=repository_dir.resolve().as_uri())
-
-    assert Repository.parse_local_non_git_repository(dependency.repository) == str(repository_dir)
+    assert dependency.is_non_git_directory()
+    assert Source.parse_local_non_git_repository(dependency.directory) == str(directory)
 
 
 def test_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
@@ -610,8 +535,8 @@ def test_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
 
     dependency = Dependency(repository=repository_dir.resolve().as_uri())
 
-    assert Repository.parse_local_non_git_repository(dependency.repository) is None
-    assert Repository.parse_local_directory_path(url=dependency.repository) == str(repository_dir)
+    assert Source.parse_local_non_git_repository(dependency.repository) is None
+    assert Source.parse_local_directory_path(url=dependency.repository) == str(repository_dir)
 
 
 def test_helpers_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
@@ -622,8 +547,8 @@ def test_helpers_parse_local_non_git_repository_ignores_local_git_directory(tmp_
 
     repository_uri = repository_dir.resolve().as_uri()
 
-    assert Repository.parse_local_non_git_repository(repository_uri) is None
-    assert Repository.parse_local_directory_path(repository_uri) == str(repository_dir)
+    assert Source.parse_local_non_git_repository(repository_uri) is None
+    assert Source.parse_local_directory_path(repository_uri) == str(repository_dir)
 
 
 def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path):
@@ -635,7 +560,7 @@ def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path)
 
     repositories = context.load_recipes_repositories()
 
-    assert [repository.url for repository in repositories] == [recipes_dir.resolve().as_uri()]
+    assert [repository.location for repository in repositories] == [recipes_dir.resolve().as_uri()]
 
 
 def test_get_overrides_repository_normalizes_local_paths(monkeypatch, tmp_path):
@@ -645,7 +570,7 @@ def test_get_overrides_repository_normalizes_local_paths(monkeypatch, tmp_path):
 
     monkeypatch.setenv('GOLEM_OVERRIDES_REPOSITORY', 'overrides')
 
-    assert context.get_overrides_repository().url == overrides_dir.resolve().as_uri()
+    assert context.get_overrides_repository().location == overrides_dir.resolve().as_uri()
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -653,10 +578,10 @@ def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
     recipes_dir = project_dir / 'recipes #1'
     recipes_dir.mkdir(parents=True)
 
-    repository = Repository.from_url('recipes #1', str(project_dir)).url
+    repository = Source.detect('recipes #1', str(project_dir)).location
 
     assert repository == recipes_dir.resolve().as_uri()
-    assert Repository.parse_local_directory_path(repository) == str(recipes_dir.resolve())
+    assert Source.parse_local_directory_path(repository) == str(recipes_dir.resolve())
 
 
 def test_run_command_uses_subprocess_without_shell_on_windows(monkeypatch):
@@ -715,12 +640,12 @@ def test_clone_repository_copies_non_git_directory(tmp_path):
     repo_path = tmp_path / 'cache' / 'recipes'
 
     context = make_repository_context(project_dir=project_dir)
-    repository = Repository.from_url('recipes', str(project_dir))
+    repository = Source.detect('recipes', str(project_dir))
 
-    context.clone_repository(path=str(repo_path), repository=repository)
+    context.clone_repository(path=str(repo_path), source=repository)
 
     assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'copied\n'
-    assert (repo_path / '.golem-origin').read_text(encoding='utf-8') == repository.url
+    assert (repo_path / '.golem-origin').read_text(encoding='utf-8') == repository.location
 
 
 def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path):
@@ -734,20 +659,20 @@ def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path)
     (repo_path / 'marker.txt').write_text('stale\n', encoding='utf-8')
 
     context = make_repository_context(project_dir=project_dir)
-    repository = Repository.from_url('recipes', str(project_dir))
+    repository = Source.detect('recipes', str(project_dir))
 
-    context.clone_repository(path=str(repo_path), repository=repository)
+    context.clone_repository(path=str(repo_path), source=repository)
 
     assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'fresh\n'
 
 
 def test_clone_repository_raises_for_missing_local_directory(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    repository = Repository.from_url('missing-recipes', str(tmp_path))
+    repository = Source.detect('missing-recipes', str(tmp_path))
     repo_path = tmp_path / 'cache' / 'recipes'
 
-    with pytest.raises(RuntimeError, match="Can't find local repository directory"):
-        context.clone_repository(path=str(repo_path), repository=repository)
+    with pytest.raises(RuntimeError, match="Can't find local source directory"):
+        context.clone_repository(path=str(repo_path), source=repository)
 
 
 def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path):
@@ -760,154 +685,93 @@ def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path
     repo_path = tmp_path / 'cache' / 'recipes'
 
     context = make_repository_context(project_dir=project_dir)
-    repository = Repository.from_url('recipes', str(project_dir))
+    repository = Source.detect('recipes', str(project_dir))
     calls = []
 
     monkeypatch.setattr(helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append((args, cwd)))
 
-    context.clone_repository(path=str(repo_path), repository=repository)
+    context.clone_repository(path=str(repo_path), source=repository)
 
-    assert calls[0] == (['clone', '--', repository.url, '.'], str(repo_path))
+    assert calls[0] == (['clone', '--', repository.location, '.'], str(repo_path))
     assert calls[1] == (['reset', '--hard', 'origin/main'], str(repo_path))
 
 
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    context.context.options.cache_minimization_enabled = 'off'
-    context.cache_conf = make_cache_conf(CacheDir('/cache', is_read_only=False))
-    context.find_repository_cache_dir = lambda repository, subdir=None: CacheDir('/cache', is_read_only=False)
+    context.cache_configuration = make_cache_configuration(
+        CacheDirectory('/cache', is_read_only=False), minimization_enabled=False)
 
-    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
+    repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
-    repo_path = context.make_basic_dependency_repo_path(repository, subdir=cache.RECIPES_SUBDIR)
+    manager = get_recipes_repository_manager(context.cache_configuration)
+    repo_path = manager.resolve_cached_resource(repository).path
 
-    assert repo_path == os.path.join('/cache', cache.RECIPES_SUBDIR, Repository.make_repository_base(
+    assert repo_path == os.path.join('/cache', RECIPES_SUBDIR, Source.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
     )
 
-def test_get_resource_location_reuses_repository_cache_key_for_dependency(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    context.context.options.cache_minimization_enabled = 'off'
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
-
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
-
-    expected_repository = Repository(
-        url=dep.repository,
-        reference=helpers.get_dependency_resolved_version(dep))
-
-    assert context.get_resource_location(dep, cache_dir) == os.path.join(
-        cache_dir.location, cache.DEPENDENCIES_SUBDIR, expected_repository.get_cache_key())
-
-
-def test_get_resource_location_minimized_flat_when_enabled(tmp_path):
-    import hashlib
-    context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
-
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
-
-    cache_key = Repository(
-        url=dep.repository,
-        reference=helpers.get_dependency_resolved_version(dep)).get_cache_key()
-    expected_name = hashlib.sha1(
-        '{}/{}'.format(cache.DEPENDENCIES_SUBDIR, cache_key).encode('utf-8')
-    ).hexdigest()[:8]
-
-    location = context.get_resource_location(dep, cache_dir)
-    assert location == os.path.join(cache_dir.location, expected_name)
-    # Flat: no per-kind subdirectory in the path.
-    assert cache.DEPENDENCIES_SUBDIR not in os.path.relpath(location, cache_dir.location)
-
-
-def test_get_resource_location_prefers_existing_non_minimized(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
-
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
-
-    cache_key = Repository(
-        url=dep.repository,
-        reference=helpers.get_dependency_resolved_version(dep)).get_cache_key()
-    non_minimized = os.path.join(
-        cache_dir.location, cache.DEPENDENCIES_SUBDIR, cache_key)
-    os.makedirs(non_minimized, exist_ok=True)
-
-    # A resource already present under the classic layout keeps its location even
-    # though minimization is enabled.
-    assert context.get_resource_location(dep, cache_dir) == non_minimized
-
 
 def test_cache_minimization_length_and_toggle_resolution(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
+    options = SimpleNamespace(
+        cache_minimization_enabled='', cache_minimization_length=0)
+    settings = get_settings(
+        options=options, project_dir=str(tmp_path))
 
     # Defaults: enabled, length 8.
-    assert context.is_cache_minimization_enabled() is True
-    assert context.get_cache_minimization_length() == 8
+    assert settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED') is True
+    assert settings.get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 8
 
-    context.context.options.cache_minimization_length = 16
-    assert context.get_cache_minimization_length() == 16
+    options.cache_minimization_length = 16
+    assert settings.get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 16
 
-    context.context.options.cache_minimization_enabled = 'off'
-    assert context.is_cache_minimization_enabled() is False
-
-
-def test_is_resource_in_cache_dir_uses_dependency_base(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
-    os.makedirs(cache_dir.location, exist_ok=True)
-
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
-
-    resource_path = context.get_resource_location(dep, cache_dir)
-    os.makedirs(resource_path, exist_ok=True)
-
-    assert context.is_resource_in_cache_dir(dep, cache_dir) is True
+    options.cache_minimization_enabled = 'off'
+    assert settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED') is False
 
 
 def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
+    cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
+    context.cache_configuration = make_cache_configuration(cache_dir)
 
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
         version='^3.0.0')
     dep.resolved_hash = '1234567890abcdef'
-    dep.cache_dir = cache_dir
+    # Primed the way configure does, so the path comes from that resolution.
+    dep.update_cached_resource(context.cache_configuration)
 
     assert context.make_dependency_path(dep, 'artifact') == os.path.join(
-        context.get_resource_location(dep, cache_dir), 'artifact')
+        get_dependency_manager(
+            context.cache_configuration).resolve_cached_resource(dep).path,
+        'artifact')
 
 
-def test_get_dependency_resolved_version_prefers_hash_prefix():
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved_version = '3.11.3'
-    dep.resolved_hash = '1234567890abcdef'
-
-    assert helpers.get_dependency_resolved_version(dep) == '12345678'
-
-
-def test_is_resource_in_cache_dir_uses_repository_base(tmp_path):
+def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
+    # A dependency restored from a dependencies.json comes back without a cached
+    # resource: it resolves its own on first use rather than needing a caller to
+    # prime it.
     context = make_repository_context(project_dir=tmp_path)
-    cache_dir = CacheDir(str(tmp_path / 'cache'), is_read_only=False)
-    os.makedirs(cache_dir.location, exist_ok=True)
+    cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
+    context.cache_configuration = make_cache_configuration(cache_dir)
 
-    repository = Repository(url='https://github.com/GolemCpp/recipes.git')
-    resource_path = context.get_resource_location(repository, cache_dir, subdir=cache.RECIPES_SUBDIR)
-    os.makedirs(resource_path, exist_ok=True)
+    dep = Dependency.unserialize_from_json({
+        'name': 'json',
+        'repository': 'https://github.com/nlohmann/json.git',
+        'resolved_version': '3.11.3',
+        'resolved_hash': '1234567890abcdef',
+    })
+    assert dep.cached_resource is None
 
-    assert context.is_resource_in_cache_dir(repository, cache_dir, subdir=cache.RECIPES_SUBDIR) is True
+    location = context.get_dep_location(dep)
+
+    assert location == get_dependency_manager(
+        context.cache_configuration).resolve_cached_resource(dep).path
+    # Resolved once and kept: the same cached resource answers every later path.
+    assert dep.cached_resource.path == location
+    assert context.get_dep_cached_resource(dep) is dep.cached_resource
+
+
+def test_resolved_reference_prefers_hash_prefix():
+    assert helpers.resolved_reference('3.11.3', '1234567890abcdef') == '12345678'
+    # Falls back to the resolved version name when there is no hash.
+    assert helpers.resolved_reference('3.11.3', '') == '3.11.3'

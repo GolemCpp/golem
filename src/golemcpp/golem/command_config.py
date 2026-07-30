@@ -3,6 +3,7 @@ from argparse import Namespace
 from dataclasses import dataclass
 
 from golemcpp.golem import config_store
+from golemcpp.golem import settings
 
 
 def build_config_parser() -> ArgumentParser:
@@ -50,15 +51,24 @@ class ConfigCommandHandler:
         print('  config --unset <key>    Remove the value from the selected scope')
         print('  config --list           List settings (merged, or per scope)')
         print('')
-        print('Settings are resolved as: command-line option > environment variable >')
-        print('local configuration > global configuration > built-in default.')
+        print('Settings are resolved as:')
+        print('  1. Command-line option')
+        print('  2. Option persisted by golem configure (build directory)')
+        print('  3. Environment variable')
+        print('  4. Local configuration')
+        print('  5. Global configuration')
+        print('  6. Built-in default')
         print('')
         print('Available settings:')
-        for key in config_store.known_keys():
-            env_name, description = config_store.KNOWN_SETTINGS[key]
-            print('  {}'.format(key))
-            print('    {}'.format(description))
-            print('    Environment variable: {}'.format(env_name))
+        for setting in settings.known_settings():
+            print('  {}'.format(setting.key))
+            print('    {}'.format(setting.description))
+            print('    Environment variable: {}'.format(setting.env_name))
+            if setting.option_flag:
+                print('    Command-line option: {}'.format(setting.option_flag))
+            default = setting.format_value(setting.get_default())
+            if default:
+                print('    Default: {}'.format(default))
 
     def selected_scope(self) -> str:
         if self.options.use_global:
@@ -66,12 +76,12 @@ class ConfigCommandHandler:
         return config_store.LOCAL_SCOPE
 
     def validate_key(self, key: str) -> bool:
-        if config_store.is_known_key(key):
+        if settings.is_known_key(key):
             return True
 
         print('ERROR: unknown configuration key: {}'.format(key))
         print('Valid keys are:')
-        for known in config_store.known_keys():
+        for known in settings.known_keys():
             print('  {}'.format(known))
         return False
 
@@ -115,6 +125,9 @@ class ConfigCommandHandler:
             return 1
 
         try:
+            # Refused here rather than at the next command reading the store,
+            # which is the only other place the value is checked.
+            settings.get_setting_by_key(self.options.key).parse(self.options.value)
             config_store.set_value(
                 key=self.options.key,
                 value=self.options.value,

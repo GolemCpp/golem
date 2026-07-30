@@ -6,7 +6,7 @@ from golemcpp.golem import cppfront_tool
 def test_find_cppfront_cache_uses_cache_directory(tmp_path):
     cache_directory = tmp_path / 'tools-cache'
     cache_dir = cache_directory / cppfront_tool.CPPFRONT_NAME
-    repository_dir = cache_dir / 'repository' / 'include'
+    repository_dir = cache_dir / 'source' / 'include'
     executable_path = cache_dir / 'bin' / cppfront_tool.get_cppfront_binary_name()
 
     repository_dir.mkdir(parents=True)
@@ -14,11 +14,11 @@ def test_find_cppfront_cache_uses_cache_directory(tmp_path):
     executable_path.write_text('', encoding='utf-8')
 
     found = cppfront_tool.find_cppfront_cache_root(
-        tool_cache_root=str(cache_dir),
+        cached_tool_root=str(cache_dir),
     )
 
     assert found is not None
-    assert found.cache_root == str(cache_directory / cppfront_tool.CPPFRONT_NAME)
+    assert found.resource_root == str(cache_directory / cppfront_tool.CPPFRONT_NAME)
 
 
 def test_install_cppfront_writes_into_install_root(monkeypatch, tmp_path):
@@ -28,14 +28,14 @@ def test_install_cppfront_writes_into_install_root(monkeypatch, tmp_path):
 
     def fake_run_git(params, cwd, **kwargs):
         if params[0] == 'clone':
-            repository_dir = install_root / 'repository'
+            repository_dir = install_root / 'source'
             (repository_dir / 'include').mkdir(parents=True)
             return
         if params[0] == 'checkout':
             return
         raise AssertionError('Unexpected git command: {}'.format(params))
 
-    def fake_build_cppfront_executable(repository_dir, executable_path):
+    def fake_build_cppfront_executable(source_dir, executable_path):
         os.makedirs(os.path.dirname(executable_path), exist_ok=True)
         with open(executable_path, 'w', encoding='utf-8') as fileout:
             fileout.write('')
@@ -50,5 +50,5 @@ def test_install_cppfront_writes_into_install_root(monkeypatch, tmp_path):
     )
 
     assert result is None
-    assert (install_root / 'repository').is_dir()
+    assert (install_root / 'source').is_dir()
     assert (install_root / 'bin' / cppfront_tool.get_cppfront_binary_name()).is_file()

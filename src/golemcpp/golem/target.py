@@ -116,7 +116,7 @@ class TargetConfigurationFile(object):
         conf_file = TargetConfigurationFile.unserialize_from_json(json_content)
 
         for dependency in conf_file.dependencies:
-            dependency.update_cache_dir(context=context)
+            dependency.update_cached_resource(context.cache_configuration)
 
         conf_file.configuration.artifacts_dev = context.translate_cache_dir_paths(
             conf_file.configuration.artifacts_dev)

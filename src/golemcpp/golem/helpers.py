@@ -109,8 +109,13 @@ def make_golem_command(command_name):
     return [sys.executable, golem_path, command_name]
 
 
-def get_dependency_resolved_version(dep):
-    return dep.resolved_hash[:8] if dep.resolved_hash else dep.resolved_version
+def resolved_reference(resolved_version, resolved_hash):
+    '''
+    The effective git reference of a resolved resource: the short hash when known,
+    else the resolved version name. Used to build a resource's cache key so any
+    resolved resource (dependency, tool, repository) keys the same way.
+    '''
+    return resolved_hash[:8] if resolved_hash else resolved_version
 
 
 def copy_tree(source_path, destination_path):
@@ -377,3 +382,16 @@ def confirm(prompt, assume_yes=False):
         return False
 
     return answer.strip().lower() in ('y', 'yes')
+
+def first_non_empty(*values):
+    for value in values:
+        if value:
+            return value
+    return None
+
+def first_non_empty_among_keys(dictionary, *keys):
+    for key in keys:
+        value = dictionary.get(key)
+        if value:
+            return value
+    return ''

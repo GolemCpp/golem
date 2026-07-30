@@ -28,8 +28,6 @@ class Project:
         self.configuration_paths = []
 
         # TODO: Serialize these new members to/from JSON
-        self.overrides_configuration = None
-        self.overrides_repository = None
         self.clang_tidy_checks = None
         self.cppcheck_enable = None
         self.enable_build_number = False
@@ -159,7 +157,7 @@ class Project:
 
     def dependency(self, **kwargs):
         dep = Dependency(**kwargs)
-        dep.update_repository(self.project_dir)
+        dep.update_source(self.project_dir)
         self.deps.append(dep)
         return dep
 

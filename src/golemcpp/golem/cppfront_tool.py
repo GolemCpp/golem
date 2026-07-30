@@ -3,10 +3,11 @@ import shutil
 import sys
 from dataclasses import dataclass
 
+from golemcpp.golem import cache_configuration
 from golemcpp.golem import helpers
 
 CPPFRONT_NAME = 'cppfront'
-CPPFRONT_REPOSITORY_URL = 'https://github.com/hsutter/cppfront.git'
+CPPFRONT_REPOSITORY = 'https://github.com/hsutter/cppfront.git'
 DEFAULT_CPPFRONT_VERSION = 'v0.8.1'
 CPPFRONT_DESCRIPTION = 'Herb Sutter\'s compiler from an experimental C++ (cpp2) to today\'s C++ syntax (cpp).'
 
@@ -17,22 +18,22 @@ def get_cppfront_binary_name() -> str:
 
 @dataclass(frozen=True)
 class CppFrontCacheInfo:
-    cache_root: str
-    repository_path: str
+    resource_root: str
+    source_path: str
     executable_path: str
     include_path: str
 
     @classmethod
-    def from_cache_root(cls, cache_root: str):
-        if not cache_root:
-            raise ValueError('cache_root is required')
+    def from_tool_root(cls, resource_root: str):
+        if not resource_root:
+            raise ValueError('resource_root is required')
 
-        repository_path = os.path.join(cache_root, 'repository')
-        executable_path = os.path.join(cache_root, 'bin', get_cppfront_binary_name())
-        include_path = os.path.join(repository_path, 'include')
+        source_path = os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME)
+        executable_path = os.path.join(resource_root, 'bin', get_cppfront_binary_name())
+        include_path = os.path.join(source_path, 'include')
 
-        return cls(cache_root=cache_root,
-                   repository_path=repository_path,
+        return cls(resource_root=resource_root,
+                   source_path=source_path,
                    executable_path=executable_path,
                    include_path=include_path)
 
@@ -42,15 +43,15 @@ class CppFrontCacheInfo:
         return has_executable and has_include
 
 
-def find_cppfront_cache_root(tool_cache_root: str) -> CppFrontCacheInfo | None:
+def find_cppfront_cache_root(cached_tool_root: str) -> CppFrontCacheInfo | None:
     '''
     Locate an installed cppfront given the already-resolved tool cache root
     (which may be the classic tools/<name> location or a minimized flat path).
     '''
-    if not tool_cache_root:
+    if not cached_tool_root:
         return None
 
-    cache_info = CppFrontCacheInfo.from_cache_root(tool_cache_root)
+    cache_info = CppFrontCacheInfo.from_tool_root(cached_tool_root)
 
     if not cache_info.is_valid():
         return None
@@ -73,23 +74,23 @@ def configure(project):
     return golemfile_path
 
 
-def build_cppfront_executable(repository_dir: str, executable_path: str) -> list[list[str]]:
-    write_cppfront_golemfile(project_dir=repository_dir)
+def build_cppfront_executable(source_dir: str, executable_path: str) -> list[list[str]]:
+    write_cppfront_golemfile(project_dir=source_dir)
 
-    build_dir = os.path.join(repository_dir, 'build-golem-cppfront')
+    build_dir = os.path.join(source_dir, 'build-golem-cppfront')
 
     configure_command = helpers.make_golem_command('configure') + [
-        '--project-dir=' + repository_dir,
+        '--project-dir=' + source_dir,
         '--build-dir=' + build_dir,
         '--variant=release',
     ]
-    helpers.run_task(configure_command, cwd=repository_dir)
+    helpers.run_task(configure_command, cwd=source_dir)
 
     build_command = helpers.make_golem_command('build') + [
-        '--project-dir=' + repository_dir,
+        '--project-dir=' + source_dir,
         '--build-dir=' + build_dir,
     ]
-    helpers.run_task(build_command, cwd=repository_dir)
+    helpers.run_task(build_command, cwd=source_dir)
 
     built_executable_path = os.path.join(build_dir, 'bin', get_cppfront_binary_name())
     if not os.path.isfile(built_executable_path):
@@ -102,11 +103,11 @@ def build_cppfront_executable(repository_dir: str, executable_path: str) -> list
 
 
 def install_cppfront(version: str, install_root: str) -> None:
-    cache_info = CppFrontCacheInfo.from_cache_root(install_root)
-    repository_dir = cache_info.repository_path
+    cache_info = CppFrontCacheInfo.from_tool_root(install_root)
+    source_dir = cache_info.source_path
     executable_path = cache_info.executable_path
 
-    helpers.run_git(['clone', CPPFRONT_REPOSITORY_URL, repository_dir], cwd=cache_info.cache_root)
-    helpers.run_git(['checkout', version], cwd=repository_dir)
-    build_cppfront_executable(repository_dir=repository_dir, executable_path=executable_path)
+    helpers.run_git(['clone', CPPFRONT_REPOSITORY, source_dir], cwd=cache_info.resource_root)
+    helpers.run_git(['checkout', version], cwd=source_dir)
+    build_cppfront_executable(source_dir=source_dir, executable_path=executable_path)
 

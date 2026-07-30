@@ -152,34 +152,3 @@ def test_list_merged_combines_scopes(monkeypatch, tmp_path):
 
     assert merged == {'cache.directory': '/global/cache', 'overrides.repository': '/local/overrides'}
 
-
-def test_resolve_environ_prefers_environment(monkeypatch, tmp_path):
-    _isolate_home(monkeypatch, tmp_path)
-    project_dir = str(tmp_path / 'project')
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
-    monkeypatch.setenv('GOLEM_OVERRIDES_REPOSITORY', '/env/overrides')
-
-    assert config_store.resolve_environ('GOLEM_OVERRIDES_REPOSITORY', project_dir) == '/env/overrides'
-
-
-def test_resolve_environ_reads_local_then_global(monkeypatch, tmp_path):
-    _isolate_home(monkeypatch, tmp_path)
-    project_dir = str(tmp_path / 'project')
-    monkeypatch.delenv('GOLEM_OVERRIDES_REPOSITORY', raising=False)
-
-    config_store.set_value('overrides.repository', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
-    assert config_store.resolve_environ('GOLEM_OVERRIDES_REPOSITORY', project_dir) == '/global/overrides'
-
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
-    assert config_store.resolve_environ('GOLEM_OVERRIDES_REPOSITORY', project_dir) == '/local/overrides'
-
-
-def test_resolve_environ_unknown_env_returns_none(monkeypatch, tmp_path):
-    _isolate_home(monkeypatch, tmp_path)
-    monkeypatch.delenv('GOLEM_UNKNOWN', raising=False)
-
-    assert config_store.resolve_environ('GOLEM_UNKNOWN', str(tmp_path)) is None
-
-
-def test_env_to_key_covers_all_settings():
-    assert set(config_store.ENV_TO_KEY.values()) == set(config_store.KNOWN_SETTINGS.keys())
