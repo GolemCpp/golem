@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from conftest import absolute_path
 from golemcpp.golem import config_store
 from golemcpp.golem import settings
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
@@ -50,19 +51,22 @@ def test_falls_back_to_builtin_default(monkeypatch, tmp_path):
 def test_prefers_option_then_environment_then_store(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
-    config_store.set_value('cache.directory', '/store/cache', config_store.GLOBAL_SCOPE, project_dir)
+    store_cache = absolute_path('store', 'cache')
+    env_cache = absolute_path('env', 'cache')
+    cli_cache = absolute_path('cli', 'cache')
+    config_store.set_value('cache.directory', store_cache, config_store.GLOBAL_SCOPE, project_dir)
     monkeypatch.delenv('GOLEM_CACHE_DIRECTORY', raising=False)
 
     def resolve(options=None):
         return settings.get_settings(
             options=options, project_dir=project_dir).get('GOLEM_CACHE_DIRECTORY').location
 
-    assert resolve() == '/store/cache'
+    assert resolve() == store_cache
 
-    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', '/env/cache')
-    assert resolve() == '/env/cache'
+    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', env_cache)
+    assert resolve() == env_cache
 
-    assert resolve(options=SimpleNamespace(cache_directory='/cli/cache')) == '/cli/cache'
+    assert resolve(options=SimpleNamespace(cache_directory=cli_cache)) == cli_cache
 
 
 def test_local_store_wins_over_global_store(monkeypatch, tmp_path):
@@ -80,34 +84,38 @@ def test_local_store_wins_over_global_store(monkeypatch, tmp_path):
 
 def test_reads_persisted_configure_options(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
-    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', '/env/cache')
+    configured_cache = absolute_path('configured', 'cache')
+    cli_cache = absolute_path('cli', 'cache')
+    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', absolute_path('env', 'cache'))
     monkeypatch.setattr(
         settings, 'get_persisted_configure_options',
-        lambda build_dir: {'cache_directory': '/configured/cache'})
+        lambda build_dir: {'cache_directory': configured_cache})
     build_dir = str(tmp_path / 'build')
 
     # The persisted option loses to an explicit CLI option but wins over the
     # environment, so a command reached through --build-dir uses the cache the
     # project was configured with.
     assert settings.get_settings(
-        build_dir=build_dir).get('GOLEM_CACHE_DIRECTORY').location == '/configured/cache'
+        build_dir=build_dir).get('GOLEM_CACHE_DIRECTORY').location == configured_cache
     assert settings.get_settings(
-        options=SimpleNamespace(cache_directory='/cli/cache'),
-        build_dir=build_dir).get('GOLEM_CACHE_DIRECTORY').location == '/cli/cache'
+        options=SimpleNamespace(cache_directory=cli_cache),
+        build_dir=build_dir).get('GOLEM_CACHE_DIRECTORY').location == cli_cache
 
 
 def test_converts_to_the_setting_type(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_ENABLED', 'off')
     monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_LENGTH', '16')
-    monkeypatch.setenv('GOLEM_ADDITIONAL_CACHE_DIRECTORIES', '/first|/second=github')
+    first = absolute_path('first')
+    second = absolute_path('second')
+    monkeypatch.setenv('GOLEM_ADDITIONAL_CACHE_DIRECTORIES', '{}|{}=github'.format(first, second))
     manager = settings.get_settings()
 
     assert manager.get('GOLEM_CACHE_MINIMIZATION_ENABLED') is False
     assert manager.get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 16
     assert [(entry.location, entry.regex, entry.is_read_only)
             for entry in manager.get('GOLEM_ADDITIONAL_CACHE_DIRECTORIES')] == [
-        ('/first', None, False), ('/second', 'github', False)]
+        (first, None, False), (second, 'github', False)]
 
 
 def test_reports_an_unparsable_value_with_the_source_it_comes_from(monkeypatch, tmp_path):
@@ -236,12 +244,13 @@ def test_a_malformed_entry_raises_where_it_is_read(monkeypatch, tmp_path):
 
 def test_make_flag_spells_a_value_the_way_a_command_reads_it(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
-    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', '/opt/cache')
+    cache_dir = absolute_path('opt', 'cache')
+    monkeypatch.setenv('GOLEM_CACHE_DIRECTORY', cache_dir)
     monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_ENABLED', 'off')
     monkeypatch.setenv('GOLEM_CACHE_MINIMIZATION_LENGTH', '16')
     manager = settings.get_settings(project_dir=str(tmp_path))
 
-    assert manager.make_flag('GOLEM_CACHE_DIRECTORY') == ['--cache-directory=/opt/cache']
+    assert manager.make_flag('GOLEM_CACHE_DIRECTORY') == ['--cache-directory={}'.format(cache_dir)]
     assert manager.make_flag('GOLEM_CACHE_MINIMIZATION_ENABLED') == ['--cache-minimization-enabled=off']
     assert manager.make_flag('GOLEM_CACHE_MINIMIZATION_LENGTH') == ['--cache-minimization-length=16']
     assert manager.make_flag('GOLEM_CACHE_RESOLUTION_POLICY') == ['--cache-resolution-policy=strict']
@@ -250,12 +259,14 @@ def test_make_flag_spells_a_value_the_way_a_command_reads_it(monkeypatch, tmp_pa
 def test_make_flag_repeats_a_list_setting_and_absolutizes_it(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
-    monkeypatch.setenv('GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES', 'shared=github|/opt/cache')
+    cache_dir = absolute_path('opt', 'cache')
+    monkeypatch.setenv(
+        'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES', 'shared=github|{}'.format(cache_dir))
     manager = settings.get_settings(project_dir=project_dir)
 
     assert manager.make_flag('GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES') == [
         '--additional-read-only-cache-directory={}=github'.format(os.path.join(project_dir, 'shared')),
-        '--additional-read-only-cache-directory=/opt/cache',
+        '--additional-read-only-cache-directory={}'.format(cache_dir),
     ]
 
 

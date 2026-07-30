@@ -14,7 +14,7 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.recipes_repository_manager import get_recipes_repository_manager
 from golemcpp.golem.source import Source
-from conftest import make_cache_configuration
+from conftest import absolute_path, make_cache_configuration
 
 
 class AttrDict(dict):
@@ -453,10 +453,12 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context.get_only_update_dependencies_regex = lambda: ''
     # The cache options forwarded to the dependency sub-build are the flags the
     # settings spell, so the sub-build reaches the same caches with the same layout.
+    project_dir = absolute_path('tmp', 'project')
+    cache_dir = absolute_path('tmp', 'cache')
     context.settings = get_settings(
-        project_dir='/tmp/project',
+        project_dir=project_dir,
         options=SimpleNamespace(
-            cache_directory='/tmp/cache',
+            cache_directory=cache_dir,
             cache_minimization_enabled='off',
             cache_minimization_length=12,
             additional_cache_directory=['shared=github'],
@@ -486,12 +488,13 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     assert '--runtime=shared' not in calls[0]
     # Path minimization settings are forwarded to the dependency sub-build so it
     # resolves cache paths with the same layout as the parent.
-    assert '--cache-directory=/tmp/cache' in calls[0]
+    assert '--cache-directory={}'.format(cache_dir) in calls[0]
     assert '--cache-minimization-enabled=off' in calls[0]
     assert '--cache-minimization-length=12' in calls[0]
     # A relative cache directory is forwarded absolute: the sub-build runs
     # elsewhere and would otherwise resolve it against its own directory.
-    assert '--additional-cache-directory=/tmp/project/shared=github' in calls[0]
+    assert '--additional-cache-directory={}=github'.format(
+        os.path.join(project_dir, 'shared')) in calls[0]
 
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):

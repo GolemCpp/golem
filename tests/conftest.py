@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -13,6 +14,15 @@ if str(WAFLIB_SRC) not in sys.path:
 
 from golemcpp.golem.cache_configuration import CacheConfiguration  # noqa: E402
 from golemcpp.golem.settings import get_settings  # noqa: E402
+
+
+def absolute_path(*parts):
+    '''
+    An absolute path on every platform. A leading separator is enough on POSIX,
+    but Windows also needs a drive: os.path.isabs('/opt/cache') is False there,
+    so such a path would still be resolved against the current directory.
+    '''
+    return os.path.join(os.path.abspath(os.sep), *parts)
 
 
 def default_setting(name):
