@@ -13,6 +13,11 @@ the richest one any kind needs — shallow clones, submodules, cleaning,
 checkout-then-reset — and a kind asks for what it wants through the FetchPolicy
 it builds. A kind that wants more of it later turns a field on rather than
 writing its own git.
+
+Installing is a lifecycle rather than a single step: `install` brackets the fetch
+with `pre_install`, `pre_install_refresh` and `post_install`, which is how a kind
+that makes something from its source — a tool builds its binary there — says so
+without owning the fetch.
 '''
 
 import os
@@ -21,7 +26,6 @@ import subprocess
 from dataclasses import dataclass
 
 from golemcpp.golem import helpers
-from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 
@@ -66,16 +70,33 @@ class ResourceManager:
         return self.cache_manager.locations
 
     def resolve_cached_resource(self, item):
-        '''Where an item lives in the caches: which cache it belongs to, where it
-        sits there and whether it is already fetched, resolved in one go.'''
-        return self.cache_manager.resolve_cached_resource(self.resource_for(item))
+        '''
+        Where an item lives in the caches: which cache it belongs to, where it
+        sits there and whether it is already fetched, resolved in one go. The
+        version comes first, since what it resolves to identifies the resource.
+        '''
+        return self.cache_manager.resolve_cached_resource(
+            self.resource_for(self.resolve_version(item)))
 
-    def staged_install(self, cached_resource, populate) -> str:
+    def guard_install(self, cached_resource, populate) -> str:
         '''Fetch a source into a staging dir, then atomically swap it into place
-        with its manifest (see CacheManager.staged_install).'''
-        return self.cache_manager.staged_install(cached_resource, populate)
+        with its manifest (see CacheManager.guard_install).'''
+        return self.cache_manager.guard_install(cached_resource, populate)
+
+    def guard_refresh(self, cached_resource, refresh) -> str:
+        '''Bring a resource up to date in place and record what it now holds
+        (see CacheManager.guard_refresh).'''
+        return self.cache_manager.guard_refresh(cached_resource, refresh)
 
     # -- what a kind says for itself: data, not mechanism -------------------
+
+    @staticmethod
+    def resolve_version(item):
+        '''
+        The item with its version resolved to a concrete reference, returned so a
+        caller keeps reading the one it handed over.
+        '''
+        return item
 
     @staticmethod
     def source_for(item):
@@ -100,10 +121,25 @@ class ResourceManager:
         return FetchPolicy(reference='origin/' + cls.source_for(item).reference)
 
     @staticmethod
-    def prepare(item):
+    def pre_install(item):
         '''
-        Called before a fresh fetch, never before a refresh. A kind whose policy
-        depends on something it must work out first does it here.
+        Called before a fresh fetch, never before a refresh. Not where a version
+        is resolved: that has to happen before the resource is even located, see
+        resolve_version.
+        '''
+
+    @staticmethod
+    def pre_install_refresh(root, item):
+        '''
+        Called before a refresh moves the source: whatever the kind made from the
+        previous one, which is stale the moment the source changes.
+        '''
+
+    @staticmethod
+    def post_install(root, item):
+        '''
+        What the kind makes from the source it now holds, beside it in the
+        resource root. Most kinds are built by a later command and make nothing.
         '''
 
     # -- installation ------------------------------------------------------
@@ -118,20 +154,26 @@ class ResourceManager:
             return cached_resource.path
 
         if os.path.isdir(self.source_path(cached_resource.path)):
-            if refresh:
-                self.refresh_source(self.source_path(cached_resource.path), item)
-            resource_manifest.touch_last_used(cached_resource.path)
+            if not refresh:
+                self.cache_manager.touch_last_used(cached_resource.path)
+                return cached_resource.path
+
+            self.pre_install_refresh(cached_resource.path, item)
+            self.guard_refresh(
+                cached_resource,
+                lambda root: self.refresh_source(self.source_path(root), item))
         else:
-            self.staged_install(
+            self.pre_install(item)
+            self.guard_install(
                 cached_resource,
                 lambda staging_root: self.populate(
                     self.source_path(staging_root), item))
 
+        self.post_install(cached_resource.path, item)
         return cached_resource.path
 
     def populate(self, path, item):
         '''Materialize a source freshly into `path`, writing no manifest.'''
-        self.prepare(item)
         source = self.source_for(item)
         local_path = self.validate_local_source(source)
 

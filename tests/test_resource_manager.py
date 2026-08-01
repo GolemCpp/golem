@@ -213,6 +213,78 @@ def test_a_remote_source_has_no_local_path_to_check():
 # -- install: what happens around the fetch ---------------------------------
 
 
+def make_recording_manager(tmp_path, recorded):
+    '''A cookbook manager whose whole lifecycle is recorded, in order.'''
+    manager = make_manager(tmp_path)
+    manager.pre_install = lambda item: recorded.append('pre_install')
+    manager.pre_install_refresh = \
+        lambda root, item: recorded.append('pre_install_refresh')
+    manager.post_install = lambda root, item: recorded.append('post_install')
+    return manager
+
+
+def test_a_kind_with_nothing_to_resolve_hands_its_item_back():
+    # A cookbook or an overlay tracks a branch, so its reference is already the
+    # one to fetch.
+    source = Source.for_repository('https://host/r.git', reference='main')
+
+    assert ResourceManager.resolve_version(source) is source
+
+
+def test_locating_a_resource_resolves_its_version_first(tmp_path):
+    # The resolved reference is part of what identifies a resource, so a location
+    # worked out before it would name a different one.
+    manager = make_manager(tmp_path)
+    manager.resolve_version = lambda source: Source.for_repository(
+        source.location, reference='v3.12.0')
+
+    cached = manager.resolve_cached_resource(
+        Source.for_repository('https://host/r.git', reference='main'))
+
+    assert cached.cache_key == Source.for_repository(
+        'https://host/r.git', reference='v3.12.0').get_cache_key()
+
+
+def test_the_lifecycle_hooks_do_nothing_by_default():
+    # Every kind gets them; only the ones that make something from their source
+    # fill them in.
+    assert ResourceManager.pre_install('item') is None
+    assert ResourceManager.pre_install_refresh('/cache/r', 'item') is None
+    assert ResourceManager.post_install('/cache/r', 'item') is None
+
+
+def test_a_fresh_install_prepares_then_fetches_then_makes(tmp_path, monkeypatch):
+    recorded = []
+    manager = make_recording_manager(tmp_path, recorded)
+    source = Source.for_repository('https://host/r.git', reference='main')
+    monkeypatch.setattr(
+        helpers, 'run_git',
+        lambda args, cwd=None, stdout=None: recorded.append('fetch'))
+
+    manager.install(manager.resolve_cached_resource(source), source)
+
+    # The fetch is guarded, so what it makes can only run once the source is in
+    # place -- and pre_install runs before anything is written.
+    assert recorded == ['pre_install', 'fetch', 'fetch', 'post_install']
+
+
+def test_a_refresh_discards_then_fetches_then_makes(tmp_path, monkeypatch):
+    recorded = []
+    manager = make_recording_manager(tmp_path, recorded)
+    source = Source.for_repository('https://host/r.git', reference='main')
+    cached = manager.resolve_cached_resource(source)
+    os.makedirs(manager.source_path(cached.path))
+    monkeypatch.setattr(
+        helpers, 'run_git',
+        lambda args, cwd=None, stdout=None: recorded.append('fetch'))
+
+    manager.install(cached, source)
+
+    # Nothing made from the previous source outlives it, and pre_install belongs
+    # to a fresh fetch alone.
+    assert recorded == ['pre_install_refresh', 'fetch', 'fetch', 'post_install']
+
+
 def test_install_does_not_touch_the_cache_when_not_fetching(tmp_path, git_calls):
     manager = make_manager(tmp_path)
     source = Source.for_repository('https://host/r.git', reference='main')
@@ -259,7 +331,8 @@ def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):
 
 
 def test_install_can_leave_an_existing_resource_alone(tmp_path, git_calls, monkeypatch):
-    manager = make_manager(tmp_path)
+    recorded = []
+    manager = make_recording_manager(tmp_path, recorded)
     source = Source.for_repository('https://host/r.git', reference='main')
     cached = manager.resolve_cached_resource(source)
     os.makedirs(manager.source_path(cached.path))
@@ -269,5 +342,6 @@ def test_install_can_leave_an_existing_resource_alone(tmp_path, git_calls, monke
     manager.install(cached, source, refresh=False)
 
     assert git_calls == []
+    assert recorded == []
     # Still counts as used, which is what keeps it from being pruned.
     assert touched == [cached.path]

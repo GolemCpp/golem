@@ -255,19 +255,27 @@ class CacheManager:
     def touch_last_used(resource_root: str) -> None:
         resource_manifest.touch_last_used(resource_root)
 
+    def record_manifest(self, cached_resource) -> None:
+        '''
+        Keep the manifest telling the truth about what the root holds. A kind
+        whose cache key does not carry its reference -- a tool is keyed by its
+        name -- can be refreshed onto another version, and the root would then
+        claim the one it used to hold.
+        '''
+        if self.read_manifest_source(cached_resource.path) != cached_resource.resource.source:
+            self.write_manifest(cached_resource.path, cached_resource.resource)
+        else:
+            self.touch_last_used(cached_resource.path)
+
     # -- per-resource mutations -------------------------------------------
 
-    def staged_install(self, cached_resource, populate) -> str:
+    def guard_install(self, cached_resource, populate) -> str:
         '''
         Build a resource into a sibling `.tmp` staging directory, drop its
         manifest, then atomically swap it into place. `populate(staging_root)`
         fills the staging directory with the resource's contents.
         '''
-        if cached_resource.resource is None:
-            raise ValueError(
-                'cannot install {}: this cached resource was not made from a '
-                'resource, so it has no identity to write a manifest from'.format(
-                    cached_resource.path))
+        self.check_identity(cached_resource)
 
         resource_root = cached_resource.path
         staging_root = resource_root + '.tmp'
@@ -284,6 +292,31 @@ class CacheManager:
             helpers.remove_tree(staging_root)
 
         return resource_root
+
+    def guard_refresh(self, cached_resource, refresh) -> str:
+        '''
+        A refresh cannot be staged: the resource is its own working copy. The
+        manifest is recorded here instead, so what the root claims never outlives
+        the source it was refreshed onto.
+        '''
+        self.check_identity(cached_resource)
+
+        refresh(cached_resource.path)
+        self.record_manifest(cached_resource)
+
+        # TODO: Add a try catch like guard_install to recover or trigger a fallback mechanism when it 
+        # fails. Ideas are: removing the source, or running a hook function to let the derived manager
+        # define how to recover.
+
+        return cached_resource.path
+
+    @staticmethod
+    def check_identity(cached_resource) -> None:
+        if cached_resource.resource is None:
+            raise ValueError(
+                'cannot install {}: this cached resource was not made from a '
+                'resource, so it has no identity to write a manifest from'.format(
+                    cached_resource.path))
 
     # -- cache inventory --------------------------------------------------
 
