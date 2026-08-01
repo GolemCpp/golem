@@ -599,8 +599,9 @@ def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
 
     monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'overrides')
 
-    assert [overlay.location for overlay in context.get_overlay_locations()] == \
-        [overrides_dir.resolve().as_uri()]
+    overlays = context.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
+
+    assert [overlay.location for overlay in overlays] == [overrides_dir.resolve().as_uri()]
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -661,155 +662,55 @@ def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch
     assert '&& cl.exe /nologo' in captured['command'][4]
 
 
-def test_clone_repository_copies_non_git_directory(tmp_path):
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
-    source_dir = project_dir / 'recipes'
-    source_dir.mkdir()
-    (source_dir / 'marker.txt').write_text('copied\n', encoding='utf-8')
-    repo_path = tmp_path / 'cache' / 'recipes'
-
-    context = make_repository_context(project_dir=project_dir)
-    repository = Source.parse('recipes', str(project_dir))
-
-    context.clone_repository(path=str(repo_path), source=repository)
-
-    assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'copied\n'
-    assert (repo_path / '.golem-origin').read_text(encoding='utf-8') == repository.location
+# -- overrides: the precedence and the memo Context still owns ---------------
 
 
-def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path):
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
-    source_dir = project_dir / 'recipes'
-    source_dir.mkdir()
-    (source_dir / 'marker.txt').write_text('fresh\n', encoding='utf-8')
-    repo_path = tmp_path / 'cache' / 'recipes'
-    repo_path.mkdir(parents=True)
-    (repo_path / 'marker.txt').write_text('stale\n', encoding='utf-8')
-
-    context = make_repository_context(project_dir=project_dir)
-    repository = Source.parse('recipes', str(project_dir))
-
-    context.clone_repository(path=str(repo_path), source=repository)
-
-    assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'fresh\n'
-
-
-def test_clone_repository_raises_for_missing_local_directory(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    repository = Source.parse('missing-recipes', str(tmp_path))
-    repo_path = tmp_path / 'cache' / 'recipes'
-
-    with pytest.raises(RuntimeError, match="Can't find local source directory"):
-        context.clone_repository(path=str(repo_path), source=repository)
-
-
-def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path):
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
-    source_dir = project_dir / 'recipes'
-    git_dir = source_dir / '.git'
-    git_dir.mkdir(parents=True)
-    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
-    repo_path = tmp_path / 'cache' / 'recipes'
-
-    context = make_repository_context(project_dir=project_dir)
-    repository = Source.parse('recipes', str(project_dir))
-    calls = []
-
-    monkeypatch.setattr(helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append((args, cwd)))
-
-    context.clone_repository(path=str(repo_path), source=repository)
-
-    assert calls[0] == (['clone', '--', repository.location, '.'], str(repo_path))
-    assert calls[1] == (['reset', '--hard', 'origin/main'], str(repo_path))
-
-
-# -- overlays: several overrides.json layered in the order they are configured --
-
-
-def make_overlay(tmp_path, name, entries):
-    overlay_dir = tmp_path / name
-    overlay_dir.mkdir(parents=True)
-    (overlay_dir / 'overrides.json').write_text(json.dumps(entries), encoding='utf-8')
-    return overlay_dir
-
-
-def load_layered_overrides(monkeypatch, tmp_path, overlay_names):
+def make_overrides_context(tmp_path, monkeypatch):
     project_dir = tmp_path / 'project'
     project_dir.mkdir(exist_ok=True)
     context = make_repository_context(project_dir=project_dir, deps_resolve=False)
     context.resolved_overrides = ''
-
-    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', '|'.join(
-        'directory+{}'.format(tmp_path / name) for name in overlay_names))
-    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION', raising=False)
-    # An overlay is read where it was installed; here that is the directory itself.
-    monkeypatch.setattr(context, 'install_overlay', lambda source: source.get_local_path())
     monkeypatch.setattr(context, 'make_build_path',
                         lambda path: str(tmp_path / 'build' / path))
-
-    return context.load_overrides_configuration()
-
-
-def test_a_later_overlay_overwrites_only_the_members_it_sets(monkeypatch, tmp_path):
-    make_overlay(tmp_path, 'first', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0', 'shallow': True}])
-    make_overlay(tmp_path, 'second', [
-        {'repository': 'https://host/json.git', 'version': '^4.0.0'}])
-
-    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
-
-    assert len(overrides) == 1
-    assert overrides[0].version == '^4.0.0'
-    # Untouched by the second overlay, so the first one still carries it.
-    assert overrides[0].shallow is True
-
-
-def test_layering_keeps_an_entry_only_one_overlay_defines(monkeypatch, tmp_path):
-    make_overlay(tmp_path, 'first', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0'}])
-    make_overlay(tmp_path, 'second', [
-        {'repository': 'https://host/fmt.git', 'version': '^10.0.0'}])
-
-    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
-
-    assert [override.repository for override in overrides] == \
-        ['https://host/json.git', 'https://host/fmt.git']
-
-
-def test_layering_identifies_an_entry_by_the_source_it_overrides(monkeypatch, tmp_path):
-    lib_dir = tmp_path / 'project' / 'mylib'
-    lib_dir.mkdir(parents=True)
-    make_overlay(tmp_path, 'first', [{'directory': 'mylib', 'variant': 'debug'}])
-    make_overlay(tmp_path, 'second', [{'location': 'mylib', 'variant': 'release'}])
-
-    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
-
-    assert len(overrides) == 1
-    assert overrides[0].directory == lib_dir.resolve().as_uri()
-    assert overrides[0].variant == ['release']
+    return context, project_dir
 
 
 def test_an_explicit_configuration_stands_in_for_the_overlays(monkeypatch, tmp_path):
-    make_overlay(tmp_path, 'first', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0'}])
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
+    context, project_dir = make_overrides_context(tmp_path, monkeypatch)
     (project_dir / 'explicit.json').write_text(
         json.dumps([{'repository': 'https://host/fmt.git', 'version': '^10.0.0'}]),
         encoding='utf-8')
-
-    context = make_repository_context(project_dir=project_dir, deps_resolve=False)
-    context.resolved_overrides = ''
-    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS',
-                       'directory+{}'.format(tmp_path / 'first'))
     monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', 'explicit.json')
+    # Never consulted: the explicit file wins outright.
+    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'directory+{}'.format(tmp_path / 'unused'))
 
     overrides = context.load_overrides_configuration()
 
     assert [override.repository for override in overrides] == ['https://host/fmt.git']
+
+
+def test_the_resolved_overrides_path_is_worked_out_once(monkeypatch, tmp_path):
+    # Sub-builds are handed this memo, so it must survive being read again.
+    context, project_dir = make_overrides_context(tmp_path, monkeypatch)
+    (project_dir / 'explicit.json').write_text('[]', encoding='utf-8')
+    monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', 'explicit.json')
+
+    context.load_overrides_configuration()
+    resolved = context.resolved_overrides
+    assert resolved == str(project_dir / 'explicit.json')
+
+    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION')
+    context.load_overrides_configuration()
+
+    assert context.resolved_overrides == resolved
+
+
+def test_no_overrides_configured_at_all_resolves_to_nothing(monkeypatch, tmp_path):
+    context, _ = make_overrides_context(tmp_path, monkeypatch)
+    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION', raising=False)
+    monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
+
+    assert context.load_overrides_configuration() is None
 
 
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):

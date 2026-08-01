@@ -11,6 +11,8 @@
 - [docs/Developers.md](docs/Developers.md): local contributor setup and contribution expectations.
 - [src/golemcpp/golem/main.py](src/golemcpp/golem/main.py): CLI entry and generated `wscript` handoff.
 - [src/golemcpp/golem/settings.py](src/golemcpp/golem/settings.py): every setting Golem understands — configuration key, environment variable, CLI option, default. Read it before answering anything about environment behavior; the docs-site page for environment variables is still incomplete.
+- [src/golemcpp/golem/resource_manager.py](src/golemcpp/golem/resource_manager.py): how every resource kind (dependency, cookbook, overlay, tool) is fetched into the cache. The mechanism is shared and the richest a kind needs — shallow clones, submodules, cleaning, checkout-then-reset — so a kind asks for what it wants through the `FetchPolicy` it builds rather than writing its own git. A kind defines only data: `source_for`, `source_path`, `policy_for`, `prepare`.
+- [src/golemcpp/golem/source.py](src/golemcpp/golem/source.py): what a location means. `[<kind>+]<locator>`, the kinds that exist, and the detection that fills in an unprefixed one. Adding a kind (archive, SVN) starts at `SOURCE_KINDS`.
 - Keep user-facing behavior aligned with the docs sources in [../golemcpp.github.io/content/docs](../golemcpp.github.io/content/docs).
 
 ## Environment And Commands

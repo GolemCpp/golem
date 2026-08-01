@@ -1,5 +1,9 @@
+import os
+
+from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.resource import Resource
+from golemcpp.golem.resource_manager import FetchPolicy
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 
@@ -7,21 +11,39 @@ from golemcpp.golem.resource_manifest import ResourceKind
 class DependencyManager(ResourceManager):
     @staticmethod
     def resource_for(dep) -> Resource:
-        source = dep.to_source()
+        source = DependencyManager.source_for(dep)
         return Resource(
             kind=ResourceKind.DEPENDENCY,
             cache_key=source.get_cache_key(),
             source=source)
 
-    def resolve_cached_resource(self, dep):
-        '''The dependency as a cached resource: which cache it belongs to, where it
-        lives there and whether it is already cloned, resolved in one go.'''
-        return self.cache_manager.resolve_cached_resource(self.resource_for(dep))
+    @staticmethod
+    def source_for(dep):
+        return dep.to_source()
 
-    def staged_install(self, cached_dep, populate) -> str:
-        '''Clone the dependency's source into a staging dir, then atomically swap
-        it into place with its manifest (see CacheManager.staged_install).'''
-        return self.cache_manager.staged_install(cached_dep, populate)
+    @staticmethod
+    def source_path(root):
+        # A dependency root also holds what was built from the source, so the
+        # source itself sits in a subdirectory of its own.
+        return os.path.join(root, SOURCE_DIRNAME)
+
+    @classmethod
+    def policy_for(cls, dep):
+        # Pinned to a resolved commit, so there is nothing to fetch on a refresh
+        # and the reset lands on the hash rather than on a moving branch.
+        return FetchPolicy(
+            shallow=dep.shallow,
+            checkout=dep.resolved_version,
+            reference=dep.resolved_hash,
+            submodules=True,
+            clean=True,
+            fetch_remote=False)
+
+    @staticmethod
+    def prepare(dep):
+        # The policy is built from the resolved version and hash, so they have to
+        # exist before the first fetch. A refresh already has them.
+        dep.resolve()
 
 
 def get_dependency_manager(cache_configuration) -> DependencyManager:
