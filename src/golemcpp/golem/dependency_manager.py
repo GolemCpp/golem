@@ -31,10 +31,11 @@ class DependencyManager(ResourceManager):
             fetch_remote=False)
 
     @staticmethod
-    def prepare(dep):
-        # The policy is built from the resolved version and hash, so they have to
-        # exist before the first fetch. A refresh already has them.
+    def resolve_version(dep):
+        # The cache key is built from the resolved reference, so a dependency
+        # located before this point would name a different resource.
         dep.resolve()
+        return dep
 
 
 def get_dependency_manager(cache_configuration) -> DependencyManager:

@@ -74,40 +74,31 @@ def configure(project):
     return golemfile_path
 
 
-def build_cppfront_executable(source_dir: str, executable_path: str) -> list[list[str]]:
-    write_cppfront_golemfile(project_dir=source_dir)
-
+def build_cppfront(resource_root: str) -> None:
+    '''cppfront built from the source already fetched and checked out under the root.'''
+    cache_info = CppFrontCacheInfo.from_tool_root(resource_root)
+    source_dir = cache_info.source_path
     build_dir = os.path.join(source_dir, 'build-golem-cppfront')
 
-    configure_command = helpers.make_golem_command('configure') + [
+    # cppfront ships no golemfile, so it gets one, and Golem builds it like any
+    # other project.
+    write_cppfront_golemfile(project_dir=source_dir)
+
+    helpers.run_task(helpers.make_golem_command('configure') + [
         '--project-dir=' + source_dir,
         '--build-dir=' + build_dir,
         '--variant=release',
-    ]
-    helpers.run_task(configure_command, cwd=source_dir)
+    ], cwd=source_dir)
 
-    build_command = helpers.make_golem_command('build') + [
+    helpers.run_task(helpers.make_golem_command('build') + [
         '--project-dir=' + source_dir,
         '--build-dir=' + build_dir,
-    ]
-    helpers.run_task(build_command, cwd=source_dir)
+    ], cwd=source_dir)
 
     built_executable_path = os.path.join(build_dir, 'bin', get_cppfront_binary_name())
     if not os.path.isfile(built_executable_path):
         raise RuntimeError('Golem built cppfront but the executable was not found at {}'.format(built_executable_path))
 
-    os.makedirs(os.path.dirname(executable_path), exist_ok=True)
-    shutil.copy2(built_executable_path, executable_path)
-
-    return [configure_command, build_command]
-
-
-def install_cppfront(version: str, install_root: str) -> None:
-    cache_info = CppFrontCacheInfo.from_tool_root(install_root)
-    source_dir = cache_info.source_path
-    executable_path = cache_info.executable_path
-
-    helpers.run_git(['clone', CPPFRONT_REPOSITORY, source_dir], cwd=cache_info.resource_root)
-    helpers.run_git(['checkout', version], cwd=source_dir)
-    build_cppfront_executable(source_dir=source_dir, executable_path=executable_path)
+    os.makedirs(os.path.dirname(cache_info.executable_path), exist_ok=True)
+    shutil.copy2(built_executable_path, cache_info.executable_path)
 

@@ -258,7 +258,7 @@ def test_resolve_cached_resource_reads_size_and_manifest_on_demand(tmp_path):
     assert detailed.source['location'] == 'https://example.com/tool.git'
 
 
-def test_staged_install_swaps_atomically(tmp_path):
+def test_guard_install_swaps_atomically(tmp_path):
     cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
     manager = make_classic_manager(cache_dir)
     resource = make_tool_resource()
@@ -267,7 +267,7 @@ def test_staged_install_swaps_atomically(tmp_path):
         with open(os.path.join(staging_root, 'payload.txt'), 'w') as fileout:
             fileout.write('hi')
 
-    root = manager.staged_install(
+    root = manager.guard_install(
         manager._make_cached_resource(cache_dir, resource), populate)
 
     assert os.path.isfile(os.path.join(root, 'payload.txt'))
@@ -275,7 +275,7 @@ def test_staged_install_swaps_atomically(tmp_path):
     assert not os.path.exists(root + '.tmp')
 
 
-def test_staged_install_refuses_a_scanned_resource(tmp_path):
+def test_guard_install_refuses_a_scanned_resource(tmp_path):
     cache_root = str(tmp_path / 'cache')
     make_resource(cache_root, cache_configuration.TOOLS_SUBDIR, 'demo',
                   manifest_kind=ResourceKind.TOOL)
@@ -287,7 +287,72 @@ def test_staged_install_refuses_a_scanned_resource(tmp_path):
     scanned = manager.scan(compute_size=False)[0]
 
     with pytest.raises(ValueError):
-        manager.staged_install(scanned, lambda staging_root: None)
+        manager.guard_install(scanned, lambda staging_root: None)
+
+
+def make_installed_tool(tmp_path, reference='v1'):
+    '''A tool already in the cache, as guard_install would have left it.'''
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    resource = Resource(
+        kind=ResourceKind.TOOL, cache_key='demo',
+        source=Source.for_repository('https://example.com/tool.git', reference=reference))
+    cached = manager._make_cached_resource(cache_dir, resource)
+    os.makedirs(cached.path, exist_ok=True)
+    return manager, cached
+
+
+def test_guard_refresh_records_the_source_it_was_refreshed_onto(tmp_path):
+    # A tool is keyed by its name, so asking for another version refreshes the
+    # root it already occupies: the manifest has to follow.
+    manager, cached = make_installed_tool(tmp_path)
+    manager.write_manifest(cached.path, cached.resource)
+    created_at = ResourceManifest.read_from_root(cached.path).created_at
+
+    manager, moved = make_installed_tool(tmp_path, reference='v2')
+    root = manager.guard_refresh(moved, lambda path: None)
+
+    assert root == moved.path
+    manifest = ResourceManifest.read_from_root(root)
+    assert manifest.source['reference'] == 'v2'
+    # A different version is a different resource, so it is newly created.
+    assert manifest.created_at >= created_at
+
+
+def test_guard_refresh_only_marks_an_unchanged_resource_as_used(tmp_path, monkeypatch):
+    manager, cached = make_installed_tool(tmp_path)
+    manager.write_manifest(cached.path, cached.resource)
+    written = []
+    monkeypatch.setattr(manager, 'write_manifest',
+                        lambda root, resource: written.append(root))
+
+    manager.guard_refresh(cached, lambda path: None)
+
+    assert written == []
+    assert ResourceManifest.read_from_root(cached.path).source['reference'] == 'v1'
+
+
+def test_guard_refresh_names_a_resource_that_lost_its_manifest(tmp_path):
+    manager, cached = make_installed_tool(tmp_path)
+
+    manager.guard_refresh(cached, lambda path: None)
+
+    assert ResourceManifest.read_from_root(cached.path).cache_key == 'demo'
+
+
+def test_guard_refresh_records_only_once_the_refresh_ran(tmp_path):
+    manager, cached = make_installed_tool(tmp_path)
+    order = []
+
+    def refresh(path):
+        order.append('refresh')
+        order.append(ResourceManifest.read_from_root(path))
+
+    manager.guard_refresh(cached, refresh)
+
+    # Nothing claims the new source before it is actually there.
+    assert order == ['refresh', None]
+    assert ResourceManifest.read_from_root(cached.path) is not None
 
 
 def test_remove_resources_honors_read_only_guard(tmp_path):

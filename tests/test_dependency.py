@@ -58,19 +58,17 @@ def test_cached_resource_is_resolved_once_and_kept(tmp_path):
     assert dep.get_cached_resource(cache_configuration) is cached
 
 
-def test_resolving_drops_a_cached_resource_of_the_unresolved_dependency(
-        tmp_path, monkeypatch):
-    # The cache key comes from the resolved reference, so a cached resource taken
-    # before resolution points at another location and must not be reused.
+def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch):
+    # The cache key comes from the resolved reference, so a location worked out
+    # before resolution would name another resource. There is no way to obtain
+    # one: asking where a dependency lives resolves it on the way.
     cache_configuration = make_configuration(tmp_path)
     dep = Dependency(name='json', repository='https://example.com/json.git')
-
-    stale = dep.get_cached_resource(cache_configuration)
-
     monkeypatch.setattr(
         VersionResolver, 'resolve',
         staticmethod(lambda *args, **kwargs: ('3.11.3', '1234567890abcdef')))
-    dep.resolve()
 
-    assert dep.cached_resource is None
-    assert dep.get_cached_resource(cache_configuration).path != stale.path
+    cached = dep.get_cached_resource(cache_configuration)
+
+    assert dep.resolved_hash == '1234567890abcdef'
+    assert cached.cache_key == dep.to_source().get_cache_key()

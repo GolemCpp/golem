@@ -46,9 +46,17 @@ def test_resource_for_uses_the_dependency_source():
     assert resource.cache_key == resource.source.get_cache_key()
 
 
+def make_resolved_dependency():
+    # Locating a dependency resolves it, and a unit test has no remote to resolve
+    # against: these come pre-resolved.
+    dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep.resolved_hash = '1234567890abcdef'
+    return dep
+
+
 def test_resolve_and_write(tmp_path):
     manager = make_manager(tmp_path)
-    dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep = make_resolved_dependency()
 
     root = manager.resolve_cached_resource(dep).path
     os.makedirs(root)
@@ -58,9 +66,9 @@ def test_resolve_and_write(tmp_path):
     assert source.location == 'https://example.com/json.git'
 
 
-def test_staged_install_swaps_source_and_manifest(tmp_path):
+def test_guard_install_swaps_source_and_manifest(tmp_path):
     manager = make_manager(tmp_path)
-    dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep = make_resolved_dependency()
 
     def populate(staging_root):
         source_dir = os.path.join(staging_root, cache_configuration.SOURCE_DIRNAME)
@@ -68,7 +76,7 @@ def test_staged_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(source_dir, 'CMakeLists.txt'), 'w') as fileout:
             fileout.write('project(json)')
 
-    resource_root = manager.staged_install(
+    resource_root = manager.guard_install(
         manager.resolve_cached_resource(dep), populate)
 
     assert os.path.isfile(
@@ -137,14 +145,26 @@ def test_the_policy_carries_the_shallow_request():
     assert DependencyManager.policy_for(dep).shallow is True
 
 
-def test_a_fresh_fetch_resolves_the_version_first(monkeypatch):
+def test_locating_a_dependency_resolves_its_version(monkeypatch):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
     resolved = []
     monkeypatch.setattr(Dependency, 'resolve', lambda self: resolved.append(self))
 
-    DependencyManager.prepare(dep)
-
+    assert DependencyManager.resolve_version(dep) is dep
     assert resolved == [dep]
+
+
+def test_a_refresh_keeps_what_was_built_from_the_dependency(tmp_path):
+    # A dependency is built by a later command, so its include/ and its artifacts
+    # have to survive a refresh: only a kind that says so throws anything away.
+    manager = make_manager(tmp_path)
+    dep = make_dependency()
+    root = manager.resolve_cached_resource(dep).path
+    os.makedirs(os.path.join(root, 'include'))
+
+    DependencyManager.pre_install_refresh(root, dep)
+
+    assert os.path.isdir(os.path.join(root, 'include'))
 
 
 def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
