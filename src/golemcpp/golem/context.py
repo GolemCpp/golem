@@ -4063,7 +4063,7 @@ class Context:
         # definition, so an unset setting still yields a cookbook to search.
         manager = get_cookbook_manager(self.cache_configuration)
         fetch = self.deps_resolve and not self.context.options.no_cookbooks_fetch
-        cookbook_paths = [
+        cookbook_roots = [
             manager.install(manager.resolve_cached_resource(source), source, fetch=fetch)
             for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
         ]
@@ -4078,11 +4078,13 @@ class Context:
             return
 
         found_recipe_dir = None
-        for cookbook_path in cookbook_paths:
-            directory = os.path.join(cookbook_path, recipe_id)
+        for cookbook_root in cookbook_roots:
+            # Recipes sit in the cookbook's content; the manifest to touch is at
+            # the resource root above it.
+            directory = os.path.join(manager.source_path(cookbook_root), recipe_id)
             if os.path.exists(directory):
                 found_recipe_dir = directory
-                resource_manifest.touch_last_used(cookbook_path)
+                resource_manifest.touch_last_used(cookbook_root)
 
         if not found_recipe_dir:
             raise RuntimeError(

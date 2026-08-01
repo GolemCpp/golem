@@ -41,6 +41,21 @@ def test_a_manager_holds_its_cache_manager_and_exposes_its_locations(tmp_path):
     assert manager.locations == cache_manager.locations
 
 
+def test_every_kind_keeps_its_content_under_source():
+    # The root is the resource: it holds the manifest naming it and whatever gets
+    # built from the source, so no kind may fetch straight into it.
+    from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
+    from golemcpp.golem.dependency_manager import DependencyManager
+    from golemcpp.golem.cookbook_manager import CookbookManager
+    from golemcpp.golem.overlay_manager import OverlayManager
+    from golemcpp.golem.tool_manager import ToolManager
+
+    for kind in (ResourceManager, DependencyManager, CookbookManager,
+                 OverlayManager, ToolManager):
+        assert kind.source_path('/cache/r') == os.path.join('/cache/r', SOURCE_DIRNAME), \
+            '{} fetches outside source/'.format(kind.__name__)
+
+
 # -- the git sequence a policy produces -------------------------------------
 
 
@@ -222,7 +237,8 @@ def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch
     root = manager.install(cached, source)
 
     assert root == cached.path
-    assert os.path.isfile(os.path.join(root, 'fetched.txt'))
+    # The content sits under source/; the root holds it and the manifest naming it.
+    assert os.path.isfile(os.path.join(manager.source_path(root), 'fetched.txt'))
     assert not os.path.exists(root + '.tmp')
     assert resource_manifest.ResourceManifest.read_from_root(root) is not None
 
@@ -231,7 +247,7 @@ def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):
     manager = make_manager(tmp_path)
     source = Source.for_repository('https://host/r.git', reference='main')
     cached = manager.resolve_cached_resource(source)
-    os.makedirs(cached.path)
+    os.makedirs(manager.source_path(cached.path))
 
     manager.install(cached, source)
 
@@ -246,7 +262,7 @@ def test_install_can_leave_an_existing_resource_alone(tmp_path, git_calls, monke
     manager = make_manager(tmp_path)
     source = Source.for_repository('https://host/r.git', reference='main')
     cached = manager.resolve_cached_resource(source)
-    os.makedirs(cached.path)
+    os.makedirs(manager.source_path(cached.path))
     touched = []
     monkeypatch.setattr(resource_manifest, 'touch_last_used', touched.append)
 

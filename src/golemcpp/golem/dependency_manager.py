@@ -1,6 +1,3 @@
-import os
-
-from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manager import FetchPolicy
@@ -20,12 +17,6 @@ class DependencyManager(ResourceManager):
     @staticmethod
     def source_for(dep):
         return dep.to_source()
-
-    @staticmethod
-    def source_path(root):
-        # A dependency root also holds what was built from the source, so the
-        # source itself sits in a subdirectory of its own.
-        return os.path.join(root, SOURCE_DIRNAME)
 
     @classmethod
     def policy_for(cls, dep):
