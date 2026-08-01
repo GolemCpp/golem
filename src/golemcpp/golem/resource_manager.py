@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from golemcpp.golem import helpers
 from golemcpp.golem import resource_manifest
+from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 
 
@@ -84,10 +85,11 @@ class ResourceManager:
     @staticmethod
     def source_path(root):
         '''
-        Where a resource keeps its fetched content under its root. The root
-        itself, unless a kind stores something beside it.
+        Where a resource keeps its fetched content under its root. Never the root
+        itself: that is the resource, and it also holds the manifest naming it and
+        whatever gets built from the source.
         '''
-        return root
+        return os.path.join(root, SOURCE_DIRNAME)
 
     @classmethod
     def policy_for(cls, item):

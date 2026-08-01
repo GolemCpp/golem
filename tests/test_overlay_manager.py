@@ -46,13 +46,16 @@ def test_staged_install_swaps_source_and_manifest(tmp_path):
     source = make_source()
 
     def populate(staging_root):
-        with open(os.path.join(staging_root, 'overrides.json'), 'w') as fileout:
+        source_dir = manager.source_path(staging_root)
+        os.makedirs(source_dir)
+        with open(os.path.join(source_dir, 'overrides.json'), 'w') as fileout:
             fileout.write('[]')
 
     resource_root = manager.staged_install(
         manager.resolve_cached_resource(source), populate)
 
-    assert os.path.isfile(os.path.join(resource_root, 'overrides.json'))
+    assert os.path.isfile(
+        os.path.join(manager.source_path(resource_root), 'overrides.json'))
     assert not os.path.exists(resource_root + '.tmp')
     manifest = ResourceManifest.read_from_root(resource_root)
     assert manifest.kind == ResourceKind.OVERLAY.value
@@ -92,7 +95,11 @@ def test_install_overlays_keeps_the_configured_order(tmp_path):
     paths = manager.install_overlays(sources, fetch=False)
 
     assert len(paths) == 2
-    assert paths == [manager.resolve_cached_resource(source).path for source in sources]
+    # What an overlay carries is its content, not its resource root.
+    assert paths == [
+        manager.source_path(manager.resolve_cached_resource(source).path)
+        for source in sources
+    ]
 
 
 def test_a_later_overlay_overwrites_only_the_members_it_sets(tmp_path):

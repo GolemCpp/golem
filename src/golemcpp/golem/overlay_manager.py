@@ -23,11 +23,12 @@ class OverlayManager(ResourceManager):
 
     def install_overlays(self, sources, fetch=True):
         '''
-        Installs each configured overlay, in the order it was configured,
-        and returns where each lives.
+        Installs each configured overlay, in the order it was configured, and
+        returns the content of each: what an overlay carries is read from there.
         '''
         return [
-            self.install(self.resolve_cached_resource(source), source, fetch=fetch)
+            self.source_path(
+                self.install(self.resolve_cached_resource(source), source, fetch=fetch))
             for source in sources
         ]
 
