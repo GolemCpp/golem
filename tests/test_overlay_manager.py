@@ -1,3 +1,4 @@
+import json
 import os
 
 from golemcpp.golem import cache_configuration
@@ -56,6 +57,88 @@ def test_staged_install_swaps_source_and_manifest(tmp_path):
     manifest = ResourceManifest.read_from_root(resource_root)
     assert manifest.kind == ResourceKind.OVERLAY.value
     assert manager.cache_manager.read_manifest_source(resource_root).reference == 'main'
+
+
+# -- what an overlay carries ------------------------------------------------
+
+
+def make_overlay(tmp_path, name, entries):
+    '''An overlay directory carrying an overrides.json, as a directory source.'''
+    overlay_dir = tmp_path / name
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / 'overrides.json').write_text(json.dumps(entries), encoding='utf-8')
+    return Source.for_directory(overlay_dir.resolve().as_uri())
+
+
+def load_overrides(tmp_path, sources):
+    '''The layered result, read back from where the manager wrote it.'''
+    manager = make_manager(tmp_path)
+    merged_path = manager.load_overrides(
+        sources=sources,
+        project_dir=str(tmp_path / 'project'),
+        merged_path=str(tmp_path / 'build' / 'overrides.json'))
+
+    if not merged_path:
+        return merged_path, []
+
+    with open(merged_path) as fp:
+        return merged_path, json.load(fp)
+
+
+def test_install_overlays_keeps_the_configured_order(tmp_path):
+    manager = make_manager(tmp_path)
+    sources = [make_overlay(tmp_path, name, []) for name in ('first', 'second')]
+
+    paths = manager.install_overlays(sources, fetch=False)
+
+    assert len(paths) == 2
+    assert paths == [manager.resolve_cached_resource(source).path for source in sources]
+
+
+def test_a_later_overlay_overwrites_only_the_members_it_sets(tmp_path):
+    sources = [
+        make_overlay(tmp_path, 'first', [
+            {'repository': 'https://host/json.git', 'version': '^3.0.0', 'shallow': True}]),
+        make_overlay(tmp_path, 'second', [
+            {'repository': 'https://host/json.git', 'version': '^4.0.0'}]),
+    ]
+
+    _, entries = load_overrides(tmp_path, sources)
+
+    assert len(entries) == 1
+    assert entries[0]['version'] == '^4.0.0'
+    # Untouched by the second overlay, so the first one still carries it.
+    assert entries[0]['shallow'] is True
+
+
+def test_layering_keeps_an_entry_only_one_overlay_defines(tmp_path):
+    sources = [
+        make_overlay(tmp_path, 'first', [
+            {'repository': 'https://host/json.git', 'version': '^3.0.0'}]),
+        make_overlay(tmp_path, 'second', [
+            {'repository': 'https://host/fmt.git', 'version': '^10.0.0'}]),
+    ]
+
+    _, entries = load_overrides(tmp_path, sources)
+
+    assert [entry['repository'] for entry in entries] == \
+        ['https://host/json.git', 'https://host/fmt.git']
+
+
+def test_an_overlay_carrying_nothing_contributes_nothing(tmp_path):
+    empty = tmp_path / 'empty'
+    empty.mkdir()
+
+    merged_path, entries = load_overrides(
+        tmp_path, [Source.for_directory(empty.resolve().as_uri())])
+
+    # Nothing to write, so nothing to point at.
+    assert merged_path == ''
+    assert entries == []
+
+
+def test_no_overlay_at_all_contributes_nothing(tmp_path):
+    assert load_overrides(tmp_path, [])[0] == ''
 
 
 def test_the_two_repository_kinds_do_not_share_a_cache_location(tmp_path):

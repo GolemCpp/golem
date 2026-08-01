@@ -104,6 +104,69 @@ def test_resolved_location_is_minimized_flat_when_enabled(tmp_path):
         cached_dep.path, cached_dep.cache_root)
 
 
+# -- what a dependency asks of the shared fetch mechanism -------------------
+
+
+def test_the_source_tree_sits_under_the_resource_root():
+    # The root also holds what was built from the source, so the source itself
+    # gets a subdirectory of its own.
+    assert DependencyManager.source_path('/cache/json@x') == os.path.join(
+        '/cache/json@x', cache_configuration.SOURCE_DIRNAME)
+
+
+def test_the_policy_pins_to_the_resolved_commit():
+    dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
+    dep.resolved_version = 'v3.12.0'
+    dep.resolved_hash = 'cafebabecafebabe'
+
+    policy = DependencyManager.policy_for(dep)
+
+    assert policy.checkout == 'v3.12.0'
+    assert policy.reference == 'cafebabecafebabe'
+    assert policy.submodules is True
+    assert policy.clean is True
+    # Pinned to a commit, so a refresh has nothing to fetch.
+    assert policy.fetch_remote is False
+    assert policy.shallow is False
+
+
+def test_the_policy_carries_the_shallow_request():
+    dep = Dependency(repository='https://example.com/json.git', shallow=True)
+    dep.resolved_hash = 'cafebabe'
+
+    assert DependencyManager.policy_for(dep).shallow is True
+
+
+def test_a_fresh_fetch_resolves_the_version_first(monkeypatch):
+    dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
+    resolved = []
+    monkeypatch.setattr(Dependency, 'resolve', lambda self: resolved.append(self))
+
+    DependencyManager.prepare(dep)
+
+    assert resolved == [dep]
+
+
+def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
+    dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
+    dep.resolved_version = 'v3.12.0'
+    dep.resolved_hash = 'cafebabecafebabe'
+    calls = []
+    monkeypatch.setattr(
+        helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append(args))
+
+    DependencyManager.clone_source(
+        '/cache/json/source', DependencyManager.source_for(dep),
+        DependencyManager.policy_for(dep))
+
+    assert calls == [
+        ['clone', '--', 'https://example.com/json.git', '.'],
+        ['checkout', 'v3.12.0'],
+        ['reset', '--hard', 'cafebabecafebabe'],
+        ['submodule', 'update', '--init', '--recursive', '--depth=1'],
+    ]
+
+
 def test_resolved_location_prefers_an_existing_non_minimized_layout(tmp_path):
     manager = make_manager(tmp_path, minimization_enabled=True)
     dep = make_dependency()
