@@ -443,11 +443,29 @@ def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_en
     assert build_target.arflags == ['/custom-arflag']
 
 
+def stub_dependency_manager(monkeypatch, context, *, is_read_only=False,
+                            cache_root='/tmp/cache', source_path='/tmp/repo',
+                            installs=None):
+    '''Stands in for the real manager, so a fake dep needs no cache to resolve in.'''
+    context.cache_configuration = None
+    cached_dep = SimpleNamespace(is_read_only=is_read_only, cache_root=cache_root)
+
+    def install(dep, refresh=True, cached_resource=None):
+        if installs is not None:
+            installs.append(refresh)
+        return SimpleNamespace(source_path=source_path)
+
+    monkeypatch.setattr(
+        golem_context, 'get_dependency_manager',
+        lambda cache_configuration: SimpleNamespace(
+            get_cached_resource=lambda dep: cached_dep,
+            install=install))
+
+
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context = make_runtime_context(runtime_variant='release')
     context.resolved_overrides = '/tmp/overrides.json'
     context.get_dep_location = lambda dep: '/tmp/dep-export'
-    context.make_repo_ready = lambda dep, should_clean=False: '/tmp/repo'
     context.get_dep_build_location = lambda dep: '/tmp/repo/build'
     context.get_global_dependencies_configuration_file = lambda: '/tmp/global-dependencies.json'
     context.get_only_update_dependencies_regex = lambda: ''
@@ -480,6 +498,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
     monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
     monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: calls.append(args))
+    stub_dependency_manager(monkeypatch, context)
 
     context.run_dep_command(dep=dep, command='resolve')
 
@@ -495,6 +514,51 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     # elsewhere and would otherwise resolve it against its own directory.
     assert '--additional-cache-directory={}=github'.format(
         os.path.join(project_dir, 'shared')) in calls[0]
+
+
+def test_run_dep_command_refuses_a_read_only_cache_location(monkeypatch):
+    # The command builds into the dependency's cache root, so a location that
+    # forbids writing is refused before anything runs.
+    context = make_runtime_context(runtime_variant='release')
+    monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        helpers, 'run_task',
+        lambda *args, **kwargs: pytest.fail('ran a command from a read-only cache'))
+    stub_dependency_manager(
+        monkeypatch, context, is_read_only=True, cache_root='/shared/cache')
+
+    with pytest.raises(RuntimeError, match='read-only cache location /shared/cache'):
+        context.run_dep_command(
+            dep=SimpleNamespace(name='demo', version='1.0.0'), command='build')
+
+
+def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch):
+    # Building dirties the dependency's working tree, so its source is cleaned and
+    # reset first; resolving reads what is already there.
+    monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
+    monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
+    monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: None)
+
+    refreshed = []
+    for command in ('resolve', 'build'):
+        context = make_runtime_context(runtime_variant='release')
+        context.resolved_overrides = '/tmp/overrides.json'
+        context.get_dep_location = lambda dep: '/tmp/dep-export'
+        context.get_dep_build_location = lambda dep: '/tmp/repo/build'
+        context.get_global_dependencies_configuration_file = lambda: '/tmp/global.json'
+        context.get_only_update_dependencies_regex = lambda: ''
+        context.settings = get_settings(
+            project_dir=absolute_path('tmp', 'project'),
+            options=SimpleNamespace(cache_directory=absolute_path('tmp', 'cache')))
+        stub_dependency_manager(monkeypatch, context, installs=refreshed)
+
+        context.run_dep_command(
+            dep=SimpleNamespace(
+                name='demo', version='1.0.0', runtime_link=None, runtime_variant=None,
+                link=None, variant=None, shallow=False, resolved_version='1.0.0'),
+            command=command)
+
+    assert refreshed == [False, True]
 
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_cookbooks_fetch=False):
@@ -721,7 +785,8 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
     repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
     manager = get_cookbook_manager(context.cache_configuration)
-    repo_path = manager.resolve_cached_resource(repository).path
+    repo_path = manager.resolve_cached_resource(
+        manager.get_cookbook(repository)).path
 
     assert repo_path == os.path.join('/cache', COOKBOOKS_SUBDIR, Source.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
@@ -755,7 +820,7 @@ def test_make_dependency_path_uses_shared_resource_location(tmp_path):
         version='^3.0.0')
     dep.resolved_hash = '1234567890abcdef'
     # Primed the way configure does, so the path comes from that resolution.
-    dep.update_cached_resource(context.cache_configuration)
+    get_dependency_manager(context.cache_configuration).update_cached_resource(dep)
 
     assert context.make_dependency_path(dep, 'artifact') == os.path.join(
         get_dependency_manager(

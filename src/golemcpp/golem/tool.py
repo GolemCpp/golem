@@ -10,6 +10,7 @@ class Tool:
     '''An installable tool and the version of it a command asked for.'''
 
     definition: tool_registry.ToolDefinition
+
     version: str = ''
     resolved_version: str = ''
     resolved_hash: str = ''
@@ -31,6 +32,9 @@ class Tool:
             self.definition.repository, reference=self.resolved_version)
 
     def resolve(self):
+        # Resolves the requested version through VersionResolver
+        # Don't do anything if already resolved
+        
         if self.resolved_hash:
             return self.resolved_hash
 
