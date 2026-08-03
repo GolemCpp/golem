@@ -106,7 +106,7 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path):
     assert installed_tool.name == 'cppfront'
     assert installed_tool.resolved_version == 'v0.8.1'
 
-    source = manager.cache_manager.read_manifest_source(cached_tool.path)
+    source = manager.cache_manager.read_manifest_source(cached_tool)
 
     assert source.type == 'git'
     assert source.reference == 'v0.8.1'

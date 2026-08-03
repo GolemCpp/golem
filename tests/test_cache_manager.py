@@ -212,7 +212,7 @@ def test_resolve_and_locate(tmp_path):
     resource = make_tool_resource()
 
     assert manager.resolve_cache_directory(resource).location == str(tmp_path / 'cache')
-    assert manager.get_resource_location(cache_dir, resource) == os.path.join(
+    assert manager._get_resource_location(cache_dir, resource) == os.path.join(
         str(tmp_path / 'cache'), cache_configuration.TOOLS_SUBDIR, 'demo')
     assert manager.resolve_cached_resource(resource).exists() is False
 
@@ -221,15 +221,16 @@ def test_write_and_read_source(tmp_path):
     cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
     manager = make_classic_manager(cache_dir)
     resource = make_tool_resource()
-    root = manager.get_resource_location(cache_dir, resource)
+    cached = manager.make_cached_resource(cache_dir, resource)
+    root = cached.path
     os.makedirs(root)
 
-    manager.write_manifest(root, resource)
+    manager.write_manifest(cached)
 
     manifest = ResourceManifest.read_from_root(root)
     assert manifest.kind == ResourceKind.TOOL.value
     assert manifest.cache_key == 'demo'
-    source = manager.read_manifest_source(root)
+    source = manager.read_manifest_source(cached)
     assert source.location == 'https://example.com/tool.git'
     assert source.reference == 'v1'
     assert manager.resolve_cached_resource(resource).exists() is True
@@ -239,11 +240,12 @@ def test_resolve_cached_resource_reads_size_and_manifest_on_demand(tmp_path):
     cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
     manager = make_classic_manager(cache_dir)
     resource = make_tool_resource()
-    root = manager.get_resource_location(cache_dir, resource)
+    cached = manager.make_cached_resource(cache_dir, resource)
+    root = cached.path
     os.makedirs(root)
     with open(os.path.join(root, 'payload.txt'), 'w') as fileout:
         fileout.write('hi')
-    manager.write_manifest(root, resource)
+    manager.write_manifest(cached)
 
     # Both are opt-in: resolving alone reports neither.
     plain = manager.resolve_cached_resource(resource)
@@ -267,12 +269,33 @@ def test_guard_install_swaps_atomically(tmp_path):
         with open(os.path.join(staging_root, 'payload.txt'), 'w') as fileout:
             fileout.write('hi')
 
-    root = manager.guard_install(
-        manager._make_cached_resource(cache_dir, resource), populate)
+    cached = manager.make_cached_resource(cache_dir, resource)
+    root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(os.path.join(root, 'payload.txt'))
     assert ResourceManifest.read_from_root(root) is not None
-    assert not os.path.exists(root + '.tmp')
+    assert not os.path.exists(cached.staging_path)
+
+
+def test_guard_install_stages_the_manifest_with_the_content(tmp_path):
+    # The manifest is written where the resource is being built, so it is swapped
+    # in with it. Written into the root instead, it would go with the old one.
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    cached = manager.make_cached_resource(cache_dir, make_tool_resource())
+
+    staged = []
+
+    def populate(staging_root):
+        staged.append(ResourceManifest.read_from_root(staging_root))
+
+    manager.guard_install(cached, populate)
+
+    # Nothing yet while populate runs, and both in place once it is swapped.
+    assert staged == [None]
+    assert cached.staging_path != cached.path
+    assert ResourceManifest.read_from_root(cached.path) is not None
+    assert not os.path.exists(cached.staging_path)
 
 
 def test_guard_install_refuses_a_scanned_resource(tmp_path):
@@ -297,7 +320,7 @@ def make_installed_tool(tmp_path, reference='v1'):
     resource = Resource(
         kind=ResourceKind.TOOL, cache_key='demo',
         source=Source.for_repository('https://example.com/tool.git', reference=reference))
-    cached = manager._make_cached_resource(cache_dir, resource)
+    cached = manager.make_cached_resource(cache_dir, resource)
     os.makedirs(cached.path, exist_ok=True)
     return manager, cached
 
@@ -306,7 +329,7 @@ def test_guard_refresh_records_the_source_it_was_refreshed_onto(tmp_path):
     # A tool is keyed by its name, so asking for another version refreshes the
     # root it already occupies: the manifest has to follow.
     manager, cached = make_installed_tool(tmp_path)
-    manager.write_manifest(cached.path, cached.resource)
+    manager.write_manifest(cached)
     created_at = ResourceManifest.read_from_root(cached.path).created_at
 
     manager, moved = make_installed_tool(tmp_path, reference='v2')
@@ -321,10 +344,10 @@ def test_guard_refresh_records_the_source_it_was_refreshed_onto(tmp_path):
 
 def test_guard_refresh_only_marks_an_unchanged_resource_as_used(tmp_path, monkeypatch):
     manager, cached = make_installed_tool(tmp_path)
-    manager.write_manifest(cached.path, cached.resource)
+    manager.write_manifest(cached)
     written = []
     monkeypatch.setattr(manager, 'write_manifest',
-                        lambda root, resource: written.append(root))
+                        lambda cached_resource: written.append(cached_resource.path))
 
     manager.guard_refresh(cached, lambda path: None)
 

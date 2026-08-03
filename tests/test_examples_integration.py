@@ -268,7 +268,7 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     assert Path(cache_info.executable_path).is_file()
     assert Path(cache_info.include_path).is_dir()
 
-    source = manager.cache_manager.read_manifest_source(cached_tool.path)
+    source = manager.cache_manager.read_manifest_source(cached_tool)
 
     assert source.type == 'git'
     assert source.reference == cppfront_tool.DEFAULT_CPPFRONT_VERSION
