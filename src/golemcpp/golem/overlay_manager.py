@@ -2,6 +2,7 @@ import os
 
 from golemcpp.golem import overrides
 from golemcpp.golem.cache_manager import get_cache_manager
+from golemcpp.golem.overlay import Overlay
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
@@ -11,37 +12,42 @@ class OverlayManager(ResourceManager):
     '''
     An overlay is a source carrying configuration a project layers onto its own.
     It contributes an `overrides.json` today; whatever it carries next is read
-    the same way, from the paths install_overlays hands back.
+    the same way, from the content of the overlays a caller installed.
     '''
 
     @staticmethod
-    def resource_for(source) -> Resource:
+    def get_overlay(source, version: str = '') -> Overlay:
+        return Overlay(source=source, version=version)
+
+    @staticmethod
+    def resource_for(overlay: Overlay) -> Resource:
+        source = OverlayManager.source_for(overlay)
         return Resource(
             kind=ResourceKind.OVERLAY,
             cache_key=source.get_cache_key(),
             source=source)
 
-    def install_overlays(self, sources, fetch=True):
-        '''
-        Installs each configured overlay, in the order it was configured, and
-        returns the content of each: what an overlay carries is read from there.
-        '''
-        return [
-            self.source_path(
-                self.install(self.resolve_cached_resource(source), source, fetch=fetch))
-            for source in sources
-        ]
+    @staticmethod
+    def source_for(overlay: Overlay):
+        return overlay.to_source()
 
-    def load_overrides(self, sources, project_dir, merged_path, fetch=True):
+    @staticmethod
+    def resolve_version(overlay: Overlay) -> Overlay:
+        overlay.resolve()
+        return overlay
+
+    def load_overrides(self, cached_overlays, project_dir, merged_path):
         '''
-        Merges the overrides the configured overlays contribute, layered
-        in order, and returns `merged_path` containing them.
-        
+        Merges the overrides the given overlays contribute, layered in the order
+        they come in, and returns `merged_path` containing them. Reads them where
+        they already are: installing the overlays is the caller's step.
+
         Returns an empty string when no overrides could be found.
         '''
         contributions = []
-        for overlay_path in self.install_overlays(sources, fetch=fetch):
-            overrides_path = os.path.join(overlay_path, overrides.OVERRIDES_FILENAME)
+        for cached_overlay in cached_overlays:
+            overrides_path = os.path.join(
+                cached_overlay.source_path, overrides.OVERRIDES_FILENAME)
             if os.path.exists(overrides_path):
                 contributions.append(
                     overrides.read_overrides(overrides_path, project_dir))

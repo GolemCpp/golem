@@ -31,8 +31,16 @@ class CachedResource:
     resource: object = None  # resource.Resource | None
 
     def exists(self) -> bool:
-        '''Whether the resource root is present on disk.'''
+        '''
+        Whether the resource root is present on disk. This is about the location
+        in cache, not its content. See ResourceManager.is_installed.
+        '''
         return os.path.isdir(self.path)
+
+    @property
+    def source_path(self) -> str:
+        '''The fetched content under the root, which is what a consumer reads.'''
+        return cache_configuration.source_path(self.path)
 
     @property
     def is_identified(self) -> bool:
@@ -165,9 +173,19 @@ class CacheManager:
         The cached form of a resource, in whichever cache directory the
         resolution settles on.
         '''
-        return self._make_cached_resource(
+        cached_resource = self._make_cached_resource(
             self.resolve_cache_directory(resource), resource,
             compute_size=compute_size, read_manifest=read_manifest)
+        self.mark_used(cached_resource)
+        return cached_resource
+
+    def mark_used(self, cached_resource) -> None:
+        '''
+        Resolving a resource is an attempt to use it, which is what keeps it from
+        being pruned. A read-only location has no timestamp to record.
+        '''
+        if not cached_resource.is_read_only:
+            self.touch_last_used(cached_resource.path)
 
     def _make_cached_resource(self, cache_directory, resource,
                               compute_size=False, read_manifest=False):
@@ -264,8 +282,6 @@ class CacheManager:
         '''
         if self.read_manifest_source(cached_resource.path) != cached_resource.resource.source:
             self.write_manifest(cached_resource.path, cached_resource.resource)
-        else:
-            self.touch_last_used(cached_resource.path)
 
     # -- per-resource mutations -------------------------------------------
 

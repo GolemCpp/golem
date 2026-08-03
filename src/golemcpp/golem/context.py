@@ -23,7 +23,6 @@ from golemcpp.golem.module import Module
 from golemcpp.golem.cache_configuration import get_cache_configuration
 from golemcpp.golem import cache_configuration
 from golemcpp.golem.configuration import Configuration
-from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.tool_manager import get_tool_manager
 from golemcpp.golem.dependency_manager import get_dependency_manager
@@ -267,17 +266,26 @@ class Context:
             # path, so it already arrives absolute.
             self.resolved_overrides = \
                 self.get_settings().get('GOLEM_OVERRIDES_CONFIGURATION') or \
-                get_overlay_manager(self.cache_configuration).load_overrides(
-                    sources=self.get_settings().get('GOLEM_OVERLAYS_LOCATIONS'),
-                    project_dir=self.get_project_dir(),
-                    merged_path=self.make_build_path(overrides.OVERRIDES_FILENAME),
-                    fetch=self.deps_resolve)
+                self.load_overlay_overrides()
 
         if not self.resolved_overrides or not os.path.exists(
                 self.resolved_overrides):
             return None
 
         return overrides.read_overrides(self.resolved_overrides, self.get_project_dir())
+
+    def load_overlay_overrides(self):
+        '''The overrides the configured overlays contribute, installed then read.'''
+        manager = get_overlay_manager(self.cache_configuration)
+        overlays = [
+            manager.get_overlay(source) for source in self.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
+        ]
+        cached_overlays = manager.make_available_all(overlays, fetch=self.deps_resolve)
+
+        return manager.load_overrides(
+            cached_overlays,
+            project_dir=self.get_project_dir(),
+            merged_path=self.make_build_path(overrides.OVERRIDES_FILENAME))
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
@@ -1256,8 +1264,9 @@ class Context:
         if self.context.options.force_version:
             self.version.force_version(self.context.options.force_version)
 
+        manager = get_dependency_manager(self.cache_configuration)
         for dependency in self.project.deps:
-            dependency.update_cached_resource(self.cache_configuration)
+            manager.update_cached_resource(dependency)
 
     def dep_system(self, context, libs):
         context.env['LIB'] += libs
@@ -1305,10 +1314,11 @@ class Context:
 
     def get_dep_cached_resource(self, dep):
         '''
-        Where the dependency lives in the caches. The dependency resolves it once
-        and holds on to it, so every path below is derived from the same resolution.
+        Where the dependency lives in the caches. It is resolved once and kept on
+        the dependency, so every path below is derived from the same resolution.
         '''
-        return dep.get_cached_resource(self.cache_configuration)
+        return get_dependency_manager(
+            self.cache_configuration).get_cached_resource(dep)
 
     def get_dep_location(self, dep):
         return self.get_dep_cached_resource(dep).path
@@ -1533,15 +1543,6 @@ class Context:
                         Artifact(abspath, relpath, path_build))
         return artifacts_list
 
-    def make_repo_ready(self, dep, should_clean=False):
-        '''The dependency's source tree on disk, fetched if it is not there yet.'''
-        manager = get_dependency_manager(self.cache_configuration)
-        cached_dep = self.get_dep_cached_resource(dep)
-
-        manager.install(cached_dep, dep, refresh=should_clean)
-
-        return manager.source_path(cached_dep.path)
-
     def run_dep_command(self, dep, command):
 
         should_clean_repo = False
@@ -1554,8 +1555,17 @@ class Context:
             Logs.info("Running {} on {} ({})...".format(
                 command, dep.name, dep.version))
 
+        manager = get_dependency_manager(self.cache_configuration)
+        cached_dep = manager.get_cached_resource(dep)
+        # The command builds into the dependency's cache root, which a read-only
+        # location does not allow -- refuse before running anything.
+        if cached_dep.is_read_only:
+            raise RuntimeError(
+                "Cannot run {} on {} from the read-only cache location {}".format(
+                    command, dep.name, cached_dep.cache_root))
+
         dep_path = self.get_dep_location(dep)
-        repo_path = self.make_repo_ready(dep, should_clean=should_clean_repo)
+        repo_path = manager.install(dep, refresh=should_clean_repo).source_path
         build_path = self.get_dep_build_location(dep)
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file()
@@ -4063,10 +4073,10 @@ class Context:
         # definition, so an unset setting still yields a cookbook to search.
         manager = get_cookbook_manager(self.cache_configuration)
         fetch = self.deps_resolve and not self.context.options.no_cookbooks_fetch
-        cookbook_roots = [
-            manager.install(manager.resolve_cached_resource(source), source, fetch=fetch)
-            for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
+        cookbooks = [
+            manager.get_cookbook(source) for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
         ]
+        cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
 
         if not recipe_id and self.project is None:
             recipe_url = self.load_git_remote_origin_url()
@@ -4078,13 +4088,11 @@ class Context:
             return
 
         found_recipe_dir = None
-        for cookbook_root in cookbook_roots:
-            # Recipes sit in the cookbook's content; the manifest to touch is at
-            # the resource root above it.
-            directory = os.path.join(manager.source_path(cookbook_root), recipe_id)
+        for cached_cookbook in cached_cookbooks:
+            # Recipes sit in the cookbook's content, never at the resource root.
+            directory = os.path.join(cached_cookbook.source_path, recipe_id)
             if os.path.exists(directory):
                 found_recipe_dir = directory
-                resource_manifest.touch_last_used(cookbook_root)
 
         if not found_recipe_dir:
             raise RuntimeError(
@@ -4194,7 +4202,9 @@ class Context:
     def autodiscover_cppfront(self):
         # Resolve the tool root exactly like it was installed (classic tools/
         # subdir or a minimized flat path) so the build finds it either way.
-        cached_tool = get_tool_manager(self.cache_configuration).resolve_cached_tool(cppfront_tool.CPPFRONT_NAME)
+        manager = get_tool_manager(self.cache_configuration)
+        tool = manager.get_tool(cppfront_tool.CPPFRONT_NAME)
+        cached_tool = manager.resolve_cached_resource(tool, with_version_resolution=False)
 
         cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(cached_tool.path)
 

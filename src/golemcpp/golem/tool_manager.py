@@ -21,14 +21,6 @@ class InstalledToolInfo:
     is_read_only: bool = False
 
 
-@dataclass(frozen=True)
-class ToolInstallResult:
-    name: str
-    version: str
-    resource_root: str
-    cache_root: str
-
-
 class ToolManager(ResourceManager):
     '''
     Manages installable tools as ordinary cached resources: tools resolve across
@@ -95,24 +87,6 @@ class ToolManager(ResourceManager):
     def post_install(root, tool: Tool) -> None:
         tool.definition.build_handler(resource_root=root)
 
-    def resolve_cached_tool(self, tool_name: str, compute_size=False, read_manifest=False):
-        '''
-        The tool as a cached resource: where it lives, which cache it belongs to
-        and whether it is installed at all, resolved in one go.
-        
-        A pure lookup -- it goes straight to the cache manager rather than through
-        resolve_cached_resource, so finding an installed tool never queries a
-        remote. A tool is keyed by its name, so locating one needs no version.
-        '''
-        return self.cache_manager.resolve_cached_resource(
-            self.resource_for(self.get_tool(tool_name)),
-            compute_size=compute_size,
-            read_manifest=read_manifest)
-
-    def read_tool_source(self, tool_name: str):
-        cached_tool = self.resolve_cached_tool(tool_name)
-        return self.cache_manager.read_manifest_source(cached_tool.path)
-
     def list_installed_tools(self) -> list[InstalledToolInfo]:
         # Scan every configured cache location, like CacheManager.scan, so a tool
         # installed in an additional (or read-only) cache is listed too.
@@ -130,29 +104,6 @@ class ToolManager(ResourceManager):
                     cache_root=cache_dir.location,
                     is_read_only=cache_dir.is_read_only))
         return installed_tools
-
-    def install_tool(self, tool_name: str, version: str) -> ToolInstallResult:
-        tool = self.get_tool(tool_name, version=version)
-        # Locating resolves the version, which is what the manifest records.
-        cached_tool = self.resolve_cached_resource(tool)
-        if cached_tool.is_read_only:
-            raise RuntimeError(
-                'cannot install {} into read-only cache location {}'.format(
-                    tool.name, cached_tool.cache_root))
-
-        return ToolInstallResult(
-            name=tool.name,
-            version=tool.resolved_version,
-            resource_root=self.install(cached_tool, tool),
-            cache_root=cached_tool.cache_root)
-
-    def uninstall_tool(self, cached_tool) -> bool:
-        '''
-        Remove an already resolved tool resource, so what a caller inspected and
-        confirmed is exactly what gets deleted. Returns whether it was removed.
-        '''
-        removed, _ = self.cache_manager.remove_resources([cached_tool])
-        return bool(removed)
 
 
 def get_tool_manager(cache_configuration) -> ToolManager:

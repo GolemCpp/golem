@@ -25,8 +25,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
+from golemcpp.golem import cache_configuration
 from golemcpp.golem import helpers
-from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 
 
@@ -69,14 +69,17 @@ class ResourceManager:
     def locations(self):
         return self.cache_manager.locations
 
-    def resolve_cached_resource(self, item):
+    def resolve_cached_resource(self, item, compute_size=False, read_manifest=False, with_version_resolution=True):
         '''
         Where an item lives in the caches: which cache it belongs to, where it
         sits there and whether it is already fetched, resolved in one go. The
         version comes first, since what it resolves to identifies the resource.
         '''
+        resolved_item = self.resolve_version(item) if with_version_resolution else item
         return self.cache_manager.resolve_cached_resource(
-            self.resource_for(self.resolve_version(item)))
+            self.resource_for(resolved_item),
+            compute_size=compute_size,
+            read_manifest=read_manifest)
 
     def guard_install(self, cached_resource, populate) -> str:
         '''Fetch a source into a staging dir, then atomically swap it into place
@@ -105,12 +108,8 @@ class ResourceManager:
 
     @staticmethod
     def source_path(root):
-        '''
-        Where a resource keeps its fetched content under its root. Never the root
-        itself: that is the resource, and it also holds the manifest naming it and
-        whatever gets built from the source.
-        '''
-        return os.path.join(root, SOURCE_DIRNAME)
+        '''Where a resource keeps its fetched content under its root.'''
+        return cache_configuration.source_path(root)
 
     @classmethod
     def policy_for(cls, item):
@@ -144,20 +143,44 @@ class ResourceManager:
 
     # -- installation ------------------------------------------------------
 
-    def install(self, cached_resource, item, fetch=True, refresh=True) -> str:
+    def is_installed(self, cached_resource) -> bool:
         '''
-        The resource root, with its content materialized when asked. Fresh: the
-        whole root and its manifest are staged and swapped in one step. Existing:
-        refreshed in place, keeping the cache root.
+        Whether the root holds the fetched source a consumer reads. This is about
+        the content. CachedResource.exists() is about the location in cache,
+        which is what resolution matches a resource to.
         '''
-        if not fetch:
-            return cached_resource.path
+        return os.path.isdir(cached_resource.source_path)
 
-        if os.path.isdir(self.source_path(cached_resource.path)):
-            if not refresh:
-                self.cache_manager.touch_last_used(cached_resource.path)
-                return cached_resource.path
+    def install(self, item, refresh=True, cached_resource=None):
+        '''
+        Installs the item in cache and returns the cached resource associated.
 
+        Fresh install: the whole root and its manifest are staged and swapped
+        in one step.
+
+        Existing install: refreshed in place, keeping the cache root.
+
+        An installed resource is handed back untouched without `refresh`.
+
+        Installing into a read-only cache location is refused. Nothing is written
+        there, whether the resource has to be populated or refreshed.
+
+        `cached_resource` skips the resolution when the caller already did it.
+        '''
+        if cached_resource is None:
+            cached_resource = self.resolve_cached_resource(item)
+
+        installed = self.is_installed(cached_resource)
+        if installed and not refresh:
+            return cached_resource
+
+        # Everything below writes into the cache root.
+        if cached_resource.is_read_only:
+            raise RuntimeError(
+                'cannot install {} into read-only cache location {}'.format(
+                    cached_resource.cache_key, cached_resource.cache_root))
+
+        if installed:
             self.pre_install_refresh(cached_resource.path, item)
             self.guard_refresh(
                 cached_resource,
@@ -170,7 +193,34 @@ class ResourceManager:
                     self.source_path(staging_root), item))
 
         self.post_install(cached_resource.path, item)
-        return cached_resource.path
+        return cached_resource
+
+    def make_available(self, item, fetch=True, refresh=True):
+        '''
+        The item's cached resource, ready to read. Either installed, or kept as
+        is from a read-only location.
+
+        `fetch=False` only resolves where the resource lives and fetches nothing.
+
+        Raises when a read-only location does not hold the resource. There is
+        nothing to serve and nothing may be written.
+        '''
+        cached_resource = self.resolve_cached_resource(item)
+
+        if not fetch:
+            return cached_resource
+
+        if cached_resource.is_read_only and self.is_installed(cached_resource):
+            return cached_resource
+
+        return self.install(item, refresh=refresh, cached_resource=cached_resource)
+
+    def make_available_all(self, items, fetch=True, refresh=True):
+        '''Each item made available, in the order it was given.'''
+        return [
+            self.make_available(item, fetch=fetch, refresh=refresh)
+            for item in items
+        ]
 
     def populate(self, path, item):
         '''Materialize a source freshly into `path`, writing no manifest.'''

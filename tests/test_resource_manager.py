@@ -7,6 +7,7 @@ from golemcpp.golem import cache_directory
 from golemcpp.golem import helpers
 from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
+from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem.resource_manager import FetchPolicy
 from golemcpp.golem.resource_manager import ResourceManager
@@ -213,6 +214,11 @@ def test_a_remote_source_has_no_local_path_to_check():
 # -- install: what happens around the fetch ---------------------------------
 
 
+def make_cookbook():
+    return Cookbook(
+        source=Source.for_repository('https://host/r.git', reference='main'))
+
+
 def make_recording_manager(tmp_path, recorded):
     '''A cookbook manager whose whole lifecycle is recorded, in order.'''
     manager = make_manager(tmp_path)
@@ -223,23 +229,37 @@ def make_recording_manager(tmp_path, recorded):
     return manager
 
 
-def test_a_kind_with_nothing_to_resolve_hands_its_item_back():
-    # A cookbook or an overlay tracks a branch, so its reference is already the
-    # one to fetch.
-    source = Source.for_repository('https://host/r.git', reference='main')
+def make_read_only_manager(tmp_path):
+    return get_cookbook_manager(make_cache_configuration(
+        cache_directory.CacheDirectory(
+            location=str(tmp_path / 'cache'), is_read_only=True),
+        minimization_enabled=False))
 
-    assert ResourceManager.resolve_version(source) is source
+
+def install_on_disk(manager, cached_resource):
+    '''A resource already in a cache: its fetched source, and the manifest naming it.'''
+    os.makedirs(manager.source_path(cached_resource.path), exist_ok=True)
+    manager.cache_manager.write_manifest(
+        cached_resource.path, cached_resource.resource)
+    return cached_resource
+
+
+def test_a_kind_with_nothing_to_resolve_hands_its_item_back():
+    # The base hands its item straight back, which is what a kind that has no
+    # version of its own inherits.
+    item = Source.for_repository('https://host/r.git', reference='main')
+
+    assert ResourceManager.resolve_version(item) is item
 
 
 def test_locating_a_resource_resolves_its_version_first(tmp_path):
     # The resolved reference is part of what identifies a resource, so a location
     # worked out before it would name a different one.
     manager = make_manager(tmp_path)
-    manager.resolve_version = lambda source: Source.for_repository(
-        source.location, reference='v3.12.0')
+    manager.resolve_version = lambda cookbook: Cookbook(
+        source=cookbook.source, version='v3.12.0')
 
-    cached = manager.resolve_cached_resource(
-        Source.for_repository('https://host/r.git', reference='main'))
+    cached = manager.resolve_cached_resource(make_cookbook())
 
     assert cached.cache_key == Source.for_repository(
         'https://host/r.git', reference='v3.12.0').get_cache_key()
@@ -256,12 +276,12 @@ def test_the_lifecycle_hooks_do_nothing_by_default():
 def test_a_fresh_install_prepares_then_fetches_then_makes(tmp_path, monkeypatch):
     recorded = []
     manager = make_recording_manager(tmp_path, recorded)
-    source = Source.for_repository('https://host/r.git', reference='main')
+    cookbook = make_cookbook()
     monkeypatch.setattr(
         helpers, 'run_git',
         lambda args, cwd=None, stdout=None: recorded.append('fetch'))
 
-    manager.install(manager.resolve_cached_resource(source), source)
+    manager.install(cookbook)
 
     # The fetch is guarded, so what it makes can only run once the source is in
     # place -- and pre_install runs before anything is written.
@@ -271,34 +291,38 @@ def test_a_fresh_install_prepares_then_fetches_then_makes(tmp_path, monkeypatch)
 def test_a_refresh_discards_then_fetches_then_makes(tmp_path, monkeypatch):
     recorded = []
     manager = make_recording_manager(tmp_path, recorded)
-    source = Source.for_repository('https://host/r.git', reference='main')
-    cached = manager.resolve_cached_resource(source)
-    os.makedirs(manager.source_path(cached.path))
+    cookbook = make_cookbook()
+    install_on_disk(manager, manager.resolve_cached_resource(cookbook))
     monkeypatch.setattr(
         helpers, 'run_git',
         lambda args, cwd=None, stdout=None: recorded.append('fetch'))
 
-    manager.install(cached, source)
+    manager.install(cookbook)
 
     # Nothing made from the previous source outlives it, and pre_install belongs
     # to a fresh fetch alone.
     assert recorded == ['pre_install_refresh', 'fetch', 'fetch', 'post_install']
 
 
-def test_install_does_not_touch_the_cache_when_not_fetching(tmp_path, git_calls):
+def test_a_resource_is_installed_once_its_source_is_there(tmp_path):
+    # The fetched source is what a consumer reads, so that is what says the
+    # resource is installed. The root existing only says which cache holds it.
     manager = make_manager(tmp_path)
-    source = Source.for_repository('https://host/r.git', reference='main')
-    cached = manager.resolve_cached_resource(source)
+    cached = manager.resolve_cached_resource(make_cookbook())
+    os.makedirs(cached.path)
 
-    assert manager.install(cached, source, fetch=False) == cached.path
-    assert git_calls == []
-    assert not os.path.exists(cached.path)
+    assert cached.exists() is True
+    assert manager.is_installed(cached) is False
+
+    os.makedirs(manager.source_path(cached.path))
+
+    assert manager.is_installed(cached) is True
 
 
 def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch):
     manager = make_manager(tmp_path)
-    source = Source.for_repository('https://host/r.git', reference='main')
-    cached = manager.resolve_cached_resource(source)
+    cookbook = make_cookbook()
+    cached = manager.resolve_cached_resource(cookbook)
 
     # Stand in for the clone: the staging root is what populate is handed.
     monkeypatch.setattr(
@@ -306,22 +330,21 @@ def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch
         lambda args, cwd=None, stdout=None: open(
             os.path.join(cwd, 'fetched.txt'), 'w').close())
 
-    root = manager.install(cached, source)
+    installed = manager.install(cookbook)
 
-    assert root == cached.path
+    assert installed.path == cached.path
     # The content sits under source/; the root holds it and the manifest naming it.
-    assert os.path.isfile(os.path.join(manager.source_path(root), 'fetched.txt'))
-    assert not os.path.exists(root + '.tmp')
-    assert resource_manifest.ResourceManifest.read_from_root(root) is not None
+    assert os.path.isfile(os.path.join(installed.source_path, 'fetched.txt'))
+    assert not os.path.exists(installed.path + '.tmp')
+    assert resource_manifest.ResourceManifest.read_from_root(installed.path) is not None
 
 
 def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):
     manager = make_manager(tmp_path)
-    source = Source.for_repository('https://host/r.git', reference='main')
-    cached = manager.resolve_cached_resource(source)
-    os.makedirs(manager.source_path(cached.path))
+    cookbook = make_cookbook()
+    install_on_disk(manager, manager.resolve_cached_resource(cookbook))
 
-    manager.install(cached, source)
+    manager.install(cookbook)
 
     # Refreshed, not re-cloned: the cache root is kept.
     assert git_calls == [
@@ -333,15 +356,130 @@ def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):
 def test_install_can_leave_an_existing_resource_alone(tmp_path, git_calls, monkeypatch):
     recorded = []
     manager = make_recording_manager(tmp_path, recorded)
-    source = Source.for_repository('https://host/r.git', reference='main')
-    cached = manager.resolve_cached_resource(source)
-    os.makedirs(manager.source_path(cached.path))
+    cookbook = make_cookbook()
+    cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
     touched = []
     monkeypatch.setattr(resource_manifest, 'touch_last_used', touched.append)
 
-    manager.install(cached, source, refresh=False)
+    manager.install(cookbook, refresh=False)
 
     assert git_calls == []
     assert recorded == []
-    # Still counts as used, which is what keeps it from being pruned.
+    # Resolving it counts as using it, which is what keeps it from being pruned.
     assert touched == [cached.path]
+
+
+def test_install_clones_a_resource_that_is_not_there(tmp_path, git_calls):
+    manager = make_manager(tmp_path)
+    cookbook = make_cookbook()
+
+    installed = manager.install(cookbook)
+
+    assert manager.is_installed(installed)
+    assert git_calls == [['clone', '--', 'https://host/r.git', '.'],
+                         ['reset', '--hard', 'origin/main']]
+
+
+def test_install_reuses_a_cached_resource_the_caller_already_resolved(tmp_path, git_calls):
+    manager = make_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = manager.resolve_cached_resource(cookbook)
+
+    resolutions = []
+    manager.cache_manager.resolve_cached_resource = \
+        lambda *args, **kwargs: resolutions.append(1)
+
+    assert manager.install(cookbook, cached_resource=cached).path == cached.path
+    assert resolutions == []
+
+
+# -- install writes, so a read-only location is refused ---------------------
+
+
+def test_populating_a_read_only_cache_is_refused(tmp_path):
+    manager = make_read_only_manager(tmp_path)
+
+    with pytest.raises(RuntimeError, match='read-only cache location'):
+        manager.install(make_cookbook())
+
+
+def test_refreshing_a_read_only_cache_is_refused(tmp_path, git_calls):
+    # The resource is there, but refreshing it writes just as populating does.
+    manager = make_read_only_manager(tmp_path)
+    cookbook = make_cookbook()
+    install_on_disk(manager, manager.resolve_cached_resource(cookbook))
+
+    with pytest.raises(RuntimeError, match='read-only cache location'):
+        manager.install(cookbook)
+
+    assert git_calls == []
+
+
+def test_a_read_only_resource_is_handed_back_when_nothing_is_refreshed(tmp_path, git_calls):
+    manager = make_read_only_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
+
+    # Nothing is written, so there is nothing to refuse.
+    assert manager.install(cookbook, refresh=False).path == cached.path
+    assert git_calls == []
+
+
+# -- make_available reads, so a populated read-only location is kept as is --
+
+
+def test_make_available_installs_into_a_writable_cache(tmp_path, git_calls):
+    manager = make_manager(tmp_path)
+
+    available = manager.make_available(make_cookbook())
+
+    assert manager.is_installed(available)
+    assert available.is_read_only is False
+    assert git_calls == [['clone', '--', 'https://host/r.git', '.'],
+                         ['reset', '--hard', 'origin/main']]
+
+
+def test_make_available_keeps_a_read_only_resource_as_it_stands(tmp_path, git_calls):
+    manager = make_read_only_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
+
+    available = manager.make_available(cookbook)
+
+    assert available.path == cached.path
+    assert available.is_read_only is True
+    assert git_calls == []
+
+
+def test_make_available_refuses_an_empty_read_only_cache(tmp_path):
+    # Nothing to serve there, and nothing may be written.
+    manager = make_read_only_manager(tmp_path)
+
+    with pytest.raises(RuntimeError, match='read-only cache location'):
+        manager.make_available(make_cookbook())
+
+
+def test_make_available_does_not_touch_the_cache_when_not_fetching(tmp_path, git_calls):
+    manager = make_read_only_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = manager.resolve_cached_resource(cookbook)
+
+    # Not even the empty read-only cache is refused: nothing is asked of it.
+    assert manager.make_available(cookbook, fetch=False).path == cached.path
+    assert git_calls == []
+    assert not os.path.exists(cached.path)
+
+
+def test_make_available_all_hands_back_a_resource_per_item_in_order(tmp_path, git_calls):
+    manager = make_manager(tmp_path)
+    items = [
+        Cookbook(source=Source.for_repository(
+            'https://host/{}.git'.format(name), reference='main'))
+        for name in ('first', 'second')
+    ]
+
+    cached_resources = manager.make_available_all(items, fetch=False)
+
+    assert [cached.path for cached in cached_resources] == \
+        [manager.resolve_cached_resource(item).path for item in items]
+    assert git_calls == []

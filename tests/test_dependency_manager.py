@@ -8,6 +8,7 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import DependencyManager, get_dependency_manager
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
+from golemcpp.golem.version_resolver import VersionResolver
 from conftest import make_cache_configuration
 
 
@@ -198,3 +199,40 @@ def test_resolved_location_prefers_an_existing_non_minimized_layout(tmp_path):
     # A resource already present under the classic layout keeps its location even
     # though minimization is enabled.
     assert manager.resolve_cached_resource(dep).path == non_minimized
+
+
+def test_a_cached_resource_is_resolved_once_and_kept_on_the_dependency(tmp_path):
+    manager = make_manager(tmp_path)
+    dep = make_dependency()
+
+    cached = manager.get_cached_resource(dep)
+
+    assert cached is dep.cached_resource
+    assert manager.get_cached_resource(dep) is cached
+
+
+def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch):
+    # The cache key comes from the resolved reference, so a location worked out
+    # before resolution would name another resource. There is no way to obtain
+    # one: asking where a dependency lives resolves it on the way.
+    manager = make_manager(tmp_path)
+    dep = Dependency(name='json', repository='https://example.com/json.git')
+    monkeypatch.setattr(
+        VersionResolver, 'resolve',
+        staticmethod(lambda *args, **kwargs: ('3.11.3', '1234567890abcdef')))
+
+    cached = manager.get_cached_resource(dep)
+
+    assert dep.resolved_hash == '1234567890abcdef'
+    assert cached.cache_key == dep.to_source().get_cache_key()
+
+
+def test_updating_a_cached_resource_replaces_the_one_kept(tmp_path):
+    manager = make_manager(tmp_path)
+    dep = make_dependency()
+    first = manager.get_cached_resource(dep)
+
+    second = manager.update_cached_resource(dep)
+
+    assert second is not first
+    assert second is dep.cached_resource
