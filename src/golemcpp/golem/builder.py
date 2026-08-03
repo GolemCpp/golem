@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from waflib.TaskGen import feature, before_method
+from golemcpp.golem import network
 from golemcpp.golem.context import Context
 import sys
 
@@ -46,12 +47,15 @@ def resolve(context):
     ctx.deps_to_resolve = []
     ctx.deps_resolve = True
 
-    ctx.environment(resolve_dependencies=True)
+    # This is the command that fills the cache, so it is the one allowed to
+    # reach a remote. Every other command reads what this one put there.
+    with network.allowed():
+        ctx.environment(resolve_dependencies=True)
 
-    # Disable targets as there is no task generator associated with this command for the moment
-    ctx.context.targets = None
+        # Disable targets as there is no task generator associated with this command for the moment
+        ctx.context.targets = None
 
-    ctx.resolve_recursively()
+        ctx.resolve_recursively()
 
 
 def package(context):

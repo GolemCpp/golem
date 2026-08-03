@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
+import pytest
+
 from golemcpp.golem import helpers
+from golemcpp.golem import network
 from golemcpp.golem.helpers import get_environ
 
 
@@ -37,3 +40,44 @@ def test_remove_tree_handles_windows_style_paths_with_spaces_and_non_ascii(tmp_p
     helpers.remove_tree(str(directory))
 
     assert not directory.exists()
+
+
+@pytest.mark.parametrize('params', [
+    ['clone', '--', 'https://example.test/repo.git', '.'],
+    ['fetch', 'origin'],
+    ['fetch', '--depth=1', 'origin', 'abcdef'],
+    ['pull'],
+    ['push', 'origin', 'main'],
+    ['ls-remote', '--tags', 'https://example.test/repo.git'],
+    ['submodule', 'update', '--init', '--recursive'],
+])
+def test_is_network_git_command_recognizes_what_reaches_a_remote(params):
+    assert helpers.is_network_git_command(['git'] + params) is True
+
+
+@pytest.mark.parametrize('params', [
+    ['init'],
+    ['remote', 'add', 'origin', 'https://example.test/repo.git'],
+    ['checkout', 'v1.0.0'],
+    ['reset', '--hard'],
+    ['clean', '-ffxd'],
+    ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
+    ['describe', '--long', '--tags'],
+    ['config', '--get', 'remote.origin.url'],
+])
+def test_is_network_git_command_leaves_local_commands_alone(params):
+    assert helpers.is_network_git_command(['git'] + params) is False
+
+
+def test_validate_git_command_refuses_a_remote_outside_a_network_scope(tmp_path):
+    with pytest.raises(RuntimeError, match='Run golem resolve first'):
+        helpers.validate_git_command(
+            ['git', 'ls-remote', '--tags', 'https://example.test/repo.git'],
+            cwd=str(tmp_path))
+
+
+def test_validate_git_command_allows_a_remote_inside_a_network_scope(tmp_path):
+    with network.allowed():
+        helpers.validate_git_command(
+            ['git', 'ls-remote', '--tags', 'https://example.test/repo.git'],
+            cwd=str(tmp_path))

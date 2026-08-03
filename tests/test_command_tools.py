@@ -5,6 +5,7 @@ from golemcpp.golem import settings
 from golemcpp.golem import helpers
 from golemcpp.golem import command_tools
 from golemcpp.golem import cppfront_tool
+from golemcpp.golem import network
 from golemcpp.golem import tool_manager
 from golemcpp.golem.cache_manager import CachedResource
 
@@ -106,6 +107,31 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
     stdout = capsys.readouterr().out
     assert 'Installed cppfront {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in stdout
     assert 'Selected cache location: {}'.format(captured['location']) in stdout
+
+
+def test_installing_a_tool_may_reach_a_remote(monkeypatch, tmp_path):
+    # Fetching a tool is what this command is for, so it opens the scope that
+    # every other command leaves closed.
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+
+    captured = {}
+
+    def fake_make_available(self, tool, fetch=True, refresh=True):
+        captured['network_allowed'] = network.is_allowed()
+        tool.resolved_version = cppfront_tool.DEFAULT_CPPFRONT_VERSION
+        return make_cached_tool(
+            path='/tmp/golem-tools-cache/cppfront',
+            cache_root=self.locations[0].location)
+
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'make_available', fake_make_available)
+
+    assert command_tools.handle_tools_command(
+        project_dir=str(project_dir), args=['install', 'cppfront']) == 0
+
+    assert captured['network_allowed'] is True
+    assert network.is_allowed() is False
 
 
 def test_handle_tools_command_accepts_explicit_version(monkeypatch, tmp_path):

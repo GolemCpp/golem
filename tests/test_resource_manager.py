@@ -484,3 +484,25 @@ def test_make_available_all_hands_back_a_resource_per_item_in_order(tmp_path, gi
     assert [cached.path for cached in cached_resources] == \
         [manager.resolve_cached_resource(item).path for item in items]
     assert git_calls == []
+
+
+# -- fetching is a resolve step ---------------------------------------------
+# These run the real helpers.run_git, so they see the rule the way a command
+# does. Nothing is spawned: the refusal comes before git is called.
+
+
+def test_fetching_a_resource_outside_a_network_scope_is_refused(tmp_path):
+    manager = make_manager(tmp_path)
+
+    with pytest.raises(RuntimeError, match='Run golem resolve first'):
+        manager.install(make_cookbook())
+
+
+def test_the_staging_directory_is_removed_when_the_fetch_is_refused(tmp_path):
+    manager = make_manager(tmp_path)
+    cached = manager.resolve_cached_resource(make_cookbook())
+
+    with pytest.raises(RuntimeError):
+        manager.install(make_cookbook())
+
+    assert not os.path.exists(cached.staging_path)

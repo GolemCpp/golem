@@ -5,6 +5,7 @@ from dataclasses import field
 
 from golemcpp.golem.cache_configuration import get_cache_configuration
 from golemcpp.golem import helpers
+from golemcpp.golem import network
 from golemcpp.golem import settings
 from golemcpp.golem import tool_manager
 
@@ -104,7 +105,10 @@ class ToolsCommandHandler:
         try:
             tool = tool_manager.ToolManager.get_tool(
                 self.options.tool, version=self.options.version)
-            cached_tool = manager.make_available(tool)
+            # Installing a tool is what this command is for, so it may reach the
+            # remote, both to resolve the version and to fetch the source.
+            with network.allowed():
+                cached_tool = manager.make_available(tool)
         except ValueError as error:
             print('ERROR: {}'.format(error))
             self.print_help()
