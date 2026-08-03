@@ -239,8 +239,7 @@ def make_read_only_manager(tmp_path):
 def install_on_disk(manager, cached_resource):
     '''A resource already in a cache: its fetched source, and the manifest naming it.'''
     os.makedirs(manager.source_path(cached_resource.path), exist_ok=True)
-    manager.cache_manager.write_manifest(
-        cached_resource.path, cached_resource.resource)
+    manager.cache_manager.write_manifest(cached_resource)
     return cached_resource
 
 
@@ -359,7 +358,9 @@ def test_install_can_leave_an_existing_resource_alone(tmp_path, git_calls, monke
     cookbook = make_cookbook()
     cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
     touched = []
-    monkeypatch.setattr(resource_manifest, 'touch_last_used', touched.append)
+    monkeypatch.setattr(
+        resource_manifest.ResourceManifest, 'touch',
+        staticmethod(touched.append))
 
     manager.install(cookbook, refresh=False)
 

@@ -95,7 +95,7 @@ class ToolManager(ResourceManager):
             resource = self.resource_for(Tool(definition=definition))
             for cache_dir in self.cache_manager.locations:
                 source = self.cache_manager.read_manifest_source(
-                    self.cache_manager.get_resource_location(cache_dir, resource))
+                    self.cache_manager.make_cached_resource(cache_dir, resource))
                 if source is None:
                     continue
                 installed_tools.append(InstalledToolInfo(

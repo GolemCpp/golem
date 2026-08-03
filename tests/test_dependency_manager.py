@@ -59,11 +59,11 @@ def test_resolve_and_write(tmp_path):
     manager = make_manager(tmp_path)
     dep = make_resolved_dependency()
 
-    root = manager.resolve_cached_resource(dep).path
-    os.makedirs(root)
-    manager.cache_manager.write_manifest(root, manager.resource_for(dep))
+    cached = manager.resolve_cached_resource(dep)
+    os.makedirs(cached.path)
+    manager.cache_manager.write_manifest(cached)
 
-    source = manager.cache_manager.read_manifest_source(root)
+    source = manager.cache_manager.read_manifest_source(cached)
     assert source.location == 'https://example.com/json.git'
 
 
@@ -77,13 +77,13 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(source_dir, 'CMakeLists.txt'), 'w') as fileout:
             fileout.write('project(json)')
 
-    resource_root = manager.guard_install(
-        manager.resolve_cached_resource(dep), populate)
+    cached = manager.resolve_cached_resource(dep)
+    resource_root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(
         os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))
-    assert not os.path.exists(resource_root + '.tmp')
-    source = manager.cache_manager.read_manifest_source(resource_root)
+    assert not os.path.exists(cached.staging_path)
+    source = manager.cache_manager.read_manifest_source(cached)
     assert source.location == 'https://example.com/json.git'
 
 

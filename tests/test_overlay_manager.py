@@ -62,15 +62,15 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(source_dir, 'overrides.json'), 'w') as fileout:
             fileout.write('[]')
 
-    resource_root = manager.guard_install(
-        manager.resolve_cached_resource(Overlay(source=source)), populate)
+    cached = manager.resolve_cached_resource(Overlay(source=source))
+    resource_root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(
         os.path.join(manager.source_path(resource_root), 'overrides.json'))
-    assert not os.path.exists(resource_root + '.tmp')
+    assert not os.path.exists(cached.staging_path)
     manifest = ResourceManifest.read_from_root(resource_root)
     assert manifest.kind == ResourceKind.OVERLAY.value
-    assert manager.cache_manager.read_manifest_source(resource_root).reference == 'main'
+    assert manager.cache_manager.read_manifest_source(cached).reference == 'main'
 
 
 # -- what an overlay carries ------------------------------------------------

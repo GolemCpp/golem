@@ -164,6 +164,3 @@ def write_manifest(resource_root: str, kind, cache_key: str, source: dict) -> No
         pass
 
 
-def touch_last_used(resource_root: str) -> None:
-    '''Module-level wrapper over ResourceManifest.touch for existing callers.'''
-    ResourceManifest.touch(resource_root)
