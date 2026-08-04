@@ -26,8 +26,6 @@ class DependencyManager(ResourceManager):
             shallow=dep.shallow,
             checkout=dep.resolved_version,
             reference=dep.resolved_hash,
-            submodules=True,
-            clean=True,
             fetch_remote=False)
 
     @staticmethod

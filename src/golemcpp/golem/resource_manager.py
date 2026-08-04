@@ -8,11 +8,9 @@ read/write its manifest, install/remove it. That shared plumbing lives once in
 into a `Resource` (via `resource_for`) and delegates every cache access to the
 CacheManager it holds.
 
-Fetching a source into the cache is shared the same way. The mechanism here is
-the richest one any kind needs — shallow clones, submodules, cleaning,
-checkout-then-reset — and a kind asks for what it wants through the FetchPolicy
-it builds. A kind that wants more of it later turns a field on rather than
-writing its own git.
+Fetching a source into the cache is shared the same way. Whatever a resource
+holds, it is fetched whole and kept faithful to the reference it names. Use
+FetchPolicy to customize the behavior.
 
 Installing is a lifecycle rather than a single step: `install` brackets the fetch
 with `pre_install`, `pre_install_refresh` and `post_install`, which is how a kind
@@ -50,13 +48,39 @@ class FetchPolicy:
     # What to reset to. Empty resets to the current HEAD, which is what a
     # resource pinned to a commit wants.
     reference: str = ''
-    # Fetch and reset the submodules along with the resource itself.
-    submodules: bool = False
-    # Discard local changes before refreshing an already-cached resource.
-    clean: bool = False
     # Whether refreshing consults the remote. A pinned resource cannot move, so
     # it has nothing to fetch.
     fetch_remote: bool = True
+
+
+@dataclass(frozen=True)
+class FetchResult:
+    '''
+    What a fetch left behind, for the manifest to keep. The source says what was
+    asked for — a branch as often as a commit — and this says what that turned
+    out to be.
+
+    Serialized like a Source is: the manifest holds the dict, this holds what it
+    means.
+    '''
+
+    # The commit the fetch landed on. Empty when there was no git involved, as a
+    # copied directory has no commit to name.
+    head: str = ''
+
+    def to_dict(self) -> dict:
+        return {'head': self.head}
+
+    @classmethod
+    def from_dict(cls, data) -> 'FetchResult':
+        if not data:
+            return cls()
+        return cls(head=data.get('head', ''))
+
+    @classmethod
+    def from_manifest(cls, manifest) -> 'FetchResult':
+        '''What a cached resource's manifest says its root was left holding.'''
+        return cls.from_dict(manifest.fetched if manifest else None)
 
 
 class ResourceManager:
@@ -230,11 +254,11 @@ class ResourceManager:
         if source.type == SOURCE_TYPE_DIRECTORY:
             print("Copying directory {} into {}".format(source.location, path))
             self.copy_directory(source.location, local_path, path)
-            return
+            return FetchResult()
 
         print("Cloning repository {} into {}".format(source.location, path))
         os.makedirs(path, exist_ok=True)
-        self.clone_source(path, source, self.policy_for(item))
+        return self.clone_source(path, source, self.policy_for(item))
 
     def refresh_source(self, path, item):
         '''Bring an already-fetched source up to date in place, without re-cloning.'''
@@ -244,54 +268,128 @@ class ResourceManager:
         if source.type == SOURCE_TYPE_DIRECTORY:
             print("Copying directory {} into {}".format(source.location, path))
             self.copy_directory(source.location, local_path, path)
-            return
+            return FetchResult()
 
-        self.update_source(path, source, self.policy_for(item))
+        return self.update_source(path, source, self.policy_for(item))
 
     # -- the mechanism itself ----------------------------------------------
 
     @staticmethod
     def clone_source(path, source, policy):
-        '''A source obtained fresh from its remote, as much of it as asked for.'''
+        '''A source obtained fresh from its remote, as much of it as asked for.
+
+        Everything that only moves the working tree is quiet. What reaches the
+        remote keeps reporting its progress.
+        '''
         if policy.shallow:
-            helpers.run_git(['init'], cwd=path)
-            helpers.run_git(['remote', 'add', 'origin', source.location], cwd=path)
+            helpers.run_git(['init'], cwd=path, quiet=True)
+            helpers.run_git(['remote', 'add', 'origin', source.location], cwd=path, quiet=True)
             helpers.run_git(['fetch', '--depth=1', 'origin', policy.reference], cwd=path)
-            helpers.run_git(['reset', '--hard', 'FETCH_HEAD'], cwd=path)
+            helpers.run_git(['reset', '--hard', 'FETCH_HEAD'], cwd=path, quiet=True)
         else:
             helpers.run_git(['clone', '--', source.location, '.'], cwd=path)
             if policy.checkout:
-                helpers.run_git(['checkout', policy.checkout], cwd=path)
-            helpers.run_git(['reset', '--hard'] + ([policy.reference] if policy.reference else []),
-                            cwd=path)
+                helpers.run_git(['checkout', policy.checkout], cwd=path, quiet=True)
+            ResourceManager.ensure_reference(path, source, policy)
+            helpers.run_git(['reset', '--hard'] + ([policy.reference] if policy.reference else []), cwd=path, quiet=True)
 
-        if policy.submodules:
-            helpers.run_git(
-                ['submodule', 'update', '--init', '--recursive', '--depth=1'], cwd=path)
+        if ResourceManager.has_submodules(path):
+            # Only a shallow resource takes shallow submodules: at a depth of one, a
+            # submodule whose recorded commit is not a tip the remote advertises
+            # cannot be fetched at all.
+            submodule_update = ['submodule', 'update', '--init', '--recursive']
+            if policy.shallow:
+                submodule_update.append('--depth=1')
+            helpers.run_git(submodule_update, cwd=path)
+
+        return FetchResult(head=ResourceManager.read_head(path))
 
     @staticmethod
     def update_source(path, source, policy):
-        '''An already-cloned source brought back to what it should be.'''
-        if policy.clean:
-            helpers.run_git(['clean', '-ffxd'], cwd=path, stdout=subprocess.DEVNULL)
-            if policy.submodules:
-                helpers.run_git(
-                    ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
-                    cwd=path, stdout=subprocess.DEVNULL)
+        '''An already-cloned source brought back to what it should be.
+
+        Cleaning comes first: a reset alone leaves behind what the previous
+        reference put there, and a cached resource is only worth reading when it
+        holds the reference it names and nothing else.
+        '''
+        helpers.run_git(['clean', '-ffxd'], cwd=path, quiet=True)
+        if ResourceManager.has_submodules(path):
+            helpers.run_git(['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'], cwd=path, quiet=True)
 
         if policy.fetch_remote:
-            helpers.run_git(['fetch', 'origin'], cwd=path)
+            # Pruning both ways: a branch deleted upstream stops being tracked, and a
+            # tag that moved is honoured rather than kept at what it used to point to.
+            helpers.run_git(['fetch', '--prune', '--prune-tags', '--tags', 'origin'], cwd=path)
 
-        helpers.run_git(['reset', '--hard'] + ([policy.reference] if policy.reference else []),
-                        cwd=path, stdout=subprocess.DEVNULL if policy.clean else None)
+        ResourceManager.ensure_reference(path, source, policy)
+        helpers.run_git(['reset', '--hard'] + ([policy.reference] if policy.reference else []), cwd=path, quiet=True)
 
-        if policy.submodules:
-            helpers.run_git(
-                ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
-                cwd=path, stdout=subprocess.DEVNULL if policy.clean else None)
-            helpers.run_git(
-                ['submodule', 'update', '--init', '--recursive'],
-                cwd=path, stdout=subprocess.DEVNULL if policy.clean else None)
+        if ResourceManager.has_submodules(path):
+            helpers.run_git(['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'], cwd=path, quiet=True)
+
+            # After the reset, so .gitmodules is the one the reference names, and
+            # before the update, which otherwise keeps fetching from the URL recorded
+            # at clone time however the resource respelled it since.
+            helpers.run_git(['submodule', 'sync', '--recursive'], cwd=path, quiet=True)
+
+            submodule_update = ['submodule', 'update', '--init', '--recursive']
+            if not policy.fetch_remote:
+                submodule_update.append('--no-fetch')
+            helpers.run_git(submodule_update, cwd=path)
+
+        return FetchResult(head=ResourceManager.read_head(path))
+
+    @staticmethod
+    def ensure_reference(path, source, policy):
+        '''
+        The reference has to name something the repository holds before anything
+        resets to it.
+        '''
+        if not policy.reference or ResourceManager.holds_reference(path, policy.reference):
+            return
+
+        missing = RuntimeError(
+            'Cannot find "{}" in "{}", and {} does not offer it. '
+            'Run golem resolve first.'.format(policy.reference, path, source.location))
+
+        try:
+            helpers.run_git(['fetch', 'origin', policy.reference], cwd=path)
+        except RuntimeError as error:
+            # A reference the remote no longer has: a branch pruned away, a tag
+            # deleted, a commit never pushed.
+            # 
+            # What git says about a refspec it could not find says nothing about
+            # which resource asked for it.
+            raise missing from error
+
+        if not ResourceManager.holds_reference(path, policy.reference):
+            raise missing
+
+    @staticmethod
+    def has_submodules(path) -> bool:
+        '''
+        Whether the revision in place declares any submodule.
+        '''
+        return os.path.isfile(os.path.join(path, '.gitmodules'))
+
+    @staticmethod
+    def holds_reference(path, reference) -> bool:
+        '''Whether the repository already holds the commit a reference names.'''
+        return helpers.call_git(
+            ['rev-parse', '--verify', '--quiet', '{}^{{commit}}'.format(reference)],
+            cwd=path, stdout=subprocess.DEVNULL) == 0
+
+    @staticmethod
+    def read_head(path) -> str:
+        '''
+        The commit the working tree is on, for the manifest to record. Best-effort:
+        what the root holds is worth knowing, never worth failing a fetch over.
+        '''
+        try:
+            return helpers.check_git_output(
+                ['rev-parse', 'HEAD'], cwd=path, stderr=subprocess.DEVNULL).strip()
+        except Exception:
+            return ''
 
     @staticmethod
     def copy_directory(location, local_path, path):
