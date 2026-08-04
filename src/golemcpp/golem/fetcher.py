@@ -37,6 +37,17 @@ class Fetcher:
         '''
         raise NotImplementedError
 
+    def migrate(self, recorded) -> bool:
+        '''
+        Whether a directory holding what `recorded` describes can be brought to
+        what the policy now asks for, converting it in place if that takes
+        anything. False means it has to be obtained again from scratch.
+
+        Nothing to do by default: a way of obtaining a source that has only one
+        way of doing it can never be holding the wrong one.
+        '''
+        return True
+
     @property
     def local_path(self):
         '''

@@ -3,6 +3,7 @@ import pytest
 from golemcpp.golem.cache_configuration import CacheConfiguration
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
+from golemcpp.golem.fetch_policy import FetchMode
 
 
 def _arguments(**overrides):
@@ -10,7 +11,8 @@ def _arguments(**overrides):
         locations=[CacheDirectory(location='/opt/cache')],
         resolution_policy=CacheResolutionPolicy.STRICT,
         minimization_enabled=True,
-        minimization_length=8)
+        minimization_length=8,
+        fetch_mode=FetchMode.BLOBLESS)
     arguments.update(overrides)
     return arguments
 

@@ -4,6 +4,7 @@ import os
 from golemcpp.golem import cache_directory
 from golemcpp.golem import cache_resolution_policy
 from golemcpp.golem import config_store
+from golemcpp.golem import fetch_policy
 from golemcpp.golem import helpers
 from golemcpp.golem import source
 from golemcpp.golem.setting_descriptor import format_option_flag
@@ -87,6 +88,20 @@ SETTINGS = (
         value_type=SettingType.INT,
         default=8,
         deserialize=require_positive,
+    ),
+    SettingDescriptor(
+        key='git.fetch-mode',
+        env_name='GOLEM_GIT_FETCH_MODE',
+        option_name='git_fetch_mode',
+        description='How much of a resource to obtain when fetching it: blobless (every '
+                    'commit and tag, file content on demand), full (everything, the only '
+                    'mode whose cache keeps working with no access to the remotes) or '
+                    'shallow (the requested commit alone, for a repository too heavy to '
+                    'clone whole). Defaults to blobless, or to full when git is too old '
+                    'to be trusted with a partial clone.',
+        default=fetch_policy.default_fetch_mode,
+        deserialize=fetch_policy.parse_fetch_mode,
+        serialize=fetch_policy.format_fetch_mode,
     ),
     SettingDescriptor(
         key='cookbooks.locations',

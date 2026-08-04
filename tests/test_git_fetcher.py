@@ -1,7 +1,9 @@
 import pytest
 
 from golemcpp.golem import helpers
+from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.fetch_policy import FetchPolicy
+from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.git_fetcher import GitFetcher
 from golemcpp.golem.source import Source
 from conftest import stub_git_probes
@@ -52,9 +54,9 @@ def test_the_default_policy_clones_and_tracks_the_branch(git_calls, make_fetcher
     make_fetcher().populate()
 
     assert git_calls == [
-        ['clone', '--', 'https://host/r.git', '.'],
+        ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
         ['reset', '--hard', 'origin/main'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
 
 
@@ -68,7 +70,7 @@ def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls, make_fet
         ['reset', '--hard', 'origin/main'],
         ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
         ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
 
 
@@ -76,16 +78,16 @@ def test_a_checkout_lands_between_the_clone_and_the_reset(git_calls, make_fetche
     make_fetcher(FetchPolicy(checkout='v3.12.0', reference='cafebabe')).populate()
 
     assert git_calls == [
-        ['clone', '--', 'https://host/r.git', '.'],
+        ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
         ['checkout', 'v3.12.0'],
         ['reset', '--hard', 'cafebabe'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
 
 
 def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls, make_fetcher):
     make_fetcher(
-        FetchPolicy(shallow=True, checkout='v3.12.0', reference='cafebabe')).populate()
+        FetchPolicy(fetch_mode=FetchMode.SHALLOW, checkout='v3.12.0', reference='cafebabe')).populate()
 
     assert git_calls == [
         ['init'],
@@ -109,7 +111,7 @@ def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls, make
         ['reset', '--hard'],
         ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
         ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive', '--no-fetch'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none', '--no-fetch'],
     ]
     assert not any(helpers.is_network_git_command(['git'] + args) for args in git_calls)
 
@@ -176,19 +178,97 @@ def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls, make_fetcher
     make_fetcher().refresh()
 
     assert [args for args, quiet in quiet_calls if not quiet] == [
-        ['clone', '--', 'https://host/r.git', '.'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
         ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
     assert all(helpers.is_network_git_command(['git'] + args)
                for args, quiet in quiet_calls if not quiet)
 
 
 def test_a_shallow_clone_only_speaks_while_it_fetches(quiet_calls, make_fetcher):
-    make_fetcher(FetchPolicy(shallow=True, reference='cafebabe')).populate()
+    make_fetcher(FetchPolicy(fetch_mode=FetchMode.SHALLOW, reference='cafebabe')).populate()
 
     assert [args for args, quiet in quiet_calls if not quiet] == [
         ['fetch', '--depth=1', 'origin', 'cafebabe'],
         ['submodule', 'update', '--init', '--recursive', '--depth=1'],
     ]
+
+
+# -- changing what a root already holds -------------------------------------
+
+
+def migrating(make_fetcher, git_calls, recorded, target):
+    fetcher = make_fetcher(FetchPolicy(fetch_mode=target, reference='origin/main'))
+    return fetcher.migrate(Fetched(head=STUB_HEAD, mode=recorded)), git_calls
+
+
+def test_a_root_already_in_the_asked_mode_is_left_alone(git_calls, make_fetcher):
+    migrated, calls = migrating(make_fetcher, git_calls, FetchMode.BLOBLESS, FetchMode.BLOBLESS)
+
+    assert migrated is True
+    assert calls == []
+
+
+def test_a_full_root_becomes_blobless_without_transferring_anything(git_calls, make_fetcher):
+    # The objects are already here. This only says that later fetches may leave
+    # file content behind.
+    migrated, calls = migrating(make_fetcher, git_calls, FetchMode.FULL, FetchMode.BLOBLESS)
+
+    assert migrated is True
+    assert calls == [
+        ['config', 'remote.origin.promisor', 'true'],
+        ['config', 'remote.origin.partialclonefilter', 'blob:none'],
+    ]
+    assert not any(helpers.is_network_git_command(['git'] + args) for args in calls)
+
+
+def test_a_blobless_root_becomes_full_by_asking_for_what_it_left_out(git_calls, make_fetcher):
+    migrated, calls = migrating(make_fetcher, git_calls, FetchMode.BLOBLESS, FetchMode.FULL)
+
+    assert migrated is True
+    assert calls == [['fetch', '--refetch', 'origin']]
+
+
+def test_a_shallow_root_is_deepened_before_anything_else(git_calls, make_fetcher):
+    migrated, calls = migrating(make_fetcher, git_calls, FetchMode.SHALLOW, FetchMode.BLOBLESS)
+
+    assert migrated is True
+    assert calls[0] == ['fetch', '--unshallow', 'origin']
+
+
+def test_becoming_shallow_is_not_worth_converting_in_place(git_calls, make_fetcher):
+    # Truncating a history in place is subtle, and whoever asked for shallow wants
+    # the cheap thing anyway: obtaining it again is both.
+    migrated, calls = migrating(make_fetcher, git_calls, FetchMode.FULL, FetchMode.SHALLOW)
+
+    assert migrated is False
+    assert calls == []
+
+
+def test_a_root_that_recorded_nothing_is_recognised_rather_than_re_cloned(
+        monkeypatch, git_calls, make_fetcher):
+    # Every cache populated before golem recorded a mode says nothing. Upgrading
+    # must not re-clone all of them.
+    monkeypatch.setattr(GitFetcher, 'detected_mode', lambda self: FetchMode.FULL)
+
+    fetcher = make_fetcher(FetchPolicy(fetch_mode=FetchMode.FULL, reference='origin/main'))
+
+    assert fetcher.migrate(Fetched(head=STUB_HEAD)) is True
+    assert git_calls == []
+
+
+def test_what_a_root_looks_like_when_its_manifest_does_not_say(monkeypatch, make_fetcher):
+    fetcher = make_fetcher()
+    answers = {}
+    monkeypatch.setattr(
+        GitFetcher, 'reads_true', lambda self, args: answers.get(tuple(args), False))
+
+    assert fetcher.detected_mode() == FetchMode.FULL
+
+    answers[('config', '--get', 'remote.origin.promisor')] = True
+    assert fetcher.detected_mode() == FetchMode.BLOBLESS
+
+    answers[('rev-parse', '--is-shallow-repository')] = True
+    assert fetcher.detected_mode() == FetchMode.SHALLOW

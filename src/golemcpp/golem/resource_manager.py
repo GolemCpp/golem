@@ -78,13 +78,23 @@ class ResourceManager:
         '''Where a resource keeps its fetched content under its root.'''
         return cache_configuration.source_path(root)
 
-    @classmethod
-    def policy_for(cls, item):
+    @property
+    def fetch_mode(self):
+        '''
+        How much of a source to obtain. Configured once for every kind: each has
+        to be refreshable in place, and some follow a branch, so none of them is
+        in a position to want something different.
+        '''
+        return self.cache_manager.cache_configuration.fetch_mode
+
+    def policy_for(self, item):
         '''
         How to fetch this item. Tracks a branch on the remote, which is what a
         resource that is not pinned to a commit wants.
         '''
-        return FetchPolicy(reference='origin/' + cls.source_for(item).reference)
+        return FetchPolicy(
+            fetch_mode=self.fetch_mode,
+            reference='origin/' + self.source_for(item).reference)
 
     @staticmethod
     def pre_install(item):
@@ -147,6 +157,11 @@ class ResourceManager:
                 'cannot install {} into read-only cache location {}'.format(
                     cached_resource.cache_key, cached_resource.cache_root))
 
+        if installed and not self.migrate(cached_resource, item):
+            # What the root holds is not what is asked for any more, and cannot be
+            # turned into it. Obtaining it again always can.
+            installed = False
+
         if installed:
             self.pre_install_refresh(cached_resource.path, item)
             self.guard_refresh(
@@ -196,6 +211,23 @@ class ResourceManager:
         business.
         '''
         return fetcher.fetcher_for(path, self.source_for(item), self.policy_for(item))
+
+    def migrate(self, cached_resource, item) -> bool:
+        '''
+        Whether the root can keep being refreshed, given what the manifest says it
+        was fetched as and what is asked for now.
+        
+        A conversion that fails leaves a root nobody has read yet, so the answer
+        is simply no and the caller obtains it again.
+        '''
+        recorded = self.cache_manager.read_manifest_fetched(cached_resource)
+        try:
+            return self.fetcher_for(
+                self.source_path(cached_resource.path), item).migrate(recorded)
+        except RuntimeError as error:
+            print("Cannot migrate {}, fetching it again: {}".format(
+                cached_resource.path, error))
+            return False
 
     def populate(self, path, item):
         '''Materialize a source freshly into `path`, writing no manifest.'''

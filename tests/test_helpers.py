@@ -101,14 +101,14 @@ def test_run_git_drops_stdout_when_asked_to_be_quiet(tmp_path, git_task):
 def test_run_git_leaves_a_command_speaking_by_default(tmp_path, git_task):
     helpers.run_git(['reset', '--hard'], cwd=make_git_repository(tmp_path))
 
-    assert git_task == {}
+    assert 'stdout' not in git_task
 
 
 def test_run_git_keeps_the_stdout_a_caller_asked_for(tmp_path, git_task):
     helpers.run_git(['reset', '--hard'], cwd=make_git_repository(tmp_path),
                     quiet=True, stdout=None)
 
-    assert git_task == {'stdout': None}
+    assert git_task['stdout'] is None
 
 
 def test_validate_git_command_refuses_a_remote_outside_a_network_scope(tmp_path):

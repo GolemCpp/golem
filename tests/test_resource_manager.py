@@ -8,6 +8,7 @@ from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
+from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.directory_fetcher import DirectoryFetcher
 from golemcpp.golem.git_fetcher import GitFetcher
@@ -27,6 +28,12 @@ def git_calls(monkeypatch):
         lambda args, cwd=None, quiet=False: calls.append(args))
     stub_git_probes(monkeypatch)
     return calls
+
+
+def make_resource_manager(tmp_path):
+    '''The base manager over a real cache, since it reads the configured mode.'''
+    return ResourceManager(get_cache_manager(make_cache_configuration(
+        cache_directory.CacheDirectory(location=str(tmp_path / 'cache')))))
 
 
 def make_manager(tmp_path):
@@ -63,8 +70,8 @@ def test_every_kind_keeps_its_content_under_source():
 # -- the kind decides what to fetch; a fetcher decides how ------------------
 
 
-def test_a_repository_source_is_handed_to_a_git_fetcher():
-    manager = ResourceManager(cache_manager=None)
+def test_a_repository_source_is_handed_to_a_git_fetcher(tmp_path):
+    manager = make_resource_manager(tmp_path)
 
     assert isinstance(
         manager.fetcher_for('/cache/r', Source.for_repository('https://host/r.git')),
@@ -72,15 +79,15 @@ def test_a_repository_source_is_handed_to_a_git_fetcher():
 
 
 def test_a_directory_source_is_handed_to_a_directory_fetcher(tmp_path):
-    manager = ResourceManager(cache_manager=None)
+    manager = make_resource_manager(tmp_path)
 
     assert isinstance(
         manager.fetcher_for('/cache/r', Source.for_directory(tmp_path.resolve().as_uri())),
         DirectoryFetcher)
 
 
-def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy():
-    manager = ResourceManager(cache_manager=None)
+def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy(tmp_path):
+    manager = make_resource_manager(tmp_path)
     source = Source.for_repository('https://host/r.git', reference='main')
 
     fetcher = manager.fetcher_for('/cache/r', source)
@@ -90,9 +97,9 @@ def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy():
     assert fetcher.policy == manager.policy_for(source)
 
 
-def test_populate_and_refresh_hand_back_what_the_fetch_left(monkeypatch, tmp_path):
+def test_populate_and_refresh_hand_back_what_the_fetch_left(tmp_path, monkeypatch):
     # The manager keeps no opinion about the fetch beyond passing its result on.
-    manager = ResourceManager(cache_manager=None)
+    manager = make_resource_manager(tmp_path)
     source = Source.for_repository('https://host/r.git', reference='main')
     monkeypatch.setattr(GitFetcher, 'populate', lambda self: Fetched(head='c10ned'))
     monkeypatch.setattr(GitFetcher, 'refresh', lambda self: Fetched(head='refre5hed'))
@@ -126,10 +133,11 @@ def make_read_only_manager(tmp_path):
         minimization_enabled=False))
 
 
-def install_on_disk(manager, cached_resource):
+def install_on_disk(manager, cached_resource, mode=FetchMode.BLOBLESS):
     '''A resource already in a cache: its fetched source, and the manifest naming it.'''
     os.makedirs(manager.source_path(cached_resource.path), exist_ok=True)
-    manager.cache_manager.write_manifest(cached_resource)
+    manager.cache_manager.write_manifest(
+        cached_resource, fetched=Fetched(head=STUB_HEAD, mode=mode))
     return cached_resource
 
 
@@ -238,7 +246,7 @@ def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch
     manifest = resource_manifest.ResourceManifest.read_from_root(installed.path)
     assert manifest is not None
     # The manifest names what the fetch landed on, not just what was asked for.
-    assert Fetched.from_manifest(manifest) == Fetched(head=STUB_HEAD)
+    assert Fetched.from_manifest(manifest) == Fetched(head=STUB_HEAD, mode=FetchMode.BLOBLESS)
 
 
 def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
@@ -249,7 +257,7 @@ def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
     manager = make_manager(tmp_path)
     cookbook = make_cookbook()
     cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
-    manager.cache_manager.write_manifest(cached, fetched=Fetched(head='0ldc0mmit'))
+    manager.cache_manager.write_manifest(cached, fetched=Fetched(head='0ldc0mmit', mode=FetchMode.BLOBLESS))
     monkeypatch.setattr(
         helpers, 'check_git_output', lambda args, cwd=None, **kwargs: 'newc0mmit\n')
 
@@ -257,7 +265,7 @@ def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
 
     assert Fetched.from_manifest(
         resource_manifest.ResourceManifest.read_from_root(cached.path)) == \
-        Fetched(head='newc0mmit')
+        Fetched(head='newc0mmit', mode=FetchMode.BLOBLESS)
 
 
 def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):
@@ -275,7 +283,7 @@ def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):
         ['reset', '--hard', 'origin/main'],
         ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
         ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
 
 
@@ -304,9 +312,9 @@ def test_install_clones_a_resource_that_is_not_there(tmp_path, git_calls):
     installed = manager.install(cookbook)
 
     assert manager.is_installed(installed)
-    assert git_calls == [['clone', '--', 'https://host/r.git', '.'],
+    assert git_calls == [['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
                          ['reset', '--hard', 'origin/main'],
-                         ['submodule', 'update', '--init', '--recursive']]
+                         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none']]
 
 
 def test_install_reuses_a_cached_resource_the_caller_already_resolved(tmp_path, git_calls):
@@ -364,9 +372,9 @@ def test_make_available_installs_into_a_writable_cache(tmp_path, git_calls):
 
     assert manager.is_installed(available)
     assert available.is_read_only is False
-    assert git_calls == [['clone', '--', 'https://host/r.git', '.'],
+    assert git_calls == [['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
                          ['reset', '--hard', 'origin/main'],
-                         ['submodule', 'update', '--init', '--recursive']]
+                         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none']]
 
 
 def test_make_available_keeps_a_read_only_resource_as_it_stands(tmp_path, git_calls):

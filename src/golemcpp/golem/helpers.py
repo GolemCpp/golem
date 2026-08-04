@@ -1,5 +1,6 @@
 import locale
 import os
+import re
 import sys
 import types
 import shutil
@@ -202,6 +203,32 @@ def does_git_command_need_nothing(args):
         return True
     return False
 
+_git_version = None
+
+
+def git_version():
+    '''
+    The client git's version, as a tuple to compare against. Asked once per
+    process: it cannot change under us, and every caller asking is a subprocess
+    spawned to learn the same thing.
+
+    An unreadable version reads as (0, 0), so whatever it gates falls back to
+    whatever the oldest git would get.
+    '''
+    global _git_version
+    if _git_version is not None:
+        return _git_version
+
+    try:
+        output = subprocess.check_output(['git', 'version'])
+        numbers = re.search(r'(\d+)\.(\d+)(?:\.(\d+))?', decode_output(output))
+        _git_version = tuple(int(part) for part in numbers.groups(default='0'))
+    except Exception:
+        _git_version = (0, 0, 0)
+
+    return _git_version
+
+
 def is_network_git_command(args):
     '''
     Git commands that reach the remote. `submodule update` clones a submodule
@@ -235,6 +262,24 @@ def validate_git_command(args, cwd):
             raise RuntimeError(
                 "Not a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
 
+def git_environment():
+    '''
+    The environment a git command runs in.
+
+    1. Ensuring the no git command issues network calls outside those authorised to:
+
+    A partial clone (blobless mode) completes itself as it goes: any command can
+    reach the remote for an object it is missing, and no command name says so.
+    
+    Outside a resolve, GIT_NO_LAZY_FETCH makes git fail there instead of quietly
+    phoning home, which is what keeps is_network_git_command's verdict true of
+    what actually happens.
+    '''
+    if network.is_allowed():
+        return None
+    return dict(os.environ, GIT_NO_LAZY_FETCH='1')
+
+
 def run_git(params, cwd, quiet=False, **kwargs):
     '''
     `quiet` drops what the command has to say on stdout.
@@ -245,6 +290,7 @@ def run_git(params, cwd, quiet=False, **kwargs):
 
     if quiet:
         kwargs.setdefault('stdout', subprocess.DEVNULL)
+    kwargs.setdefault('env', git_environment())
 
     run_task(args=args, cwd=cwd, **kwargs)
 
@@ -252,6 +298,7 @@ def check_git_output(params, cwd, **kwargs):
     args = ['git'] + params
 
     validate_git_command(args=args, cwd=cwd)
+    kwargs.setdefault('env', git_environment())
 
     output = subprocess.check_output(args, cwd=cwd, **kwargs)
     output = decode_output(output)
@@ -262,6 +309,7 @@ def call_git(params, cwd, **kwargs):
     args = ['git'] + params
 
     validate_git_command(args=args, cwd=cwd)
+    kwargs.setdefault('env', git_environment())
 
     return subprocess.call(args, cwd=cwd, **kwargs)
 

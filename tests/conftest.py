@@ -53,7 +53,8 @@ def default_setting(name):
 def make_cache_configuration(*locations,
                              resolution_policy=default_setting('GOLEM_CACHE_RESOLUTION_POLICY'),
                              minimization_enabled=default_setting('GOLEM_CACHE_MINIMIZATION_ENABLED'),
-                             minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH')):
+                             minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'),
+                             fetch_mode=default_setting('GOLEM_GIT_FETCH_MODE')):
     '''
     A CacheConfiguration for a test that only cares about one of its settings.
     The constructor requires them all, so the built-in defaults are filled here.
@@ -62,4 +63,5 @@ def make_cache_configuration(*locations,
         locations=locations,
         resolution_policy=resolution_policy,
         minimization_enabled=minimization_enabled,
-        minimization_length=minimization_length)
+        minimization_length=minimization_length,
+        fetch_mode=fetch_mode)
