@@ -214,7 +214,7 @@ def migrating(make_fetcher, git_calls, recorded, target):
 def test_a_root_already_in_the_asked_mode_is_left_alone(git_calls, make_fetcher):
     migrated, calls = migrating(make_fetcher, git_calls, FetchMode.BLOBLESS, FetchMode.BLOBLESS)
 
-    assert migrated is True
+    assert migrated == Fetched(head=STUB_HEAD, mode=FetchMode.BLOBLESS)
     assert calls == []
 
 
@@ -223,7 +223,9 @@ def test_a_full_root_becomes_blobless_without_transferring_anything(git_calls, m
     # file content behind.
     migrated, calls = migrating(make_fetcher, git_calls, FetchMode.FULL, FetchMode.BLOBLESS)
 
-    assert migrated is True
+    # Converted, and still on the commit it was on: a migration changes how much
+    # of a history a root holds, never where it stands in it.
+    assert migrated == Fetched(head=STUB_HEAD, mode=FetchMode.BLOBLESS)
     assert calls == [
         ['config', 'remote.origin.promisor', 'true'],
         ['config', 'remote.origin.partialclonefilter', 'blob:none'],
@@ -234,14 +236,14 @@ def test_a_full_root_becomes_blobless_without_transferring_anything(git_calls, m
 def test_a_blobless_root_becomes_full_by_asking_for_what_it_left_out(git_calls, make_fetcher):
     migrated, calls = migrating(make_fetcher, git_calls, FetchMode.BLOBLESS, FetchMode.FULL)
 
-    assert migrated is True
+    assert migrated == Fetched(head=STUB_HEAD, mode=FetchMode.FULL)
     assert calls == [['fetch', '--refetch', 'origin']]
 
 
 def test_a_shallow_root_is_deepened_before_anything_else(git_calls, make_fetcher):
     migrated, calls = migrating(make_fetcher, git_calls, FetchMode.SHALLOW, FetchMode.BLOBLESS)
 
-    assert migrated is True
+    assert migrated == Fetched(head=STUB_HEAD, mode=FetchMode.BLOBLESS)
     assert calls[0] == ['fetch', '--unshallow', 'origin']
 
 
@@ -250,7 +252,7 @@ def test_becoming_shallow_is_not_worth_converting_in_place(git_calls, make_fetch
     # the cheap thing anyway: obtaining it again is both.
     migrated, calls = migrating(make_fetcher, git_calls, FetchMode.FULL, FetchMode.SHALLOW)
 
-    assert migrated is False
+    assert migrated is None
     assert calls == []
 
 
@@ -262,7 +264,10 @@ def test_a_root_that_recorded_nothing_is_recognised_rather_than_re_cloned(
 
     fetcher = make_fetcher(FetchPolicy(fetch_mode=FetchMode.FULL, reference='origin/main'))
 
-    assert fetcher.migrate(Fetched(head=STUB_HEAD)) is True
+    # What it was detected as is handed back, so the manifest can record it and
+    # the next resolve has nothing left to detect.
+    assert fetcher.migrate(Fetched(head=STUB_HEAD)) == \
+        Fetched(head=STUB_HEAD, mode=FetchMode.FULL)
     assert git_calls == []
 
 

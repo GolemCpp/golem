@@ -23,6 +23,7 @@ import os
 
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import fetcher
+from golemcpp.golem import network
 from golemcpp.golem.fetch_policy import FetchPolicy
 
 
@@ -134,6 +135,18 @@ class ResourceManager:
         '''
         return os.path.isdir(cached_resource.source_path)
 
+    @staticmethod
+    def may_migrate(cached_resource) -> bool:
+        '''
+        Whether this is a moment to change what a root holds.
+
+        Converting one may have to reach a remote, so it belongs to resolve, the
+        command allowed to; and it writes, so a read-only location keeps whatever
+        it was given. Everywhere else a root is used in the shape it is in, and
+        changes shape the next time it is resolved.
+        '''
+        return network.is_allowed() and not cached_resource.is_read_only
+
     def install(self, item, refresh=True, cached_resource=None):
         '''
         Installs the item in cache and returns the cached resource associated.
@@ -143,7 +156,12 @@ class ResourceManager:
 
         Existing install: refreshed in place, keeping the cache root.
 
-        An installed resource is handed back untouched without `refresh`.
+        An installed resource is handed back untouched without `refresh`, as long
+        as it already is in the fetch mode asked for.
+        
+        If the asked fetch mode and the detected one are different, the resource
+        is migrated. This can involve obtaining it again, whether or not anything
+        only wanted it refreshed.
 
         Installing into a read-only cache location is refused. Nothing is written
         there, whether the resource has to be populated or refreshed.
@@ -154,6 +172,13 @@ class ResourceManager:
             cached_resource = self.resolve_cached_resource(item)
 
         installed = self.is_installed(cached_resource)
+
+        if installed and self.may_migrate(cached_resource) \
+                and not self.migrate(cached_resource, item):
+            # What the root holds is not what is asked for any more, and cannot be
+            # turned into it. Obtaining it again always can.
+            installed = False
+
         if installed and not refresh:
             return cached_resource
 
@@ -162,11 +187,6 @@ class ResourceManager:
             raise RuntimeError(
                 'cannot install {} into read-only cache location {}'.format(
                     cached_resource.cache_key, cached_resource.cache_root))
-
-        if installed and not self.migrate(cached_resource, item):
-            # What the root holds is not what is asked for any more, and cannot be
-            # turned into it. Obtaining it again always can.
-            installed = False
 
         if installed:
             self.pre_install_refresh(cached_resource.path, item)
@@ -220,20 +240,28 @@ class ResourceManager:
 
     def migrate(self, cached_resource, item) -> bool:
         '''
-        Whether the root can keep being refreshed, given what the manifest says it
-        was fetched as and what is asked for now.
-        
+        Whether the root can keep being used, given what the manifest says it was
+        fetched as and what is asked for now. What it then holds is written back,
+        so a conversion is done once rather than on every resolve.
+
         A conversion that fails leaves a root nobody has read yet, so the answer
         is simply no and the caller obtains it again.
         '''
         recorded = self.cache_manager.read_manifest_fetched(cached_resource)
         try:
-            return self.fetcher_for(
+            fetched = self.fetcher_for(
                 self.source_path(cached_resource.path), item).migrate(recorded)
         except RuntimeError as error:
             print("Cannot migrate {}, fetching it again: {}".format(
                 cached_resource.path, error))
             return False
+
+        if fetched is None:
+            return False
+
+        if fetched != recorded:
+            self.cache_manager.write_manifest(cached_resource, fetched=fetched)
+        return True
 
     def populate(self, path, item):
         '''Materialize a source freshly into `path`, writing no manifest.'''

@@ -4,6 +4,7 @@ import pytest
 
 from golemcpp.golem import cache_directory
 from golemcpp.golem import helpers
+from golemcpp.golem import network
 from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.cookbook import Cookbook
@@ -36,10 +37,10 @@ def make_resource_manager(tmp_path):
         cache_directory.CacheDirectory(location=str(tmp_path / 'cache')))))
 
 
-def make_manager(tmp_path):
+def make_manager(tmp_path, **configuration):
     return get_cookbook_manager(make_cache_configuration(
         cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
-        minimization_enabled=False))
+        minimization_enabled=False, **configuration))
 
 
 def test_a_manager_holds_its_cache_manager_and_exposes_its_locations(tmp_path):
@@ -258,8 +259,7 @@ def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
     cookbook = make_cookbook()
     cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
     manager.cache_manager.write_manifest(cached, fetched=Fetched(head='0ldc0mmit', mode=FetchMode.BLOBLESS))
-    monkeypatch.setattr(
-        helpers, 'check_git_output', lambda args, cwd=None, **kwargs: 'newc0mmit\n')
+    stub_git_probes(monkeypatch, head='newc0mmit')
 
     manager.install(cookbook)
 
@@ -328,6 +328,79 @@ def test_install_reuses_a_cached_resource_the_caller_already_resolved(tmp_path, 
 
     assert manager.install(cookbook, cached_resource=cached).path == cached.path
     assert resolutions == []
+
+
+# -- changing what a root holds belongs to resolve --------------------------
+
+
+def install_in_another_mode(manager, cookbook):
+    '''A cached resource holding a full clone, where blobless is now configured.'''
+    return install_on_disk(
+        manager, manager.resolve_cached_resource(cookbook), mode=FetchMode.FULL)
+
+
+def recorded_fetched(cached):
+    return Fetched.from_manifest(
+        resource_manifest.ResourceManifest.read_from_root(cached.path))
+
+
+def test_a_root_in_another_mode_is_converted_where_a_remote_may_be_reached(
+        tmp_path, git_calls):
+    manager = make_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = install_in_another_mode(manager, cookbook)
+
+    with network.allowed():
+        manager.install(cookbook, refresh=False)
+
+    assert git_calls == [
+        ['config', 'remote.origin.promisor', 'true'],
+        ['config', 'remote.origin.partialclonefilter', 'blob:none'],
+    ]
+    # Written back, so the conversion is done once rather than on every resolve.
+    assert recorded_fetched(cached) == Fetched(head=STUB_HEAD, mode=FetchMode.BLOBLESS)
+
+
+def test_a_root_in_another_mode_is_used_as_it_stands_anywhere_else(
+        tmp_path, git_calls, monkeypatch):
+    # A build refreshes without being allowed to reach a remote, and converting a
+    # root may have to. It keeps the mode it has until the next resolve, and the
+    # manifest keeps saying so.
+    manager = make_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = install_in_another_mode(manager, cookbook)
+    stub_git_probes(monkeypatch, mode=FetchMode.FULL)
+
+    manager.install(cookbook)
+
+    assert ['config', 'remote.origin.promisor', 'true'] not in git_calls
+    assert recorded_fetched(cached) == Fetched(head=STUB_HEAD, mode=FetchMode.FULL)
+
+
+def test_a_root_that_cannot_be_converted_is_obtained_again(tmp_path, git_calls):
+    # Nothing asked for a refresh, but what is there cannot serve: becoming
+    # shallow is the one conversion that is not worth doing in place.
+    manager = make_manager(tmp_path, fetch_mode=FetchMode.SHALLOW)
+    cookbook = make_cookbook()
+    install_in_another_mode(manager, cookbook)
+
+    with network.allowed():
+        manager.install(cookbook, refresh=False)
+
+    assert git_calls[:2] == [['init'], ['remote', 'add', 'origin', 'https://host/r.git']]
+
+
+def test_a_read_only_root_is_never_converted(tmp_path, git_calls):
+    # Converting writes, and that location is not ours to write into.
+    manager = make_read_only_manager(tmp_path)
+    cookbook = make_cookbook()
+    cached = install_in_another_mode(manager, cookbook)
+
+    with network.allowed():
+        assert manager.install(cookbook, refresh=False).path == cached.path
+
+    assert git_calls == []
+    assert recorded_fetched(cached) == Fetched(head=STUB_HEAD, mode=FetchMode.FULL)
 
 
 # -- install writes, so a read-only location is refused ---------------------

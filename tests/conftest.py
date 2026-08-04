@@ -14,6 +14,7 @@ if str(WAFLIB_SRC) not in sys.path:
 
 from golemcpp.golem import helpers  # noqa: E402
 from golemcpp.golem.cache_configuration import CacheConfiguration  # noqa: E402
+from golemcpp.golem.fetch_policy import FetchMode  # noqa: E402
 from golemcpp.golem.git_fetcher import GitFetcher  # noqa: E402
 from golemcpp.golem.settings import get_settings  # noqa: E402
 
@@ -22,17 +23,31 @@ from golemcpp.golem.settings import get_settings  # noqa: E402
 STUB_HEAD = 'cafebabecafebabecafebabecafebabecafebabe'
 
 
-def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True, has_submodules=True):
+def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True,
+                    has_submodules=True, mode=FetchMode.BLOBLESS):
     '''
     What the fetch reads about a repository, stubbed for a test that drives the
     mechanism without one: the reference is present, HEAD reads back as a commit,
-    and the resource declares submodules. None of these go through `run_git`, so
-    none of them shows up in a recorded command sequence.
+    the resource declares submodules, and the root looks like it was fetched the
+    way `mode` says. None of these go through `run_git`, so none of them shows up
+    in a recorded command sequence.
     '''
+    # What a root answers about its own shape, which is how a fetch tells what it
+    # is refreshing rather than what a fresh one would be asked for.
+    shape = {
+        '--is-shallow-repository': mode == FetchMode.SHALLOW,
+        'remote.origin.promisor': mode == FetchMode.BLOBLESS,
+    }
+
+    def check_git_output(args, cwd=None, **kwargs):
+        for question, answer in shape.items():
+            if question in args:
+                return ('true' if answer else 'false') + '\n'
+        return head + '\n'
+
     monkeypatch.setattr(
         helpers, 'call_git', lambda args, cwd=None, **kwargs: 0 if holds_reference else 1)
-    monkeypatch.setattr(
-        helpers, 'check_git_output', lambda args, cwd=None, **kwargs: head + '\n')
+    monkeypatch.setattr(helpers, 'check_git_output', check_git_output)
     monkeypatch.setattr(GitFetcher, 'has_submodules', lambda self: has_submodules)
 
 

@@ -16,6 +16,7 @@ decides whether reaching one is allowed here at all.
 
 import os
 import subprocess
+from dataclasses import replace
 
 from golemcpp.golem import helpers
 from golemcpp.golem.fetch_policy import BLOBLESS_FILTER
@@ -51,7 +52,8 @@ class GitFetcher(Fetcher):
         if self.has_submodules():
             self.update_submodules()
 
-        return self.fetched()
+        # Obtained just now, exactly the way it was asked for.
+        return self.fetched(self.policy.fetch_mode)
 
     def refresh(self) -> Fetched:
         '''
@@ -60,9 +62,15 @@ class GitFetcher(Fetcher):
         Cleaning comes first: a reset alone leaves behind what the previous
         reference put there, and a cached resource is only worth reading when it
         holds the reference it names and nothing else.
+
+        A refresh moves a root, it never converts one: how much of the source it
+        holds is what it already held, whatever the policy would ask for of a
+        fresh one. Changing that is a migration, and belongs to resolve.
         '''
         if self.is_up_to_date():
-            return self.fetched()
+            # The mode has to be pulled from the state of the root. It can be different
+            # from the mode asked, because a golem resolve is needed to migrate the root.
+            return self.fetched(self.detected_mode())
 
         self.run(['clean', '-ffxd'], quiet=True)
         if self.has_submodules():
@@ -88,7 +96,9 @@ class GitFetcher(Fetcher):
 
             self.update_submodules(no_fetch=not self.policy.fetch_remote)
 
-        return self.fetched()
+        # The mode has to be pulled from the state of the root. It can be different
+        # from the mode asked, because a golem resolve is needed to migrate the root.
+        return self.fetched(self.detected_mode())
 
     # -- the steps a fetch is made of --------------------------------------
 
@@ -133,9 +143,9 @@ class GitFetcher(Fetcher):
             return ['--filter=' + BLOBLESS_FILTER]
         return []
 
-    def fetched(self) -> Fetched:
+    def fetched(self, mode) -> Fetched:
         '''What this fetch left behind, for the manifest to keep.'''
-        return Fetched(head=self.read_head(), mode=self.policy.fetch_mode)
+        return Fetched(head=self.read_head(), mode=mode)
 
     def ensure_reference(self):
         '''
@@ -165,13 +175,13 @@ class GitFetcher(Fetcher):
 
     # -- changing what a root already holds --------------------------------
 
-    def migrate(self, recorded) -> bool:
+    def migrate(self, recorded) -> Fetched | None:
         '''
         A root fetched one way brought to another, in place where that costs less
         than obtaining it again: git got upgraded and blobless became available, a
         dependency was switched to shallow, a cache was asked to become portable.
 
-        False means it cannot be converted and has to be re-cloned, which is
+        None means it cannot be converted and has to be re-cloned, which is
         always correct and never wrong, only slower.
         '''
         target = self.policy.fetch_mode
@@ -179,35 +189,36 @@ class GitFetcher(Fetcher):
         # recognisable, or upgrading would re-clone every cache there is.
         current = recorded.mode or self.detected_mode()
 
-        if current == target:
-            return True
+        if current != target:
+            # Truncating a history in place is not worth the subtlety, and shallow
+            # is asked for by someone who wants the cheap thing anyway.
+            if target == FetchMode.SHALLOW:
+                return None
 
-        # Truncating a history in place is not worth the subtlety, and shallow is
-        # asked for by someone who wants the cheap thing anyway.
-        if target == FetchMode.SHALLOW:
-            return False
+            print("Migrating {} from {} to {}".format(
+                self.path, current.value, target.value))
 
-        print("Migrating {} from {} to {}".format(
-            self.path, current.value, target.value))
+            if current == FetchMode.SHALLOW:
+                # The history it never had. Everything else it holds stays.
+                self.run(['fetch', '--unshallow', 'origin'])
 
-        if current == FetchMode.SHALLOW:
-            # The history it never had. Everything else it holds stays.
-            self.run(['fetch', '--unshallow', 'origin'])
+            if target == FetchMode.BLOBLESS:
+                # Nothing to transfer: the objects are already here, and this only
+                # says that later fetches may leave file content behind.
+                self.run(['config', 'remote.origin.promisor', 'true'], quiet=True)
+                self.run(['config', 'remote.origin.partialclonefilter', BLOBLESS_FILTER],
+                         quiet=True)
+            else:
+                # Back to a self-contained root: drop the filter, then ask for
+                # everything it was allowed to leave out.
+                self.unset('remote.origin.partialclonefilter')
+                self.unset('remote.origin.promisor')
+                self.run(['fetch', '--refetch', 'origin'])
 
-        if target == FetchMode.BLOBLESS:
-            # Nothing to transfer: the objects are already here, and this only
-            # says that later fetches may leave file content behind.
-            self.run(['config', 'remote.origin.promisor', 'true'], quiet=True)
-            self.run(['config', 'remote.origin.partialclonefilter', BLOBLESS_FILTER],
-                     quiet=True)
-        else:
-            # Back to a self-contained root: drop the filter, then ask for
-            # everything it was allowed to leave out.
-            self.unset('remote.origin.partialclonefilter')
-            self.unset('remote.origin.promisor')
-            self.run(['fetch', '--refetch', 'origin'])
-
-        return True
+        # A migration changes how much of a history a root holds, never which
+        # commit it is on. Said even when nothing was converted, so a root that
+        # recorded no mode stops being detected on every resolve.
+        return replace(recorded, mode=target)
 
     def unset(self, key):
         '''A configuration key removed if it is there. Absent is the same as gone.'''
