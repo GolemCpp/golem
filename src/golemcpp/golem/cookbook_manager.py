@@ -7,7 +7,7 @@ from golemcpp.golem.resource_manifest import ResourceKind
 
 class CookbookManager(ResourceManager):
     '''
-    A cookbook is read, never built, so it asks nothing of the fetch mechanism
+    A cookbook is read, never built, so it asks nothing of the fetch policy
     beyond tracking the branch it was configured with.
     '''
 

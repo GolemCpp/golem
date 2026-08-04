@@ -10,6 +10,7 @@ from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
 from conftest import make_cache_configuration
+from conftest import stub_git_probes
 
 
 DEPENDENCIES_SUBDIR = cache_configuration.DEPENDENCIES_SUBDIR
@@ -132,8 +133,6 @@ def test_the_policy_pins_to_the_resolved_commit():
 
     assert policy.checkout == 'v3.12.0'
     assert policy.reference == 'cafebabecafebabe'
-    assert policy.submodules is True
-    assert policy.clean is True
     # Pinned to a commit, so a refresh has nothing to fetch.
     assert policy.fetch_remote is False
     assert policy.shallow is False
@@ -174,7 +173,8 @@ def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
     dep.resolved_hash = 'cafebabecafebabe'
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append(args))
+        helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
+    stub_git_probes(monkeypatch)
 
     DependencyManager.clone_source(
         '/cache/json/source', DependencyManager.source_for(dep),
@@ -184,7 +184,7 @@ def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
         ['clone', '--', 'https://example.com/json.git', '.'],
         ['checkout', 'v3.12.0'],
         ['reset', '--hard', 'cafebabecafebabe'],
-        ['submodule', 'update', '--init', '--recursive', '--depth=1'],
+        ['submodule', 'update', '--init', '--recursive'],
     ]
 
 

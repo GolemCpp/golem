@@ -42,6 +42,43 @@ def test_write_and_read_manifest_roundtrip(tmp_path):
     assert 'source' in data
 
 
+def test_what_the_fetch_left_survives_the_roundtrip(tmp_path):
+    # The source names what was asked for, `fetched` names what the root ended up
+    # holding, and the two travel together.
+    root = tmp_path / 'r'
+    root.mkdir()
+
+    resource_manifest.write_manifest(
+        resource_root=str(root),
+        kind=resource_manifest.ResourceKind.COOKBOOK,
+        cache_key=root.name,
+        source={'type': 'git', 'location': 'u', 'reference': 'main'},
+        fetched={'head': 'cafebabe'},
+    )
+
+    manifest = resource_manifest.ResourceManifest.read_from_root(str(root))
+    assert manifest.fetched == {'head': 'cafebabe'}
+    assert json.loads(
+        (root / resource_manifest.MANIFEST_FILENAME).read_text(encoding='utf-8')
+    )['fetched'] == {'head': 'cafebabe'}
+
+
+def test_a_manifest_written_without_a_fetch_reads_back_empty(tmp_path):
+    # A copied directory is not fetched at all, and an older manifest predates the
+    # field entirely: both read back as nothing recorded rather than as missing.
+    root = tmp_path / 'r'
+    root.mkdir()
+
+    resource_manifest.write_manifest(
+        resource_root=str(root),
+        kind=resource_manifest.ResourceKind.OVERLAY,
+        cache_key=root.name,
+        source={'type': 'directory', 'location': 'file:///somewhere', 'reference': ''},
+    )
+
+    assert resource_manifest.ResourceManifest.read_from_root(str(root)).fetched == {}
+
+
 def test_read_missing_manifest_returns_none(tmp_path):
     assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
 

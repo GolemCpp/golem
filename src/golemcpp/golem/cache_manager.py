@@ -260,31 +260,43 @@ class CacheManager:
         return Source.from_manifest(manifest)
 
     @staticmethod
-    def write_manifest(cached_resource) -> None:
+    def read_manifest_fetched(cached_resource) -> dict:
+        '''What a resource's manifest says the fetch left in its root.'''
+        manifest = ResourceManifest.read_from_root(cached_resource.path)
+        return {} if manifest is None else manifest.fetched
+
+    @staticmethod
+    def write_manifest(cached_resource, fetched=None) -> None:
         resource = cached_resource.resource
         resource_manifest.write_manifest(
             resource_root=cached_resource.path,
             kind=resource.kind,
             cache_key=resource.cache_key,
-            source=resource.source.to_dict())
+            source=resource.source.to_dict(),
+            fetched=fetched.to_dict() if fetched else {})
 
-    def record_manifest(self, cached_resource) -> None:
+    def record_manifest(self, cached_resource, fetched=None) -> None:
         '''
-        Keep the manifest telling the truth about what the root holds. A kind
-        whose cache key does not carry its reference, a tool is keyed by its
-        name, can be refreshed onto another version, and the root would then
-        claim the one it used to hold.
+        Keep the manifest telling the truth about what the root holds.
+
+        What the fetch left counts as much as the source: a resource following a
+        branch keeps naming the same reference while landing on a different commit
+        every time it moves.
         '''
-        if self.read_manifest_source(cached_resource) != cached_resource.resource.source:
-            self.write_manifest(cached_resource)
+        recorded = fetched.to_dict() if fetched else {}
+        if (self.read_manifest_source(cached_resource) != cached_resource.resource.source
+                or self.read_manifest_fetched(cached_resource) != recorded):
+            self.write_manifest(cached_resource, fetched=fetched)
 
     # -- per-resource mutations -------------------------------------------
 
     def guard_install(self, cached_resource, populate) -> str:
         '''
         Build a resource into a sibling `.tmp` staging directory, drop its
-        manifest, then atomically swap it into place. `populate(staging_root)`
-        fills the staging directory with the resource's contents.
+        manifest, then atomically swap it into place.
+        
+        `populate(staging_root)` fills the staging directory with the resource's
+        contents and hands back what it recorded, which the manifest keeps.
         '''
         self.check_identity(cached_resource)
 
@@ -296,8 +308,7 @@ class CacheManager:
         helpers.remove_tree(staging.path)
         os.makedirs(staging.path, exist_ok=True)
         try:
-            populate(staging.path)
-            self.write_manifest(staging)
+            self.write_manifest(staging, fetched=populate(staging.path))
             helpers.remove_tree(resource_root)
             os.makedirs(os.path.dirname(resource_root), exist_ok=True)
             os.replace(staging.path, resource_root)
@@ -314,8 +325,7 @@ class CacheManager:
         '''
         self.check_identity(cached_resource)
 
-        refresh(cached_resource.path)
-        self.record_manifest(cached_resource)
+        self.record_manifest(cached_resource, fetched=refresh(cached_resource.path))
 
         # TODO: Add a try catch like guard_install to recover or trigger a fallback mechanism when it 
         # fails. Ideas are: removing the source, or running a hook function to let the derived manager

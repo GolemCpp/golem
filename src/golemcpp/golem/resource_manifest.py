@@ -60,13 +60,17 @@ class ResourceManifest:
     cache_key: str
     # The serialized Source that produced this resource ({type, location, reference}).
     source: dict = field(default_factory=dict)
+    # Holds what a fetch operation against the asked 'source' left behind.
+    # Empty for a copied directory, which is not fetched at all.
+    fetched: dict = field(default_factory=dict)
     version: int = MANIFEST_VERSION
     golem_version: str = ''
     created_at: str = ''
     last_used_at: str = ''
 
     @classmethod
-    def create(cls, kind, cache_key: str, source: dict) -> 'ResourceManifest':
+    def create(cls, kind, cache_key: str, source: dict,
+               fetched: dict = None) -> 'ResourceManifest':
         if isinstance(kind, ResourceKind):
             kind = kind.value
         now = utc_now()
@@ -74,6 +78,7 @@ class ResourceManifest:
             kind=kind,
             cache_key=cache_key,
             source=dict(source),
+            fetched=dict(fetched or {}),
             version=MANIFEST_VERSION,
             golem_version=command_version.get_golem_version(),
             created_at=now,
@@ -98,6 +103,7 @@ class ResourceManifest:
             kind=data.get('kind', ''),
             cache_key=data.get('cache_key', ''),
             source=data.get('source', {}),
+            fetched=data.get('fetched', {}),
             version=data.get('version', MANIFEST_VERSION),
             golem_version=data.get('golem_version', ''),
             created_at=data.get('created_at', ''),
@@ -115,6 +121,7 @@ class ResourceManifest:
             'cache_key': self.cache_key,
             'golem_version': self.golem_version,
             'source': self.source,
+            'fetched': self.fetched,
             'created_at': self.created_at,
             'last_used_at': self.last_used_at,
         }
@@ -150,7 +157,8 @@ class ResourceManifest:
             pass
 
 
-def write_manifest(resource_root: str, kind, cache_key: str, source: dict) -> None:
+def write_manifest(resource_root: str, kind, cache_key: str, source: dict,
+                   fetched: dict = None) -> None:
     '''
     Write a fresh manifest at the root of a newly created cache resource.
     Best-effort: a failure here must never break a build, so errors are
@@ -158,7 +166,7 @@ def write_manifest(resource_root: str, kind, cache_key: str, source: dict) -> No
     '''
     try:
         manifest = ResourceManifest.create(
-            kind=kind, cache_key=cache_key, source=source)
+            kind=kind, cache_key=cache_key, source=source, fetched=fetched)
         manifest.write_to_root(resource_root)
     except OSError:
         pass
