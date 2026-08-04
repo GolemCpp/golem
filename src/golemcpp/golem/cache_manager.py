@@ -7,6 +7,7 @@ from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import helpers
+from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.resource_manifest import ResourceManifest
 from golemcpp.golem.source import Source
 
@@ -260,10 +261,10 @@ class CacheManager:
         return Source.from_manifest(manifest)
 
     @staticmethod
-    def read_manifest_fetched(cached_resource) -> dict:
+    def read_manifest_fetched(cached_resource) -> Fetched:
         '''What a resource's manifest says the fetch left in its root.'''
-        manifest = ResourceManifest.read_from_root(cached_resource.path)
-        return {} if manifest is None else manifest.fetched
+        return Fetched.from_manifest(
+            ResourceManifest.read_from_root(cached_resource.path))
 
     @staticmethod
     def write_manifest(cached_resource, fetched=None) -> None:
@@ -273,7 +274,7 @@ class CacheManager:
             kind=resource.kind,
             cache_key=resource.cache_key,
             source=resource.source.to_dict(),
-            fetched=fetched.to_dict() if fetched else {})
+            fetched=(fetched or Fetched()).to_dict())
 
     def record_manifest(self, cached_resource, fetched=None) -> None:
         '''
@@ -283,9 +284,8 @@ class CacheManager:
         branch keeps naming the same reference while landing on a different commit
         every time it moves.
         '''
-        recorded = fetched.to_dict() if fetched else {}
         if (self.read_manifest_source(cached_resource) != cached_resource.resource.source
-                or self.read_manifest_fetched(cached_resource) != recorded):
+                or self.read_manifest_fetched(cached_resource) != (fetched or Fetched())):
             self.write_manifest(cached_resource, fetched=fetched)
 
     # -- per-resource mutations -------------------------------------------

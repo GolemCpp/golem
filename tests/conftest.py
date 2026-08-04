@@ -14,7 +14,7 @@ if str(WAFLIB_SRC) not in sys.path:
 
 from golemcpp.golem import helpers  # noqa: E402
 from golemcpp.golem.cache_configuration import CacheConfiguration  # noqa: E402
-from golemcpp.golem.resource_manager import ResourceManager  # noqa: E402
+from golemcpp.golem.git_fetcher import GitFetcher  # noqa: E402
 from golemcpp.golem.settings import get_settings  # noqa: E402
 
 
@@ -33,8 +33,7 @@ def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True, has_submo
         helpers, 'call_git', lambda args, cwd=None, **kwargs: 0 if holds_reference else 1)
     monkeypatch.setattr(
         helpers, 'check_git_output', lambda args, cwd=None, **kwargs: head + '\n')
-    monkeypatch.setattr(
-        ResourceManager, 'has_submodules', staticmethod(lambda path: has_submodules))
+    monkeypatch.setattr(GitFetcher, 'has_submodules', lambda self: has_submodules)
 
 
 def absolute_path(*parts):

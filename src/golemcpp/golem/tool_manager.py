@@ -7,7 +7,7 @@ from golemcpp.golem import tool_registry
 from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.resource import Resource
-from golemcpp.golem.resource_manager import FetchPolicy
+from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.tool import Tool

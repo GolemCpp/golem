@@ -176,9 +176,7 @@ def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
         helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
     stub_git_probes(monkeypatch)
 
-    DependencyManager.clone_source(
-        '/cache/json/source', DependencyManager.source_for(dep),
-        DependencyManager.policy_for(dep))
+    DependencyManager(cache_manager=None).fetcher_for('/cache/json/source', dep).populate()
 
     assert calls == [
         ['clone', '--', 'https://example.com/json.git', '.'],

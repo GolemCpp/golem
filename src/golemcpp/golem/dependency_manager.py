@@ -1,6 +1,6 @@
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.resource import Resource
-from golemcpp.golem.resource_manager import FetchPolicy
+from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 
