@@ -74,15 +74,22 @@ def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls, make_fet
     ]
 
 
-def test_a_checkout_lands_between_the_clone_and_the_reset(git_calls, make_fetcher):
+def test_a_checkout_gives_way_to_the_reset_that_follows_it(git_calls, make_fetcher):
+    # Both land on the same commit, and materializing the tree twice is two round
+    # trips for the file content under a partial clone.
     make_fetcher(FetchPolicy(checkout='v3.12.0', reference='cafebabe')).populate()
 
     assert git_calls == [
         ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
-        ['checkout', 'v3.12.0'],
         ['reset', '--hard', 'cafebabe'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
+
+
+def test_a_checkout_is_kept_when_there_is_nothing_to_reset_onto(git_calls, make_fetcher):
+    make_fetcher(FetchPolicy(checkout='v3.12.0', reference='')).populate()
+
+    assert ['checkout', 'v3.12.0'] in git_calls
 
 
 def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls, make_fetcher):
@@ -272,3 +279,77 @@ def test_what_a_root_looks_like_when_its_manifest_does_not_say(monkeypatch, make
 
     answers[('rev-parse', '--is-shallow-repository')] = True
     assert fetcher.detected_mode() == FetchMode.SHALLOW
+
+
+# -- a refresh that would do nothing ----------------------------------------
+
+
+def pinned(reference='cafebabe'):
+    return FetchPolicy(reference=reference, fetch_remote=False)
+
+
+def test_a_pinned_root_already_on_its_commit_is_left_alone(monkeypatch, git_calls, make_fetcher):
+    # Nothing is consulted, so nothing can have moved. Dependencies refresh on
+    # every configure, which makes this the common path rather than a rare one.
+    monkeypatch.setattr(GitFetcher, 'is_at', lambda self, reference: True)
+    monkeypatch.setattr(GitFetcher, 'is_dirty', lambda self: False)
+
+    assert make_fetcher(pinned()).refresh().head == STUB_HEAD
+    assert git_calls == []
+
+
+def test_a_pinned_root_that_drifted_is_refreshed(monkeypatch, git_calls, make_fetcher):
+    monkeypatch.setattr(GitFetcher, 'is_at', lambda self, reference: False)
+    monkeypatch.setattr(GitFetcher, 'is_dirty', lambda self: False)
+
+    make_fetcher(pinned()).refresh()
+
+    assert ['reset', '--hard', 'cafebabe'] in git_calls
+
+
+def test_a_dirty_root_is_refreshed_even_on_its_commit(monkeypatch, git_calls, make_fetcher):
+    # `status --porcelain` answers for the submodules too: untracked content in
+    # one, a modified file, a moved HEAD all count as dirty here.
+    monkeypatch.setattr(GitFetcher, 'is_at', lambda self, reference: True)
+    monkeypatch.setattr(GitFetcher, 'is_dirty', lambda self: True)
+
+    make_fetcher(pinned()).refresh()
+
+    assert ['clean', '-ffxd'] in git_calls
+
+
+def test_a_root_that_consults_its_remote_is_always_refreshed(monkeypatch, git_calls, make_fetcher):
+    # It may have moved since it was last looked at, and only the fetch can say.
+    monkeypatch.setattr(GitFetcher, 'is_at', lambda self, reference: True)
+    monkeypatch.setattr(GitFetcher, 'is_dirty', lambda self: False)
+
+    make_fetcher().refresh()
+
+    assert ['fetch', '--prune', '--prune-tags', '--tags', 'origin'] in git_calls
+
+
+def test_what_cannot_be_read_is_not_taken_for_clean(monkeypatch, make_fetcher):
+    monkeypatch.setattr(
+        helpers, 'check_git_output',
+        lambda args, cwd=None, **kwargs: (_ for _ in ()).throw(RuntimeError('no repo')))
+
+    assert make_fetcher().is_dirty() is True
+    assert make_fetcher().is_at('cafebabe') is False
+
+
+# -- submodules fetched at once ---------------------------------------------
+
+
+def test_submodules_are_fetched_in_parallel_when_asked(git_calls, make_fetcher):
+    make_fetcher(FetchPolicy(reference='origin/main', fetch_jobs=4)).populate()
+
+    assert git_calls[-1] == [
+        'submodule', 'update', '--init', '--recursive', '--filter=blob:none',
+        '--jobs', '4',
+    ]
+
+
+def test_one_job_is_left_unsaid(git_calls, make_fetcher):
+    make_fetcher(FetchPolicy(reference='origin/main', fetch_jobs=1)).populate()
+
+    assert '--jobs' not in git_calls[-1]

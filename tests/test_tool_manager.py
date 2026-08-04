@@ -288,7 +288,6 @@ def test_install_tool_fetches_through_the_shared_mechanism(monkeypatch, tmp_path
     # landing on the resolved commit under the tag it asked for.
     assert git_calls == [
         ['clone', '--filter=blob:none', '--', tool_registry.TOOLS['cppfront'].repository, '.'],
-        ['checkout', 'v0.8.1'],
         ['reset', '--hard', 'deadbeef'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]

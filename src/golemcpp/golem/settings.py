@@ -104,6 +104,16 @@ SETTINGS = (
         serialize=fetch_policy.format_fetch_mode,
     ),
     SettingDescriptor(
+        key='git.jobs',
+        env_name='GOLEM_GIT_JOBS',
+        option_name='git_jobs',
+        description='How many submodules to fetch at once (default: one per processor, '
+                    'capped at 8).',
+        value_type=SettingType.INT,
+        default=fetch_policy.default_fetch_jobs,
+        deserialize=require_positive,
+    ),
+    SettingDescriptor(
         key='cookbooks.locations',
         env_name='GOLEM_COOKBOOKS_LOCATIONS',
         option_name='cookbook_location',

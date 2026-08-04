@@ -64,6 +64,7 @@ class ToolManager(ResourceManager):
         # the clone needs the remote.
         return FetchPolicy(
             fetch_mode=self.fetch_mode,
+            fetch_jobs=self.fetch_jobs,
             checkout=tool.resolved_version,
             reference=tool.resolved_hash,
             fetch_remote=True)

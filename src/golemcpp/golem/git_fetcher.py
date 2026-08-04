@@ -40,7 +40,10 @@ class GitFetcher(Fetcher):
             self.run(['reset', '--hard', 'FETCH_HEAD'], quiet=True)
         else:
             self.run(['clone'] + self.mode_args() + ['--', self.source.location, '.'])
-            if self.policy.checkout:
+            if self.policy.checkout and not self.policy.reference:
+                # Only when there is nothing to reset onto afterwards. A checkout
+                # followed by a reset materializes the same tree twice, and under a
+                # partial clone that is two round trips for the file content.
                 self.run(['checkout', self.policy.checkout], quiet=True)
             self.ensure_reference()
             self.reset()
@@ -58,6 +61,9 @@ class GitFetcher(Fetcher):
         reference put there, and a cached resource is only worth reading when it
         holds the reference it names and nothing else.
         '''
+        if self.is_up_to_date():
+            return self.fetched()
+
         self.run(['clean', '-ffxd'], quiet=True)
         if self.has_submodules():
             self.run(['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'], quiet=True)
@@ -104,6 +110,8 @@ class GitFetcher(Fetcher):
         '''
         # --init is not optional here: --filter is only read beside it.
         args = ['submodule', 'update', '--init', '--recursive'] + self.mode_args()
+        if self.policy.fetch_jobs > 1:
+            args += ['--jobs', str(self.policy.fetch_jobs)]
         if no_fetch:
             args.append('--no-fetch')
         self.run(args)
@@ -207,6 +215,45 @@ class GitFetcher(Fetcher):
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # -- what the repository says about itself -----------------------------
+
+    def is_up_to_date(self) -> bool:
+        '''
+        Whether the whole refresh would leave the root exactly as it found it.
+
+        Only a resource that consults no remote can be known to be up to date;
+        anything else may have moved since it was last looked at.
+
+        `status --porcelain` answers for the submodules too: untracked content in
+        one, a modified file, a moved HEAD all show up as a change here.
+        '''
+        if self.policy.fetch_remote:
+            return False
+        if self.policy.reference and not self.is_at(self.policy.reference):
+            return False
+        return not self.is_dirty()
+
+    def is_at(self, reference) -> bool:
+        '''Whether HEAD is already the commit a reference names.'''
+        try:
+            landed, wanted = helpers.check_git_output(
+                ['rev-parse', 'HEAD', '{}^{{commit}}'.format(reference)],
+                cwd=self.path, stderr=subprocess.DEVNULL).split()
+        except Exception:
+            return False
+        return landed == wanted
+
+    def is_dirty(self) -> bool:
+        '''
+        Whether anything in the root differs from what its revision records.
+        Unreadable counts as dirty: what cannot be checked is not known to be
+        clean.
+        '''
+        try:
+            return bool(helpers.check_git_output(
+                ['status', '--porcelain'], cwd=self.path,
+                stderr=subprocess.DEVNULL).strip())
+        except Exception:
+            return True
 
     def detected_mode(self) -> FetchMode:
         '''

@@ -13,6 +13,7 @@ a branch. Only a resource that says so for itself, like a heavy dependency askin
 to be shallow, departs from it.
 '''
 
+import os
 from dataclasses import dataclass
 from enum import Enum
 
@@ -54,6 +55,14 @@ def supports_blobless() -> bool:
     return helpers.git_version() >= BLOBLESS_MINIMUM_GIT_VERSION
 
 
+def default_fetch_jobs() -> int:
+    '''
+    How many submodules to obtain at once when nobody says. One per processor,
+    capped: past a point the remote is the bottleneck, not this machine.
+    '''
+    return min(os.cpu_count() or 1, 8)
+
+
 def default_fetch_mode() -> 'FetchMode':
     '''
     What every kind fetches in unless told otherwise. Asked for explicitly, any
@@ -84,6 +93,9 @@ class FetchPolicy:
     # How much of the source to obtain. Every kind fetches the same way unless a
     # resource asks for something else of its own.
     fetch_mode: FetchMode = FetchMode.BLOBLESS
+    # How many submodules to obtain at once. What makes a superproject with a
+    # couple of hundred of them bearable.
+    fetch_jobs: int = 1
     # Checked out before the reset, when the ref to land on is not the one to
     # check out (a dependency resets to a hash under a version tag).
     checkout: str = ''

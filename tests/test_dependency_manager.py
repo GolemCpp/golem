@@ -187,7 +187,6 @@ def test_a_dependency_produces_the_expected_clone_sequence(tmp_path, monkeypatch
 
     assert calls == [
         ['clone', '--filter=blob:none', '--', 'https://example.com/json.git', '.'],
-        ['checkout', 'v3.12.0'],
         ['reset', '--hard', 'cafebabecafebabe'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]

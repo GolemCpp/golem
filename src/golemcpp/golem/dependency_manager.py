@@ -28,6 +28,7 @@ class DependencyManager(ResourceManager):
         # clone whole, and pays for it by having no history to describe from.
         return FetchPolicy(
             fetch_mode=FetchMode.SHALLOW if dep.shallow else self.fetch_mode,
+            fetch_jobs=self.fetch_jobs,
             checkout=dep.resolved_version,
             reference=dep.resolved_hash,
             fetch_remote=False)

@@ -87,6 +87,11 @@ class ResourceManager:
         '''
         return self.cache_manager.cache_configuration.fetch_mode
 
+    @property
+    def fetch_jobs(self):
+        '''How many submodules to obtain at once, configured for every kind.'''
+        return self.cache_manager.cache_configuration.fetch_jobs
+
     def policy_for(self, item):
         '''
         How to fetch this item. Tracks a branch on the remote, which is what a
@@ -94,6 +99,7 @@ class ResourceManager:
         '''
         return FetchPolicy(
             fetch_mode=self.fetch_mode,
+            fetch_jobs=self.fetch_jobs,
             reference='origin/' + self.source_for(item).reference)
 
     @staticmethod

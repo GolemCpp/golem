@@ -12,7 +12,8 @@ def _arguments(**overrides):
         resolution_policy=CacheResolutionPolicy.STRICT,
         minimization_enabled=True,
         minimization_length=8,
-        fetch_mode=FetchMode.BLOBLESS)
+        fetch_mode=FetchMode.BLOBLESS,
+        fetch_jobs=1)
     arguments.update(overrides)
     return arguments
 

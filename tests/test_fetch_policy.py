@@ -40,3 +40,15 @@ def test_an_unreadable_git_version_takes_the_safe_mode(monkeypatch):
     monkeypatch.setattr(helpers, 'git_version', lambda: (0, 0, 0))
 
     assert fetch_policy.default_fetch_mode() == FetchMode.FULL
+
+
+def test_how_many_submodules_at_once_by_default(monkeypatch):
+    # One per processor, capped: past a point the remote is the bottleneck.
+    monkeypatch.setattr(fetch_policy.os, 'cpu_count', lambda: 4)
+    assert fetch_policy.default_fetch_jobs() == 4
+
+    monkeypatch.setattr(fetch_policy.os, 'cpu_count', lambda: 64)
+    assert fetch_policy.default_fetch_jobs() == 8
+
+    monkeypatch.setattr(fetch_policy.os, 'cpu_count', lambda: None)
+    assert fetch_policy.default_fetch_jobs() == 1
