@@ -100,6 +100,10 @@ def get_cache_configuration(settings):
     and the native `golem cache` / `golem tools` commands resolve the cache the
     same way.
     '''
+    # Every command that goes on to run git comes through here, and this is the
+    # last point where its settings are still in hand: what runs git afterwards is
+    # handed a URL, not a configuration. See helpers.allow_git_prompt.
+    helpers.allow_git_prompt(settings.get('GOLEM_GIT_PROMPT_ENABLED'))
 
     return CacheConfiguration(
         locations=resolve_cache_locations(settings),

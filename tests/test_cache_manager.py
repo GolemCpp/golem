@@ -4,6 +4,7 @@ import pytest
 
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
+from golemcpp.golem import cache_lock
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import cache_manager
 from golemcpp.golem.resource import Resource
@@ -296,6 +297,48 @@ def test_guard_install_stages_the_manifest_with_the_content(tmp_path):
     assert cached.staging_path != cached.path
     assert ResourceManifest.read_from_root(cached.path) is not None
     assert not os.path.exists(cached.staging_path)
+
+
+def taken_by_somebody_else(cached):
+    '''Whether another golem would have to wait for this root right now.'''
+    try:
+        with cache_lock.held(cached.lock_path, timeout=0):
+            return False
+    except RuntimeError:
+        return True
+
+
+def test_guard_install_holds_the_root_while_it_stages_and_swaps(tmp_path):
+    # The staging directory is named after the root, so two installs are not two
+    # installs side by side but two writers in one directory.
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    manager = make_classic_manager(cache_dir)
+    cached = manager.make_cached_resource(cache_dir, make_tool_resource())
+
+    held = []
+    manager.guard_install(cached, lambda staging_root: held.append(
+        taken_by_somebody_else(cached)))
+
+    assert held == [True]
+    # Let go of on the way out: the next golem does not wait for a finished one.
+    assert taken_by_somebody_else(cached) is False
+    # The file it left behind is not a resource: what it holds is nothing, and
+    # the inventory only looks at directories.
+    assert os.path.isfile(cached.lock_path)
+    assert [scanned.path for scanned in manager.scan(compute_size=False)] == [cached.path]
+
+
+def test_guard_refresh_holds_the_root_while_it_is_brought_up_to_date(tmp_path):
+    # Nothing stands between two of these: it is the tree both would be cleaning
+    # and resetting.
+    manager, cached = make_installed_tool(tmp_path)
+
+    held = []
+    manager.guard_refresh(cached, lambda path: held.append(
+        taken_by_somebody_else(cached)))
+
+    assert held == [True]
+    assert taken_by_somebody_else(cached) is False
 
 
 def test_guard_install_refuses_a_scanned_resource(tmp_path):

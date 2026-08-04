@@ -141,8 +141,11 @@ def test_a_missing_reference_is_fetched_before_the_reset(monkeypatch, git_calls,
     # The commit a resource names is not in this root -- a pin whose cache predates
     # the resolve that produced it. Ask for exactly that commit rather than dying at
     # the reset with git's own error.
+    # Missing when the reset would need it, there once it has been asked for.
+    # Whatever else the refresh calls git for reads as an ordinary success.
     holds = iter([1, 0])
-    monkeypatch.setattr(helpers, 'call_git', lambda args, cwd=None, **kwargs: next(holds))
+    monkeypatch.setattr(
+        helpers, 'call_git', lambda args, cwd=None, **kwargs: next(holds, 0))
 
     make_fetcher(FetchPolicy(reference='cafebabe', fetch_remote=False)).refresh()
 
@@ -294,8 +297,9 @@ def pinned(reference='cafebabe'):
 
 
 def test_a_pinned_root_already_on_its_commit_is_left_alone(monkeypatch, git_calls, make_fetcher):
-    # Nothing is consulted, so nothing can have moved. Dependencies refresh on
-    # every configure, which makes this the common path rather than a rare one.
+    # Nothing is consulted, so nothing can have moved. This is what golem does to
+    # a dependency it is about to rebuild, where the sequence costs the most for
+    # the least.
     monkeypatch.setattr(GitFetcher, 'is_at', lambda self, reference: True)
     monkeypatch.setattr(GitFetcher, 'is_dirty', lambda self: False)
 
@@ -331,6 +335,37 @@ def test_a_root_that_consults_its_remote_is_always_refreshed(monkeypatch, git_ca
     make_fetcher().refresh()
 
     assert ['fetch', '--prune', '--prune-tags', '--tags', 'origin'] in git_calls
+
+
+# -- keeping a long-lived root from growing unboundedly ---------------------
+
+
+@pytest.fixture
+def housekeeping(monkeypatch, git_calls):
+    '''What the fetcher asks git about, where nothing is made of the answer.'''
+    asked = []
+    monkeypatch.setattr(
+        helpers, 'call_git',
+        lambda args, cwd=None, **kwargs: asked.append(args) or 0)
+    return asked
+
+
+def test_a_refreshed_root_is_handed_to_git_to_keep_tidy(housekeeping, make_fetcher):
+    # A cache root is fetched into for as long as it is kept, and nothing else
+    # would ever pack what those fetches leave loose. Git decides whether it is
+    # due; this only asks.
+    make_fetcher().refresh()
+
+    assert ['gc', '--auto'] in housekeeping
+
+
+def test_a_root_nothing_was_done_to_is_not_packed_either(monkeypatch, housekeeping, make_fetcher):
+    monkeypatch.setattr(GitFetcher, 'is_at', lambda self, reference: True)
+    monkeypatch.setattr(GitFetcher, 'is_dirty', lambda self: False)
+
+    make_fetcher(pinned()).refresh()
+
+    assert ['gc', '--auto'] not in housekeeping
 
 
 def test_what_cannot_be_read_is_not_taken_for_clean(monkeypatch, make_fetcher):

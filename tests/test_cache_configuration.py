@@ -1,9 +1,12 @@
 import pytest
 
+from golemcpp.golem import helpers
 from golemcpp.golem.cache_configuration import CacheConfiguration
+from golemcpp.golem.cache_configuration import get_cache_configuration
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.fetch_policy import FetchMode
+from golemcpp.golem.settings import get_settings
 
 
 def _arguments(**overrides):
@@ -32,3 +35,14 @@ def test_a_disabled_or_empty_setting_is_a_value():
 
     assert configuration.locations == []
     assert configuration.minimization_enabled is False
+
+
+def test_building_one_says_whether_git_may_ask_for_credentials(monkeypatch):
+    # Every command that goes on to run git comes through here, and this is the
+    # last point where its settings are still in hand.
+    monkeypatch.setattr(helpers, '_git_prompt_allowed', False)
+    monkeypatch.setenv('GOLEM_GIT_PROMPT_ENABLED', 'on')
+
+    get_cache_configuration(get_settings())
+
+    assert helpers.is_git_prompt_allowed() is True

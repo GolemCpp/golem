@@ -2,12 +2,23 @@ import locale
 import os
 import re
 import sys
+import time
 import types
 import shutil
 import subprocess
 from pathlib import Path
 
 from golemcpp.golem import network
+
+
+# Options carried by every git command golem runs. The advice is about landing on
+# a detached HEAD, which every resource golem checks out does, on purpose.
+GIT_OPTIONS = ['-c', 'advice.detachedHead=false']
+
+# How long to wait before running a failed network command again, once per entry.
+# An early EOF or a refused connection is routine on a busy network and says
+# nothing about the command, where a local git command failing means what it says.
+GIT_RETRY_DELAYS = (2, 5)
 
 
 def print_obj(obj, depth=5, l=""):
@@ -262,27 +273,82 @@ def validate_git_command(args, cwd):
             raise RuntimeError(
                 "Not a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
 
+# Whether git may stop and ask for credentials. Off until a command's settings
+# say otherwise: a prompt nobody is watching reads as a hang rather than as the
+# failure it is, and forgetting to ask only ever makes golem fail sooner.
+_git_prompt_allowed = False
+
+
+def allow_git_prompt(allowed):
+    '''
+    What a command's settings say about git asking for credentials, kept for every
+    git invocation the process makes afterwards (see git_environment).
+
+    Process-wide, like the network scope, because the commands that would ask are
+    not all reached through a resource: resolving a version runs `ls-remote` from
+    a static method that is handed a URL and nothing else.
+    '''
+    global _git_prompt_allowed
+    _git_prompt_allowed = bool(allowed)
+
+
+def is_git_prompt_allowed() -> bool:
+    return _git_prompt_allowed
+
+
 def git_environment():
     '''
     The environment a git command runs in.
 
-    1. Ensuring the no git command issues network calls outside those authorised to:
+    1. Ensuring no git command issues network calls outside those authorised to:
 
     A partial clone (blobless mode) completes itself as it goes: any command can
     reach the remote for an object it is missing, and no command name says so.
-    
+
     Outside a resolve, GIT_NO_LAZY_FETCH makes git fail there instead of quietly
     phoning home, which is what keeps is_network_git_command's verdict true of
     what actually happens.
+
+    2. Never stopping to ask for credentials:
+
+    A private or mistyped URL otherwise parks a build at a prompt nobody is
+    watching. An empty GIT_ASKPASS is not the same as an unset one: it stops git
+    looking for another asker, leaving GIT_TERMINAL_PROMPT to refuse the terminal
+    it falls back to.
+
+    Both are git's own, and cover what git asks for itself. A repository reached
+    over ssh is handed to ssh, which unlocks the key it needs on its own terms.
+
+    Credential helpers are left alone: one that already holds the credential
+    answers without asking anybody, which is the case worth serving.
     '''
-    if network.is_allowed():
-        return None
-    return dict(os.environ, GIT_NO_LAZY_FETCH='1')
+    environment = dict(os.environ)
+
+    if not network.is_allowed():
+        environment['GIT_NO_LAZY_FETCH'] = '1'
+
+    if not is_git_prompt_allowed():
+        environment['GIT_TERMINAL_PROMPT'] = '0'
+        environment['GIT_ASKPASS'] = ''
+
+    return environment
+
+
+def git_command(params):
+    '''
+    The git command line golem runs.
+    
+    The options are not part of the validation.
+    '''
+    return ['git'] + GIT_OPTIONS + params
 
 
 def run_git(params, cwd, quiet=False, **kwargs):
     '''
     `quiet` drops what the command has to say on stdout.
+
+    What reaches a remote is run again when it fails: the network is the one part
+    of this that fails for reasons that have nothing to do with what was asked.
     '''
     args = ['git'] + params
 
@@ -292,7 +358,8 @@ def run_git(params, cwd, quiet=False, **kwargs):
         kwargs.setdefault('stdout', subprocess.DEVNULL)
     kwargs.setdefault('env', git_environment())
 
-    run_task(args=args, cwd=cwd, **kwargs)
+    delays = GIT_RETRY_DELAYS if is_network_git_command(args) else ()
+    run_task_with_retries(args=git_command(params), cwd=cwd, delays=delays, **kwargs)
 
 def check_git_output(params, cwd, **kwargs):
     args = ['git'] + params
@@ -300,9 +367,9 @@ def check_git_output(params, cwd, **kwargs):
     validate_git_command(args=args, cwd=cwd)
     kwargs.setdefault('env', git_environment())
 
-    output = subprocess.check_output(args, cwd=cwd, **kwargs)
+    output = subprocess.check_output(git_command(params), cwd=cwd, **kwargs)
     output = decode_output(output)
-    
+
     return output
 
 def call_git(params, cwd, **kwargs):
@@ -311,7 +378,25 @@ def call_git(params, cwd, **kwargs):
     validate_git_command(args=args, cwd=cwd)
     kwargs.setdefault('env', git_environment())
 
-    return subprocess.call(args, cwd=cwd, **kwargs)
+    return subprocess.call(git_command(params), cwd=cwd, **kwargs)
+
+def run_task_with_retries(args, cwd=None, delays=(), **kwargs):
+    '''
+    A command run again for as many delays as it is given, waiting each one out
+    before trying once more.
+
+    Whatever it is retried for has to be worth waiting for twice: a command that
+    fails because of what it was asked only fails again, later.
+    '''
+    for delay in delays:
+        try:
+            return run_task(args=args, cwd=cwd, **kwargs)
+        except RuntimeError as error:
+            print("{}\nTrying again in {}s.".format(error, delay))
+            time.sleep(delay)
+
+    return run_task(args=args, cwd=cwd, **kwargs)
+
 
 def run_task(args, cwd=None, debug=True, **kwargs):
     if debug:

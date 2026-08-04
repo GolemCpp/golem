@@ -96,6 +96,8 @@ class GitFetcher(Fetcher):
 
             self.update_submodules(no_fetch=not self.policy.fetch_remote)
 
+        self.collect_garbage()
+
         # The mode has to be pulled from the state of the root. It can be different
         # from the mode asked, because a golem resolve is needed to migrate the root.
         return self.fetched(self.detected_mode())
@@ -219,6 +221,18 @@ class GitFetcher(Fetcher):
         # commit it is on. Said even when nothing was converted, so a root that
         # recorded no mode stops being detected on every resolve.
         return replace(recorded, mode=target)
+
+    def collect_garbage(self):
+        '''
+        Git's own housekeeping, which it decides is due or not. A cache root is
+        fetched into for as long as it is kept, and nothing else would ever pack
+        what those fetches leave loose.
+
+        Never worth failing a refresh over: what it does is what a later command
+        would have done anyway.
+        '''
+        helpers.call_git(['gc', '--auto'], cwd=self.path,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def unset(self, key):
         '''A configuration key removed if it is there. Absent is the same as gone.'''

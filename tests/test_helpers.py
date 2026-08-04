@@ -1,3 +1,4 @@
+import os
 import subprocess
 from types import SimpleNamespace
 
@@ -109,6 +110,136 @@ def test_run_git_keeps_the_stdout_a_caller_asked_for(tmp_path, git_task):
                     quiet=True, stdout=None)
 
     assert git_task['stdout'] is None
+
+
+# -- how golem runs git, which is not what it validates ---------------------
+
+
+def test_a_git_command_carries_the_options_golem_runs_git_with():
+    # Detached is where every resource golem checks out lands, on purpose, so the
+    # advice about it is noise.
+    assert helpers.git_command(['reset', '--hard']) == [
+        'git', '-c', 'advice.detachedHead=false', 'reset', '--hard']
+
+
+def test_the_options_are_not_what_a_command_is_validated_as(tmp_path, monkeypatch):
+    # Read from the command itself: an option in front of it would answer for it.
+    ran = []
+    monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, **kwargs: ran.append(args))
+
+    with pytest.raises(RuntimeError, match='Run golem resolve first'):
+        helpers.run_git(['fetch', 'origin'], cwd=make_git_repository(tmp_path))
+
+    assert ran == []
+
+
+# -- what reaches a remote is worth running twice ---------------------------
+
+
+@pytest.fixture
+def no_waiting(monkeypatch):
+    '''Every backoff waited out at once, so a test reads what it asserts about.'''
+    waited = []
+    monkeypatch.setattr(helpers.time, 'sleep', waited.append)
+    return waited
+
+
+def failing_task(failures, attempts):
+    '''A command that fails its first `failures` attempts and then succeeds.'''
+    def run_task(args, cwd=None, **kwargs):
+        attempts.append(args)
+        if len(attempts) <= failures:
+            raise RuntimeError('early EOF')
+    return run_task
+
+
+def test_a_network_command_is_run_again_after_it_fails(tmp_path, monkeypatch, no_waiting):
+    attempts = []
+    monkeypatch.setattr(helpers, 'run_task', failing_task(1, attempts))
+
+    with network.allowed():
+        helpers.run_git(['fetch', 'origin'], cwd=make_git_repository(tmp_path))
+
+    assert len(attempts) == 2
+    assert no_waiting == [helpers.GIT_RETRY_DELAYS[0]]
+
+
+def test_a_network_command_that_keeps_failing_says_so(tmp_path, monkeypatch, no_waiting):
+    # Waited out as many times as there are delays, and no further: a remote that
+    # is not answering is an answer.
+    attempts = []
+    monkeypatch.setattr(helpers, 'run_task', failing_task(99, attempts))
+
+    with network.allowed(), pytest.raises(RuntimeError, match='early EOF'):
+        helpers.run_git(['fetch', 'origin'], cwd=make_git_repository(tmp_path))
+
+    assert len(attempts) == len(helpers.GIT_RETRY_DELAYS) + 1
+    assert no_waiting == list(helpers.GIT_RETRY_DELAYS)
+
+
+def test_a_local_command_is_only_run_once(tmp_path, monkeypatch, no_waiting):
+    # It failed for what it was asked, and asking again does not change that.
+    attempts = []
+    monkeypatch.setattr(helpers, 'run_task', failing_task(99, attempts))
+
+    with pytest.raises(RuntimeError, match='early EOF'):
+        helpers.run_git(['reset', '--hard'], cwd=make_git_repository(tmp_path))
+
+    assert len(attempts) == 1
+    assert no_waiting == []
+
+
+# -- git is never left waiting for someone to type ---------------------------
+
+
+def test_git_is_not_allowed_to_ask_for_credentials(monkeypatch):
+    # A prompt nobody is watching reads as a hang. An empty GIT_ASKPASS is not an
+    # unset one: it is what keeps git from reaching for another asker instead.
+    monkeypatch.setattr(helpers, '_git_prompt_allowed', False)
+
+    environment = helpers.git_environment()
+
+    assert environment['GIT_TERMINAL_PROMPT'] == '0'
+    assert environment['GIT_ASKPASS'] == ''
+
+
+def test_nothing_else_about_the_environment_is_golem_s_to_change(monkeypatch):
+    # A command inherits everything else it needs, and how it authenticates where
+    # git is not the one asking is none of golem's business. Naming what golem
+    # adds is what keeps that list from growing quietly.
+    monkeypatch.setattr(helpers, '_git_prompt_allowed', False)
+    for name in ('GIT_NO_LAZY_FETCH', 'GIT_TERMINAL_PROMPT', 'GIT_ASKPASS'):
+        monkeypatch.delenv(name, raising=False)
+
+    inherited = dict(os.environ)
+    environment = helpers.git_environment()
+
+    assert {name for name, value in environment.items()
+            if inherited.get(name) != value} == {
+        'GIT_NO_LAZY_FETCH', 'GIT_TERMINAL_PROMPT', 'GIT_ASKPASS'}
+    # Added to, never taken from.
+    assert set(environment) >= set(inherited)
+
+
+def test_git_may_ask_when_a_setting_says_so(monkeypatch):
+    # What is asserted is an absence, so the session golem inherits must not be
+    # the one answering for it.
+    monkeypatch.setattr(helpers, '_git_prompt_allowed', False)
+    monkeypatch.delenv('GIT_TERMINAL_PROMPT', raising=False)
+    helpers.allow_git_prompt(True)
+
+    assert helpers.is_git_prompt_allowed() is True
+    assert 'GIT_TERMINAL_PROMPT' not in helpers.git_environment()
+
+
+def test_a_git_command_may_not_fetch_what_it_is_missing_on_its_own(monkeypatch):
+    # A partial clone completes itself as it goes, and no command name says so.
+    monkeypatch.setattr(helpers, '_git_prompt_allowed', False)
+
+    assert helpers.git_environment()['GIT_NO_LAZY_FETCH'] == '1'
+
+    with network.allowed():
+        assert 'GIT_NO_LAZY_FETCH' not in helpers.git_environment()
 
 
 def test_validate_git_command_refuses_a_remote_outside_a_network_scope(tmp_path):
