@@ -28,7 +28,7 @@ class VersionResolver:
         - With no tag match, the value is treated as a branch head (`ls-remote
           --heads`); failing that, it is used literally as both version and hash.
         '''
-        tags = helpers.check_git_output(
+        tags = helpers.read_git(
             ['ls-remote', '--tags', url], cwd=os.getcwd())
         tags = tags.split('\n')
         tmp = ''
@@ -45,7 +45,7 @@ class VersionResolver:
 
         found_version = VersionResolver.find_version(versions_list, version)
         if found_version:
-            hash = helpers.check_git_output(
+            hash = helpers.read_git(
                 ['ls-remote', '--tags', url, 'refs/tags/' + found_version],
                 cwd=os.getcwd())
             if not hash:
@@ -57,7 +57,7 @@ class VersionResolver:
             return found_version, hash
 
         resolved_version = version
-        hash = helpers.check_git_output(
+        hash = helpers.read_git(
             ['ls-remote', '--heads', url, version], cwd=os.getcwd())
         if hash:
             hash = hash.splitlines()[0]

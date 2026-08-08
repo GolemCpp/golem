@@ -457,3 +457,78 @@ def test_the_fetch_mode_default_follows_what_git_can_do(monkeypatch):
 
     monkeypatch.setenv('GOLEM_GIT_FETCH_MODE', 'blobless')
     assert settings.get_settings().get('GOLEM_GIT_FETCH_MODE') == FetchMode.BLOBLESS
+
+
+def test_the_job_count_reads_back_from_every_source(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.delenv('GOLEM_GIT_JOBS', raising=False)
+    project_dir = str(tmp_path / 'project')
+
+    def resolve(options=None):
+        return settings.get_settings(
+            options=options, project_dir=project_dir).get('GOLEM_GIT_JOBS')
+
+    # Counted from the processors, so what it is worth asserting is the shape.
+    assert 1 <= resolve() <= 8
+
+    config_store.set_value('git.jobs', 3, config_store.LOCAL_SCOPE, project_dir)
+    assert resolve() == 3
+
+    monkeypatch.setenv('GOLEM_GIT_JOBS', '5')
+    assert resolve() == 5
+
+    assert resolve(options=SimpleNamespace(git_jobs=12)) == 12
+    # And it goes back out as the text a sub-build parses.
+    assert settings.get_settings(
+        options=SimpleNamespace(git_jobs=12),
+        project_dir=project_dir).make_flag('GOLEM_GIT_JOBS') == ['--git-jobs=12']
+
+
+def test_a_job_count_that_would_fetch_nothing_is_refused(monkeypatch):
+    monkeypatch.setenv('GOLEM_GIT_JOBS', '0')
+
+    with pytest.raises(ValueError, match='positive'):
+        settings.get_settings().get('GOLEM_GIT_JOBS')
+
+
+def test_whether_git_may_prompt_reads_back_from_every_source_it_has(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.delenv('GOLEM_GIT_PROMPT_ENABLED', raising=False)
+    project_dir = str(tmp_path / 'project')
+
+    def resolve():
+        return settings.get_settings(
+            project_dir=project_dir).get('GOLEM_GIT_PROMPT_ENABLED')
+
+    # A prompt nobody is watching looks like a hang, so nobody gets one by default.
+    assert resolve() is False
+
+    config_store.set_value(
+        'git.prompt.enabled', True, config_store.LOCAL_SCOPE, project_dir)
+    assert resolve() is True
+
+    monkeypatch.setenv('GOLEM_GIT_PROMPT_ENABLED', 'off')
+    assert resolve() is False
+
+
+def test_whether_git_may_prompt_is_not_carried_on_a_command_line(monkeypatch, tmp_path):
+    # It describes a machine, not a build, and it is read where no options are in
+    # hand (see helpers.allow_git_prompt). Having no flag is the decision.
+    _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.setenv('GOLEM_GIT_PROMPT_ENABLED', 'on')
+
+    assert settings.get_settings().make_flag('GOLEM_GIT_PROMPT_ENABLED') == []
+
+
+def test_an_unreadable_prompt_setting_is_refused(monkeypatch):
+    monkeypatch.setenv('GOLEM_GIT_PROMPT_ENABLED', 'maybe')
+
+    with pytest.raises(ValueError):
+        settings.get_settings().get('GOLEM_GIT_PROMPT_ENABLED')
+
+
+def test_every_git_setting_is_one_golem_config_lists(monkeypatch):
+    # `golem config` lists what known_keys answers, so a setting missing from it is
+    # a setting nobody can find.
+    assert set(settings.known_keys()) >= {
+        'git.fetch-mode', 'git.jobs', 'git.prompt.enabled'}

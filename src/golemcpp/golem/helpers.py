@@ -197,20 +197,25 @@ def copy_file_if_recent(source_path, destination_directory, callback=None):
     return True
 
 def is_git_repository(path):
+    '''Whether a repository is there to work in: one with a HEAD to read.'''
     git_index = os.path.join(path, '.git', 'HEAD')
     return os.path.exists(git_index)
 
-def is_not_git_repository(path):
-    git_dir = os.path.join(path, '.git')
-    return not os.path.exists(git_dir)
+def has_git_directory(path):
+    '''
+    Whether git has anything here at all. Not the opposite of is_git_repository:
+    that one asks whether a repository can be worked in, this one whether the
+    ground is free for a clone.
+    '''
+    return os.path.exists(os.path.join(path, '.git'))
 
-def does_git_command_need_no_repository(args):
-    if args[1] in ['init', 'clone']:
+def does_git_command_need_no_repository(params):
+    if params[0] in ['init', 'clone']:
         return True
     return False
 
-def does_git_command_need_nothing(args):
-    if args[1] in ['ls-remote']:
+def does_git_command_need_nothing(params):
+    if params[0] in ['ls-remote']:
         return True
     return False
 
@@ -240,7 +245,7 @@ def git_version():
     return _git_version
 
 
-def is_network_git_command(args):
+def is_network_git_command(params):
     '''
     Git commands that reach the remote. `submodule update` clones a submodule
     that is not there, while `submodule foreach` only runs in the ones already
@@ -250,28 +255,35 @@ def is_network_git_command(args):
     and to fail rather than go looking, which is what a resource being refreshed
     without consulting its remote needs.
     '''
-    command = args[1]
+    command = params[0]
     if command == 'submodule':
-        return args[2:3] == ['update'] and '--no-fetch' not in args
+        return params[1:2] == ['update'] and '--no-fetch' not in params
     return command in ['clone', 'fetch', 'pull', 'push', 'ls-remote']
 
-def validate_git_command(args, cwd):
-    if is_network_git_command(args=args) and not network.is_allowed():
+def validate_git_command(params, cwd):
+    '''
+    What a git command is allowed to do here, read from the command itself. Not
+    from the line it runs as: the options golem carries are its own, and one of
+    them in front of the command would answer for it (see git_command_line).
+    '''
+    if is_network_git_command(params=params) and not network.is_allowed():
         raise RuntimeError(
-            "Cannot run \"{}\" from \"{}\": reaching a remote is a resolve step. "
-            "Run golem resolve first.".format(' '.join(args), cwd))
+            "Cannot run \"git {}\" from \"{}\": reaching a remote is a resolve step. "
+            "Run golem resolve first.".format(' '.join(params), cwd))
 
-    if does_git_command_need_no_repository(args=args):
-        if not is_not_git_repository(path=cwd):
+    if does_git_command_need_no_repository(params=params):
+        if has_git_directory(path=cwd):
             raise RuntimeError(
-                "Already a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
-    elif does_git_command_need_nothing(args=args):
+                "Already a git repository: \"git {}\" from \"{}\"".format(
+                    ' '.join(params), cwd))
+    elif does_git_command_need_nothing(params=params):
         pass
     else:
         # Needs a repository
         if not is_git_repository(path=cwd):
             raise RuntimeError(
-                "Not a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
+                "Not a git repository: \"git {}\" from \"{}\"".format(
+                    ' '.join(params), cwd))
 
 # Whether git may stop and ask for credentials. Off until a command's settings
 # say otherwise: a prompt nobody is watching reads as a hang rather than as the
@@ -334,51 +346,56 @@ def git_environment():
     return environment
 
 
-def git_command(params):
+def git_command_line(params):
     '''
-    The git command line golem runs.
-    
-    The options are not part of the validation.
+    The line golem runs a git command as, its own options included.
+
+    The line, not the command: what a command is allowed to do is read from
+    `params` alone (see validate_git_command).
     '''
     return ['git'] + GIT_OPTIONS + params
 
 
 def run_git(params, cwd, quiet=False, **kwargs):
     '''
+    Runs a git command, and raises if it fails.
+
     `quiet` drops what the command has to say on stdout.
 
     What reaches a remote is run again when it fails: the network is the one part
     of this that fails for reasons that have nothing to do with what was asked.
     '''
-    args = ['git'] + params
-
-    validate_git_command(args=args, cwd=cwd)
+    validate_git_command(params=params, cwd=cwd)
 
     if quiet:
         kwargs.setdefault('stdout', subprocess.DEVNULL)
     kwargs.setdefault('env', git_environment())
 
-    delays = GIT_RETRY_DELAYS if is_network_git_command(args) else ()
-    run_task_with_retries(args=git_command(params), cwd=cwd, delays=delays, **kwargs)
+    delays = GIT_RETRY_DELAYS if is_network_git_command(params) else ()
+    run_task_with_retries(args=git_command_line(params), cwd=cwd, delays=delays, **kwargs)
 
-def check_git_output(params, cwd, **kwargs):
-    args = ['git'] + params
 
-    validate_git_command(args=args, cwd=cwd)
+def read_git(params, cwd, **kwargs):
+    '''
+    Runs a git command and hands back what it printed. Raises if it fails, so
+    what comes back is always an answer.
+    '''
+    validate_git_command(params=params, cwd=cwd)
     kwargs.setdefault('env', git_environment())
 
-    output = subprocess.check_output(git_command(params), cwd=cwd, **kwargs)
-    output = decode_output(output)
+    return decode_output(
+        subprocess.check_output(git_command_line(params), cwd=cwd, **kwargs))
 
-    return output
 
-def call_git(params, cwd, **kwargs):
-    args = ['git'] + params
-
-    validate_git_command(args=args, cwd=cwd)
+def try_git(params, cwd, **kwargs) -> bool:
+    '''
+    Runs a git command and says whether it worked. Never raises: this is the one
+    for asking a repository a question it is allowed to answer no to.
+    '''
+    validate_git_command(params=params, cwd=cwd)
     kwargs.setdefault('env', git_environment())
 
-    return subprocess.call(git_command(params), cwd=cwd, **kwargs)
+    return subprocess.call(git_command_line(params), cwd=cwd, **kwargs) == 0
 
 def run_task_with_retries(args, cwd=None, delays=(), **kwargs):
     '''

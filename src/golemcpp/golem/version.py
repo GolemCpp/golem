@@ -152,7 +152,7 @@ class Version:
         version_string = None
 
         try:
-            version_string = helpers.check_git_output(
+            version_string = helpers.read_git(
                 ['describe', '--long', '--tags', '--dirty=-d'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL)
@@ -168,7 +168,7 @@ class Version:
         version_string = None
 
         try:
-            version_string = helpers.check_git_output(
+            version_string = helpers.read_git(
                 ['describe', '--abbrev=0', '--tags'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL)
@@ -183,7 +183,7 @@ class Version:
         version_string = None
 
         try:
-            version_string = helpers.check_git_output(
+            version_string = helpers.read_git(
                 ['rev-parse', 'HEAD'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL)
@@ -202,7 +202,7 @@ class Version:
             return ''
 
         try:
-            message = helpers.check_git_output(
+            message = helpers.read_git(
                 ['log', '--format=%B', '-n', '1', commit_hash],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL)
@@ -218,7 +218,7 @@ class Version:
         branch = None
 
         try:
-            branch = helpers.check_git_output(
+            branch = helpers.read_git(
                 ['rev-parse', '--abbrev-ref', 'HEAD'],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL)

@@ -95,13 +95,14 @@ class ResourceManager:
 
     def policy_for(self, item):
         '''
-        How to fetch this item. Tracks a branch on the remote, which is what a
-        resource that is not pinned to a commit wants.
+        How to fetch this item.
+
+        See GitFetcher.resolved_reset_reference to know how the reference is interpreted.
         '''
         return FetchPolicy(
             fetch_mode=self.fetch_mode,
             fetch_jobs=self.fetch_jobs,
-            reference='origin/' + self.source_for(item).reference)
+            reference=self.source_for(item).reference)
 
     @staticmethod
     def pre_install(item):

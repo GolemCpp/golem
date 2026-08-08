@@ -24,13 +24,17 @@ STUB_HEAD = 'cafebabecafebabecafebabecafebabecafebabe'
 
 
 def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True,
-                    has_submodules=True, mode=FetchMode.BLOBLESS):
+                    has_submodules=True, mode=FetchMode.BLOBLESS,
+                    branches=('main',), tags=()):
     '''
     What the fetch reads about a repository, stubbed for a test that drives the
-    mechanism without one: the reference is present, HEAD reads back as a commit,
-    the resource declares submodules, and the root looks like it was fetched the
-    way `mode` says. None of these go through `run_git`, so none of them shows up
-    in a recorded command sequence.
+    mechanism without one: HEAD reads back as a commit, the resource declares
+    submodules, the root looks like it was fetched the way `mode` says, and the
+    refs are the ones `branches` and `tags` name. None of these go through
+    `run_git`, so none of them shows up in a recorded command sequence.
+
+    `holds_reference=False` is a repository holding nothing that was asked for,
+    whatever its refs would otherwise say.
     '''
     # What a root answers about its own shape, which is how a fetch tells what it
     # is refreshing rather than what a fresh one would be asked for.
@@ -39,15 +43,30 @@ def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True,
         'remote.origin.promisor': mode == FetchMode.BLOBLESS,
     }
 
-    def check_git_output(args, cwd=None, **kwargs):
+    def read_git(params, cwd=None, **kwargs):
         for question, answer in shape.items():
-            if question in args:
+            if question in params:
                 return ('true' if answer else 'false') + '\n'
         return head + '\n'
 
-    monkeypatch.setattr(
-        helpers, 'call_git', lambda args, cwd=None, **kwargs: 0 if holds_reference else 1)
-    monkeypatch.setattr(helpers, 'check_git_output', check_git_output)
+    def try_git(params, cwd=None, **kwargs):
+        if params[:3] != ['rev-parse', '--verify', '--quiet']:
+            # Housekeeping, where nothing is made of the answer.
+            return True
+        if not holds_reference:
+            return False
+
+        # What the probe order asks for, one ref at a time. Anything else is a
+        # commit, which a repository asked about its own reference holds.
+        wanted = params[3].removesuffix('^{commit}')
+        if wanted.startswith('refs/tags/'):
+            return wanted[len('refs/tags/'):] in tags
+        if wanted.startswith('refs/remotes/origin/'):
+            return wanted[len('refs/remotes/origin/'):] in branches
+        return True
+
+    monkeypatch.setattr(helpers, 'try_git', try_git)
+    monkeypatch.setattr(helpers, 'read_git', read_git)
     monkeypatch.setattr(GitFetcher, 'has_submodules', lambda self: has_submodules)
 
 

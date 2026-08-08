@@ -42,7 +42,7 @@ def make_fetcher(tmp_path):
         return GitFetcher(
             str(tmp_path / 'r'),
             Source.for_repository('https://host/r.git', reference=reference),
-            policy if policy is not None else FetchPolicy(reference='origin/' + reference))
+            policy if policy is not None else FetchPolicy(reference=reference))
 
     return make
 
@@ -105,6 +105,34 @@ def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls, make_fetc
     ]
 
 
+def test_a_shallow_refresh_asks_for_what_the_clone_asked_for(git_calls, make_fetcher):
+    # A root given one commit at a depth of one is refreshed the same way. Asking
+    # for every tag and every branch is history it was deliberately not given, and
+    # one refresh of it would leave a root marked shallow holding what a full clone
+    # holds.
+    make_fetcher(FetchPolicy(fetch_mode=FetchMode.SHALLOW, reference='cafebabe')).refresh()
+
+    assert ['fetch', '--depth=1', 'origin', 'cafebabe'] in git_calls
+    assert ['fetch', '--prune', '--prune-tags', '--tags', 'origin'] not in git_calls
+    assert not any('--tags' in args for args in git_calls)
+
+
+def test_every_other_mode_refreshes_every_ref(git_calls, make_fetcher):
+    # A branch deleted upstream stops being tracked, and a tag that moved is
+    # honoured rather than kept at what it used to point to.
+    make_fetcher(FetchPolicy(fetch_mode=FetchMode.FULL, reference='main')).refresh()
+
+    assert ['fetch', '--prune', '--prune-tags', '--tags', 'origin'] in git_calls
+
+
+def test_a_blobless_refresh_says_nothing_about_its_filter(git_calls, make_fetcher):
+    # It is recorded in the repository by the clone, so every later fetch is
+    # filtered by it without being told.
+    make_fetcher(FetchPolicy(fetch_mode=FetchMode.BLOBLESS, reference='main')).refresh()
+
+    assert not any('--filter=blob:none' in args for args in git_calls if args[0] == 'fetch')
+
+
 def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls, make_fetcher):
     # Every resource is cleaned and carries its submodules; a pin only says that
     # a refresh has nothing to fetch and lands back on the commit it holds. That
@@ -120,7 +148,7 @@ def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls, make
         ['submodule', 'sync', '--recursive'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none', '--no-fetch'],
     ]
-    assert not any(helpers.is_network_git_command(['git'] + args) for args in git_calls)
+    assert not any(helpers.is_network_git_command(args) for args in git_calls)
 
 
 def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, git_calls, make_fetcher):
@@ -137,35 +165,114 @@ def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, gi
 # -- the reference has to be there before anything resets to it -------------
 
 
-def test_a_missing_reference_is_fetched_before_the_reset(monkeypatch, git_calls, make_fetcher):
-    # The commit a resource names is not in this root -- a pin whose cache predates
-    # the resolve that produced it. Ask for exactly that commit rather than dying at
-    # the reset with git's own error.
-    # Missing when the reset would need it, there once it has been asked for.
-    # Whatever else the refresh calls git for reads as an ordinary success.
-    holds = iter([1, 0])
+def stub_a_reference_this_root_does_not_hold(monkeypatch):
+    '''A root answering for no tag, no branch, and not the commit either.'''
     monkeypatch.setattr(
-        helpers, 'call_git', lambda args, cwd=None, **kwargs: next(holds, 0))
-
-    make_fetcher(FetchPolicy(reference='cafebabe', fetch_remote=False)).refresh()
-
-    assert git_calls.index(['fetch', 'origin', 'cafebabe']) < \
-        git_calls.index(['reset', '--hard', 'cafebabe'])
+        helpers, 'try_git',
+        # Everything else is housekeeping, where nothing is made of the answer.
+        lambda params, cwd=None, **kwargs: params[:3] != ['rev-parse', '--verify', '--quiet'])
 
 
-def test_a_reference_that_never_arrives_is_refused(monkeypatch, git_calls, make_fetcher):
-    # Still missing after asking for it: nothing to reset to, and the error says
-    # what to do rather than what git saw.
-    monkeypatch.setattr(helpers, 'call_git', lambda args, cwd=None, **kwargs: 1)
+def stub_a_reference_only_a_fetch_answers_for(monkeypatch):
+    '''A root holding no ref for the reference, and only what a fetch just wrote.'''
+    monkeypatch.setattr(
+        helpers, 'try_git',
+        lambda params, cwd=None, **kwargs:
+            params[:3] != ['rev-parse', '--verify', '--quiet']
+            or params[3].startswith('FETCH_HEAD'))
 
-    with pytest.raises(RuntimeError, match='Run golem resolve first'):
-        make_fetcher(FetchPolicy(reference='cafebabe', fetch_remote=False)).refresh()
+
+@pytest.mark.parametrize('mode', [FetchMode.BLOBLESS, FetchMode.FULL])
+def test_a_reference_no_branch_or_tag_reaches_is_refused(monkeypatch, git_calls, make_fetcher, mode):
+    # A clone and a pruning fetch bring every branch and every tag with all their
+    # ancestors, so a commit missing from one of these roots is one nothing
+    # advertises. Asking for it by name would take a server willing to serve an
+    # object it advertises to nobody, and what came back could be on its way out of
+    # that remote's next collection -- so nothing is asked, and nothing is advised.
+    stub_a_reference_this_root_does_not_hold(monkeypatch)
+
+    with pytest.raises(RuntimeError, match='advertises no branch or tag'):
+        make_fetcher(FetchPolicy(
+            fetch_mode=mode, reference='cafebabe', fetch_remote=False)).refresh()
+
+    assert not any(helpers.is_network_git_command(args) for args in git_calls)
+
+
+def test_a_shallow_root_reaches_a_commit_nothing_advertises(monkeypatch, git_calls, make_fetcher):
+    # Asking by name is how a shallow root asks for anything at all, so it lands on a
+    # commit no branch and no tag reaches where the other modes refuse. A consequence
+    # of the mechanism, not a capability: naming such a commit is unsupported, and
+    # this pins the asymmetry so it stays deliberate rather than becoming a promise.
+    stub_a_reference_only_a_fetch_answers_for(monkeypatch)
+
+    make_fetcher(FetchPolicy(
+        fetch_mode=FetchMode.SHALLOW, reference='cafebabe')).populate()
+
+    assert git_calls.index(['fetch', '--depth=1', 'origin', 'cafebabe']) \
+        < git_calls.index(['reset', '--hard', 'FETCH_HEAD'])
 
 
 def test_a_present_reference_is_reset_to_without_asking_for_it(git_calls, make_fetcher):
     make_fetcher(FetchPolicy(reference='cafebabe', fetch_remote=False)).refresh()
 
     assert ['fetch', 'origin', 'cafebabe'] not in git_calls
+
+
+# -- what a reference turns out to name -------------------------------------
+
+
+def reset_onto(git_calls):
+    '''What the reset landed on, which is what the reference resolved to.'''
+    return next(args[2] for args in git_calls if args[:2] == ['reset', '--hard'])
+
+
+def test_a_branch_is_reached_through_the_remote(git_calls, make_fetcher):
+    # Never by its bare name: a cache clone carries a local branch of that name,
+    # left behind by the clone and never moved since, and git would read that one.
+    make_fetcher().populate()
+
+    assert reset_onto(git_calls) == 'origin/main'
+
+
+def test_a_tag_wins_over_a_branch_sharing_its_name(monkeypatch, git_calls, make_fetcher):
+    # Named in full, which is what keeps git from calling it ambiguous and
+    # warning about the branch it did not pick.
+    stub_git_probes(monkeypatch, branches=('main',), tags=('main',))
+
+    make_fetcher().populate()
+
+    assert reset_onto(git_calls) == 'refs/tags/main'
+
+
+def test_a_tag_is_reached_by_name(monkeypatch, git_calls, make_fetcher):
+    stub_git_probes(monkeypatch, branches=(), tags=('v3.12.0',))
+
+    make_fetcher(reference='v3.12.0').populate()
+
+    assert reset_onto(git_calls) == 'refs/tags/v3.12.0'
+
+
+def test_a_commit_is_left_as_it_was_given(monkeypatch, git_calls, make_fetcher):
+    # Neither a tag nor a branch answers for it, and a hash needs no help.
+    stub_git_probes(monkeypatch, branches=(), tags=())
+
+    make_fetcher(reference='cafebabe').populate()
+
+    assert reset_onto(git_calls) == 'cafebabe'
+
+
+def test_what_a_reference_names_is_read_once(monkeypatch, git_calls, make_fetcher):
+    # A refresh asks before the reset and again for it, and both are the same
+    # question about the same root.
+    probes = []
+    original = helpers.try_git
+    monkeypatch.setattr(
+        helpers, 'try_git',
+        lambda params, cwd=None, **kwargs: probes.append(params) or original(params, cwd))
+
+    make_fetcher().refresh()
+
+    assert sum('refs/tags/main^{commit}' in params for params in probes) == 1
 
 
 # -- what the fetch reports back --------------------------------------------
@@ -193,7 +300,7 @@ def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls, make_fetcher
         ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
-    assert all(helpers.is_network_git_command(['git'] + args)
+    assert all(helpers.is_network_git_command(args)
                for args, quiet in quiet_calls if not quiet)
 
 
@@ -210,7 +317,7 @@ def test_a_shallow_clone_only_speaks_while_it_fetches(quiet_calls, make_fetcher)
 
 
 def migrating(make_fetcher, git_calls, recorded, target):
-    fetcher = make_fetcher(FetchPolicy(fetch_mode=target, reference='origin/main'))
+    fetcher = make_fetcher(FetchPolicy(fetch_mode=target, reference='main'))
     return fetcher.migrate(Fetched(head=STUB_HEAD, mode=recorded)), git_calls
 
 
@@ -233,7 +340,7 @@ def test_a_full_root_becomes_blobless_without_transferring_anything(git_calls, m
         ['config', 'remote.origin.promisor', 'true'],
         ['config', 'remote.origin.partialclonefilter', 'blob:none'],
     ]
-    assert not any(helpers.is_network_git_command(['git'] + args) for args in calls)
+    assert not any(helpers.is_network_git_command(args) for args in calls)
 
 
 def test_a_blobless_root_becomes_full_by_asking_for_what_it_left_out(git_calls, make_fetcher):
@@ -265,7 +372,7 @@ def test_a_root_that_recorded_nothing_is_recognised_rather_than_re_cloned(
     # must not re-clone all of them.
     monkeypatch.setattr(GitFetcher, 'detected_mode', lambda self: FetchMode.FULL)
 
-    fetcher = make_fetcher(FetchPolicy(fetch_mode=FetchMode.FULL, reference='origin/main'))
+    fetcher = make_fetcher(FetchPolicy(fetch_mode=FetchMode.FULL, reference='main'))
 
     # What it was detected as is handed back, so the manifest can record it and
     # the next resolve has nothing left to detect.
@@ -345,8 +452,8 @@ def housekeeping(monkeypatch, git_calls):
     '''What the fetcher asks git about, where nothing is made of the answer.'''
     asked = []
     monkeypatch.setattr(
-        helpers, 'call_git',
-        lambda args, cwd=None, **kwargs: asked.append(args) or 0)
+        helpers, 'try_git',
+        lambda params, cwd=None, **kwargs: asked.append(params) or True)
     return asked
 
 
@@ -370,8 +477,8 @@ def test_a_root_nothing_was_done_to_is_not_packed_either(monkeypatch, housekeepi
 
 def test_what_cannot_be_read_is_not_taken_for_clean(monkeypatch, make_fetcher):
     monkeypatch.setattr(
-        helpers, 'check_git_output',
-        lambda args, cwd=None, **kwargs: (_ for _ in ()).throw(RuntimeError('no repo')))
+        helpers, 'read_git',
+        lambda params, cwd=None, **kwargs: (_ for _ in ()).throw(RuntimeError('no repo')))
 
     assert make_fetcher().is_dirty() is True
     assert make_fetcher().is_at('cafebabe') is False
@@ -381,7 +488,7 @@ def test_what_cannot_be_read_is_not_taken_for_clean(monkeypatch, make_fetcher):
 
 
 def test_submodules_are_fetched_in_parallel_when_asked(git_calls, make_fetcher):
-    make_fetcher(FetchPolicy(reference='origin/main', fetch_jobs=4)).populate()
+    make_fetcher(FetchPolicy(reference='main', fetch_jobs=4)).populate()
 
     assert git_calls[-1] == [
         'submodule', 'update', '--init', '--recursive', '--filter=blob:none',
@@ -390,6 +497,6 @@ def test_submodules_are_fetched_in_parallel_when_asked(git_calls, make_fetcher):
 
 
 def test_one_job_is_left_unsaid(git_calls, make_fetcher):
-    make_fetcher(FetchPolicy(reference='origin/main', fetch_jobs=1)).populate()
+    make_fetcher(FetchPolicy(reference='main', fetch_jobs=1)).populate()
 
     assert '--jobs' not in git_calls[-1]

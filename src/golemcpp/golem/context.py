@@ -4119,7 +4119,7 @@ class Context:
             return self.repository
         self.repository = ''
         try:
-            remote_url = helpers.check_git_output(
+            remote_url = helpers.read_git(
                 ['config', '--get', 'remote.origin.url'],
                 cwd=self.get_project_dir())
             remote_url = remote_url.split('\n')

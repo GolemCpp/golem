@@ -54,7 +54,7 @@ def test_remove_tree_handles_windows_style_paths_with_spaces_and_non_ascii(tmp_p
     ['submodule', 'update', '--init', '--recursive'],
 ])
 def test_is_network_git_command_recognizes_what_reaches_a_remote(params):
-    assert helpers.is_network_git_command(['git'] + params) is True
+    assert helpers.is_network_git_command(params) is True
 
 
 @pytest.mark.parametrize('params', [
@@ -70,7 +70,7 @@ def test_is_network_git_command_recognizes_what_reaches_a_remote(params):
     ['config', '--get', 'remote.origin.url'],
 ])
 def test_is_network_git_command_leaves_local_commands_alone(params):
-    assert helpers.is_network_git_command(['git'] + params) is False
+    assert helpers.is_network_git_command(params) is False
 
 
 def make_git_repository(tmp_path):
@@ -115,10 +115,10 @@ def test_run_git_keeps_the_stdout_a_caller_asked_for(tmp_path, git_task):
 # -- how golem runs git, which is not what it validates ---------------------
 
 
-def test_a_git_command_carries_the_options_golem_runs_git_with():
+def test_a_git_command_line_carries_the_options_golem_runs_git_with():
     # Detached is where every resource golem checks out lands, on purpose, so the
     # advice about it is noise.
-    assert helpers.git_command(['reset', '--hard']) == [
+    assert helpers.git_command_line(['reset', '--hard']) == [
         'git', '-c', 'advice.detachedHead=false', 'reset', '--hard']
 
 
@@ -245,12 +245,44 @@ def test_a_git_command_may_not_fetch_what_it_is_missing_on_its_own(monkeypatch):
 def test_validate_git_command_refuses_a_remote_outside_a_network_scope(tmp_path):
     with pytest.raises(RuntimeError, match='Run golem resolve first'):
         helpers.validate_git_command(
-            ['git', 'ls-remote', '--tags', 'https://example.test/repo.git'],
+            ['ls-remote', '--tags', 'https://example.test/repo.git'],
             cwd=str(tmp_path))
 
 
 def test_validate_git_command_allows_a_remote_inside_a_network_scope(tmp_path):
     with network.allowed():
         helpers.validate_git_command(
-            ['git', 'ls-remote', '--tags', 'https://example.test/repo.git'],
+            ['ls-remote', '--tags', 'https://example.test/repo.git'],
             cwd=str(tmp_path))
+
+
+# -- and whether there is a repository to run it in -------------------------
+
+
+def test_a_clone_needs_ground_git_has_nothing_on(tmp_path):
+    # Free ground, so there is nothing to refuse.
+    with network.allowed():
+        helpers.validate_git_command(['clone', '--', 'url', '.'], cwd=str(tmp_path))
+
+        (tmp_path / '.git').mkdir()
+
+        with pytest.raises(RuntimeError, match='Already a git repository'):
+            helpers.validate_git_command(['clone', '--', 'url', '.'], cwd=str(tmp_path))
+
+
+def test_everything_else_needs_a_repository_to_work_in(tmp_path):
+    with pytest.raises(RuntimeError, match='Not a git repository'):
+        helpers.validate_git_command(['reset', '--hard'], cwd=str(tmp_path))
+
+    helpers.validate_git_command(
+        ['reset', '--hard'], cwd=make_git_repository(tmp_path))
+
+
+def test_a_directory_git_started_in_and_left_is_neither(tmp_path):
+    # `.git` without a HEAD: enough for a clone to refuse the ground, not enough
+    # for anything else to work there. The two questions are not each other's
+    # opposite, which is what naming them apart is for.
+    (tmp_path / '.git').mkdir()
+
+    assert helpers.has_git_directory(str(tmp_path)) is True
+    assert helpers.is_git_repository(str(tmp_path)) is False
