@@ -74,10 +74,11 @@ def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls, make_fet
     ]
 
 
-def test_a_checkout_gives_way_to_the_reset_that_follows_it(git_calls, make_fetcher):
-    # Both land on the same commit, and materializing the tree twice is two round
-    # trips for the file content under a partial clone.
-    make_fetcher(FetchPolicy(checkout='v3.12.0', reference='cafebabe')).populate()
+def test_a_clone_lands_on_its_reference_through_the_reset(git_calls, make_fetcher):
+    # The clone materializes the tree once: the reset is what lands it on the
+    # reference, which under a partial clone is one round trip for the content
+    # rather than two.
+    make_fetcher(FetchPolicy(reference='cafebabe')).populate()
 
     assert git_calls == [
         ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
@@ -86,15 +87,9 @@ def test_a_checkout_gives_way_to_the_reset_that_follows_it(git_calls, make_fetch
     ]
 
 
-def test_a_checkout_is_kept_when_there_is_nothing_to_reset_onto(git_calls, make_fetcher):
-    make_fetcher(FetchPolicy(checkout='v3.12.0', reference='')).populate()
-
-    assert ['checkout', 'v3.12.0'] in git_calls
-
-
 def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls, make_fetcher):
     make_fetcher(
-        FetchPolicy(fetch_mode=FetchMode.SHALLOW, checkout='v3.12.0', reference='cafebabe')).populate()
+        FetchPolicy(fetch_mode=FetchMode.SHALLOW, reference='cafebabe')).populate()
 
     assert git_calls == [
         ['init'],
