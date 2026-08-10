@@ -54,10 +54,10 @@ def test_resolve_matches_tag_and_returns_hash(monkeypatch):
 
     monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
 
-    resolved_version, resolved_hash = VersionResolver.resolve(
+    resolved = VersionResolver.resolve(
         'https://github.com/nlohmann/json.git', '^3.0.0')
-    assert resolved_version == 'v3.12.0'
-    assert resolved_hash == 'cafebabecafebabe'
+    assert resolved.reference == 'v3.12.0'
+    assert resolved.revision == 'cafebabecafebabe'
 
 
 def test_resolve_falls_back_to_branch_head(monkeypatch):
@@ -70,7 +70,7 @@ def test_resolve_falls_back_to_branch_head(monkeypatch):
 
     monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
 
-    resolved_version, resolved_hash = VersionResolver.resolve(
+    resolved = VersionResolver.resolve(
         'https://example.com/x.git', 'main')
-    assert resolved_version == 'main'
-    assert resolved_hash == 'abc123'
+    assert resolved.reference == 'main'
+    assert resolved.revision == 'abc123'

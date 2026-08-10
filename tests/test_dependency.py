@@ -1,3 +1,4 @@
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.dependency import Dependency
 
 
@@ -14,7 +15,7 @@ def test_dependency_accepts_directory_keyword():
     assert dep.repository == ''
     assert dep.is_non_git_directory() is True
     # A directory dependency has no version to resolve.
-    assert dep.resolve() == '-'
+    assert dep.resolve() == ResolvedVersion(reference='-', revision='-')
     source = dep.to_source()
     assert source.type == 'directory'
     assert source.location == './mylib'

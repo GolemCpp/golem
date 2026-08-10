@@ -2,15 +2,16 @@
 Shared version resolution for cached resources.
 
 Given a remote `url` and a requested `version` (a semver spec, a branch, or an
-exact ref), resolve it to a concrete `(resolved_version, resolved_hash)` pair by
-querying the remote's git tags. Extracted from `Dependency.resolve` so every
-resource kind (dependencies, tools, repositories) resolves versions identically.
+exact ref), resolve it to a concrete `ResolvedVersion` by querying the remote's
+git tags. Extracted from `Dependency.resolve` so every resource kind
+(dependencies, tools, repositories) resolves versions identically.
 '''
 
 import os
 import re
 
 from golemcpp.golem import helpers
+from golemcpp.golem.resolved_version import ResolvedVersion
 from semver import max_satisfying
 
 
@@ -18,15 +19,14 @@ class VersionResolver:
     @staticmethod
     def resolve(url, version, version_regex=''):
         '''
-        Resolve `version` against `url`'s git tags, returning
-        `(resolved_version, resolved_hash)`.
+        Resolve `version` against `url`'s git tags, returning a `ResolvedVersion`.
 
         Semantics (unchanged from the original Dependency.resolve):
         - The semver spec is matched against the remote tags (optionally
           pre-filtered by `version_regex`); on a match the tag and its sha are
           returned.
         - With no tag match, the value is treated as a branch head (`ls-remote
-          --heads`); failing that, it is used literally as both version and hash.
+          --heads`); failing that, it stands for itself as both name and revision.
         '''
         tags = helpers.read_git(
             ['ls-remote', '--tags', url], cwd=os.getcwd())
@@ -54,18 +54,16 @@ class VersionResolver:
                         found_version))
             hash = hash.splitlines()[0]
             hash = hash.split('\t')[0]
-            return found_version, hash
+            return ResolvedVersion(reference=found_version, revision=hash)
 
-        resolved_version = version
         hash = helpers.read_git(
             ['ls-remote', '--heads', url, version], cwd=os.getcwd())
         if hash:
             hash = hash.splitlines()[0]
             hash = hash.split('\t')[0]
-            resolved_hash = hash
         else:
-            resolved_hash = version
-        return resolved_version, resolved_hash
+            hash = version
+        return ResolvedVersion(reference=version, revision=hash)
 
     @staticmethod
     def find_version(versions, ver):

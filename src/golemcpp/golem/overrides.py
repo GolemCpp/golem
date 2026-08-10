@@ -24,8 +24,7 @@ OVERRIDES_FILENAME = 'overrides.json'
 # carries say which dependency is meant, not what to change about it.
 OVERRIDDEN_MEMBERS = (
     'version',
-    'resolved_version',
-    'resolved_hash',
+    'resolved',
     'shallow',
     'link',
     'variant',

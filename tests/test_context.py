@@ -3,6 +3,7 @@ import pytest
 from types import SimpleNamespace
 import json
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import context as golem_context, helpers, network, qt_discovery
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
@@ -490,7 +491,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
         link=None,
         variant=None,
         shallow=False,
-        resolved_version='1.0.0',
+        resolved=ResolvedVersion(reference='1.0.0', revision='cafebabe'),
     )
 
     calls = []
@@ -555,7 +556,8 @@ def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch
         context.run_dep_command(
             dep=SimpleNamespace(
                 name='demo', version='1.0.0', runtime_link=None, runtime_variant=None,
-                link=None, variant=None, shallow=False, resolved_version='1.0.0'),
+                link=None, variant=None, shallow=False,
+                resolved=ResolvedVersion(reference='1.0.0', revision='cafebabe')),
             command=command)
 
     assert refreshed == [False, True]
@@ -817,7 +819,7 @@ def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
         version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
+    dep.resolved = ResolvedVersion(revision='1234567890abcdef')
     # Primed the way configure does, so the path comes from that resolution.
     get_dependency_manager(context.cache_configuration).update_cached_resource(dep)
 
@@ -838,8 +840,7 @@ def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
     dep = Dependency.unserialize_from_json({
         'name': 'json',
         'repository': 'https://github.com/nlohmann/json.git',
-        'resolved_version': '3.11.3',
-        'resolved_hash': '1234567890abcdef',
+        'resolved': {'reference': '3.11.3', 'revision': '1234567890abcdef'},
     })
     assert dep.cached_resource is None
 
@@ -852,12 +853,16 @@ def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
     assert context.get_dep_cached_resource(dep) is dep.cached_resource
 
 
-def test_resolved_reference_prefers_the_hash_whole():
+def test_a_dependency_source_prefers_the_commit_whole():
     # Whole, not abbreviated: git is handed this as it is, and cutting it down to
     # fit a directory name is source.make_revision_component's job.
-    assert helpers.resolved_reference('3.11.3', '1234567890abcdef') == '1234567890abcdef'
-    # Falls back to the resolved version name when there is no hash.
-    assert helpers.resolved_reference('3.11.3', '') == '3.11.3'
+    dep = Dependency(repository='https://host/json.git')
+    dep.resolved = ResolvedVersion(reference='3.11.3', revision='1234567890abcdef')
+    assert dep.to_source().reference == '1234567890abcdef'
+
+    # Falls back to the resolved name when nothing named a commit.
+    dep.resolved = ResolvedVersion(reference='3.11.3')
+    assert dep.to_source().reference == '3.11.3'
 
 
 def test_a_build_script_may_reach_a_remote():

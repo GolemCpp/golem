@@ -123,18 +123,6 @@ def make_golem_command(command_name):
     return [sys.executable, golem_path, command_name]
 
 
-def resolved_reference(resolved_version, resolved_hash):
-    '''
-    The effective git reference of a resolved resource: the commit when known,
-    else the resolved version name. Used to build a resource's cache key so any
-    resolved resource (dependency, tool, repository) keys the same way.
-
-    Whole, never abbreviated: a reference reaches git as it is, and how much of it
-    a directory name can carry is source.make_revision_component's business.
-    '''
-    return resolved_hash or resolved_version
-
-
 def copy_tree(source_path, destination_path):
     if not os.path.isdir(destination_path):
         raise ValueError(str(destination_path) + " is not a directory")

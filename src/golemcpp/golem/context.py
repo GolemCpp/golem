@@ -136,7 +136,7 @@ class Context:
     @staticmethod
     def make_dependency_unique_identifier(dependency):
         return '{}_{}_{}_{}_{}'.format(dependency.repository,
-                                       dependency.resolved_hash,
+                                       dependency.resolved.revision,
                                        dependency.link,
                                        dependency.runtime_link,
                                        dependency.runtime_variant)
@@ -1634,7 +1634,7 @@ class Context:
 
         if dep.shallow:
             configure_options += [
-                '--force-version="{}"'.format(dep.resolved_version)
+                '--force-version="{}"'.format(dep.resolved.reference)
             ]
 
         dependencies_options = path_options + []
@@ -4909,9 +4909,8 @@ class Context:
             repository=repository,
             target=target,
             decorated_target=decorated_target,
-            resolved_version=self.context.options.force_version
-            if self.context.options.force_version else self.version.gitlong,
-            resolved_hash=self.version.githash)
+            resolved=self.version.to_resolved_version(
+                force_reference=self.context.options.force_version))
 
     def generate_configuration(self, task, targets):
         config = task.merge_configs(self)

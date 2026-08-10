@@ -1,5 +1,6 @@
 import pytest
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
@@ -12,7 +13,7 @@ def resolutions(monkeypatch):
 
     def resolve(url, version, version_regex=''):
         asked.append((url, version))
-        return 'v1.2.0', 'deadbeef'
+        return ResolvedVersion(reference='v1.2.0', revision='deadbeef')
 
     monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(resolve))
     return asked
@@ -30,8 +31,8 @@ def test_a_cookbook_asked_for_without_a_version_takes_its_sources_reference():
 def test_resolving_follows_the_configured_reference_without_asking_a_remote(resolutions):
     cookbook = Cookbook(source=make_source(reference='develop'))
 
-    assert cookbook.resolve() == 'develop'
-    assert cookbook.resolved_version == 'develop'
+    assert cookbook.resolve() == ResolvedVersion(reference='develop', revision='develop')
+    assert cookbook.resolved.reference == 'develop'
     # Nothing to ask for: a cookbook names no version of its own yet.
     assert resolutions == []
 

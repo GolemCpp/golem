@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import pytest
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem import cache_resolution_policy
@@ -22,7 +23,8 @@ def stub_version_resolver(monkeypatch):
     # stub it so unit tests neither touch the network nor depend on live tags.
     monkeypatch.setattr(
         tool.VersionResolver, 'resolve',
-        staticmethod(lambda url, version, version_regex='': (version, 'deadbeef')))
+        staticmethod(lambda url, version, version_regex='':
+                    ResolvedVersion(reference=version, revision='deadbeef')))
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +108,7 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path):
     # not the staging directory the fetch went through.
     assert captured['resource_root'] == classic_tool_root(tools_cache_directory)
     assert installed_tool.name == 'cppfront'
-    assert installed_tool.resolved_version == 'v0.8.1'
+    assert installed_tool.resolved.reference == 'v0.8.1'
 
     source = manager.cache_manager.read_manifest_source(cached_tool)
 
