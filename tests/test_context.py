@@ -777,7 +777,7 @@ def test_no_overrides_configured_at_all_resolves_to_nothing(monkeypatch, tmp_pat
     assert context.load_overrides_configuration() is None
 
 
-def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
+def test_make_basic_dependency_repo_path_uses_the_cache_key_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     context.cache_configuration = make_cache_configuration(
         CacheDirectory('/cache', is_read_only=False), minimization_enabled=False)
@@ -788,9 +788,8 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
     repo_path = manager.resolve_cached_resource(
         manager.get_cookbook(repository)).path
 
-    assert repo_path == os.path.join('/cache', COOKBOOKS_SUBDIR, Source.make_repository_base(
-        'https://github.com/GolemCpp/recipes.git', 'main')
-    )
+    assert repo_path == os.path.join(
+        '/cache', COOKBOOKS_SUBDIR, repository.get_cache_key())
 
 
 def test_cache_minimization_length_and_toggle_resolution(tmp_path):
@@ -853,8 +852,10 @@ def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
     assert context.get_dep_cached_resource(dep) is dep.cached_resource
 
 
-def test_resolved_reference_prefers_hash_prefix():
-    assert helpers.resolved_reference('3.11.3', '1234567890abcdef') == '12345678'
+def test_resolved_reference_prefers_the_hash_whole():
+    # Whole, not abbreviated: git is handed this as it is, and cutting it down to
+    # fit a directory name is source.make_revision_component's job.
+    assert helpers.resolved_reference('3.11.3', '1234567890abcdef') == '1234567890abcdef'
     # Falls back to the resolved version name when there is no hash.
     assert helpers.resolved_reference('3.11.3', '') == '3.11.3'
 

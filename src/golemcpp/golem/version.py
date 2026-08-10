@@ -107,7 +107,9 @@ class Version:
 
     @staticmethod
     def parse_git_hash(version):
-        hash_regex = r'^[0-9a-fA-F]{7,40}$'
+        # Up to 64: a SHA-256 object name is twice the length of a SHA-1 one, and
+        # git is migrating to it.
+        hash_regex = r'^[0-9a-fA-F]{7,64}$'
         if re.fullmatch(hash_regex, version):
             return version[:7], version
         return None

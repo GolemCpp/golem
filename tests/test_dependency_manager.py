@@ -104,7 +104,7 @@ def test_resolved_location_is_minimized_flat_when_enabled(tmp_path):
     manager = make_manager(tmp_path, minimization_enabled=True)
     dep = make_dependency()
 
-    expected_name = hashlib.sha1(
+    expected_name = hashlib.sha256(
         '{}/{}'.format(DEPENDENCIES_SUBDIR, expected_cache_key(dep)).encode('utf-8')
     ).hexdigest()[:8]
 
