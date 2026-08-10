@@ -179,6 +179,15 @@ def test_cache_key_uses_source_id_and_reference():
     assert source.get_cache_key() == 'recipes@com.github.golemcpp+main=0d6e4079'
 
 
+def test_cache_key_of_a_source_with_no_revision_is_the_source_id():
+    # A copied directory has no revision, so there is nothing for the separator
+    # to join and it is left off entirely.
+    source = Source.for_directory('file:///tmp/mylib')
+
+    assert source.get_cache_key() == source.get_id()
+    assert source.get_cache_key() == 'mylib@fsys.tmp'
+
+
 def test_cache_key_abbreviates_an_object_name_the_way_git_does():
     source = Source.for_repository(
         'https://github.com/nlohmann/json.git',

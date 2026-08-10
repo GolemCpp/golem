@@ -223,9 +223,16 @@ class Source:
         '''
         What identifies this source in a cache, as one directory name: which
         repository it is, and which revision of it.
+
+        A source with no revision to name (e.g. a copied directory) is identified
+        by the repository alone, rather than by a separator with nothing after it.
         '''
-        return self.get_id() + CACHE_KEY_SEPARATOR + make_revision_component(
-            str(self.reference))
+        component = make_revision_component(str(self.reference))
+
+        if not component:
+            return self.get_id()
+
+        return self.get_id() + CACHE_KEY_SEPARATOR + component
 
 
 # Every kind a location may claim, and how to build it. A new kind (an archive,
