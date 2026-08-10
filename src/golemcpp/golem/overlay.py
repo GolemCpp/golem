@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
@@ -11,7 +11,7 @@ class Overlay:
     source: Source
     
     version: str = ''
-    resolved: ResolvedVersion = field(default_factory=ResolvedVersion)
+    resolved: ResolvedVersion = ResolvedVersion()
 
     def __post_init__(self):
         # An overlay asked for without a version is asked for at the reference its

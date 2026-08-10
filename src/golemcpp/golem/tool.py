@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from golemcpp.golem import tool_registry
 from golemcpp.golem.resolved_version import ResolvedVersion
@@ -13,7 +13,7 @@ class Tool:
     definition: tool_registry.ToolDefinition
 
     version: str = ''
-    resolved: ResolvedVersion = field(default_factory=ResolvedVersion)
+    resolved: ResolvedVersion = ResolvedVersion()
 
     def __post_init__(self):
         # A tool asked for without a version is asked for at the one its

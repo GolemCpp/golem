@@ -95,15 +95,16 @@ class Dependency(Configuration):
         return bool(self.directory)
 
     def resolve(self):
+        if self.directory:
+            # A copied directory has no version: nothing to resolve, and nothing a
+            # resolution could name. What DirectoryFetcher says with Fetched().
+            return self.resolved
+
         if self.resolved:
             return self.resolved
 
-        if self.directory:
-            # A copied directory has no version to resolve.
-            self.resolved = ResolvedVersion(reference='-', revision='-')
-        else:
-            self.resolved = VersionResolver.resolve(
-                self.repository, self.version, self.version_regex)
+        self.resolved = VersionResolver.resolve(
+            self.repository, self.version, self.version_regex)
 
         if not self.resolved.revision:
             raise RuntimeError(

@@ -14,8 +14,13 @@ def test_dependency_accepts_directory_keyword():
     assert dep.directory == './mylib'
     assert dep.repository == ''
     assert dep.is_non_git_directory() is True
-    # A directory dependency has no version to resolve.
-    assert dep.resolve() == ResolvedVersion(reference='-', revision='-')
+    # A directory dependency has no version to resolve, and resolving one names
+    # nothing rather than standing something in for it.
+    assert dep.resolve() == ResolvedVersion()
+    assert not dep.resolved
+    # Idempotent, and never serialized: there is nothing to record.
+    assert dep.resolve() == ResolvedVersion()
+    assert 'resolved' not in Dependency.serialize_to_json(dep)
     source = dep.to_source()
     assert source.type == 'directory'
     assert source.location == './mylib'

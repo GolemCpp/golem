@@ -97,7 +97,9 @@ class Project:
                         cached_dependency.resolved.revision))
                     self.deps[i].resolved = cached_dependency.resolved
                     break
-            if not self.deps[i].resolved:
+            # A copied directory has no version to have cached, so saying so about
+            # one would report a failure that cannot happen.
+            if not self.deps[i].resolved and not dependency.is_non_git_directory():
                 print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()
