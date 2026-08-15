@@ -76,8 +76,7 @@ class Dependency(Configuration):
         # way as every other resource kind.
         if self.directory:
             return Source.for_directory(self.directory)
-        return Source.for_repository(
-            self.repository, self.resolved.revision or self.resolved.reference)
+        return Source.for_repository(self.repository, self.resolved)
 
     def update_source(self, project_dir):
         # Also the gate on a dependency read from a configuration: read_json

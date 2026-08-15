@@ -28,8 +28,7 @@ class Tool:
     def to_source(self):
         # View the tool as a Source to compute its identity the same way as every
         # other resource kind.
-        return Source.for_repository(
-            self.definition.repository, reference=self.resolved.reference)
+        return Source.for_repository(self.definition.repository, self.resolved)
 
     def resolve(self):
         # Resolves the requested version through VersionResolver

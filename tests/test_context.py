@@ -18,6 +18,7 @@ from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.requested_source import detect_kind
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
+from golemcpp.golem.dependency_manager import DependencyManager
 from conftest import absolute_path, make_cache_configuration
 
 
@@ -808,7 +809,8 @@ def test_make_basic_dependency_repo_path_uses_the_cache_key_with_branch(tmp_path
 
     assert repo_path == os.path.join(
         '/cache', COOKBOOKS_SUBDIR,
-        requested.resolved_at('main').get_cache_key())
+        get_cookbook_manager(context.cache_configuration).cache_key_for(
+            manager.get_cookbook(requested)))
 
 
 def test_cache_minimization_length_and_toggle_resolution(tmp_path):
@@ -875,11 +877,14 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # fit a directory name is source.make_revision_component's job.
     dep = Dependency(repository='https://host/json.git')
     dep.resolved = ResolvedVersion(reference='3.11.3', revision='1234567890abcdef')
-    assert dep.to_source().reference == '1234567890abcdef'
+    assert dep.to_source().resolved.revision == '1234567890abcdef'
 
-    # Falls back to the resolved name when nothing named a commit.
+    # Keyed on the commit, falling back to the resolved name when nothing
+    # named one -- which is DependencyManager's rule, not the Source's.
+    assert DependencyManager.key_component_for(dep.to_source()) == '1234567890abcdef'
+
     dep.resolved = ResolvedVersion(reference='3.11.3')
-    assert dep.to_source().reference == '3.11.3'
+    assert DependencyManager.key_component_for(dep.to_source()) == '3.11.3'
 
 
 def test_a_build_script_may_reach_a_remote():

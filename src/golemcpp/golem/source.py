@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from golemcpp.golem import helpers
 from golemcpp.golem import locator
 from golemcpp.golem.locator import Locator
+from golemcpp.golem.resolved_version import ResolvedVersion
 
 
 # A cached resource is obtained from a Source. Today a Source is one of two kinds:
@@ -59,10 +60,18 @@ def make_revision_component(revision):
 
 @dataclass(frozen=True)
 class Source:
-    # `locator` is where the source is, settled. `version` is what was asked of
-    # it, empty when the location named nothing.
+    '''
+    Where a resource comes from, once resolving has said which version of it.
+
+    A RequestedSource is what a configuration spells, a Source is what resolving
+    one produces. Only this one can name a commit, and only this one identifies
+    anything in a cache.
+    '''
+
+    # `locator` is where the source is, settled. `resolved` is which version of
+    # it resolving landed on, empty when there was nothing to resolve.
     locator: Locator = field(default_factory=Locator)
-    reference: str = 'main'
+    resolved: ResolvedVersion = field(default_factory=ResolvedVersion)
     type: str = SOURCE_TYPE_GIT
 
     # The named constructors take either a Locator or the string spelling one;
@@ -70,13 +79,15 @@ class Source:
     # without passing through here or through parsing.
 
     @classmethod
-    def for_repository(cls, locator, reference='main'):
-        return cls(locator=Locator(str(locator)), reference=reference,
+    def for_repository(cls, locator, resolved=None):
+        return cls(locator=Locator(str(locator)),
+                   resolved=resolved if resolved is not None else ResolvedVersion(),
                    type=SOURCE_TYPE_GIT)
 
     @classmethod
     def for_directory(cls, locator):
-        return cls(locator=Locator(str(locator)), reference='',
+        # A copied directory is whatever it holds now: nothing resolved it.
+        return cls(locator=Locator(str(locator)), resolved=ResolvedVersion(),
                    type=SOURCE_TYPE_DIRECTORY)
 
     # -- identity serialization (recorded in a resource manifest) ---------
@@ -85,14 +96,14 @@ class Source:
         return {
             'type': self.type,
             'locator': str(self.locator),
-            'reference': self.reference,
+            'resolved': self.resolved.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, source: dict) -> 'Source':
         return cls(
             locator=Locator(helpers.first_non_empty_among_keys(source, 'locator')),
-            reference=helpers.first_non_empty_among_keys(source, 'reference'),
+            resolved=ResolvedVersion.from_dict(source.get('resolved') or {}),
             type=helpers.first_non_empty_among_keys(source, 'type') or SOURCE_TYPE_GIT)
 
     @classmethod
@@ -104,21 +115,6 @@ class Source:
         '''Human label, e.g. "<locator> <reference>"; empty when no locator.'''
         if not self.locator:
             return ''
-        if self.reference:
-            return '{} {}'.format(self.locator, self.reference)
+        if self.resolved.reference:
+            return '{} {}'.format(self.locator, self.resolved.reference)
         return str(self.locator)
-
-    def get_cache_key(self):
-        '''
-        What identifies this source in a cache, as one directory name: which
-        repository it is, and which revision of it.
-
-        A source with no revision to name (e.g. a copied directory) is identified
-        by the repository alone, rather than by a separator with nothing after it.
-        '''
-        component = make_revision_component(str(self.reference))
-
-        if not component:
-            return self.locator.get_id()
-
-        return self.locator.get_id() + CACHE_KEY_SEPARATOR + component

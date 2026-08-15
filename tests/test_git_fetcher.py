@@ -5,6 +5,7 @@ from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.git_fetcher import GitFetcher
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from conftest import stub_git_probes
 from conftest import STUB_HEAD
@@ -50,7 +51,7 @@ def fetch_root(tmp_path):
 def make_fetcher(policy=None, revision='main'):
     return GitFetcher(
         _root,
-        Source.for_repository('https://host/r.git', reference=revision),
+        Source.for_repository('https://host/r.git', ResolvedVersion(reference=revision, revision=revision)),
         policy if policy is not None else FetchPolicy(revision=revision))
 
 

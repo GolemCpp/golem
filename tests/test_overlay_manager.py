@@ -9,6 +9,7 @@ from golemcpp.golem.overlay_manager import (
     OverlayManager, get_overlay_manager)
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
 from golemcpp.golem.source import Source
+from golemcpp.golem.resolved_version import ResolvedVersion
 from conftest import make_cache_configuration
 
 
@@ -28,8 +29,8 @@ def test_resource_for_bakes_in_the_overrides_kind():
 
     assert resource.kind == ResourceKind.OVERLAY
     assert resource.subdir == cache_configuration.OVERLAYS_SUBDIR
-    assert resource.source == source.resolved_at('main')
-    assert resource.cache_key == source.resolved_at('main').get_cache_key()
+    assert resource.source == source.resolved_at(ResolvedVersion(reference='main', revision='main'))
+    assert resource.cache_key == OverlayManager.cache_key_for(Overlay(source=source))
 
 
 def test_an_overlay_lands_where_it_did_before_being_resolved():
@@ -53,7 +54,7 @@ def test_resolve_and_locate(tmp_path):
     assert cached_repository.cache_root == str(tmp_path / 'cache')
     assert cached_repository.path == os.path.join(
         str(tmp_path / 'cache'), cache_configuration.OVERLAYS_SUBDIR,
-        source.resolved_at('main').get_cache_key())
+        OverlayManager.cache_key_for(Overlay(source=source)))
 
 
 def test_guard_install_swaps_source_and_manifest(tmp_path):
@@ -74,7 +75,7 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
     assert not os.path.exists(cached.staging_path)
     manifest = ResourceManifest.read_from_root(resource_root)
     assert manifest.kind == ResourceKind.OVERLAY.value
-    assert manager.cache_manager.read_manifest_source(cached).reference == 'main'
+    assert manager.cache_manager.read_manifest_source(cached).resolved.reference == 'main'
 
 
 # -- what an overlay carries ------------------------------------------------

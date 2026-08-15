@@ -7,13 +7,18 @@ from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class DependencyManager(ResourceManager):
-    @staticmethod
-    def resource_for(dep) -> Resource:
-        source = DependencyManager.source_for(dep)
+    @classmethod
+    def resource_for(cls, dep) -> Resource:
         return Resource(
             kind=ResourceKind.DEPENDENCY,
-            cache_key=source.get_cache_key(),
-            source=source)
+            cache_key=cls.cache_key_for(dep),
+            source=cls.source_for(dep))
+
+    @staticmethod
+    def key_component_for(source):
+        # Keyed on the commit. A dependency root is immutable. Falls back 
+        # to the reference if the revision is missing.
+        return source.resolved.revision or source.resolved.reference
 
     @staticmethod
     def source_for(dep):

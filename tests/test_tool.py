@@ -63,4 +63,4 @@ def test_the_source_carries_the_resolved_version(resolutions):
 
     assert source.locator == Locator('https://host/cppfront.git')
     # What was resolved, not what was asked for.
-    assert source.reference == 'v0.8.1'
+    assert source.resolved.reference == 'v0.8.1'

@@ -39,14 +39,18 @@ class ToolManager(ResourceManager):
     def list_available_tools():
         return tool_registry.list_available_tools()
 
-    @staticmethod
-    def resource_for(tool: Tool) -> Resource:
-        # Keyed by the name alone, so a tool asked for at another version lands in
-        # the root it already occupies rather than beside it.
+    @classmethod
+    def resource_for(cls, tool: Tool) -> Resource:
         return Resource(
             kind=ResourceKind.TOOL,
-            cache_key=tool.name,
-            source=ToolManager.source_for(tool))
+            cache_key=cls.cache_key_for(tool),
+            source=cls.source_for(tool))
+
+    @classmethod
+    def cache_key_for(cls, tool: Tool):
+        # The name alone, so a tool asked for at another version lands in the root
+        # it already occupies rather than beside it.
+        return tool.name
 
     @staticmethod
     def source_for(tool: Tool):
@@ -98,7 +102,7 @@ class ToolManager(ResourceManager):
                     continue
                 installed_tools.append(InstalledToolInfo(
                     name=definition.name,
-                    version=source.reference,
+                    version=source.resolved.reference,
                     cache_root=cache_dir.location,
                     is_read_only=cache_dir.is_read_only))
         return installed_tools

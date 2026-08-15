@@ -15,13 +15,12 @@ class CookbookManager(ResourceManager):
     def get_cookbook(source, version: str = '') -> Cookbook:
         return Cookbook(source=source, version=version)
 
-    @staticmethod
-    def resource_for(cookbook: Cookbook) -> Resource:
-        source = CookbookManager.source_for(cookbook)
+    @classmethod
+    def resource_for(cls, cookbook: Cookbook) -> Resource:
         return Resource(
             kind=ResourceKind.COOKBOOK,
-            cache_key=source.get_cache_key(),
-            source=source)
+            cache_key=cls.cache_key_for(cookbook),
+            source=cls.source_for(cookbook))
 
     @staticmethod
     def source_for(cookbook: Cookbook):

@@ -15,7 +15,12 @@ from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.directory_fetcher import DirectoryFetcher
 from golemcpp.golem.git_fetcher import GitFetcher
 from golemcpp.golem.resource_manager import ResourceManager
-from golemcpp.golem.source import Source
+from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem.cookbook_manager import CookbookManager
+from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.dependency_manager import DependencyManager
+from golemcpp.golem.tool_manager import ToolManager
+from golemcpp.golem.source import Source, make_revision_component
 from conftest import make_cache_configuration
 from conftest import stub_git_probes
 from conftest import STUB_HEAD
@@ -90,7 +95,7 @@ def test_a_directory_source_is_handed_to_a_directory_fetcher(tmp_path):
 
 def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy(tmp_path):
     manager = make_resource_manager(tmp_path)
-    source = Source.for_repository('https://host/r.git', reference='main')
+    source = Source.for_repository('https://host/r.git', ResolvedVersion(reference='main', revision='main'))
 
     fetcher = manager.fetcher_for('/cache/r', source)
 
@@ -102,7 +107,7 @@ def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy(tmp_
 def test_populate_and_refresh_hand_back_what_the_fetch_left(tmp_path, monkeypatch):
     # The manager keeps no opinion about the fetch beyond passing its result on.
     manager = make_resource_manager(tmp_path)
-    source = Source.for_repository('https://host/r.git', reference='main')
+    source = Source.for_repository('https://host/r.git', ResolvedVersion(reference='main', revision='main'))
     monkeypatch.setattr(GitFetcher, 'populate', lambda self: Fetched(head='c10ned'))
     monkeypatch.setattr(GitFetcher, 'refresh', lambda self: Fetched(head='refre5hed'))
 
@@ -159,7 +164,7 @@ def record_the_fetch(monkeypatch, recorded):
 def test_a_kind_with_nothing_to_resolve_hands_its_item_back():
     # The base hands its item straight back, which is what a kind that has no
     # version of its own inherits.
-    item = Source.for_repository('https://host/r.git', reference='main')
+    item = Source.for_repository('https://host/r.git', ResolvedVersion(reference='main', revision='main'))
 
     assert ResourceManager.resolve_version(item) is item
 
@@ -173,8 +178,8 @@ def test_locating_a_resource_resolves_its_version_first(tmp_path):
 
     cached = manager.resolve_cached_resource(make_cookbook())
 
-    assert cached.cache_key == Source.for_repository(
-        'https://host/r.git', reference='v3.12.0').get_cache_key()
+    assert cached.cache_key == manager.cache_key_for(
+        Cookbook(source=make_cookbook().source, version='v3.12.0'))
 
 
 def test_the_lifecycle_hooks_do_nothing_by_default():
@@ -517,3 +522,56 @@ def test_the_staging_directory_is_removed_when_the_fetch_is_refused(tmp_path):
         manager.install(make_cookbook())
 
     assert not os.path.exists(cached.staging_path)
+
+
+# -- the cache key, which is the kind's to name -----------------------------
+
+
+def test_a_cache_key_is_the_source_id_and_the_version_it_is_keyed_on():
+    # Was Source.get_cache_key. It moved here because a Source now carries both
+    # halves of a resolved version, and which one names the root is the kind's
+    # decision rather than the source's.
+    source = Source.for_repository(
+        'https://github.com/GolemCpp/recipes.git',
+        ResolvedVersion(reference='main', revision='main'))
+
+    assert ResourceManager.cache_key_for(source) == \
+        'recipes@com.github.golemcpp+main=0d6e4079'
+
+
+def test_a_source_with_no_version_is_keyed_by_the_repository_alone():
+    # A copied directory has nothing to name, so there is nothing for the
+    # separator to join and it is left off entirely.
+    source = Source.for_directory('file:///tmp/mylib')
+
+    assert ResourceManager.cache_key_for(source) == source.locator.get_id()
+    assert ResourceManager.cache_key_for(source) == 'mylib@fsys.tmp'
+
+
+def test_an_object_name_in_a_key_abbreviates_the_way_git_does():
+    dep = Dependency(name='json', repository='https://github.com/nlohmann/json.git')
+    dep.resolved = ResolvedVersion(
+        reference='v3.12.0', revision='65ee68451d8eb2b5f3a30b410476ab83deb3289b')
+
+    # No digest to disambiguate: an object name already identifies itself, and a
+    # component without one is by construction a commit.
+    assert DependencyManager.cache_key_for(dep) == 'json@com.github.nlohmann+65ee6845'
+
+
+def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():
+    # The divergence is deliberate and is what stage 6 turns into one Pinning
+    # declaration per kind: a cookbook follows a reference as it moves, a
+    # dependency is pinned to an immutable commit, a tool re-points one root.
+    resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabe')
+
+    cookbook = Cookbook(source=make_cookbook().source, version='v3.12.0')
+    cookbook.resolved = resolved
+    dep = Dependency(name='json', repository='https://host/r.git')
+    dep.resolved = resolved
+
+    assert CookbookManager.cache_key_for(cookbook).endswith(
+        make_revision_component('v3.12.0'))
+    assert DependencyManager.cache_key_for(dep).endswith(
+        make_revision_component('cafebabe'))
+    assert ToolManager.cache_key_for(
+        ToolManager.get_tool('cppfront', version='v0.8.1')) == 'cppfront'

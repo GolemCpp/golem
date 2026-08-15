@@ -47,7 +47,8 @@ def write_tool_manifest(resource_root, *, name='cppfront', version='v0.8.1'):
     resource_manifest.ResourceManifest.create(
         kind=resource_manifest.ResourceKind.TOOL,
         cache_key=name,
-        source={'type': 'git', 'locator': 'https://host/u.git', 'reference': version},
+        source={'type': 'git', 'locator': 'https://host/u.git',
+                'resolved': {'reference': version, 'revision': 'cafebabe'}},
     ).write_to_root(str(resource_root))
 
 
@@ -114,7 +115,7 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path):
     source = manager.cache_manager.read_manifest_source(cached_tool)
 
     assert source.type == 'git'
-    assert source.reference == 'v0.8.1'
+    assert source.resolved.reference == 'v0.8.1'
     # The remote is recorded under the unified `location` key.
     assert source.locator == Locator(tool_registry.TOOLS['cppfront'].repository)
     assert not (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront.tmp').exists()
@@ -335,7 +336,7 @@ def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp
     assert os.path.isfile(os.path.join(root, 'bin', 'cppfront'))
     # And the root stops claiming the version it used to hold.
     assert resource_manifest.ResourceManifest.read_from_root(
-        root).source['reference'] == 'v0.8.2'
+        root).source['resolved']['reference'] == 'v0.8.2'
 
 
 def test_a_failed_build_leaves_nothing_built_from_the_old_version(monkeypatch, tmp_path):
@@ -356,7 +357,7 @@ def test_a_failed_build_leaves_nothing_built_from_the_old_version(monkeypatch, t
     # -- never a binary from one version beside a source and manifest naming another.
     assert not os.path.exists(os.path.join(root, 'bin'))
     assert resource_manifest.ResourceManifest.read_from_root(
-        root).source['reference'] == 'v0.8.2'
+        root).source['resolved']['reference'] == 'v0.8.2'
 
 
 def test_installing_a_tool_into_a_read_only_cache_is_refused(tmp_path):

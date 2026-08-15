@@ -25,6 +25,7 @@ from golemcpp.golem import cache_configuration
 from golemcpp.golem import fetcher
 from golemcpp.golem import network
 from golemcpp.golem.fetch_policy import FetchPolicy
+from golemcpp.golem.source import CACHE_KEY_SEPARATOR, make_revision_component
 
 
 class ResourceManager:
@@ -74,6 +75,25 @@ class ResourceManager:
         '''The Source an item denotes. Most kinds are handed one already.'''
         return item
 
+    @classmethod
+    def cache_key_for(cls, item):
+        '''
+        What identifies an item in a cache, as one directory name: which
+        repository it is, and which version of it.
+        '''
+        source = cls.source_for(item)
+        component = make_revision_component(cls.key_component_for(source))
+
+        if not component:
+            return source.locator.get_id()
+
+        return source.locator.get_id() + CACHE_KEY_SEPARATOR + component
+
+    @staticmethod
+    def key_component_for(source):
+        '''The half of the resolved version this kind is keyed on.'''
+        return source.resolved.reference
+
     @staticmethod
     def source_path(root):
         '''Where a resource keeps its fetched content under its root.'''
@@ -102,7 +122,7 @@ class ResourceManager:
         return FetchPolicy(
             fetch_mode=self.fetch_mode,
             fetch_jobs=self.fetch_jobs,
-            revision=self.source_for(item).reference)
+            revision=self.source_for(item).resolved.revision)
 
     @staticmethod
     def pre_install(item):

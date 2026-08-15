@@ -214,12 +214,12 @@ class RequestedSource:
         '''What identifies the source itself, whatever version is asked of it.'''
         return self.locator.get_id()
 
-    def resolved_at(self, reference) -> Source:
+    def resolved_at(self, resolved) -> Source:
         '''
-        This source as the resolved one it becomes, at the reference resolving it
+        This source as the resolved one it becomes, at the version resolving it
         landed on.
         '''
-        return Source(locator=self.locator, reference=reference, type=self.type)
+        return Source(locator=self.locator, resolved=resolved, type=self.type)
 
 
 def parse_location(value, context):

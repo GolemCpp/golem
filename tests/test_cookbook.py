@@ -7,6 +7,7 @@ from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
 from golemcpp.golem.locator import Locator
+from golemcpp.golem.cookbook_manager import CookbookManager
 
 
 @pytest.fixture
@@ -47,7 +48,7 @@ def test_the_source_carries_the_resolved_reference():
     source = cookbook.to_source()
 
     assert source.locator == Locator('https://host/recipes.git')
-    assert source.reference == 'v1.2.0'
+    assert source.resolved.reference == 'v1.2.0'
 
 
 def test_the_source_is_readable_before_the_cookbook_is_resolved():
@@ -56,7 +57,7 @@ def test_the_source_is_readable_before_the_cookbook_is_resolved():
     source = Cookbook(source=make_source()).to_source()
 
     assert source.locator == Locator('https://host/recipes.git')
-    assert source.reference == DEFAULT_GIT_VERSION
+    assert source.resolved.reference == DEFAULT_GIT_VERSION
 
 
 def test_a_directory_cookbook_keeps_its_empty_reference():
@@ -70,9 +71,9 @@ def test_a_directory_cookbook_keeps_its_empty_reference():
     source = cookbook.to_source()
     assert source.type == 'directory'
     assert source.locator == requested.locator
-    assert source.reference == ''
-    # And with no revision to name, the key is the source id alone.
-    assert source.get_cache_key() == requested.get_id()
+    assert not source.resolved
+    # And with no version to name, the key is the source id alone.
+    assert CookbookManager.cache_key_for(cookbook) == requested.get_id()
 
 
 def test_a_cookbook_is_named_after_its_source():

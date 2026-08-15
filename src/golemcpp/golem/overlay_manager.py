@@ -19,13 +19,12 @@ class OverlayManager(ResourceManager):
     def get_overlay(source, version: str = '') -> Overlay:
         return Overlay(source=source, version=version)
 
-    @staticmethod
-    def resource_for(overlay: Overlay) -> Resource:
-        source = OverlayManager.source_for(overlay)
+    @classmethod
+    def resource_for(cls, overlay: Overlay) -> Resource:
         return Resource(
             kind=ResourceKind.OVERLAY,
-            cache_key=source.get_cache_key(),
-            source=source)
+            cache_key=cls.cache_key_for(overlay),
+            source=cls.source_for(overlay))
 
     @staticmethod
     def source_for(overlay: Overlay):

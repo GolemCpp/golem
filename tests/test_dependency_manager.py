@@ -35,10 +35,7 @@ def make_dependency():
 
 
 def expected_cache_key(dep):
-    return Source.for_repository(
-        locator=dep.repository,
-        reference=dep.resolved.revision or dep.resolved.reference
-    ).get_cache_key()
+    return DependencyManager.cache_key_for(dep)
 
 
 def test_resource_for_uses_the_dependency_source():
@@ -49,7 +46,7 @@ def test_resource_for_uses_the_dependency_source():
     assert resource.source.type == 'git'
     assert resource.source.locator == Locator('https://example.com/json.git')
     assert resource.locator == resource.source.locator
-    assert resource.cache_key == resource.source.get_cache_key()
+    assert resource.cache_key == DependencyManager.cache_key_for(dep)
 
 
 def make_resolved_dependency():
@@ -228,7 +225,7 @@ def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch)
     cached = manager.get_cached_resource(dep)
 
     assert dep.resolved.revision == '1234567890abcdef'
-    assert cached.cache_key == dep.to_source().get_cache_key()
+    assert cached.cache_key == DependencyManager.cache_key_for(dep)
 
 
 def test_updating_a_cached_resource_replaces_the_one_kept(tmp_path):

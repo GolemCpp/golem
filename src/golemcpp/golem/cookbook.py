@@ -29,9 +29,10 @@ class Cookbook:
 
     def to_source(self):
         # View the cookbook as a Source to compute its identity the same way as every
-        # other resource kind. Readable before resolution: a cookbook names its
-        # reference from the moment it is configured.
-        return self.source.resolved_at(self.resolved.reference or self.version)
+        # other resource kind.
+        return self.source.resolved_at(
+            self.resolved
+            or ResolvedVersion(reference=self.version, revision=self.version))
 
     def resolve(self):
         # For now, a cookbook follows the version it was configured with, without

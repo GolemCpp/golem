@@ -272,7 +272,7 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     source = manager.cache_manager.read_manifest_source(cached_tool)
 
     assert source.type == 'git'
-    assert source.reference == cppfront_tool.DEFAULT_CPPFRONT_VERSION
+    assert source.resolved.reference == cppfront_tool.DEFAULT_CPPFRONT_VERSION
     # A Locator deliberately does not compare equal to the string spelling it, so
     # this asserts the manifest read the locator back as one rather than as text.
     assert source.locator == Locator(cppfront_tool.CPPFRONT_REPOSITORY)
