@@ -94,9 +94,13 @@ class Dependency(Configuration):
             self.location = ''
             self.update_version(requested.version)
         elif self.directory:
-            self.directory = str(requested_source.make_locator(self.directory, project_dir))
+            # These two name their kind by being the field they are, so it is
+            # stated rather than detected. No # version fragment.
+            self.directory = str(requested_source.resolve_locator(
+                self.directory, source.SOURCE_TYPE_DIRECTORY, project_dir))
         elif self.repository:
-            self.repository = str(requested_source.make_locator(self.repository, project_dir))
+            self.repository = str(requested_source.resolve_locator(
+                self.repository, source.SOURCE_TYPE_GIT, project_dir))
 
     def update_version(self, requested_version):
         '''

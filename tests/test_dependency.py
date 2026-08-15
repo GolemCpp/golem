@@ -1,5 +1,8 @@
+import json
+
 import pytest
 
+from golemcpp.golem import overrides
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import Locator
@@ -91,6 +94,64 @@ def test_a_declared_version_survives_a_location_naming_none(tmp_path):
     dep.update_source(str(tmp_path))
 
     assert dep.version == '^3.0.0'
+
+
+def make_checkout(path):
+    (path / '.git').mkdir(parents=True)
+    (path / '.git' / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+    return path
+
+
+def test_a_repository_must_name_a_repository(tmp_path):
+    # The same assertion `location='git+./plaindir'` makes. It used to be skipped
+    # for this spelling, so which field you wrote decided whether a plain
+    # directory was caught here or much later inside git.
+    (tmp_path / 'plaindir').mkdir()
+
+    with pytest.raises(ValueError) as error:
+        Dependency(name='mylib', repository='./plaindir').update_source(str(tmp_path))
+
+    assert 'is not a repository git can clone from' in str(error.value)
+
+
+def test_a_repository_naming_a_checkout_resolves_against_the_project(tmp_path):
+    checkout = make_checkout(tmp_path / 'myrepo')
+    dep = Dependency(name='mylib', repository='./myrepo')
+    dep.update_source(str(tmp_path))
+
+    assert dep.repository == checkout.resolve().as_uri()
+
+
+@pytest.mark.parametrize('field', ['repository', 'directory'])
+def test_neither_field_reads_a_version_out_of_its_locator(tmp_path, field):
+    # They name a locator and state a kind by being the field they are. Only
+    # `location` is `[<kind>+]<locator>[#<version>]`, so a `#` here is part of
+    # what was pointed at.
+    named = tmp_path / 'mylib#v1.2.0'
+    if field == 'repository':
+        make_checkout(named)
+    else:
+        named.mkdir()
+
+    dep = Dependency(name='mylib', **{field: './mylib#v1.2.0'})
+    dep.update_source(str(tmp_path))
+
+    assert getattr(dep, field) == named.resolve().as_uri()
+    assert dep.version == ''
+
+
+def test_an_override_naming_a_plain_directory_as_a_repository_is_refused(tmp_path):
+    # read_overrides runs every entry through update_source, so overrides.json
+    # gets the same refusal without knowing about it.
+    (tmp_path / 'plaindir').mkdir()
+    overrides_path = tmp_path / 'overrides.json'
+    overrides_path.write_text(
+        json.dumps([{'name': 'mylib', 'repository': './plaindir'}]), encoding='utf-8')
+
+    with pytest.raises(ValueError) as error:
+        overrides.read_overrides(str(overrides_path), str(tmp_path))
+
+    assert 'is not a repository git can clone from' in str(error.value)
 
 
 def test_a_dependency_asking_for_two_versions_is_refused(tmp_path):

@@ -111,6 +111,28 @@ def is_path_locator_valid(locator: Locator, kind):
     return locator.is_existing_directory()
 
 
+def validate_locator_kind(locator: Locator, kind):
+    '''
+    Refuses a locator the kind asked of it cannot be.
+    '''
+    if kind != source.SOURCE_TYPE_GIT:
+        return
+
+    if locator.is_existing_directory() and not locator.is_git_repository():
+        raise ValueError(
+            "'{}' is not a repository git can clone from, and a git location "
+            "must name one".format(locator))
+
+
+def resolve_locator(locator, kind, project_directory) -> Locator:
+    '''
+    Validates the locator corresponds to the kind and returns a resolved Locator.
+    '''
+    locator = make_locator(locator, project_directory)
+    validate_locator_kind(locator, kind)
+    return locator
+
+
 def resolve_location(location, project_directory):
     '''
     Resolves a location into a locator, version and a kind.
@@ -151,10 +173,7 @@ def resolve_location(location, project_directory):
 
     # If kind asks for a repository, check the locator is one.
 
-    if kind == source.SOURCE_TYPE_GIT and locator.is_existing_directory() and not locator.is_git_repository():
-        raise ValueError(
-            "'{}' is not a repository git can clone from, and a git location "
-            "must name one".format(locator))
+    validate_locator_kind(locator, kind)
 
     return locator, version, kind
 
