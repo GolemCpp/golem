@@ -65,7 +65,7 @@ class ToolManager(ResourceManager):
         return FetchPolicy(
             fetch_mode=self.fetch_mode,
             fetch_jobs=self.fetch_jobs,
-            reference=tool.resolved.revision)
+            revision=tool.resolved.revision)
 
     @staticmethod
     def pre_install_refresh(root, tool: Tool) -> None:

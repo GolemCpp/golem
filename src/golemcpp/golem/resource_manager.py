@@ -97,12 +97,12 @@ class ResourceManager:
         '''
         How to fetch this item.
 
-        See GitFetcher.resolved_reset_reference to know how the reference is interpreted.
+        See GitFetcher.resolved_reset_revision to know how the revision is interpreted.
         '''
         return FetchPolicy(
             fetch_mode=self.fetch_mode,
             fetch_jobs=self.fetch_jobs,
-            reference=self.source_for(item).reference)
+            revision=self.source_for(item).reference)
 
     @staticmethod
     def pre_install(item):

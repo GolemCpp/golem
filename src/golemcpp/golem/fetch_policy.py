@@ -96,9 +96,8 @@ class FetchPolicy:
     # How many submodules to obtain at once. What makes a superproject with a
     # couple of hundred of them bearable.
     fetch_jobs: int = 1
-    # What to reset to. Empty resets to the current HEAD, which is what a
-    # resource pinned to a commit wants.
-    reference: str = ''
+    # What to reset to: a sha, a tag or a branch. Empty resets to the current HEAD.
+    revision: str = ''
     # Whether refreshing consults the remote. A pinned resource cannot move, so
     # it has nothing to fetch.
     fetch_remote: bool = True

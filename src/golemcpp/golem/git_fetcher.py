@@ -2,10 +2,10 @@
 A source obtained from a git remote.
 
 The mechanism here is the richest one any resource kind needs: shallow clones,
-submodules, cleaning, resetting onto a reference. A kind asks for what it wants
+submodules, cleaning, resetting onto a revision. A kind asks for what it wants
 through the FetchPolicy it hands over.
 
-Whatever a resource holds, it is fetched whole and kept faithful to the reference
+Whatever a resource holds, it is fetched whole and kept faithful to the revision
 it names: the submodules come with it, and local changes are discarded before it
 is refreshed.
 
@@ -29,8 +29,8 @@ class GitFetcher(Fetcher):
 
     def __init__(self, path, source, policy):
         super().__init__(path, source, policy)
-        # What the reference turns out to name
-        self._resolved_reset_reference = None
+        # What the revision turns out to name
+        self._resolved_reset_revision = None
 
     def populate(self) -> Fetched:
         '''A source obtained fresh from its remote, as much of it as asked for.'''
@@ -42,11 +42,11 @@ class GitFetcher(Fetcher):
             # ask for that commit and nothing around it.
             self.run(['init'], quiet=True)
             self.run(['remote', 'add', 'origin', str(self.source.locator)], quiet=True)
-            self.fetch_reference()
+            self.fetch_revision()
         else:
             self.run(['clone'] + self.mode_args() + ['--', str(self.source.locator), '.'])
 
-        self.require_reference()
+        self.require_revision()
         self.reset()
 
         if self.has_submodules():
@@ -60,7 +60,7 @@ class GitFetcher(Fetcher):
         An already-cloned source brought back to what it should be.
 
         Cleaning comes first by resetting to only leave behind what the
-        previous reference put there.
+        previous revision put there.
 
         A refresh may move a root to a different commit, when following a
         branch for example.
@@ -77,15 +77,15 @@ class GitFetcher(Fetcher):
         if self.policy.fetch_remote:
             self.fetch_for_refresh()
 
-        self.require_reference()
+        self.require_revision()
         self.reset()
 
-        # Asked again: the reference just landed, and what it declares is not what
+        # Asked again: the revision just landed, and what it declares is not what
         # the previous one did.
         if self.has_submodules():
             self.run(['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'], quiet=True)
 
-            # After the reset, so .gitmodules is the one the reference names, and
+            # After the reset, so .gitmodules is the one the revision names, and
             # before the update, which otherwise keeps fetching from the URL recorded
             # at clone time however the resource respelled it since.
             self.run(['submodule', 'sync', '--recursive'], quiet=True)
@@ -101,41 +101,40 @@ class GitFetcher(Fetcher):
     # -- the steps a fetch is made of --------------------------------------
 
     def reset(self):
-        '''Onto the reference, or onto the current HEAD when there is none.'''
-        reference = self.resolved_reset_reference()
-        self.run(['reset', '--hard'] + ([reference] if reference else []), quiet=True)
+        '''Onto the revision, or onto the current HEAD when there is none.'''
+        revision = self.resolved_reset_revision()
+        self.run(['reset', '--hard'] + ([revision] if revision else []), quiet=True)
 
-    def resolved_reset_reference(self):
+    def resolved_reset_revision(self):
         '''
-        Returns a non-ambiguous reference for `git reset` to function.
+        Returns a non-ambiguous revision for `git reset` to function.
 
-        Handing the bare reference to git instead would answer nearly the same
+        Handing the bare revision to git instead would answer nearly the same
         way, and cannot be relied on to. Because cache clone always carries a
         local branch, etc.
         '''
-        if self._resolved_reset_reference is None:
-            self._resolved_reset_reference = self._resolve_reference()
-        return self._resolved_reset_reference
+        if self._resolved_reset_revision is None:
+            self._resolved_reset_revision = self._resolve_revision()
+        return self._resolved_reset_revision
 
-    def _resolve_reference(self):
+    def _resolve_revision(self):
         '''
-        Disambiguate a reference.
+        Disambiguate a revision.
 
-        How should the reference be interpreted to remove any ambiguity?
-
-        Precedence:
+        A tag and a branch may share a name. Here is the order to interpret the
+        revision and remove any ambiguity:
         1. Tag
         2. Branch
-        3. The reference as given (e.g. a commit hash).
+        3. The revision as given (e.g. a commit hash).
         '''
-        reference = self.policy.reference
-        if not reference:
+        revision = self.policy.revision
+        if not revision:
             return ''
-        if self.holds_reference('refs/tags/' + reference):
-            return 'refs/tags/' + reference
-        if self.holds_reference('refs/remotes/origin/' + reference):
-            return 'origin/' + reference
-        return reference
+        if self.holds_revision('refs/tags/' + revision):
+            return 'refs/tags/' + revision
+        if self.holds_revision('refs/remotes/origin/' + revision):
+            return 'origin/' + revision
+        return revision
 
     def update_submodules(self, no_fetch=False):
         '''
@@ -163,25 +162,25 @@ class GitFetcher(Fetcher):
         everything and prune branches and tags.
         '''
         if self.policy.fetch_mode == FetchMode.SHALLOW:
-            self.fetch_reference()
+            self.fetch_revision()
             return
 
         self.run(['fetch', '--prune', '--prune-tags', '--tags', 'origin'])
-        # Every ref may have moved, so what the reference names has to be asked
+        # Every ref may have moved, so what the revision names has to be asked
         # again rather than remembered from before.
-        self._resolved_reset_reference = None
+        self._resolved_reset_revision = None
 
-    def fetch_reference(self):
+    def fetch_revision(self):
         '''
-        Fetches the reference by name on the remote.
+        Fetches the revision by name on the remote.
 
-        When asking for a reference without refspec, git doesn't write any ref, so
+        When asking for a revision without refspec, git doesn't write any ref, so
         FETCH_HEAD comes to the rescue.
         '''
         self.run(['fetch'] + self.mode_args() + ['origin'] + (
-            [self.policy.reference] if self.policy.reference else []))
+            [self.policy.revision] if self.policy.revision else []))
 
-        self._resolved_reset_reference = 'FETCH_HEAD'
+        self._resolved_reset_revision = 'FETCH_HEAD'
 
     def mode_args(self):
         '''
@@ -204,9 +203,9 @@ class GitFetcher(Fetcher):
         '''What this fetch left behind, for the manifest to keep.'''
         return Fetched(head=self.read_head(), mode=mode)
 
-    def require_reference(self):
+    def require_revision(self):
         '''
-        The reference has to name something the repository holds before anything
+        The revision has to name something the repository holds before anything
         resets to it.
 
         Since no fetch is performed, the checks are local based on what was
@@ -216,12 +215,12 @@ class GitFetcher(Fetcher):
         it can't be reached by any branch or any tag previously fetched, is
         considered a missing commit.
         '''
-        if not self.policy.reference or self.holds_reference(self.resolved_reset_reference()):
+        if not self.policy.revision or self.holds_revision(self.resolved_reset_revision()):
             return
 
         raise RuntimeError(
             'Cannot find "{}" in "{}": {} advertises no branch or tag that reaches it.'
-            .format(self.policy.reference, self.path, self.source.locator))
+            .format(self.policy.revision, self.path, self.source.locator))
 
     # -- changing what a root already holds --------------------------------
 
@@ -302,15 +301,15 @@ class GitFetcher(Fetcher):
         '''
         if self.policy.fetch_remote:
             return False
-        if self.policy.reference and not self.is_at(self.resolved_reset_reference()):
+        if self.policy.revision and not self.is_at(self.resolved_reset_revision()):
             return False
         return not self.is_dirty()
 
-    def is_at(self, reference) -> bool:
-        '''Whether HEAD is already the commit a reference names.'''
+    def is_at(self, revision) -> bool:
+        '''Whether HEAD is already the commit a revision names.'''
         try:
             landed, wanted = helpers.read_git(
-                ['rev-parse', 'HEAD', '{}^{{commit}}'.format(reference)],
+                ['rev-parse', 'HEAD', '{}^{{commit}}'.format(revision)],
                 cwd=self.path, stderr=subprocess.DEVNULL).split()
         except Exception:
             return False
@@ -355,10 +354,10 @@ class GitFetcher(Fetcher):
         '''
         return os.path.isfile(os.path.join(self.path, '.gitmodules'))
 
-    def holds_reference(self, reference) -> bool:
-        '''Whether the repository already holds the commit a reference names.'''
+    def holds_revision(self, revision) -> bool:
+        '''Whether the repository already holds the commit a revision names.'''
         return helpers.try_git(
-            ['rev-parse', '--verify', '--quiet', '{}^{{commit}}'.format(reference)],
+            ['rev-parse', '--verify', '--quiet', '{}^{{commit}}'.format(revision)],
             cwd=self.path, stdout=subprocess.DEVNULL)
 
     def read_head(self) -> str:

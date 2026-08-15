@@ -134,7 +134,7 @@ def test_the_policy_pins_to_the_resolved_commit(tmp_path):
 
     policy = make_manager(tmp_path).policy_for(dep)
 
-    assert policy.reference == 'cafebabecafebabe'
+    assert policy.revision == 'cafebabecafebabe'
     # Pinned to a commit, so a refresh has nothing to fetch.
     assert policy.fetch_remote is False
     # Nothing of its own to say about how much to fetch.

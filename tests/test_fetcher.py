@@ -27,7 +27,7 @@ def test_a_directory_is_copied(tmp_path):
 
 def test_a_fetcher_is_made_for_one_source_in_one_place():
     source = Source.for_repository('https://host/r.git')
-    policy = FetchPolicy(reference='cafebabe')
+    policy = FetchPolicy(revision='cafebabe')
 
     fetcher = fetcher_for('/cache/r', source, policy)
 
