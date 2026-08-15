@@ -290,11 +290,36 @@ def test_everything_else_needs_a_repository_to_work_in(tmp_path):
         ['reset', '--hard'], cwd=make_git_repository(tmp_path))
 
 
-def test_a_directory_git_started_in_and_left_is_neither(tmp_path):
-    # `.git` without a HEAD: enough for a clone to refuse the ground, not enough
-    # for anything else to work there. The two questions are not each other's
-    # opposite, which is what naming them apart is for.
+def test_every_shape_git_recognises_is_a_repository(tmp_path):
+    # One predicate, one clause per shape. A checkout holds `.git` as a
+    # directory; a worktree and a submodule checkout hold it as a file naming the
+    # git directory they borrow; a bare repository has no `.git` because it is
+    # one. Reaching for `.git/HEAD` would answer for the first alone.
+    checkout = tmp_path / 'checkout'
+    (checkout / '.git').mkdir(parents=True)
+    (checkout / '.git' / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+
+    borrowed = tmp_path / 'borrowed'
+    borrowed.mkdir()
+    (borrowed / '.git').write_text('gitdir: /elsewhere/.git/worktrees/wt\n',
+                                   encoding='utf-8')
+
+    bare = tmp_path / 'bare.git'
+    bare.mkdir()
+    (bare / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+    (bare / 'objects').mkdir()
+    (bare / 'refs').mkdir()
+
+    for path in (checkout, borrowed, bare):
+        assert helpers.is_git_repository(str(path)) is True
+
+    assert helpers.is_git_repository(str(tmp_path)) is False
+
+
+def test_a_directory_git_started_in_and_left_is_still_a_repository(tmp_path):
+    # `.git` without a HEAD, from a clone that died halfway. Enough to refuse the
+    # ground for a fresh one; whatever tries to work in it is left to git, which
+    # names the path it could not read.
     (tmp_path / '.git').mkdir()
 
-    assert helpers.has_git_directory(str(tmp_path)) is True
-    assert helpers.is_git_repository(str(tmp_path)) is False
+    assert helpers.is_git_repository(str(tmp_path)) is True

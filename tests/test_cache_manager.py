@@ -11,6 +11,7 @@ from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
 from golemcpp.golem.source import Source
 from conftest import make_cache_configuration
+from golemcpp.golem.locator import Locator
 
 
 def make_resource(cache_root, subdir, name, *, manifest_kind=None, source=None, size=10):
@@ -35,7 +36,7 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
     make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
-                  source={'type': 'git', 'location': 'u', 'reference': 'v3.12.0'})
+                  source={'type': 'git', 'locator': 'u', 'reference': 'v3.12.0'})
     make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')  # no manifest
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
@@ -79,7 +80,7 @@ def test_filter_kind(tmp_path):
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
     make_resource(root, cache_configuration.TOOLS_SUBDIR, 'cppfront',
                   manifest_kind=resource_manifest.ResourceKind.TOOL,
-                  source={'type': 'git', 'location': 'u', 'reference': 'v0.8.1'})
+                  source={'type': 'git', 'locator': 'u', 'reference': 'v0.8.1'})
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     resources = manager.scan()
@@ -232,7 +233,7 @@ def test_write_and_read_source(tmp_path):
     assert manifest.kind == ResourceKind.TOOL.value
     assert manifest.cache_key == 'demo'
     source = manager.read_manifest_source(cached)
-    assert source.location == 'https://example.com/tool.git'
+    assert source.locator == Locator('https://example.com/tool.git')
     assert source.reference == 'v1'
     assert manager.resolve_cached_resource(resource).exists() is True
 
@@ -258,7 +259,7 @@ def test_resolve_cached_resource_reads_size_and_manifest_on_demand(tmp_path):
     assert detailed.cache_key == 'demo'
     assert detailed.kind == ResourceKind.TOOL.value
     assert detailed.size_bytes > 0
-    assert detailed.source['location'] == 'https://example.com/tool.git'
+    assert detailed.source['locator'] == 'https://example.com/tool.git'
 
 
 def test_guard_install_swaps_atomically(tmp_path):

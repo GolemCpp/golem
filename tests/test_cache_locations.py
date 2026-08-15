@@ -90,8 +90,9 @@ def test_cache_resolution_policy_from_env(monkeypatch):
 
 
 def _tool_resource(identifier, cache_key='cppfront'):
-    # A resource resolves by its resource: `location` is the identifier matched against
-    # per-cache regexes, `kind` gives the subdir, and `cache_key` the on-disk name.
+    # A resource resolves by its resource: `locator` is the identifier matched
+    # against per-cache regexes, `kind` gives the subdir, and `cache_key` the
+    # on-disk name.
     return Resource(
         kind=ResourceKind.TOOL,
         cache_key=cache_key,
@@ -121,7 +122,7 @@ def test_resolve_resource_cache_dir_weak_finds_existing(tmp_path):
         cache_directory.CacheDirectory(location=str(extra)),
         resolution_policy=cache_resolution_policy.CacheResolutionPolicy.WEAK,
         minimization_enabled=False)
-    cache_dir = CacheManager(conf).resolve_cache_directory(_tool_resource('cppfront'))
+    cache_dir = CacheManager(conf).resolve_cache_directory(_tool_resource('https://host/cppfront.git'))
 
     assert cache_dir.location == str(extra)
 

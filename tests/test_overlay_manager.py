@@ -1,6 +1,7 @@
 import json
 import os
 
+from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem.overlay import Overlay
@@ -18,7 +19,7 @@ def make_manager(tmp_path):
 
 
 def make_source():
-    return Source.for_repository('https://example.com/overrides.git', reference='main')
+    return RequestedSource.for_repository('https://example.com/overrides.git', version='main')
 
 
 def test_resource_for_bakes_in_the_overrides_kind():
@@ -27,18 +28,20 @@ def test_resource_for_bakes_in_the_overrides_kind():
 
     assert resource.kind == ResourceKind.OVERLAY
     assert resource.subdir == cache_configuration.OVERLAYS_SUBDIR
-    assert resource.source == source
-    assert resource.cache_key == source.get_cache_key()
+    assert resource.source == source.resolved_at('main')
+    assert resource.cache_key == source.resolved_at('main').get_cache_key()
 
 
-def test_an_overlay_lands_where_its_bare_source_did():
-    # An overlay follows the reference it was configured with, so wrapping a source
-    # into one may never move what is already cached.
+def test_an_overlay_lands_where_it_did_before_being_resolved():
+    # An overlay follows the version it was configured with, so resolving one may
+    # never move what is already cached.
     source = make_source()
 
-    assert OverlayManager.resource_for(
-        OverlayManager.resolve_version(Overlay(source=source))).cache_key == \
-        source.get_cache_key()
+    unresolved = OverlayManager.resource_for(Overlay(source=source))
+    resolved = OverlayManager.resource_for(
+        OverlayManager.resolve_version(Overlay(source=source)))
+
+    assert resolved.cache_key == unresolved.cache_key
 
 
 def test_resolve_and_locate(tmp_path):
@@ -49,7 +52,8 @@ def test_resolve_and_locate(tmp_path):
 
     assert cached_repository.cache_root == str(tmp_path / 'cache')
     assert cached_repository.path == os.path.join(
-        str(tmp_path / 'cache'), cache_configuration.OVERLAYS_SUBDIR, source.get_cache_key())
+        str(tmp_path / 'cache'), cache_configuration.OVERLAYS_SUBDIR,
+        source.resolved_at('main').get_cache_key())
 
 
 def test_guard_install_swaps_source_and_manifest(tmp_path):
@@ -81,7 +85,7 @@ def make_overlay(tmp_path, name, entries):
     overlay_dir = tmp_path / name
     overlay_dir.mkdir(parents=True)
     (overlay_dir / 'overrides.json').write_text(json.dumps(entries), encoding='utf-8')
-    return Source.for_directory(overlay_dir.resolve().as_uri())
+    return RequestedSource.for_directory(overlay_dir.resolve().as_uri())
 
 
 def load_overrides(tmp_path, sources):
@@ -152,7 +156,7 @@ def test_an_overlay_carrying_nothing_contributes_nothing(tmp_path):
     empty.mkdir()
 
     merged_path, entries = load_overrides(
-        tmp_path, [Source.for_directory(empty.resolve().as_uri())])
+        tmp_path, [RequestedSource.for_directory(empty.resolve().as_uri())])
 
     # Nothing to write, so nothing to point at.
     assert merged_path == ''

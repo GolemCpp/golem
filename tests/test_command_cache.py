@@ -51,7 +51,7 @@ def test_list_reports_resources(capsys, tmp_path):
     seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
                   kind=resource_manifest.ResourceKind.DEPENDENCY,
                   source={'type': 'git',
-                            'location': 'https://github.com/nlohmann/json.git',
+                            'locator': 'https://github.com/nlohmann/json.git',
                             'reference': 'v3.12.0'})
 
     result = run(tmp_path, 'list')

@@ -4,6 +4,7 @@ from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import tool_registry
 from golemcpp.golem.tool import Tool
 from golemcpp.golem.version_resolver import VersionResolver
+from golemcpp.golem.locator import Locator
 
 
 @pytest.fixture
@@ -60,6 +61,6 @@ def test_the_source_carries_the_resolved_version(resolutions):
 
     source = tool.to_source()
 
-    assert source.location == 'https://host/cppfront.git'
+    assert source.locator == Locator('https://host/cppfront.git')
     # What was resolved, not what was asked for.
     assert source.reference == 'v0.8.1'

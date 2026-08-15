@@ -36,8 +36,8 @@ from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import locator
 from golemcpp.golem.source import Source
-from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 from golemcpp.golem.template import Template
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
@@ -1384,7 +1384,7 @@ class Context:
             source_location = self.load_git_remote_origin_url()
 
         config_filename = "{}@{}.json".format(
-            '@'.join(name), Source.generate_id(source_location))
+            '@'.join(name), locator.generate_id(source_location))
 
         return config_filename
 
@@ -4087,7 +4087,7 @@ class Context:
             recipe_url = self.load_git_remote_origin_url()
             if not recipe_url:
                 return
-            recipe_id = Source.generate_id(recipe_url)
+            recipe_id = locator.generate_id(recipe_url)
 
         # A resolve makes the cookbooks available, whether or not it needs a recipe
         # itself, because it updates once the recipes that the dependencies of the

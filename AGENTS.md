@@ -14,7 +14,7 @@
 - [src/golemcpp/golem/resource_manager.py](src/golemcpp/golem/resource_manager.py): how every resource kind (dependency, cookbook, overlay, tool) is fetched into the cache.
 - [src/golemcpp/golem/network.py](src/golemcpp/golem/network.py): fetching is a resolve step, so only `golem resolve` and `golem tools install` may reach a remote. Every other command reads what those put in the cache. The rule is checked in `helpers.validate_git_command`. Three places open the scope: `builder.resolve`, `command_tools.handle_install`, and `Context.run_build_script`, since a project's own script is not Golem fetching a resource. A command that goes online anywhere else is a bug, not a missing exception.
 - A resource kind is split the way `dependency.py`/`dependency_manager.py` and [tool.py](src/golemcpp/golem/tool.py)/[tool_manager.py](src/golemcpp/golem/tool_manager.py) are: the object a command asked for, holding its own version and what that resolved to, and the manager that caches it. [tool_registry.py](src/golemcpp/golem/tool_registry.py) is the catalogue of `ToolDefinition`s, not an instance of anything.
-- [src/golemcpp/golem/source.py](src/golemcpp/golem/source.py): what a location means. `[<kind>+]<locator>`, the kinds that exist, and the detection that fills in an unprefixed one. Adding a kind (archive, SVN) starts at `SOURCE_KINDS`.
+- [src/golemcpp/golem/source.py](src/golemcpp/golem/source.py): what a location means. `[<kind>+]<locator>[#<version>]`, the kinds that exist, and the detection that fills in an unprefixed one. Adding a kind (archive, SVN) starts at `SOURCE_KINDS`.
 - Keep user-facing behavior aligned with the docs sources in [../golemcpp.github.io/content/docs](../golemcpp.github.io/content/docs).
 
 ## Environment And Commands
@@ -30,6 +30,7 @@
 ## Writing Code
 
 - Match the file you are in: single-quoted strings, `snake_case`, keyword arguments at call sites. Type annotations only where the module already uses them (the `command_*.py` handlers).
+- Import the module, not the names inside it: `from golemcpp.golem import source`, then `source.SOURCE_TYPE_GIT`. A qualified name says where it comes from, and the import list stops growing every time a caller reaches for one more constant. Classes are the exception and come in directly (`from golemcpp.golem.source import Source`), as do the manager factories (`get_cache_manager` and friends), which stand in for the class they build. Where the module name is already taken by a local — `source` is the parameter every `Fetcher` works from, see [fetcher.py](src/golemcpp/golem/fetcher.py) — import what is needed directly and leave a line saying why, so the next reader does not shadow it back.
 - **Documentation is concise.** A docstring is one to four lines. It gives the reason the function exists, the contract a caller cannot read off the signature, or the invariant it holds. It never restates the parameters, never narrates the body, and is left out entirely when the name already says it.
 - Prefer one `#` line above a subtle block over a paragraph in a docstring. Explain why, not how.
 - No section banners, no ASCII art, no changelog or migration notes in comments; git history covers that.

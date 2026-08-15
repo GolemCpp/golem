@@ -198,8 +198,12 @@ class Project:
                 project.configuration_paths = value
             elif key == 'dependencies':
                 for json_obj in value:
-                    project.deps.append(
-                        Dependency.unserialize_from_json(json_obj))
+                    # Through update_source like a dependency declared in a
+                    # golemfile: a `location` reaches this path too, and left
+                    # unresolved it would name a source no reader looks at.
+                    dependency = Dependency.unserialize_from_json(json_obj)
+                    dependency.update_source(project_dir)
+                    project.deps.append(dependency)
             elif key == 'targets':
                 for json_obj in value:
                     project.targets.append(

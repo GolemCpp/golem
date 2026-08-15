@@ -11,6 +11,7 @@ from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.setting_descriptor import SettingDescriptor
 from golemcpp.golem import helpers
 from golemcpp.golem.fetch_policy import FetchMode
+from golemcpp.golem.locator import Locator
 
 
 def _isolate_home(monkeypatch, tmp_path):
@@ -95,13 +96,15 @@ def test_local_store_wins_over_global_store(monkeypatch, tmp_path):
     monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
     manager = settings.get_settings(project_dir=project_dir)
 
-    config_store.set_value('overlays.locations', global_overlays, config_store.GLOBAL_SCOPE, project_dir)
-    assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
-        [Path(global_overlays).as_uri()]
+    config_store.set_value(
+        'overlays.locations', global_overlays, config_store.GLOBAL_SCOPE, project_dir)
+    assert [source.locator for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
+        [Locator(Path(global_overlays).as_uri())]
 
-    config_store.set_value('overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
-    assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
-        [Path(local_overlays).as_uri()]
+    config_store.set_value(
+        'overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
+    assert [source.locator for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
+        [Locator(Path(local_overlays).as_uri())]
 
 
 def test_reads_persisted_configure_options(monkeypatch, tmp_path):
@@ -200,8 +203,8 @@ def test_one_manager_answers_every_setting(monkeypatch, tmp_path):
 
     assert manager.get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 16
     assert manager.get('GOLEM_CACHE_RESOLUTION_POLICY') == CacheResolutionPolicy.WEAK
-    assert [source.location for source in manager.get('GOLEM_COOKBOOKS_LOCATIONS')] == \
-        ['https://recipes.git']
+    assert [source.locator for source in manager.get('GOLEM_COOKBOOKS_LOCATIONS')] == \
+        [Locator('https://recipes.git')]
     assert manager.get('GOLEM_CACHE_DIRECTORY').location == settings.get_default_cache_directory_path()
 
 
@@ -217,7 +220,7 @@ def test_a_location_setting_reads_its_kind(monkeypatch, tmp_path):
         'GOLEM_COOKBOOKS_LOCATIONS')
 
     assert [source.type for source in sources] == ['directory', 'git']
-    assert sources[1].location == 'https://github.com/GolemCpp/recipes.git'
+    assert sources[1].locator == Locator('https://github.com/GolemCpp/recipes.git')
 
 
 def test_a_location_setting_names_the_source_of_a_bad_kind(monkeypatch, tmp_path):
@@ -266,8 +269,8 @@ def test_a_manager_sees_a_value_written_after_it_was_built(monkeypatch, tmp_path
     config_store.set_value(
         'overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
 
-    assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
-        [Path(local_overlays).as_uri()]
+    assert [source.locator for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
+        [Locator(Path(local_overlays).as_uri())]
 
 
 def test_legacy_names_keep_resolving(monkeypatch, tmp_path):

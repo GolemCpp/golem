@@ -14,6 +14,9 @@ from golemcpp.golem.context import Context
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
+from golemcpp.golem.requested_source import RequestedSource
+from golemcpp.golem.requested_source import detect_kind
+from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
 from conftest import absolute_path, make_cache_configuration
 
@@ -590,7 +593,7 @@ def test_directory_dependency_is_detected_as_non_git(tmp_path):
     dependency = Dependency(directory=directory.resolve().as_uri())
 
     assert dependency.is_non_git_directory()
-    assert Source.detect(dependency.directory) == 'directory'
+    assert detect_kind(Locator(dependency.directory)) == 'directory'
 
 
 def test_detect_ignores_local_git_directory(tmp_path):
@@ -601,8 +604,8 @@ def test_detect_ignores_local_git_directory(tmp_path):
 
     dependency = Dependency(repository=repository_dir.resolve().as_uri())
 
-    assert Source.detect(dependency.repository) == 'git'
-    assert Source.parse_local_directory_path(url=dependency.repository) == str(repository_dir)
+    assert detect_kind(Locator(dependency.repository)) == 'git'
+    assert Locator(dependency.repository).get_local_path() == str(repository_dir)
 
 
 def test_a_dependency_location_resolves_to_the_kind_it_spells(tmp_path):
@@ -615,9 +618,21 @@ def test_a_dependency_location_resolves_to_the_kind_it_spells(tmp_path):
     assert detected.repository == ''
     assert detected.location == ''
 
-    cloned = Dependency(location='git+mylib')
+    # The override that changes an answer is the other way round: a checkout git
+    # would clone, asked for as a directory to copy instead. `git+` cannot turn
+    # `mylib` into a repository, so it refuses it rather than mislabelling it.
+    checkout = tmp_path / 'myrepo'
+    (checkout / '.git').mkdir(parents=True)
+    (checkout / '.git' / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+
+    copied = Dependency(location='directory+myrepo')
+    copied.update_source(str(tmp_path))
+    assert copied.directory == checkout.resolve().as_uri()
+    assert copied.repository == ''
+
+    cloned = Dependency(location='git+myrepo')
     cloned.update_source(str(tmp_path))
-    assert cloned.repository == lib_dir.resolve().as_uri()
+    assert cloned.repository == checkout.resolve().as_uri()
     assert cloned.directory == ''
 
 
@@ -655,7 +670,7 @@ def test_get_cookbook_locations_normalizes_local_paths(monkeypatch, tmp_path):
 
     cookbooks = context.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
 
-    assert [cookbook.location for cookbook in cookbooks] == [recipes_dir.resolve().as_uri()]
+    assert [cookbook.locator for cookbook in cookbooks] == [Locator(recipes_dir.resolve().as_uri())]
 
 
 def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
@@ -667,7 +682,7 @@ def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
 
     overlays = context.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
 
-    assert [overlay.location for overlay in overlays] == [overrides_dir.resolve().as_uri()]
+    assert [overlay.locator for overlay in overlays] == [Locator(overrides_dir.resolve().as_uri())]
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -675,10 +690,10 @@ def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
     recipes_dir = project_dir / 'recipes #1'
     recipes_dir.mkdir(parents=True)
 
-    repository = Source.parse('recipes #1', str(project_dir)).location
+    repository = RequestedSource.parse('recipes #1', str(project_dir)).locator
 
-    assert repository == recipes_dir.resolve().as_uri()
-    assert Source.parse_local_directory_path(repository) == str(recipes_dir.resolve())
+    assert repository == Locator(recipes_dir.resolve().as_uri())
+    assert repository.get_local_path() == str(recipes_dir.resolve())
 
 
 def test_run_command_uses_subprocess_without_shell_on_windows(monkeypatch):
@@ -784,14 +799,16 @@ def test_make_basic_dependency_repo_path_uses_the_cache_key_with_branch(tmp_path
     context.cache_configuration = make_cache_configuration(
         CacheDirectory('/cache', is_read_only=False), minimization_enabled=False)
 
-    repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
+    requested = RequestedSource.for_repository(
+        'https://github.com/GolemCpp/recipes.git', version='main')
 
     manager = get_cookbook_manager(context.cache_configuration)
     repo_path = manager.resolve_cached_resource(
-        manager.get_cookbook(repository)).path
+        manager.get_cookbook(requested)).path
 
     assert repo_path == os.path.join(
-        '/cache', COOKBOOKS_SUBDIR, repository.get_cache_key())
+        '/cache', COOKBOOKS_SUBDIR,
+        requested.resolved_at('main').get_cache_key())
 
 
 def test_cache_minimization_length_and_toggle_resolution(tmp_path):

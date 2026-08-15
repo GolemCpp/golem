@@ -18,8 +18,8 @@ import os
 import subprocess
 from dataclasses import replace
 
+from golemcpp.golem import fetch_policy
 from golemcpp.golem import helpers
-from golemcpp.golem.fetch_policy import BLOBLESS_FILTER
 from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.fetcher import Fetcher
@@ -34,17 +34,17 @@ class GitFetcher(Fetcher):
 
     def populate(self) -> Fetched:
         '''A source obtained fresh from its remote, as much of it as asked for.'''
-        print("Cloning repository {} into {}".format(self.source.location, self.path))
+        print("Cloning repository {} into {}".format(self.source.locator, self.path))
         os.makedirs(self.path, exist_ok=True)
 
         if self.policy.fetch_mode == FetchMode.SHALLOW:
             # Not a clone at all: fetching one commit by name is the only way to
             # ask for that commit and nothing around it.
             self.run(['init'], quiet=True)
-            self.run(['remote', 'add', 'origin', self.source.location], quiet=True)
+            self.run(['remote', 'add', 'origin', str(self.source.locator)], quiet=True)
             self.fetch_reference()
         else:
-            self.run(['clone'] + self.mode_args() + ['--', self.source.location, '.'])
+            self.run(['clone'] + self.mode_args() + ['--', str(self.source.locator), '.'])
 
         self.require_reference()
         self.reset()
@@ -197,7 +197,7 @@ class GitFetcher(Fetcher):
         if self.policy.fetch_mode == FetchMode.SHALLOW:
             return ['--depth=1']
         if self.policy.fetch_mode == FetchMode.BLOBLESS:
-            return ['--filter=' + BLOBLESS_FILTER]
+            return ['--filter=' + fetch_policy.BLOBLESS_FILTER]
         return []
 
     def fetched(self, mode) -> Fetched:
@@ -221,7 +221,7 @@ class GitFetcher(Fetcher):
 
         raise RuntimeError(
             'Cannot find "{}" in "{}": {} advertises no branch or tag that reaches it.'
-            .format(self.policy.reference, self.path, self.source.location))
+            .format(self.policy.reference, self.path, self.source.locator))
 
     # -- changing what a root already holds --------------------------------
 
@@ -256,7 +256,8 @@ class GitFetcher(Fetcher):
                 # Nothing to transfer: the objects are already here, and this only
                 # says that later fetches may leave file content behind.
                 self.run(['config', 'remote.origin.promisor', 'true'], quiet=True)
-                self.run(['config', 'remote.origin.partialclonefilter', BLOBLESS_FILTER],
+                self.run(['config', 'remote.origin.partialclonefilter',
+                          fetch_policy.BLOBLESS_FILTER],
                          quiet=True)
             else:
                 # Back to a self-contained root: drop the filter, then ask for

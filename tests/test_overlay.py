@@ -1,9 +1,12 @@
 import pytest
 
+from golemcpp.golem.requested_source import DEFAULT_GIT_VERSION
+from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.overlay import Overlay
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
+from golemcpp.golem.locator import Locator
 
 
 @pytest.fixture
@@ -19,8 +22,8 @@ def resolutions(monkeypatch):
     return asked
 
 
-def make_source(reference='main'):
-    return Source.for_repository('https://host/overrides.git', reference=reference)
+def make_source(version=''):
+    return RequestedSource.for_repository('https://host/overrides.git', version=version)
 
 
 def test_an_overlay_asked_for_without_a_version_takes_its_sources_reference():
@@ -29,7 +32,7 @@ def test_an_overlay_asked_for_without_a_version_takes_its_sources_reference():
 
 
 def test_resolving_follows_the_configured_reference_without_asking_a_remote(resolutions):
-    overlay = Overlay(source=make_source(reference='develop'))
+    overlay = Overlay(source=make_source(version='develop'))
 
     assert overlay.resolve() == ResolvedVersion(reference='develop', revision='develop')
     assert overlay.resolved.reference == 'develop'
@@ -43,25 +46,33 @@ def test_the_source_carries_the_resolved_reference():
 
     source = overlay.to_source()
 
-    assert source.location == 'https://host/overrides.git'
+    assert source.locator == Locator('https://host/overrides.git')
     assert source.reference == 'v1.2.0'
 
 
 def test_the_source_is_readable_before_the_overlay_is_resolved():
     # Locating a resource resolves it first, but nothing should depend on that to
     # read the identity an overlay already carries.
-    assert Overlay(source=make_source()).to_source() == make_source()
+    source = Overlay(source=make_source()).to_source()
+
+    assert source.locator == Locator('https://host/overrides.git')
+    assert source.reference == DEFAULT_GIT_VERSION
 
 
 def test_a_directory_overlay_keeps_its_empty_reference():
-    source = Source.for_directory('file:///overlays/local')
-    overlay = Overlay(source=source)
+    requested = RequestedSource.for_directory('file:///overlays/local')
+    overlay = Overlay(source=requested)
 
     overlay.resolve()
 
+    # No default branch to fall back on: a copied directory is what it holds.
     assert overlay.version == ''
-    assert overlay.to_source() == source
-    assert overlay.to_source().get_cache_key() == source.get_cache_key()
+    source = overlay.to_source()
+    assert source.type == 'directory'
+    assert source.locator == requested.locator
+    assert source.reference == ''
+    # And with no revision to name, the key is the source id alone.
+    assert source.get_cache_key() == requested.get_id()
 
 
 def test_an_overlay_is_named_after_its_source():
