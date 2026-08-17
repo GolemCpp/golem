@@ -136,7 +136,7 @@ class ToolsCommandHandler:
         # same resource (like `golem cache remove`).
         try:
             tool = tool_manager.ToolManager.get_tool(tool_name)
-            cached_tool = manager.resolve_cached_resource(tool, with_version_resolution=False)
+            cached_tool = manager.resolve_cached_resource(tool)
         except ValueError as error:
             print('ERROR: {}'.format(error))
             self.print_help()

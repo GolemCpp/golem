@@ -3,37 +3,27 @@ import os
 from golemcpp.golem import overrides
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.overlay import Overlay
-from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class OverlayManager(ResourceManager):
     '''
-    An overlay is a source carrying configuration a project layers onto its own.
-    It contributes an `overrides.json` today; whatever it carries next is read
-    the same way, from the content of the overlays a caller installed.
+    Manages overlays, which are repositories carrying project configuration
+    layers to override a project configuration. Today, it only contributes
+    `overrides.json` to control dependencies and manage conflicts.
+
+    Overlays are pinned in cache on the version asked. It means that when asking
+    a branch on a overlay, it will update in place to follow this branch at resolve
+    time. Same if asking for a Node-like version, it will update in place on 
+    the same asked version. E.g. "^1.0.0" will follow 1.1.0, then 1.2.0, etc.
     '''
+
+    kind = ResourceKind.OVERLAY
 
     @staticmethod
     def get_overlay(source, version: str = '') -> Overlay:
         return Overlay(source=source, version=version)
-
-    @classmethod
-    def resource_for(cls, overlay: Overlay) -> Resource:
-        return Resource(
-            kind=ResourceKind.OVERLAY,
-            cache_key=cls.cache_key_for(overlay),
-            source=cls.source_for(overlay))
-
-    @staticmethod
-    def source_for(overlay: Overlay):
-        return overlay.to_source()
-
-    @staticmethod
-    def resolve_version(overlay: Overlay) -> Overlay:
-        overlay.resolve()
-        return overlay
 
     def load_overrides(self, cached_overlays, project_dir, merged_path):
         '''

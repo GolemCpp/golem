@@ -185,14 +185,18 @@ class RequestedSource:
     locator: Locator = field(default_factory=Locator)
     version: str = ''
     type: str = source.SOURCE_TYPE_GIT
+    # Which tags `version` may be matched against, when a repository names them
+    # in a way a version range cannot be read from directly. It is a golemfile
+    # keyword only for now.
+    version_regex: str = ''
 
     # As on Source: the named constructors take either a Locator or the string
     # spelling one, the field takes only a Locator.
 
     @classmethod
-    def for_repository(cls, locator, version=''):
+    def for_repository(cls, locator, version='', version_regex=''):
         return cls(locator=Locator(str(locator)), version=version,
-                   type=source.SOURCE_TYPE_GIT)
+                   type=source.SOURCE_TYPE_GIT, version_regex=version_regex)
 
     @classmethod
     def for_directory(cls, locator):

@@ -24,8 +24,8 @@ def stub_version_resolver(monkeypatch):
     # stub it so unit tests neither touch the network nor depend on live tags.
     monkeypatch.setattr(
         tool.VersionResolver, 'resolve',
-        staticmethod(lambda url, version, version_regex='':
-                    ResolvedVersion(reference=version, revision='deadbeef')))
+        staticmethod(lambda requested:
+                    ResolvedVersion(reference=requested.version, revision='deadbeef')))
 
 
 @pytest.fixture(autouse=True)
@@ -89,7 +89,7 @@ def classic_tool_root(base_cache_directory, tool_name='cppfront'):
     return os.path.join(str(base_cache_directory), cache_configuration.TOOLS_SUBDIR, tool_name)
 
 
-def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path):
+def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path, resolving):
     captured = {}
     tools_cache_directory = tmp_path / 'tools-cache'
 
@@ -141,7 +141,7 @@ def test_locating_a_tool_asks_no_remote(monkeypatch, tmp_path):
     manager = make_tool_manager(tmp_path, tools_cache_directory=str(tmp_path / 'tools-cache'))
 
     assert manager.resolve_cached_resource(
-        manager.get_tool('cppfront'), with_version_resolution=False).path == \
+        manager.get_tool('cppfront')).path == \
         classic_tool_root(tmp_path / 'tools-cache')
 
 
@@ -153,7 +153,7 @@ def test_removing_a_tool_deletes_the_resolved_tool_resource(tmp_path):
 
     manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
     cached_tool = manager.resolve_cached_resource(
-        manager.get_tool('cppfront'), with_version_resolution=False)
+        manager.get_tool('cppfront'))
 
     assert cached_tool.path == str(resource_root)
     assert cached_tool.exists() is True
@@ -167,7 +167,7 @@ def test_removing_a_tool_that_is_not_there_deletes_nothing(tmp_path):
 
     manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
     cached_tool = manager.resolve_cached_resource(
-        manager.get_tool('cppfront'), with_version_resolution=False)
+        manager.get_tool('cppfront'))
 
     assert cached_tool.exists() is False
     assert manager.cache_manager.remove_resources([cached_tool]) == ([], [])
@@ -232,7 +232,7 @@ def test_install_tool_prefers_existing_classic_tool_layout(monkeypatch, tmp_path
         minimization_enabled=True)
 
     assert manager.resolve_cached_resource(
-        manager.get_tool('cppfront'), with_version_resolution=False).path == str(classic_root)
+        manager.get_tool('cppfront')).path == str(classic_root)
 
 
 def test_list_installed_tools_scans_additional_cache(tmp_path):
@@ -273,7 +273,7 @@ def test_removing_a_tool_finds_it_in_an_additional_cache_under_weak_policy(tmp_p
         ])
 
     cached_tool = manager.resolve_cached_resource(
-        manager.get_tool('cppfront'), with_version_resolution=False)
+        manager.get_tool('cppfront'))
 
     assert cached_tool.cache_root == str(additional)
     removed, _ = manager.cache_manager.remove_resources([cached_tool])
@@ -281,7 +281,7 @@ def test_removing_a_tool_finds_it_in_an_additional_cache_under_weak_policy(tmp_p
     assert not resource_root.exists()
 
 
-def test_install_tool_fetches_through_the_shared_mechanism(monkeypatch, tmp_path, git_calls):
+def test_install_tool_fetches_through_the_shared_mechanism(monkeypatch, tmp_path, git_calls, resolving):
     tools_cache_directory = tmp_path / 'tools-cache'
     replace_cppfront_tool(monkeypatch, build_handler=lambda resource_root: None)
 
@@ -306,7 +306,7 @@ def run_install(monkeypatch, tmp_path, version, build_handler):
     return manager.install(manager.get_tool('cppfront', version=version))
 
 
-def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp_path, git_calls):
+def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp_path, git_calls, resolving):
     def build(resource_root):
         os.makedirs(os.path.join(resource_root, 'bin'), exist_ok=True)
         with open(os.path.join(resource_root, 'bin', 'cppfront'), 'w') as fileout:
@@ -339,7 +339,7 @@ def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp
         root).source['resolved']['reference'] == 'v0.8.2'
 
 
-def test_a_failed_build_leaves_nothing_built_from_the_old_version(monkeypatch, tmp_path):
+def test_a_failed_build_leaves_nothing_built_from_the_old_version(monkeypatch, tmp_path, resolving):
     def build(resource_root):
         os.makedirs(os.path.join(resource_root, 'bin'), exist_ok=True)
         with open(os.path.join(resource_root, 'bin', 'cppfront'), 'w') as fileout:

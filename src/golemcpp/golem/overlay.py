@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from dataclasses import replace
 
 from golemcpp.golem import requested_source
 from golemcpp.golem import source
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem.version_resolver import VersionResolver
 
 
 @dataclass
@@ -27,21 +29,12 @@ class Overlay:
     def name(self):
         return self.source.get_id()
 
-    def to_source(self):
-        # View the overlay as a Source to compute its identity the same way as every
-        # other resource kind.
-        return self.source.resolved_at(
-            self.resolved
-            or ResolvedVersion(reference=self.version, revision=self.version))
+    def requested(self):
+        # What this overlay asks for. We make sure that if the version was left
+        # empty, we use the default version.
+        return replace(self.source, version=self.version)
 
     def resolve(self):
-        # For now, an overlay follows the version it was configured with, without
-        # asking a remote what that version resolves to.
-
-        # This is where VersionResolver.resolve goes, as the other kinds do, the
-        # day an overlay may name a version a remote has to be asked about.
-
-        # Naming the revision after the reference is what VersionResolver itself
-        # falls back to when no tag matches.
-        self.resolved = ResolvedVersion(reference=self.version, revision=self.version)
+        self.resolved = VersionResolver.resolve_requested(
+            self.requested(), self.resolved)
         return self.resolved

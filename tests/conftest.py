@@ -12,7 +12,10 @@ if str(SRC) not in sys.path:
 if str(WAFLIB_SRC) not in sys.path:
     sys.path.insert(0, str(WAFLIB_SRC))
 
+import pytest  # noqa: E402
+
 from golemcpp.golem import helpers  # noqa: E402
+from golemcpp.golem import network  # noqa: E402
 from golemcpp.golem.cache_configuration import CacheConfiguration  # noqa: E402
 from golemcpp.golem.fetch_policy import FetchMode  # noqa: E402
 from golemcpp.golem.git_fetcher import GitFetcher  # noqa: E402
@@ -21,6 +24,17 @@ from golemcpp.golem.settings import get_settings  # noqa: E402
 
 # The commit a stubbed fetch reports having landed on.
 STUB_HEAD = 'cafebabecafebabecafebabecafebabecafebabe'
+
+
+@pytest.fixture
+def resolving():
+    '''
+    Inside `golem resolve`, where reaching a remote is allowed. Resolving a
+    version and installing a resource both happen there and nowhere else, so a
+    test doing either says so the way the commands do.
+    '''
+    with network.allowed():
+        yield
 
 
 def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_revision=True,

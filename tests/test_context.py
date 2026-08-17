@@ -3,6 +3,7 @@ import pytest
 from types import SimpleNamespace
 import json
 
+from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import context as golem_context, helpers, network, qt_discovery
 from golemcpp.golem.settings import get_settings
@@ -18,6 +19,7 @@ from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.requested_source import detect_kind
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
+from golemcpp.golem.source import make_revision_component
 from golemcpp.golem.dependency_manager import DependencyManager
 from conftest import absolute_path, make_cache_configuration
 
@@ -877,14 +879,12 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # fit a directory name is source.make_revision_component's job.
     dep = Dependency(repository='https://host/json.git')
     dep.resolved = ResolvedVersion(reference='3.11.3', revision='1234567890abcdef')
-    assert dep.to_source().resolved.revision == '1234567890abcdef'
+    assert ResourceManager.source_for(dep).resolved.revision == '1234567890abcdef'
 
-    # Keyed on the commit, falling back to the resolved name when nothing
-    # named one -- which is DependencyManager's rule, not the Source's.
-    assert DependencyManager.key_component_for(dep.to_source()) == '1234567890abcdef'
-
-    dep.resolved = ResolvedVersion(reference='3.11.3')
-    assert DependencyManager.key_component_for(dep.to_source()) == '3.11.3'
+    # Keyed on the commit, which is what the kind's Pinning names -- not the
+    # Source's rule.
+    assert DependencyManager.cache_key_for(dep).endswith(
+        '+' + make_revision_component('1234567890abcdef'))
 
 
 def test_a_build_script_may_reach_a_remote():

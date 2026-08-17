@@ -263,7 +263,7 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     manager = tool_manager.get_tool_manager(
         make_cache_configuration(cache_directory.CacheDirectory(location=str(cache_dir))))
     cached_tool = manager.resolve_cached_resource(
-        manager.get_tool(cppfront_tool.CPPFRONT_NAME), with_version_resolution=False)
+        manager.get_tool(cppfront_tool.CPPFRONT_NAME))
     cache_info = cppfront_tool.CppFrontCacheInfo.from_tool_root(cached_tool.path)
 
     assert Path(cache_info.executable_path).is_file()

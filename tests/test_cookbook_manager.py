@@ -11,6 +11,7 @@ from golemcpp.golem.cookbook_manager import (
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
 from golemcpp.golem.source import Source
 from golemcpp.golem.resolved_version import ResolvedVersion
+from conftest import STUB_HEAD
 from conftest import make_cache_configuration
 
 
@@ -30,7 +31,9 @@ def test_resource_for_bakes_in_the_recipes_kind():
 
     assert resource.kind == ResourceKind.COOKBOOK
     assert resource.subdir == cache_configuration.COOKBOOKS_SUBDIR
-    assert resource.source == source.resolved_at(ResolvedVersion(reference='main', revision='main'))
+    # Nothing resolved it, so it names no version -- which the key does not
+    # need, since a cookbook root is named after the request.
+    assert resource.source == source.resolved_at(ResolvedVersion())
     assert resource.cache_key == CookbookManager.cache_key_for(Cookbook(source=source))
 
 
@@ -66,7 +69,9 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(staging_root, 'recipes.json'), 'w') as fileout:
             fileout.write('{}')
 
-    cached = manager.resolve_cached_resource(Cookbook(source=source))
+    item = Cookbook(source=source)
+    item.resolved = ResolvedVersion(reference='main', revision=STUB_HEAD)
+    cached = manager.resolve_cached_resource(item)
     resource_root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(os.path.join(resource_root, 'recipes.json'))

@@ -6,8 +6,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import tool_registry
 from golemcpp.golem.cache_manager import get_cache_manager
-from golemcpp.golem.resource import Resource
-from golemcpp.golem.fetch_policy import FetchPolicy
+from golemcpp.golem.resource_manager import Pinning
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.tool import Tool
@@ -23,10 +22,15 @@ class InstalledToolInfo:
 
 class ToolManager(ResourceManager):
     '''
-    Manages installable tools as ordinary cached resources: tools resolve across
-    every configured cache exactly like dependencies and repositories (through the
-    shared CacheManager).
+    Manages installable tools as ordinary cached resources.
+
+    Tools are pinned in cache on their name, which means they update in place
+    when asking for a different version. Said differently, asking for a different
+    version replaces any existing one.
     '''
+
+    kind = ResourceKind.TOOL
+    pinning = Pinning.NAME
 
     @staticmethod
     def get_tool(tool_name: str, version: str = '') -> Tool:
@@ -38,38 +42,6 @@ class ToolManager(ResourceManager):
     @staticmethod
     def list_available_tools():
         return tool_registry.list_available_tools()
-
-    @classmethod
-    def resource_for(cls, tool: Tool) -> Resource:
-        return Resource(
-            kind=ResourceKind.TOOL,
-            cache_key=cls.cache_key_for(tool),
-            source=cls.source_for(tool))
-
-    @classmethod
-    def cache_key_for(cls, tool: Tool):
-        # The name alone, so a tool asked for at another version lands in the root
-        # it already occupies rather than beside it.
-        return tool.name
-
-    @staticmethod
-    def source_for(tool: Tool):
-        return tool.to_source()
-
-    @staticmethod
-    def resolve_version(tool: Tool) -> Tool:
-        tool.resolve()
-        return tool
-
-    def policy_for(self, tool: Tool) -> FetchPolicy:
-        # Lands on the exact commit its version resolved to. Not pinned the way a
-        # dependency is: a tool is keyed by its name, so the same root is reused
-        # for whatever version is asked for next, and reaching a tag pushed after
-        # the clone needs the remote.
-        return FetchPolicy(
-            fetch_mode=self.fetch_mode,
-            fetch_jobs=self.fetch_jobs,
-            revision=tool.resolved.revision)
 
     @staticmethod
     def pre_install_refresh(root, tool: Tool) -> None:

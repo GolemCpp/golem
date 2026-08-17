@@ -1,48 +1,26 @@
 from golemcpp.golem.cache_manager import get_cache_manager
-from golemcpp.golem.resource import Resource
 from golemcpp.golem.fetch_policy import FetchMode
-from golemcpp.golem.fetch_policy import FetchPolicy
+from golemcpp.golem.resource_manager import Pinning
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class DependencyManager(ResourceManager):
-    @classmethod
-    def resource_for(cls, dep) -> Resource:
-        return Resource(
-            kind=ResourceKind.DEPENDENCY,
-            cache_key=cls.cache_key_for(dep),
-            source=cls.source_for(dep))
+    '''
+    Manages dependencies.
 
-    @staticmethod
-    def key_component_for(source):
-        # Keyed on the commit. A dependency root is immutable. Falls back 
-        # to the reference if the revision is missing.
-        return source.resolved.revision or source.resolved.reference
+    Dependency are pinned in cache on the commit its version is resolved to.
+    '''
 
-    @staticmethod
-    def source_for(dep):
-        return dep.to_source()
+    kind = ResourceKind.DEPENDENCY
+    pinning = Pinning.REVISION
 
-    def policy_for(self, dep):
-        # Pinned to a resolved commit, so there is nothing to fetch on a refresh
-        # and the reset lands on the hash rather than on a moving branch.
-        #
-        # A dependency is the one resource that departs from the configured mode:
-        # `shallow` is asked for in a golemfile, for a repository too heavy to
-        # clone whole, and pays for it by having no history to describe from.
-        return FetchPolicy(
-            fetch_mode=FetchMode.SHALLOW if dep.shallow else self.fetch_mode,
-            fetch_jobs=self.fetch_jobs,
-            revision=dep.resolved.revision,
-            fetch_remote=False)
-
-    @staticmethod
-    def resolve_version(dep):
-        # The cache key is built from the resolved reference, so a dependency
-        # located before this point would name a different resource.
-        dep.resolve()
-        return dep
+    def fetch_mode_for(self, dep):
+        # Shallow mode: Can be enabled in the project file on a dependency to
+        # fetch an extra light version of the repository, but there are drawbacks.
+        # Usually longer to clone, and prevents from using `git describe` which
+        # can be an issue if the project relies on it to know its own version.
+        return FetchMode.SHALLOW if dep.shallow else self.fetch_mode
 
     def update_cached_resource(self, dep):
         '''(Re)resolve where this dependency lives in the caches.'''
