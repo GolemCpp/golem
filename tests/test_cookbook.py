@@ -27,15 +27,12 @@ def make_source(version=''):
     return RequestedSource.for_repository('https://host/recipes.git', version=version)
 
 
-def test_a_cookbook_asked_for_without_a_version_takes_its_sources_reference():
-    assert Cookbook(source=make_source(version='v1.2.0')).version == 'v1.2.0'
-    assert Cookbook(source=make_source(), version='v1.2.0').version == 'v1.2.0'
-
-
-def test_a_cookbook_naming_no_version_anywhere_leaves_it_to_the_remote():
-    # Not `main`: which branch a remote defaults to is the remote's to say,
-    # and the resolver asks it rather than guessing a name here.
-    assert Cookbook(source=make_source()).version == ''
+def test_a_cookbook_asks_for_exactly_what_its_location_names():
+    # Nothing of its own to reconcile: the location said it in full, and
+    # naming no version is a question the resolver puts to the remote.
+    assert Cookbook(source=make_source(version='v1.2.0')).requested() == \
+        make_source(version='v1.2.0')
+    assert Cookbook(source=make_source()).requested().version == ''
 
 
 def test_a_cookbook_resolves_the_way_every_other_kind_does(resolutions):
@@ -56,7 +53,7 @@ def test_a_resolved_cookbook_is_not_resolved_again(resolutions):
 
 
 def test_the_source_carries_the_resolved_reference(resolutions):
-    cookbook = Cookbook(source=make_source(), version='^1.2.0')
+    cookbook = Cookbook(source=make_source(version='^1.2.0'))
     cookbook.resolve()
 
     source = ResourceManager.source_for(cookbook)
@@ -87,7 +84,7 @@ def test_a_directory_cookbook_keeps_its_empty_reference(resolutions):
     # which for a `file://` locator would be asking git to ls-remote a path.
     assert resolutions == []
     # No default branch to fall back on: a copied directory is what it holds.
-    assert cookbook.version == ''
+    assert cookbook.requested().version == ''
     source = ResourceManager.source_for(cookbook)
     assert source.type == 'directory'
     assert source.locator == requested.locator

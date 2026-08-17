@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 
 import pytest
 
@@ -204,12 +205,12 @@ def test_locating_a_resource_resolves_its_version_first(tmp_path):
     # worked out before it would name a different one.
     manager = make_manager(tmp_path)
     manager.resolve_version = lambda cookbook: Cookbook(
-        source=cookbook.source, version='v3.12.0')
+        source=replace(cookbook.source, version='v3.12.0'))
 
     cached = manager.resolve_cached_resource(make_cookbook())
 
     assert cached.cache_key == manager.cache_key_for(
-        Cookbook(source=make_cookbook().source, version='v3.12.0'))
+        Cookbook(source=replace(make_cookbook().source, version='v3.12.0')))
 
 
 def test_the_lifecycle_hooks_do_nothing_by_default():
@@ -597,7 +598,7 @@ def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():
     # immutable commit, a tool re-points one root.
     resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabe')
 
-    cookbook = Cookbook(source=make_cookbook().source, version='v3.12.0')
+    cookbook = Cookbook(source=replace(make_cookbook().source, version='v3.12.0'))
     cookbook.resolved = resolved
     dep = Dependency(name='json', repository='https://host/r.git')
     dep.resolved = resolved

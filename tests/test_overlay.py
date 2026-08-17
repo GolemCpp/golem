@@ -27,15 +27,12 @@ def make_source(version=''):
     return RequestedSource.for_repository('https://host/overrides.git', version=version)
 
 
-def test_an_overlay_asked_for_without_a_version_takes_its_sources_reference():
-    assert Overlay(source=make_source(version='v1.2.0')).version == 'v1.2.0'
-    assert Overlay(source=make_source(), version='v1.2.0').version == 'v1.2.0'
-
-
-def test_an_overlay_naming_no_version_anywhere_leaves_it_to_the_remote():
-    # Not `main`: which branch a remote defaults to is the remote's to say,
-    # and the resolver asks it rather than guessing a name here.
-    assert Overlay(source=make_source()).version == ''
+def test_an_overlay_asks_for_exactly_what_its_location_names():
+    # Nothing of its own to reconcile: the location said it in full, and
+    # naming no version is a question the resolver puts to the remote.
+    assert Overlay(source=make_source(version='v1.2.0')).requested() == \
+        make_source(version='v1.2.0')
+    assert Overlay(source=make_source()).requested().version == ''
 
 
 def test_an_overlay_resolves_the_way_every_other_kind_does(resolutions):
@@ -56,7 +53,7 @@ def test_a_resolved_overlay_is_not_resolved_again(resolutions):
 
 
 def test_the_source_carries_the_resolved_reference(resolutions):
-    overlay = Overlay(source=make_source(), version='^1.2.0')
+    overlay = Overlay(source=make_source(version='^1.2.0'))
     overlay.resolve()
 
     source = ResourceManager.source_for(overlay)
@@ -87,7 +84,7 @@ def test_a_directory_overlay_keeps_its_empty_reference(resolutions):
     # which for a `file://` locator would be asking git to ls-remote a path.
     assert resolutions == []
     # No default branch to fall back on: a copied directory is what it holds.
-    assert overlay.version == ''
+    assert overlay.requested().version == ''
     source = ResourceManager.source_for(overlay)
     assert source.type == 'directory'
     assert source.locator == requested.locator
