@@ -8,8 +8,8 @@ from golemcpp.golem.dependency_manager import DependencyManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import Locator
-from golemcpp.golem.source import CACHE_KEY_SEPARATOR
-from golemcpp.golem.source import make_revision_component
+from golemcpp.golem.resource_manager import CACHE_KEY_SEPARATOR
+from golemcpp.golem.resource_manager import make_revision_component
 from golemcpp.golem.version_resolver import VersionResolver
 
 
