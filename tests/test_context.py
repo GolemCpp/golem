@@ -443,11 +443,29 @@ def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_en
     assert build_target.arflags == ['/custom-arflag']
 
 
+def stub_dependency_manager(monkeypatch, context, *, is_read_only=False,
+                            cache_root='/tmp/cache', source_path='/tmp/repo',
+                            installs=None):
+    '''Stands in for the real manager, so a fake dep needs no cache to resolve in.'''
+    context.cache_configuration = None
+    cached_dep = SimpleNamespace(is_read_only=is_read_only, cache_root=cache_root)
+
+    def install(dep, refresh=True, cached_resource=None):
+        if installs is not None:
+            installs.append(refresh)
+        return SimpleNamespace(source_path=source_path)
+
+    monkeypatch.setattr(
+        golem_context, 'get_dependency_manager',
+        lambda cache_configuration: SimpleNamespace(
+            get_cached_resource=lambda dep: cached_dep,
+            install=install))
+
+
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context = make_runtime_context(runtime_variant='release')
     context.resolved_overrides = '/tmp/overrides.json'
     context.get_dep_location = lambda dep: '/tmp/dep-export'
-    context.make_repo_ready = lambda dep, should_clean=False: '/tmp/repo'
     context.get_dep_build_location = lambda dep: '/tmp/repo/build'
     context.get_global_dependencies_configuration_file = lambda: '/tmp/global-dependencies.json'
     context.get_only_update_dependencies_regex = lambda: ''
@@ -480,6 +498,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
     monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
     monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: calls.append(args))
+    stub_dependency_manager(monkeypatch, context)
 
     context.run_dep_command(dep=dep, command='resolve')
 
@@ -495,6 +514,51 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     # elsewhere and would otherwise resolve it against its own directory.
     assert '--additional-cache-directory={}=github'.format(
         os.path.join(project_dir, 'shared')) in calls[0]
+
+
+def test_run_dep_command_refuses_a_read_only_cache_location(monkeypatch):
+    # The command builds into the dependency's cache root, so a location that
+    # forbids writing is refused before anything runs.
+    context = make_runtime_context(runtime_variant='release')
+    monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        helpers, 'run_task',
+        lambda *args, **kwargs: pytest.fail('ran a command from a read-only cache'))
+    stub_dependency_manager(
+        monkeypatch, context, is_read_only=True, cache_root='/shared/cache')
+
+    with pytest.raises(RuntimeError, match='read-only cache location /shared/cache'):
+        context.run_dep_command(
+            dep=SimpleNamespace(name='demo', version='1.0.0'), command='build')
+
+
+def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch):
+    # Building dirties the dependency's working tree, so its source is cleaned and
+    # reset first; resolving reads what is already there.
+    monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
+    monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
+    monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: None)
+
+    refreshed = []
+    for command in ('resolve', 'build'):
+        context = make_runtime_context(runtime_variant='release')
+        context.resolved_overrides = '/tmp/overrides.json'
+        context.get_dep_location = lambda dep: '/tmp/dep-export'
+        context.get_dep_build_location = lambda dep: '/tmp/repo/build'
+        context.get_global_dependencies_configuration_file = lambda: '/tmp/global.json'
+        context.get_only_update_dependencies_regex = lambda: ''
+        context.settings = get_settings(
+            project_dir=absolute_path('tmp', 'project'),
+            options=SimpleNamespace(cache_directory=absolute_path('tmp', 'cache')))
+        stub_dependency_manager(monkeypatch, context, installs=refreshed)
+
+        context.run_dep_command(
+            dep=SimpleNamespace(
+                name='demo', version='1.0.0', runtime_link=None, runtime_variant=None,
+                link=None, variant=None, shallow=False, resolved_version='1.0.0'),
+            command=command)
+
+    assert refreshed == [False, True]
 
 
 def make_repository_context(project_dir, *, deps_resolve=True, no_cookbooks_fetch=False):
@@ -599,8 +663,9 @@ def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
 
     monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'overrides')
 
-    assert [overlay.location for overlay in context.get_overlay_locations()] == \
-        [overrides_dir.resolve().as_uri()]
+    overlays = context.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
+
+    assert [overlay.location for overlay in overlays] == [overrides_dir.resolve().as_uri()]
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -661,155 +726,55 @@ def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch
     assert '&& cl.exe /nologo' in captured['command'][4]
 
 
-def test_clone_repository_copies_non_git_directory(tmp_path):
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
-    source_dir = project_dir / 'recipes'
-    source_dir.mkdir()
-    (source_dir / 'marker.txt').write_text('copied\n', encoding='utf-8')
-    repo_path = tmp_path / 'cache' / 'recipes'
-
-    context = make_repository_context(project_dir=project_dir)
-    repository = Source.parse('recipes', str(project_dir))
-
-    context.clone_repository(path=str(repo_path), source=repository)
-
-    assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'copied\n'
-    assert (repo_path / '.golem-origin').read_text(encoding='utf-8') == repository.location
+# -- overrides: the precedence and the memo Context still owns ---------------
 
 
-def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path):
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
-    source_dir = project_dir / 'recipes'
-    source_dir.mkdir()
-    (source_dir / 'marker.txt').write_text('fresh\n', encoding='utf-8')
-    repo_path = tmp_path / 'cache' / 'recipes'
-    repo_path.mkdir(parents=True)
-    (repo_path / 'marker.txt').write_text('stale\n', encoding='utf-8')
-
-    context = make_repository_context(project_dir=project_dir)
-    repository = Source.parse('recipes', str(project_dir))
-
-    context.clone_repository(path=str(repo_path), source=repository)
-
-    assert (repo_path / 'marker.txt').read_text(encoding='utf-8') == 'fresh\n'
-
-
-def test_clone_repository_raises_for_missing_local_directory(tmp_path):
-    context = make_repository_context(project_dir=tmp_path)
-    repository = Source.parse('missing-recipes', str(tmp_path))
-    repo_path = tmp_path / 'cache' / 'recipes'
-
-    with pytest.raises(RuntimeError, match="Can't find local source directory"):
-        context.clone_repository(path=str(repo_path), source=repository)
-
-
-def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path):
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
-    source_dir = project_dir / 'recipes'
-    git_dir = source_dir / '.git'
-    git_dir.mkdir(parents=True)
-    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
-    repo_path = tmp_path / 'cache' / 'recipes'
-
-    context = make_repository_context(project_dir=project_dir)
-    repository = Source.parse('recipes', str(project_dir))
-    calls = []
-
-    monkeypatch.setattr(helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append((args, cwd)))
-
-    context.clone_repository(path=str(repo_path), source=repository)
-
-    assert calls[0] == (['clone', '--', repository.location, '.'], str(repo_path))
-    assert calls[1] == (['reset', '--hard', 'origin/main'], str(repo_path))
-
-
-# -- overlays: several overrides.json layered in the order they are configured --
-
-
-def make_overlay(tmp_path, name, entries):
-    overlay_dir = tmp_path / name
-    overlay_dir.mkdir(parents=True)
-    (overlay_dir / 'overrides.json').write_text(json.dumps(entries), encoding='utf-8')
-    return overlay_dir
-
-
-def load_layered_overrides(monkeypatch, tmp_path, overlay_names):
+def make_overrides_context(tmp_path, monkeypatch):
     project_dir = tmp_path / 'project'
     project_dir.mkdir(exist_ok=True)
     context = make_repository_context(project_dir=project_dir, deps_resolve=False)
     context.resolved_overrides = ''
-
-    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', '|'.join(
-        'directory+{}'.format(tmp_path / name) for name in overlay_names))
-    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION', raising=False)
-    # An overlay is read where it was installed; here that is the directory itself.
-    monkeypatch.setattr(context, 'install_overlay', lambda source: source.get_local_path())
     monkeypatch.setattr(context, 'make_build_path',
                         lambda path: str(tmp_path / 'build' / path))
-
-    return context.load_overrides_configuration()
-
-
-def test_a_later_overlay_overwrites_only_the_members_it_sets(monkeypatch, tmp_path):
-    make_overlay(tmp_path, 'first', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0', 'shallow': True}])
-    make_overlay(tmp_path, 'second', [
-        {'repository': 'https://host/json.git', 'version': '^4.0.0'}])
-
-    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
-
-    assert len(overrides) == 1
-    assert overrides[0].version == '^4.0.0'
-    # Untouched by the second overlay, so the first one still carries it.
-    assert overrides[0].shallow is True
-
-
-def test_layering_keeps_an_entry_only_one_overlay_defines(monkeypatch, tmp_path):
-    make_overlay(tmp_path, 'first', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0'}])
-    make_overlay(tmp_path, 'second', [
-        {'repository': 'https://host/fmt.git', 'version': '^10.0.0'}])
-
-    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
-
-    assert [override.repository for override in overrides] == \
-        ['https://host/json.git', 'https://host/fmt.git']
-
-
-def test_layering_identifies_an_entry_by_the_source_it_overrides(monkeypatch, tmp_path):
-    lib_dir = tmp_path / 'project' / 'mylib'
-    lib_dir.mkdir(parents=True)
-    make_overlay(tmp_path, 'first', [{'directory': 'mylib', 'variant': 'debug'}])
-    make_overlay(tmp_path, 'second', [{'location': 'mylib', 'variant': 'release'}])
-
-    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
-
-    assert len(overrides) == 1
-    assert overrides[0].directory == lib_dir.resolve().as_uri()
-    assert overrides[0].variant == ['release']
+    return context, project_dir
 
 
 def test_an_explicit_configuration_stands_in_for_the_overlays(monkeypatch, tmp_path):
-    make_overlay(tmp_path, 'first', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0'}])
-    project_dir = tmp_path / 'project'
-    project_dir.mkdir()
+    context, project_dir = make_overrides_context(tmp_path, monkeypatch)
     (project_dir / 'explicit.json').write_text(
         json.dumps([{'repository': 'https://host/fmt.git', 'version': '^10.0.0'}]),
         encoding='utf-8')
-
-    context = make_repository_context(project_dir=project_dir, deps_resolve=False)
-    context.resolved_overrides = ''
-    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS',
-                       'directory+{}'.format(tmp_path / 'first'))
     monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', 'explicit.json')
+    # Never consulted: the explicit file wins outright.
+    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'directory+{}'.format(tmp_path / 'unused'))
 
     overrides = context.load_overrides_configuration()
 
     assert [override.repository for override in overrides] == ['https://host/fmt.git']
+
+
+def test_the_resolved_overrides_path_is_worked_out_once(monkeypatch, tmp_path):
+    # Sub-builds are handed this memo, so it must survive being read again.
+    context, project_dir = make_overrides_context(tmp_path, monkeypatch)
+    (project_dir / 'explicit.json').write_text('[]', encoding='utf-8')
+    monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', 'explicit.json')
+
+    context.load_overrides_configuration()
+    resolved = context.resolved_overrides
+    assert resolved == str(project_dir / 'explicit.json')
+
+    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION')
+    context.load_overrides_configuration()
+
+    assert context.resolved_overrides == resolved
+
+
+def test_no_overrides_configured_at_all_resolves_to_nothing(monkeypatch, tmp_path):
+    context, _ = make_overrides_context(tmp_path, monkeypatch)
+    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION', raising=False)
+    monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
+
+    assert context.load_overrides_configuration() is None
 
 
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
@@ -820,7 +785,8 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
     repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
     manager = get_cookbook_manager(context.cache_configuration)
-    repo_path = manager.resolve_cached_resource(repository).path
+    repo_path = manager.resolve_cached_resource(
+        manager.get_cookbook(repository)).path
 
     assert repo_path == os.path.join('/cache', COOKBOOKS_SUBDIR, Source.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
@@ -854,7 +820,7 @@ def test_make_dependency_path_uses_shared_resource_location(tmp_path):
         version='^3.0.0')
     dep.resolved_hash = '1234567890abcdef'
     # Primed the way configure does, so the path comes from that resolution.
-    dep.update_cached_resource(context.cache_configuration)
+    get_dependency_manager(context.cache_configuration).update_cached_resource(dep)
 
     assert context.make_dependency_path(dep, 'artifact') == os.path.join(
         get_dependency_manager(

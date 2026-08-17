@@ -183,7 +183,7 @@ class Source:
 
 
 # Every kind a location may claim, and how to build it. A new kind (an archive,
-# an SVN checkout) is one entry here plus its branch in Context.clone_repository.
+# an SVN checkout) is one entry here plus its branch in ResourceManager.populate.
 SOURCE_KINDS = {
     SOURCE_TYPE_GIT: Source.for_repository,
     SOURCE_TYPE_DIRECTORY: Source.for_directory,

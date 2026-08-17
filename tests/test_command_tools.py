@@ -6,10 +6,22 @@ from golemcpp.golem import helpers
 from golemcpp.golem import command_tools
 from golemcpp.golem import cppfront_tool
 from golemcpp.golem import tool_manager
+from golemcpp.golem.cache_manager import CachedResource
 
 
 def expected_tools_cache(project_dir):
     return helpers.make_absolute_path('/tmp/custom-cache', str(project_dir))
+
+
+def make_cached_tool(path, cache_root, is_read_only=False):
+    '''What ToolManager.make_available hands back, for a stubbed install.'''
+    return CachedResource(
+        path=path,
+        cache_root=cache_root,
+        is_read_only=is_read_only,
+        subdir=cache_configuration.TOOLS_SUBDIR,
+        cache_key='cppfront',
+        size_bytes=0)
 
 
 def test_handle_tools_command_prints_help(capsys, tmp_path):
@@ -68,18 +80,17 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
 
     captured = {}
 
-    def fake_install_tool(self, tool_name, version):
-        captured['tool_name'] = tool_name
-        captured['version'] = version
+    def fake_make_available(self, tool, fetch=True, refresh=True):
+        captured['tool_name'] = tool.name
+        captured['version'] = tool.version
         captured['location'] = self.locations[0].location
-        return tool_manager.ToolInstallResult(
-            name=tool_name,
-            version=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
-            resource_root='/tmp/golem-tools-cache/cppfront',
-            cache_root=self.locations[0].location,
-        )
+        tool.resolved_version = cppfront_tool.DEFAULT_CPPFRONT_VERSION
+        return make_cached_tool(
+            path='/tmp/golem-tools-cache/cppfront',
+            cache_root=self.locations[0].location)
 
-    monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -88,7 +99,8 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
 
     assert result == 0
     assert captured['tool_name'] == 'cppfront'
-    assert captured['version'] == ''
+    # No --version: the tool is asked for at the one its definition names.
+    assert captured['version'] == cppfront_tool.DEFAULT_CPPFRONT_VERSION
     assert captured['location']
 
     stdout = capsys.readouterr().out
@@ -102,16 +114,14 @@ def test_handle_tools_command_accepts_explicit_version(monkeypatch, tmp_path):
 
     captured = {}
 
-    def fake_install_tool(self, tool_name, version):
-        captured['version'] = version
-        return tool_manager.ToolInstallResult(
-            name=tool_name,
-            version=version,
-            resource_root='/tmp/golem-tools-cache/cppfront',
-            cache_root=self.locations[0].location,
-        )
+    def fake_make_available(self, tool, fetch=True, refresh=True):
+        captured['version'] = tool.version
+        return make_cached_tool(
+            path='/tmp/golem-tools-cache/cppfront',
+            cache_root=self.locations[0].location)
 
-    monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -128,16 +138,14 @@ def test_handle_tools_command_accepts_explicit_cache_directory(monkeypatch, tmp_
 
     captured = {}
 
-    def fake_install_tool(self, tool_name, version):
+    def fake_make_available(self, tool, fetch=True, refresh=True):
         captured['location'] = self.locations[0].location
-        return tool_manager.ToolInstallResult(
-            name=tool_name,
-            version=version,
-            resource_root=self.locations[0].location + '/cppfront',
-            cache_root=self.locations[0].location,
-        )
+        return make_cached_tool(
+            path=self.locations[0].location + '/cppfront',
+            cache_root=self.locations[0].location)
 
-    monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -165,14 +173,14 @@ def test_handle_tools_command_honors_persisted_configure_options(monkeypatch, tm
 
     captured = {}
 
-    def fake_install_tool(self, tool_name, version):
+    def fake_make_available(self, tool, fetch=True, refresh=True):
         captured['location'] = self.locations[0].location
-        return tool_manager.ToolInstallResult(
-            name=tool_name, version=version,
-            resource_root=self.locations[0].location + '/cppfront',
+        return make_cached_tool(
+            path=self.locations[0].location + '/cppfront',
             cache_root=self.locations[0].location)
 
-    monkeypatch.setattr(tool_manager.ToolManager, 'install_tool', fake_install_tool)
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -181,6 +189,35 @@ def test_handle_tools_command_honors_persisted_configure_options(monkeypatch, tm
 
     assert result == 0
     assert captured['location'] == str(configured_cache)
+
+
+def test_handle_tools_command_reports_a_tool_served_from_a_read_only_cache(
+        monkeypatch, capsys, tmp_path):
+    # Already there and unwritable: nothing was installed, and the command says so
+    # rather than claiming an install that did not happen.
+    project_dir = tmp_path / 'demo-project'
+    project_dir.mkdir()
+
+    def fake_make_available(self, tool, fetch=True, refresh=True):
+        tool.resolved_version = cppfront_tool.DEFAULT_CPPFRONT_VERSION
+        return make_cached_tool(
+            path='/shared/cache/tools/cppfront',
+            cache_root='/shared/cache',
+            is_read_only=True)
+
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'make_available', fake_make_available)
+
+    result = command_tools.handle_tools_command(
+        project_dir=str(project_dir),
+        args=['install', 'cppfront'],
+    )
+
+    stdout = capsys.readouterr().out
+    assert result == 0
+    assert 'read-only cache location /shared/cache' in stdout
+    assert 'nothing was installed' in stdout
+    assert 'Installed cppfront' not in stdout
 
 
 def install_fake_tool_on_disk(cache_dir, tool_name='cppfront'):

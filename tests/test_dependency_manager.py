@@ -8,6 +8,7 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import DependencyManager, get_dependency_manager
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
+from golemcpp.golem.version_resolver import VersionResolver
 from conftest import make_cache_configuration
 
 
@@ -46,21 +47,29 @@ def test_resource_for_uses_the_dependency_source():
     assert resource.cache_key == resource.source.get_cache_key()
 
 
+def make_resolved_dependency():
+    # Locating a dependency resolves it, and a unit test has no remote to resolve
+    # against: these come pre-resolved.
+    dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep.resolved_hash = '1234567890abcdef'
+    return dep
+
+
 def test_resolve_and_write(tmp_path):
     manager = make_manager(tmp_path)
-    dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep = make_resolved_dependency()
 
-    root = manager.resolve_cached_resource(dep).path
-    os.makedirs(root)
-    manager.cache_manager.write_manifest(root, manager.resource_for(dep))
+    cached = manager.resolve_cached_resource(dep)
+    os.makedirs(cached.path)
+    manager.cache_manager.write_manifest(cached)
 
-    source = manager.cache_manager.read_manifest_source(root)
+    source = manager.cache_manager.read_manifest_source(cached)
     assert source.location == 'https://example.com/json.git'
 
 
-def test_staged_install_swaps_source_and_manifest(tmp_path):
+def test_guard_install_swaps_source_and_manifest(tmp_path):
     manager = make_manager(tmp_path)
-    dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep = make_resolved_dependency()
 
     def populate(staging_root):
         source_dir = os.path.join(staging_root, cache_configuration.SOURCE_DIRNAME)
@@ -68,13 +77,13 @@ def test_staged_install_swaps_source_and_manifest(tmp_path):
         with open(os.path.join(source_dir, 'CMakeLists.txt'), 'w') as fileout:
             fileout.write('project(json)')
 
-    resource_root = manager.staged_install(
-        manager.resolve_cached_resource(dep), populate)
+    cached = manager.resolve_cached_resource(dep)
+    resource_root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(
         os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))
-    assert not os.path.exists(resource_root + '.tmp')
-    source = manager.cache_manager.read_manifest_source(resource_root)
+    assert not os.path.exists(cached.staging_path)
+    source = manager.cache_manager.read_manifest_source(cached)
     assert source.location == 'https://example.com/json.git'
 
 
@@ -104,6 +113,81 @@ def test_resolved_location_is_minimized_flat_when_enabled(tmp_path):
         cached_dep.path, cached_dep.cache_root)
 
 
+# -- what a dependency asks of the shared fetch mechanism -------------------
+
+
+def test_the_source_tree_sits_under_the_resource_root():
+    # The root also holds what was built from the source, so the source itself
+    # gets a subdirectory of its own.
+    assert DependencyManager.source_path('/cache/json@x') == os.path.join(
+        '/cache/json@x', cache_configuration.SOURCE_DIRNAME)
+
+
+def test_the_policy_pins_to_the_resolved_commit():
+    dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
+    dep.resolved_version = 'v3.12.0'
+    dep.resolved_hash = 'cafebabecafebabe'
+
+    policy = DependencyManager.policy_for(dep)
+
+    assert policy.checkout == 'v3.12.0'
+    assert policy.reference == 'cafebabecafebabe'
+    assert policy.submodules is True
+    assert policy.clean is True
+    # Pinned to a commit, so a refresh has nothing to fetch.
+    assert policy.fetch_remote is False
+    assert policy.shallow is False
+
+
+def test_the_policy_carries_the_shallow_request():
+    dep = Dependency(repository='https://example.com/json.git', shallow=True)
+    dep.resolved_hash = 'cafebabe'
+
+    assert DependencyManager.policy_for(dep).shallow is True
+
+
+def test_locating_a_dependency_resolves_its_version(monkeypatch):
+    dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
+    resolved = []
+    monkeypatch.setattr(Dependency, 'resolve', lambda self: resolved.append(self))
+
+    assert DependencyManager.resolve_version(dep) is dep
+    assert resolved == [dep]
+
+
+def test_a_refresh_keeps_what_was_built_from_the_dependency(tmp_path):
+    # A dependency is built by a later command, so its include/ and its artifacts
+    # have to survive a refresh: only a kind that says so throws anything away.
+    manager = make_manager(tmp_path)
+    dep = make_dependency()
+    root = manager.resolve_cached_resource(dep).path
+    os.makedirs(os.path.join(root, 'include'))
+
+    DependencyManager.pre_install_refresh(root, dep)
+
+    assert os.path.isdir(os.path.join(root, 'include'))
+
+
+def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
+    dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
+    dep.resolved_version = 'v3.12.0'
+    dep.resolved_hash = 'cafebabecafebabe'
+    calls = []
+    monkeypatch.setattr(
+        helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append(args))
+
+    DependencyManager.clone_source(
+        '/cache/json/source', DependencyManager.source_for(dep),
+        DependencyManager.policy_for(dep))
+
+    assert calls == [
+        ['clone', '--', 'https://example.com/json.git', '.'],
+        ['checkout', 'v3.12.0'],
+        ['reset', '--hard', 'cafebabecafebabe'],
+        ['submodule', 'update', '--init', '--recursive', '--depth=1'],
+    ]
+
+
 def test_resolved_location_prefers_an_existing_non_minimized_layout(tmp_path):
     manager = make_manager(tmp_path, minimization_enabled=True)
     dep = make_dependency()
@@ -115,3 +199,40 @@ def test_resolved_location_prefers_an_existing_non_minimized_layout(tmp_path):
     # A resource already present under the classic layout keeps its location even
     # though minimization is enabled.
     assert manager.resolve_cached_resource(dep).path == non_minimized
+
+
+def test_a_cached_resource_is_resolved_once_and_kept_on_the_dependency(tmp_path):
+    manager = make_manager(tmp_path)
+    dep = make_dependency()
+
+    cached = manager.get_cached_resource(dep)
+
+    assert cached is dep.cached_resource
+    assert manager.get_cached_resource(dep) is cached
+
+
+def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch):
+    # The cache key comes from the resolved reference, so a location worked out
+    # before resolution would name another resource. There is no way to obtain
+    # one: asking where a dependency lives resolves it on the way.
+    manager = make_manager(tmp_path)
+    dep = Dependency(name='json', repository='https://example.com/json.git')
+    monkeypatch.setattr(
+        VersionResolver, 'resolve',
+        staticmethod(lambda *args, **kwargs: ('3.11.3', '1234567890abcdef')))
+
+    cached = manager.get_cached_resource(dep)
+
+    assert dep.resolved_hash == '1234567890abcdef'
+    assert cached.cache_key == dep.to_source().get_cache_key()
+
+
+def test_updating_a_cached_resource_replaces_the_one_kept(tmp_path):
+    manager = make_manager(tmp_path)
+    dep = make_dependency()
+    first = manager.get_cached_resource(dep)
+
+    second = manager.update_cached_resource(dep)
+
+    assert second is not first
+    assert second is dep.cached_resource

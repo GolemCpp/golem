@@ -102,7 +102,9 @@ class ToolsCommandHandler:
 
     def handle_install(self, manager: tool_manager.ToolManager) -> int:
         try:
-            install_info = manager.install_tool(tool_name=self.options.tool, version=self.options.version)
+            tool = tool_manager.ToolManager.get_tool(
+                self.options.tool, version=self.options.version)
+            cached_tool = manager.make_available(tool)
         except ValueError as error:
             print('ERROR: {}'.format(error))
             self.print_help()
@@ -111,8 +113,16 @@ class ToolsCommandHandler:
             print('ERROR: {}'.format(error))
             return 1
 
-        print('Installed {} {} in {}'.format(install_info.name, install_info.version, install_info.resource_root))
-        print('Selected cache location: {}'.format(install_info.cache_root))
+        # A read-only location is served as it stands, so say so rather than
+        # report an install that did not happen.
+        if cached_tool.is_read_only:
+            print('{} {} is served from the read-only cache location {}; nothing was installed'
+                  .format(tool.name, tool.resolved_version, cached_tool.cache_root))
+            return 0
+
+        print('Installed {} {} in {}'.format(
+            tool.name, tool.resolved_version, cached_tool.path))
+        print('Selected cache location: {}'.format(cached_tool.cache_root))
         return 0
 
     def handle_uninstall(self, manager: tool_manager.ToolManager) -> int:
@@ -121,7 +131,8 @@ class ToolsCommandHandler:
         # Resolve the tool once, so what is shown, confirmed and deleted is the
         # same resource (like `golem cache remove`).
         try:
-            cached_tool = manager.resolve_cached_tool(tool_name)
+            tool = tool_manager.ToolManager.get_tool(tool_name)
+            cached_tool = manager.resolve_cached_resource(tool, with_version_resolution=False)
         except ValueError as error:
             print('ERROR: {}'.format(error))
             self.print_help()
@@ -141,7 +152,7 @@ class ToolsCommandHandler:
             print('Aborted. Nothing was uninstalled.')
             return 0
 
-        manager.uninstall_tool(cached_tool)
+        manager.cache_manager.remove_resources([cached_tool])
         print('Uninstalled {} from {}'.format(tool_name, cached_tool.cache_root))
         return 0
 

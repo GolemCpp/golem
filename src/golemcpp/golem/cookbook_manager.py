@@ -1,26 +1,36 @@
 from golemcpp.golem.cache_manager import get_cache_manager
+from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class CookbookManager(ResourceManager):
+    '''
+    A cookbook is read, never built, so it asks nothing of the fetch mechanism
+    beyond tracking the branch it was configured with.
+    '''
+
     @staticmethod
-    def resource_for(source) -> Resource:
+    def get_cookbook(source, version: str = '') -> Cookbook:
+        return Cookbook(source=source, version=version)
+
+    @staticmethod
+    def resource_for(cookbook: Cookbook) -> Resource:
+        source = CookbookManager.source_for(cookbook)
         return Resource(
             kind=ResourceKind.COOKBOOK,
             cache_key=source.get_cache_key(),
             source=source)
 
-    def resolve_cached_resource(self, source):
-        '''The cookbook as a cached resource: which cache it belongs to, where it
-        lives there and whether it is already fetched, resolved in one go.'''
-        return self.cache_manager.resolve_cached_resource(self.resource_for(source))
+    @staticmethod
+    def source_for(cookbook: Cookbook):
+        return cookbook.to_source()
 
-    def staged_install(self, cached_cookbook, populate) -> str:
-        '''Fetch the cookbook source into a staging dir, then atomically swap it
-        into place with its manifest (see CacheManager.staged_install).'''
-        return self.cache_manager.staged_install(cached_cookbook, populate)
+    @staticmethod
+    def resolve_version(cookbook: Cookbook) -> Cookbook:
+        cookbook.resolve()
+        return cookbook
 
 
 def get_cookbook_manager(cache_configuration) -> CookbookManager:
