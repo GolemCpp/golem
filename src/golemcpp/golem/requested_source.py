@@ -32,9 +32,6 @@ VERSION_SEPARATOR = '#'
 # real locator never matches: a URL has `:` after its scheme, a path has none.
 KIND_CLAIM = re.compile(r'^([a-z][a-z0-9]*)\{}'.format(KIND_SEPARATOR))
 
-# What a git source follows when its location names no version.
-DEFAULT_GIT_VERSION = 'main'
-
 
 def split_kind(location):
     '''

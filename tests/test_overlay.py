@@ -28,8 +28,14 @@ def make_source(version=''):
 
 
 def test_an_overlay_asked_for_without_a_version_takes_its_sources_reference():
-    assert Overlay(source=make_source()).version == 'main'
+    assert Overlay(source=make_source(version='v1.2.0')).version == 'v1.2.0'
     assert Overlay(source=make_source(), version='v1.2.0').version == 'v1.2.0'
+
+
+def test_an_overlay_naming_no_version_anywhere_leaves_it_to_the_remote():
+    # Not `main`: which branch a remote defaults to is the remote's to say,
+    # and the resolver asks it rather than guessing a name here.
+    assert Overlay(source=make_source()).version == ''
 
 
 def test_an_overlay_resolves_the_way_every_other_kind_does(resolutions):

@@ -221,18 +221,31 @@ def test_a_tag_that_reads_as_a_range_is_still_found(monkeypatch):
         ResolvedVersion(reference='v1.x.0', revision='cafebabecafebabe')
 
 
-def test_asking_for_a_commit_and_getting_none_is_refused(monkeypatch):
-    # A repository with no tags, asked for no version: nothing names a commit,
-    # and a kind keyed on one cannot name a root without it.
+@pytest.mark.parametrize('version', ['', 'HEAD'])
+def test_no_version_and_HEAD_both_name_the_default_branch(monkeypatch, version):
+    # --symref answers with the branch and its commit at once, so the reference
+    # records `master` rather than the HEAD that was asked for.
+    def fake_git(args, cwd):
+        if '--symref' in args:
+            return 'ref: refs/heads/master\tHEAD\n831b49bc\tHEAD\n'
+        raise AssertionError('asked the remote something else: {}'.format(args))
+
+    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+
+    assert VersionResolver.resolve(
+        RequestedSource.for_repository('https://host/r.git', version)) == \
+        ResolvedVersion(reference='master', revision='831b49bc')
+
+
+@pytest.mark.parametrize('version', ['', 'HEAD'])
+def test_a_remote_advertising_no_head_is_refused(monkeypatch, version):
+    # An empty repository advertises nothing at all, not even a symref, so there
+    # is no default branch to fall back on.
     monkeypatch.setattr(
         version_resolver.helpers, 'read_git', lambda args, cwd: '')
-    requested = RequestedSource.for_repository('https://host/r.git', version='')
-
-    assert VersionResolver.resolve_requested(
-        requested, ResolvedVersion()) == ResolvedVersion()
 
     with pytest.raises(RuntimeError) as error:
-        VersionResolver.resolve_requested(
-            requested, ResolvedVersion(), require_revision=True)
+        VersionResolver.resolve(
+            RequestedSource.for_repository('https://host/r.git', version))
 
-    assert "no commit of 'https://host/r.git'" in str(error.value)
+    assert "answers version '{}'".format(version) in str(error.value)

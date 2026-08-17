@@ -20,11 +20,10 @@ class Overlay:
 
     def __post_init__(self):
         # An overlay asked for without a version is asked for at the version its
-        # location names, and at the default branch when it names none either.
+        # location names. Naming none either is a question for the resolver,
+        # which answers it with the remote's default branch.
         if not self.version:
             self.version = self.source.version
-        if not self.version and self.source.type == source.SOURCE_TYPE_GIT:
-            self.version = requested_source.DEFAULT_GIT_VERSION
 
     @property
     def name(self):
