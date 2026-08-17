@@ -6,8 +6,14 @@ from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.helpers import *
 from golemcpp.golem.source import Source
+from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
+
+
+# The members naming where a dependency comes from, at most one of which a
+# dependency declares.
+SOURCE_MEMBERS = ('repository', 'directory', 'location')
 
 
 class Dependency(Configuration):
@@ -15,6 +21,7 @@ class Dependency(Configuration):
                  name=None,
                  repository=None,
                  directory=None,
+                 location=None,
                  version=None,
                  version_regex=None,
                  shallow=False,
@@ -22,10 +29,14 @@ class Dependency(Configuration):
         super(Dependency, self).__init__(type='library',
                                          **kwargs)
         self.name = '' if name is None else name
-        # A dependency comes from one of two mutually-exclusive sources: a git
-        # `repository` (cloned) or a local `directory` (copied as-is).
+        # A dependency comes from one of three mutually-exclusive sources: a git
+        # `repository` (cloned), a local `directory` (copied as-is), or a
+        # `location` naming either in one field, spelling its kind or leaving it
+        # to detection. update_source resolves a location into the two others.
+        self.location = '' if location is None else location
         self.repository = '' if repository is None else repository
         self.directory = '' if directory is None else directory
+        self.validate_source()
         self.version = '' if version is None else version
         self.version_regex = '' if version_regex is None else version_regex
         self.resolved_version = ''
@@ -37,10 +48,24 @@ class Dependency(Configuration):
     def __str__(self):
         return helpers.print_obj(self)
 
+    def validate_source(self):
+        '''
+        Refuse a dependency naming its source more than once: which one wins
+        would be left to the order the readers happen to test them in. Naming
+        none is allowed -- a project file declares one later.
+        '''
+        declared = [member for member in SOURCE_MEMBERS if getattr(self, member)]
+        if len(declared) > 1:
+            raise ValueError(
+                "dependency '{}' declares several sources ({}); it comes from "
+                "exactly one".format(self.name, ', '.join(declared)))
+
     def get_source_location(self):
+        # Falls back to `location` so a dependency is identifiable before
+        # update_source has resolved which of the two fields it fills.
         if self.directory:
             return self.directory
-        return self.repository
+        return self.repository or self.location
 
     def to_source(self):
         # View the dependency as a Source to compute cache keys / identity the same
@@ -68,7 +93,15 @@ class Dependency(Configuration):
         return self.cached_resource
 
     def update_source(self, project_dir):
-        if self.directory:
+        # Also the gate on a dependency read from a configuration: read_json
+        # writes the members straight in, so __init__ never saw them.
+        self.validate_source()
+        if self.location:
+            source = Source.parse(self.location, project_dir=project_dir)
+            self.directory = source.location if source.type == SOURCE_TYPE_DIRECTORY else ''
+            self.repository = '' if self.directory else source.location
+            self.location = ''
+        elif self.directory:
             self.directory = Source.normalize_url(self.directory, project_dir)
         elif self.repository:
             self.repository = Source.normalize_url(self.repository, project_dir)
@@ -110,9 +143,11 @@ class Dependency(Configuration):
 
     @staticmethod
     def serialized_members():
+        # `location` is read from a configuration but never written back:
+        # update_source resolves it into `repository` or `directory` and clears it.
         return [
-            'name', 'repository', 'directory', 'version', 'version_regex',
-            'resolved_version', 'resolved_hash', 'shallow'
+            'name', 'repository', 'directory', 'location', 'version',
+            'version_regex', 'resolved_version', 'resolved_hash', 'shallow'
         ]
 
     @staticmethod

@@ -28,7 +28,7 @@ def test_names_list_the_current_spelling_first():
 
 
 def test_a_setting_without_an_option_has_no_option_name_nor_flag():
-    setting = SettingDescriptor(key='recipes.repositories', env_name='GOLEM_RECIPES_REPOSITORIES',
+    setting = SettingDescriptor(key='example.setting', env_name='GOLEM_EXAMPLE_SETTING',
                       description='')
 
     assert setting.option_names == ()

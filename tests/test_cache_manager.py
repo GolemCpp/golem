@@ -35,7 +35,7 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
                   source={'type': 'git', 'location': 'u', 'reference': 'v3.12.0'})
-    make_resource(root, cache_configuration.RECIPES_SUBDIR, 'mystery@host+main')  # no manifest
+    make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')  # no manifest
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     resources = manager.scan()
@@ -52,7 +52,7 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     mystery = by_key['mystery@host+main']
     assert not mystery.is_identified
     # Kind is inferred from the subdirectory when unidentified.
-    assert mystery.kind == 'recipes-repository'
+    assert mystery.kind == 'cookbook'
 
 
 def test_select_substring_and_regex(tmp_path):

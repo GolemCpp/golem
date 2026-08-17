@@ -1,12 +1,17 @@
+import pytest
+
+from golemcpp.golem.source import format_location
+from golemcpp.golem.source import parse_location
 from golemcpp.golem.source import Source
+from golemcpp.golem.setting_descriptor import SettingProcessingContext
 
 
-def test_detect_normalizes_and_classifies_local_directory(tmp_path):
+def test_parse_normalizes_and_classifies_local_directory(tmp_path):
     project_dir = tmp_path / 'project dir'
     recipes_dir = project_dir / 'recipes'
     recipes_dir.mkdir(parents=True)
 
-    source = Source.detect('recipes', str(project_dir))
+    source = Source.parse('recipes', str(project_dir))
 
     assert source.location == recipes_dir.resolve().as_uri()
     assert source.type == 'directory'
@@ -21,22 +26,22 @@ def test_for_repository_preserves_location_and_reference():
     assert source.type == 'git'
 
 
-def test_detect_parses_encoded_local_directory_path(tmp_path):
+def test_parse_parses_encoded_local_directory_path(tmp_path):
     project_dir = tmp_path / 'project dir'
     recipes_dir = project_dir / 'recipes #1'
     recipes_dir.mkdir(parents=True)
 
-    source = Source.detect('recipes #1', str(project_dir))
+    source = Source.parse('recipes #1', str(project_dir))
 
     assert source.get_local_path() == str(recipes_dir.resolve())
 
 
-def test_detect_normalizes_local_path_under_non_ascii_parent(tmp_path):
+def test_parse_normalizes_local_path_under_non_ascii_parent(tmp_path):
     project_dir = tmp_path / '日本 語 project'
     recipes_dir = project_dir / 'recipes'
     recipes_dir.mkdir(parents=True)
 
-    source = Source.detect('recipes', str(project_dir))
+    source = Source.parse('recipes', str(project_dir))
 
     assert source.location == recipes_dir.resolve().as_uri()
     assert source.get_local_path() == str(recipes_dir.resolve())
@@ -67,27 +72,93 @@ def test_generate_id_uses_hash_for_local_path_uniqueness(tmp_path):
     assert source_id_two.startswith('recipes@fsys.')
 
 
-def test_detect_classifies_local_non_git_directory(tmp_path):
+def test_parse_classifies_local_non_git_directory(tmp_path):
     project_dir = tmp_path / 'project'
     lib_dir = project_dir / 'lib'
     lib_dir.mkdir(parents=True)
 
-    source = Source.detect('lib', str(project_dir))
+    source = Source.parse('lib', str(project_dir))
 
     assert source.type == 'directory'
     assert source.location == lib_dir.resolve().as_uri()
 
 
-def test_detect_classifies_git_directory_as_git(tmp_path):
+def test_parse_classifies_git_directory_as_git(tmp_path):
     project_dir = tmp_path / 'project'
     recipes_dir = project_dir / 'recipes'
     git_dir = recipes_dir / '.git'
     git_dir.mkdir(parents=True)
     (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
 
-    source = Source.detect('recipes', str(project_dir))
+    source = Source.parse('recipes', str(project_dir))
 
     assert source.type == 'git'
+
+
+# -- a location may spell its kind rather than leave it to detection --------
+
+
+def test_parse_honours_an_explicit_git_kind_on_a_plain_directory(tmp_path):
+    project_dir = tmp_path / 'project'
+    lib_dir = project_dir / 'lib'
+    lib_dir.mkdir(parents=True)
+
+    source = Source.parse('git+lib', str(project_dir))
+
+    assert source.type == 'git'
+    assert source.location == lib_dir.resolve().as_uri()
+
+
+def test_parse_honours_an_explicit_directory_kind_on_a_git_checkout(tmp_path):
+    project_dir = tmp_path / 'project'
+    recipes_dir = project_dir / 'recipes'
+    git_dir = recipes_dir / '.git'
+    git_dir.mkdir(parents=True)
+    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+
+    source = Source.parse('directory+recipes', str(project_dir))
+
+    assert source.type == 'directory'
+
+
+def test_parse_honours_an_explicit_kind_on_a_remote_url(tmp_path):
+    source = Source.parse('git+https://github.com/GolemCpp/recipes.git', str(tmp_path))
+
+    assert source.type == 'git'
+    assert source.location == 'https://github.com/GolemCpp/recipes.git'
+
+
+def test_parse_refuses_an_unknown_kind(tmp_path):
+    with pytest.raises(ValueError) as error:
+        Source.parse('gti+https://github.com/GolemCpp/recipes.git', str(tmp_path))
+
+    assert "unknown source kind 'gti'" in str(error.value)
+    assert 'git+' in str(error.value)
+    assert 'directory+' in str(error.value)
+
+
+def test_parse_does_not_read_a_plus_inside_a_url_as_a_kind(tmp_path):
+    source = Source.parse('https://host/a+b.git', str(tmp_path))
+
+    assert source.type == 'git'
+    assert source.location == 'https://host/a+b.git'
+
+
+def test_format_location_always_spells_the_kind():
+    context = SettingProcessingContext(project_dir=None)
+
+    assert format_location(
+        Source.for_repository('https://host/r.git'), context) == 'git+https://host/r.git'
+    assert format_location(
+        Source.for_directory('file:///tmp/mylib'), context) == 'directory+file:///tmp/mylib'
+
+
+def test_parse_location_round_trips_through_format_location(tmp_path):
+    context = SettingProcessingContext(project_dir=str(tmp_path))
+    spelled = format_location(parse_location('https://host/r.git', context), context)
+
+    assert spelled == 'git+https://host/r.git'
+    assert parse_location(spelled, context) == parse_location('https://host/r.git', context)
 
 
 def test_for_directory_is_directory_type():
