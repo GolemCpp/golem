@@ -52,7 +52,8 @@ def test_list_reports_resources(capsys, tmp_path):
                   kind=resource_manifest.ResourceKind.DEPENDENCY,
                   source={'type': 'git',
                             'locator': 'https://github.com/nlohmann/json.git',
-                            'reference': 'v3.12.0'})
+                            'resolved': {'reference': 'v3.12.0',
+                                         'revision': 'cafebabe'}})
 
     result = run(tmp_path, 'list')
     assert result == 0

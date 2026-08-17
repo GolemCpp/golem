@@ -12,7 +12,10 @@ if str(SRC) not in sys.path:
 if str(WAFLIB_SRC) not in sys.path:
     sys.path.insert(0, str(WAFLIB_SRC))
 
+import pytest  # noqa: E402
+
 from golemcpp.golem import helpers  # noqa: E402
+from golemcpp.golem import network  # noqa: E402
 from golemcpp.golem.cache_configuration import CacheConfiguration  # noqa: E402
 from golemcpp.golem.fetch_policy import FetchMode  # noqa: E402
 from golemcpp.golem.git_fetcher import GitFetcher  # noqa: E402
@@ -23,7 +26,18 @@ from golemcpp.golem.settings import get_settings  # noqa: E402
 STUB_HEAD = 'cafebabecafebabecafebabecafebabecafebabe'
 
 
-def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True,
+@pytest.fixture
+def resolving():
+    '''
+    Inside `golem resolve`, where reaching a remote is allowed. Resolving a
+    version and installing a resource both happen there and nowhere else, so a
+    test doing either says so the way the commands do.
+    '''
+    with network.allowed():
+        yield
+
+
+def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_revision=True,
                     has_submodules=True, mode=FetchMode.BLOBLESS,
                     branches=('main',), tags=()):
     '''
@@ -33,7 +47,7 @@ def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True,
     refs are the ones `branches` and `tags` name. None of these go through
     `run_git`, so none of them shows up in a recorded command sequence.
 
-    `holds_reference=False` is a repository holding nothing that was asked for,
+    `holds_revision=False` is a repository holding nothing that was asked for,
     whatever its refs would otherwise say.
     '''
     # What a root answers about its own shape, which is how a fetch tells what it
@@ -53,11 +67,11 @@ def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_reference=True,
         if params[:3] != ['rev-parse', '--verify', '--quiet']:
             # Housekeeping, where nothing is made of the answer.
             return True
-        if not holds_reference:
+        if not holds_revision:
             return False
 
         # What the probe order asks for, one ref at a time. Anything else is a
-        # commit, which a repository asked about its own reference holds.
+        # commit, which a repository asked about its own revision holds.
         wanted = params[3].removesuffix('^{commit}')
         if wanted.startswith('refs/tags/'):
             return wanted[len('refs/tags/'):] in tags

@@ -1,5 +1,6 @@
 import pytest
 
+from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import tool_registry
 from golemcpp.golem.tool import Tool
@@ -12,8 +13,8 @@ def resolutions(monkeypatch):
     '''Every version resolution asked of the remote, in order.'''
     asked = []
 
-    def resolve(url, version, version_regex=''):
-        asked.append((url, version))
+    def resolve(requested):
+        asked.append((str(requested.locator), requested.version))
         return ResolvedVersion(reference='v0.8.1', revision='deadbeef')
 
     monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(resolve))
@@ -59,8 +60,8 @@ def test_the_source_carries_the_resolved_version(resolutions):
     tool = Tool(definition=make_definition(), version='^0.8.0')
     tool.resolve()
 
-    source = tool.to_source()
+    source = ResourceManager.source_for(tool)
 
     assert source.locator == Locator('https://host/cppfront.git')
     # What was resolved, not what was asked for.
-    assert source.reference == 'v0.8.1'
+    assert source.resolved.reference == 'v0.8.1'

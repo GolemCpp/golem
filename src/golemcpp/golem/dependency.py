@@ -8,7 +8,6 @@ from golemcpp.golem import requested_source
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import source
-from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
 
@@ -71,13 +70,14 @@ class Dependency(Configuration):
             return self.directory
         return self.repository or self.location
 
-    def to_source(self):
-        # View the dependency as a Source to compute cache keys / identity the same
-        # way as every other resource kind.
+    def requested(self):
+        # What this dependency asks for. The three fields stay as they are,
+        # golemfile keywords and dependencies.json keys.
         if self.directory:
-            return Source.for_directory(self.directory)
-        return Source.for_repository(
-            self.repository, self.resolved.revision or self.resolved.reference)
+            return RequestedSource.for_directory(self.directory)
+        return RequestedSource.for_repository(
+            self.repository, version=self.version,
+            version_regex=self.version_regex)
 
     def update_source(self, project_dir):
         # Also the gate on a dependency read from a configuration: read_json
@@ -122,29 +122,25 @@ class Dependency(Configuration):
         return bool(self.directory)
 
     def resolve(self):
-        if self.directory:
-            # A copied directory has no version: nothing to resolve, and nothing a
-            # resolution could name. What DirectoryFetcher says with Fetched().
+        resolved = VersionResolver.resolve_requested(
+            self.requested(), self.resolved, require_revision=True)
+
+        # The same one back: a copied directory, or an answer already in hand.
+        if resolved is self.resolved:
             return self.resolved
 
-        if self.resolved:
-            return self.resolved
-
-        self.resolved = VersionResolver.resolve(
-            self.repository, self.version, self.version_regex)
-
-        if not self.resolved.revision:
+        if not resolved.revision:
             raise RuntimeError(
                 "Bad version {} can't find any hash related".format(
                     self.version))
 
-        # The cache key is built from the resolved reference, so anything resolved
+        self.resolved = resolved
+        # The cache key is built from the resolved commit, so anything resolved
         # before this point identified a different dependency: drop it.
         self.cached_resource = None
 
         print("{}: {} -> {} ({})".format(self.name, self.version,
-                                         self.resolved.reference,
-                                         self.resolved.revision))
+                                         resolved.reference, resolved.revision))
         return self.resolved
 
     def build(self, context, config):

@@ -9,6 +9,7 @@ from golemcpp.golem import resource_manifest
 from golemcpp.golem import cache_manager
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from conftest import make_cache_configuration
 from golemcpp.golem.locator import Locator
@@ -36,7 +37,8 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
     make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
-                  source={'type': 'git', 'locator': 'u', 'reference': 'v3.12.0'})
+                  source={'type': 'git', 'locator': 'u',
+                          'resolved': {'reference': 'v3.12.0', 'revision': 'cafebabe'}})
     make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')  # no manifest
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
@@ -48,7 +50,7 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     dep = by_key['json@com.github.nlohmann+abc']
     assert dep.is_identified
     assert dep.kind == 'dependency'
-    assert dep.source['reference'] == 'v3.12.0'
+    assert dep.source['resolved']['reference'] == 'v3.12.0'
     assert dep.size_bytes > 0
 
     mystery = by_key['mystery@host+main']
@@ -199,7 +201,7 @@ def test_scan_ignores_stray_files_at_cache_root(tmp_path):
 
 
 def make_tool_resource():
-    source = Source.for_repository('https://example.com/tool.git', reference='v1')
+    source = Source.for_repository('https://example.com/tool.git', ResolvedVersion(reference='v1', revision='v1'))
     return Resource(kind=ResourceKind.TOOL, cache_key='demo', source=source)
 
 
@@ -234,7 +236,7 @@ def test_write_and_read_source(tmp_path):
     assert manifest.cache_key == 'demo'
     source = manager.read_manifest_source(cached)
     assert source.locator == Locator('https://example.com/tool.git')
-    assert source.reference == 'v1'
+    assert source.resolved.reference == 'v1'
     assert manager.resolve_cached_resource(resource).exists() is True
 
 
@@ -363,7 +365,7 @@ def make_installed_tool(tmp_path, reference='v1'):
     manager = make_classic_manager(cache_dir)
     resource = Resource(
         kind=ResourceKind.TOOL, cache_key='demo',
-        source=Source.for_repository('https://example.com/tool.git', reference=reference))
+        source=Source.for_repository('https://example.com/tool.git', ResolvedVersion(reference=reference, revision=reference)))
     cached = manager.make_cached_resource(cache_dir, resource)
     os.makedirs(cached.path, exist_ok=True)
     return manager, cached
@@ -381,7 +383,7 @@ def test_guard_refresh_records_the_source_it_was_refreshed_onto(tmp_path):
 
     assert root == moved.path
     manifest = ResourceManifest.read_from_root(root)
-    assert manifest.source['reference'] == 'v2'
+    assert manifest.source['resolved']['reference'] == 'v2'
     # A different version is a different resource, so it is newly created.
     assert manifest.created_at >= created_at
 
@@ -396,7 +398,7 @@ def test_guard_refresh_only_marks_an_unchanged_resource_as_used(tmp_path, monkey
     manager.guard_refresh(cached, lambda path: None)
 
     assert written == []
-    assert ResourceManifest.read_from_root(cached.path).source['reference'] == 'v1'
+    assert ResourceManifest.read_from_root(cached.path).source['resolved']['reference'] == 'v1'
 
 
 def test_guard_refresh_names_a_resource_that_lost_its_manifest(tmp_path):

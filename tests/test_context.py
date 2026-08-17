@@ -3,6 +3,7 @@ import pytest
 from types import SimpleNamespace
 import json
 
+from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import context as golem_context, helpers, network, qt_discovery
 from golemcpp.golem.settings import get_settings
@@ -18,6 +19,8 @@ from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.requested_source import detect_kind
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
+from golemcpp.golem.source import make_revision_component
+from golemcpp.golem.dependency_manager import DependencyManager
 from conftest import absolute_path, make_cache_configuration
 
 
@@ -808,7 +811,8 @@ def test_make_basic_dependency_repo_path_uses_the_cache_key_with_branch(tmp_path
 
     assert repo_path == os.path.join(
         '/cache', COOKBOOKS_SUBDIR,
-        requested.resolved_at('main').get_cache_key())
+        get_cookbook_manager(context.cache_configuration).cache_key_for(
+            manager.get_cookbook(requested)))
 
 
 def test_cache_minimization_length_and_toggle_resolution(tmp_path):
@@ -875,11 +879,12 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # fit a directory name is source.make_revision_component's job.
     dep = Dependency(repository='https://host/json.git')
     dep.resolved = ResolvedVersion(reference='3.11.3', revision='1234567890abcdef')
-    assert dep.to_source().reference == '1234567890abcdef'
+    assert ResourceManager.source_for(dep).resolved.revision == '1234567890abcdef'
 
-    # Falls back to the resolved name when nothing named a commit.
-    dep.resolved = ResolvedVersion(reference='3.11.3')
-    assert dep.to_source().reference == '3.11.3'
+    # Keyed on the commit, which is what the kind's Pinning names -- not the
+    # Source's rule.
+    assert DependencyManager.cache_key_for(dep).endswith(
+        '+' + make_revision_component('1234567890abcdef'))
 
 
 def test_a_build_script_may_reach_a_remote():

@@ -58,7 +58,8 @@ def manifest_path(resource_root: str) -> str:
 class ResourceManifest:
     kind: str
     cache_key: str
-    # The serialized Source that produced this resource ({type, locator, reference}).
+    # The serialized Source that produced this resource
+    # ({type, locator, resolved: {reference, revision}}).
     source: dict = field(default_factory=dict)
     # Holds what a fetch operation against the asked 'source' left behind.
     # Empty for a copied directory, which is not fetched at all.

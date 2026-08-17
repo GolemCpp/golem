@@ -4228,7 +4228,7 @@ class Context:
         # subdir or a minimized flat path) so the build finds it either way.
         manager = get_tool_manager(self.cache_configuration)
         tool = manager.get_tool(cppfront_tool.CPPFRONT_NAME)
-        cached_tool = manager.resolve_cached_resource(tool, with_version_resolution=False)
+        cached_tool = manager.resolve_cached_resource(tool)
 
         cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(cached_tool.path)
 

@@ -1,8 +1,9 @@
 '''
 What a fetch left behind.
 
-A Source says what was asked for. It can be a branch, a tag, a commit. A
-Fetched says what that turned out to be.
+A Source names the resolved request: which reference, and which revision that
+reference pointed at when it was resolved. A Fetched says what the fetch then
+landed on.
 
 It travels beside the Source in a resource's manifest, and is serialized
 the same way: the manifest holds the dict, this holds what it means.

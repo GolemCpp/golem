@@ -35,10 +35,7 @@ def make_dependency():
 
 
 def expected_cache_key(dep):
-    return Source.for_repository(
-        locator=dep.repository,
-        reference=dep.resolved.revision or dep.resolved.reference
-    ).get_cache_key()
+    return DependencyManager.cache_key_for(dep)
 
 
 def test_resource_for_uses_the_dependency_source():
@@ -49,7 +46,7 @@ def test_resource_for_uses_the_dependency_source():
     assert resource.source.type == 'git'
     assert resource.source.locator == Locator('https://example.com/json.git')
     assert resource.locator == resource.source.locator
-    assert resource.cache_key == resource.source.get_cache_key()
+    assert resource.cache_key == DependencyManager.cache_key_for(dep)
 
 
 def make_resolved_dependency():
@@ -134,7 +131,7 @@ def test_the_policy_pins_to_the_resolved_commit(tmp_path):
 
     policy = make_manager(tmp_path).policy_for(dep)
 
-    assert policy.reference == 'cafebabecafebabe'
+    assert policy.revision == 'cafebabecafebabe'
     # Pinned to a commit, so a refresh has nothing to fetch.
     assert policy.fetch_remote is False
     # Nothing of its own to say about how much to fetch.
@@ -150,7 +147,7 @@ def test_the_policy_carries_the_shallow_request(tmp_path):
     assert make_manager(tmp_path).policy_for(dep).fetch_mode == FetchMode.SHALLOW
 
 
-def test_locating_a_dependency_resolves_its_version(monkeypatch):
+def test_locating_a_dependency_resolves_its_version(monkeypatch, resolving):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
     resolved = []
     monkeypatch.setattr(Dependency, 'resolve', lambda self: resolved.append(self))
@@ -214,7 +211,7 @@ def test_a_cached_resource_is_resolved_once_and_kept_on_the_dependency(tmp_path)
     assert manager.get_cached_resource(dep) is cached
 
 
-def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch):
+def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch, resolving):
     # The cache key comes from the resolved reference, so a location worked out
     # before resolution would name another resource. There is no way to obtain
     # one: asking where a dependency lives resolves it on the way.
@@ -228,7 +225,7 @@ def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch)
     cached = manager.get_cached_resource(dep)
 
     assert dep.resolved.revision == '1234567890abcdef'
-    assert cached.cache_key == dep.to_source().get_cache_key()
+    assert cached.cache_key == DependencyManager.cache_key_for(dep)
 
 
 def test_updating_a_cached_resource_replaces_the_one_kept(tmp_path):

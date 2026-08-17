@@ -2,10 +2,20 @@ import json
 
 import pytest
 
+from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem import overrides
+from golemcpp.golem.dependency_manager import DependencyManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import Locator
+from golemcpp.golem.source import CACHE_KEY_SEPARATOR
+from golemcpp.golem.source import make_revision_component
+from golemcpp.golem.version_resolver import VersionResolver
+
+
+# A full object name, so make_revision_component abbreviates it the way it
+# abbreviates a real one.
+STUB_REVISION = '65ee68451d8eb2b5f3a30b410476ab83deb3289b'
 
 
 def test_dependency_accepts_repository_keyword():
@@ -20,6 +30,11 @@ def test_dependency_accepts_directory_keyword(tmp_path):
     assert dep.directory == './mylib'
     assert dep.repository == ''
     assert dep.is_non_git_directory() is True
+
+    # Against the project it was declared in, which is what every reader of a
+    # dependency does first.
+    dep.update_source(str(tmp_path))
+
     # A directory dependency has no version to resolve, and resolving one names
     # nothing rather than standing something in for it.
     assert dep.resolve() == ResolvedVersion()
@@ -28,21 +43,21 @@ def test_dependency_accepts_directory_keyword(tmp_path):
     assert dep.resolve() == ResolvedVersion()
     assert 'resolved' not in Dependency.serialize_to_json(dep)
 
-    # As a Source only once the path has been resolved against the project it was
-    # declared in, which is what every reader of a dependency does first.
-    dep.update_source(str(tmp_path))
-    source = dep.to_source()
+    source = ResourceManager.source_for(dep)
     assert source.type == 'directory'
     assert source.locator == Locator((tmp_path / 'mylib').resolve().as_uri())
 
 
-def test_a_dependency_is_not_a_source_before_it_is_resolved_against_a_project():
-    # `./mylib` means nothing without the project it was written in, so building
-    # a Source from it is refused rather than producing one nothing can locate.
-    with pytest.raises(ValueError) as error:
-        Dependency(name='mylib', directory='./mylib').to_source()
+def test_a_dependency_does_nothing_before_it_is_resolved_against_a_project():
+    # `./mylib` means nothing without the project it was written in, so anything
+    # asking what this dependency is refuses rather than answering with a source
+    # nothing can locate. One mistake, one error, whichever way it is reached.
+    dep = Dependency(name='mylib', directory='./mylib')
 
-    assert 'resolved against a project first' in str(error.value)
+    for ask in (ResourceManager.source_for, Dependency.resolve):
+        with pytest.raises(ValueError) as error:
+            ask(dep)
+        assert 'resolved against a project first' in str(error.value)
 
 
 def test_dependency_serializes_and_round_trips_repository():
@@ -164,3 +179,46 @@ def test_a_dependency_asking_for_two_versions_is_refused(tmp_path):
     assert "asks for exactly one" in str(error.value)
     assert "'^3.0.0'" in str(error.value)
     assert "'v1'" in str(error.value)
+
+
+def test_a_recorded_reference_alone_is_not_a_resolution(monkeypatch):
+    # A reference names no commit, and a dependency root is named after one, so
+    # a file recording only a reference is asking for a version rather than
+    # answering one. Resolve it, rather than let a tag name a root that is never
+    # fetched again.
+    dep = Dependency.unserialize_from_json({
+        'name': 'json',
+        'repository': 'https://host/json.git',
+        'resolved': {'reference': 'v3.12.0'},
+    })
+    whole = ResolvedVersion(reference='v3.12.0', revision=STUB_REVISION)
+    monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(lambda _: whole))
+
+    assert dep.resolve() == whole
+
+
+def test_a_recorded_revision_alone_is_a_resolution(monkeypatch):
+    # The commit is what names the root, so nothing is missing. The reference is
+    # the label, and it stays empty rather than claiming the commit was one.
+    dep = Dependency.unserialize_from_json({
+        'name': 'json',
+        'repository': 'https://host/json.git',
+        'resolved': {'revision': STUB_REVISION},
+    })
+    monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(
+        lambda _: pytest.fail('the remote must not be reached')))
+
+    assert dep.resolve() == ResolvedVersion(revision=STUB_REVISION)
+    assert DependencyManager.cache_key_for(dep).endswith(
+        CACHE_KEY_SEPARATOR + make_revision_component(STUB_REVISION))
+
+
+def test_a_dependency_records_a_whole_resolution_untouched():
+    dep = Dependency.unserialize_from_json({
+        'name': 'json',
+        'repository': 'https://host/json.git',
+        'resolved': {'reference': 'v3.12.0', 'revision': '65ee6845'},
+    })
+
+    assert dep.resolved == ResolvedVersion(reference='v3.12.0',
+                                           revision='65ee6845')

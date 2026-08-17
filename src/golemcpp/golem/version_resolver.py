@@ -1,69 +1,113 @@
 '''
 Shared version resolution for cached resources.
 
-Given a remote `url` and a requested `version` (a semver spec, a branch, or an
-exact ref), resolve it to a concrete `ResolvedVersion` by querying the remote's
-git tags. Extracted from `Dependency.resolve` so every resource kind
-(dependencies, tools, repositories) resolves versions identically.
+A `RequestedSource` asks for a version (e.g. a semver  range, a branch, a tag,
+a commit) and `VersionResolver` resolves it against the remote to make it a
+`ResolvedVersion`, which is then used to make a `Source`.
 '''
 
 import os
 import re
 
 from golemcpp.golem import helpers
+from golemcpp.golem import source
 from golemcpp.golem.resolved_version import ResolvedVersion
 from semver import max_satisfying
 
 
+# Regex to identify a semver range (Node-like version)
+# Note that this regex isn't verified as bulletproof. In the resolution
+# algorithm, it is rather an optimistic way to attempt finding a verbatim
+# reference if this reference doesn't look like a version range.
+VERSION_RANGE = re.compile(r'[\^~<>=|*\s]|(?:^|\.)[xX](?:\.|$)')
+
+
 class VersionResolver:
     @staticmethod
-    def resolve(url, version, version_regex=''):
+    def is_range(version) -> bool:
         '''
-        Resolve `version` against `url`'s git tags, returning a `ResolvedVersion`.
+        Does the version name a semver range or is it a ref?
+        '''
+        return bool(VERSION_RANGE.search(version or ''))
 
-        Semantics (unchanged from the original Dependency.resolve):
-        - The semver spec is matched against the remote tags (optionally
-          pre-filtered by `version_regex`); on a match the tag and its sha are
-          returned.
-        - With no tag match, the value is treated as a branch head (`ls-remote
-          --heads`); failing that, it stands for itself as both name and revision.
+    @staticmethod
+    def revision_of(url, ref) -> str:
         '''
-        tags = helpers.read_git(
-            ['ls-remote', '--tags', url], cwd=os.getcwd())
-        tags = tags.split('\n')
-        tmp = ''
-        for line in tags:
-            if '^{}' not in line:
-                tmp += line + '\n'
-        tags = tmp
-        versions_list = re.findall(r'refs\/tags\/(.*)', tags)
-        versions_list = list(set(versions_list))
+        What is the revision corresponding to the ref on the remote? if any.
+        '''
+        answer = helpers.read_git(['ls-remote', url, ref], cwd=os.getcwd())
+        if not answer:
+            return ''
+        return answer.splitlines()[0].split('\t')[0]
+
+    @staticmethod
+    def published_tags(url, version_regex='') -> list:
+        '''
+        Every tag the remote publishes, but without whatever `version_regex`
+        rejects.
+        '''
+        listing = helpers.read_git(['ls-remote', '--tags', url], cwd=os.getcwd())
+        named = '\n'.join(
+            line for line in listing.split('\n') if '^{}' not in line)
+        tags = set(re.findall(r'refs/tags/(.*)', named))
 
         if version_regex:
             pattern = re.compile(version_regex)
-            versions_list = [s for s in versions_list if pattern.match(s)]
+            tags = {tag for tag in tags if pattern.match(tag)}
 
-        found_version = VersionResolver.find_version(versions_list, version)
+        return list(tags)
+
+    @staticmethod
+    def resolve_requested(requested, resolved,
+                          require_revision=False) -> ResolvedVersion:
+        '''
+        Resolve the version of a `RequestedSource`, and hand back the resolution
+        already in hand when there is one.
+
+        What counts as already resolved depends on the caller. A kind keyed on
+        the commit needs the revision, therefore it asks for `require_revision`
+        and a resolution naming only a reference sends it to the remote.
+        '''
+        already = bool(resolved.revision) if require_revision else bool(resolved)
+        if requested.type != source.SOURCE_TYPE_GIT or already:
+            return resolved
+
+        return VersionResolver.resolve(requested)
+
+    @staticmethod
+    def resolve(requested) -> ResolvedVersion:
+        '''
+        Resolve what a `RequestedSource` asks for, returning a `ResolvedVersion`.
+
+        First, if the asked version doesn't look like a version range, try to find
+        it verbatim on the remote.
+
+        Second, we assume the asked version is a range. We gather the tags looking
+        like semvers and normalize them to find if any matches. Multiples can match
+        so only the last one is selected to follow what OpenSSL does.
+
+        Third, if nothing matched keep the version as it stands, like a commit hash.
+        '''
+        url = str(requested.locator)
+        version = requested.version
+
+        if version and not VersionResolver.is_range(version):
+            revision = VersionResolver.revision_of(url, version)
+            if revision:
+                return ResolvedVersion(reference=version, revision=revision)
+
+        found_version = VersionResolver.find_version(
+            VersionResolver.published_tags(url, requested.version_regex), version)
         if found_version:
-            hash = helpers.read_git(
-                ['ls-remote', '--tags', url, 'refs/tags/' + found_version],
-                cwd=os.getcwd())
-            if not hash:
+            revision = VersionResolver.revision_of(
+                url, 'refs/tags/' + found_version)
+            if not revision:
                 raise RuntimeError(
                     "Can't find any hash related to found tag {}".format(
                         found_version))
-            hash = hash.splitlines()[0]
-            hash = hash.split('\t')[0]
-            return ResolvedVersion(reference=found_version, revision=hash)
+            return ResolvedVersion(reference=found_version, revision=revision)
 
-        hash = helpers.read_git(
-            ['ls-remote', '--heads', url, version], cwd=os.getcwd())
-        if hash:
-            hash = hash.splitlines()[0]
-            hash = hash.split('\t')[0]
-        else:
-            hash = version
-        return ResolvedVersion(reference=version, revision=hash)
+        return ResolvedVersion(reference=version, revision=version)
 
     @staticmethod
     def find_version(versions, ver):
