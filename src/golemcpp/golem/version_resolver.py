@@ -12,24 +12,11 @@ import re
 from golemcpp.golem import helpers
 from golemcpp.golem import source
 from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem.version import Version
 from semver import max_satisfying
 
 
-# Regex to identify a semver range (Node-like version)
-# Note that this regex isn't verified as bulletproof. In the resolution
-# algorithm, it is rather an optimistic way to attempt finding a verbatim
-# reference if this reference doesn't look like a version range.
-VERSION_RANGE = re.compile(r'[\^~<>=|*\s]|(?:^|\.)[xX](?:\.|$)')
-
-
 class VersionResolver:
-    @staticmethod
-    def is_range(version) -> bool:
-        '''
-        Does the version name a semver range or is it a ref?
-        '''
-        return bool(VERSION_RANGE.search(version or ''))
-
     @staticmethod
     def revision_of(url, ref) -> str:
         '''
@@ -85,20 +72,27 @@ class VersionResolver:
         '''
         Resolve what a `RequestedSource` asks for, returning a `ResolvedVersion`.
 
-        First, if the asked version doesn't look like a version range, try to find
-        it verbatim on the remote.
+        The remote answers, in four steps:
 
-        Second, we assume the asked version is a range. We gather the tags looking
-        like semvers and normalize them to find if any matches. Multiples can match
-        so only the last one is selected to follow what OpenSSL does.
+        1. Ask it for a ref by that name. A branch and a tag alike come back
+        in one round trip, and a range comes back as nothing, so the question is
+        worth asking whatever was requested.
 
-        Third, if nothing matched keep the version as it stands, like a commit hash.
-        But an unresolved range raises an exception.
+        2. Gather the tags looking like semvers and normalize them to find
+        if any matches. Multiples can match so only the last one is selected to
+        follow what OpenSSL does.
+
+        3. Accept a commit as standing for itself. `ls-remote` matches ref
+        names, therefore it can never have answered the first step with one.
+
+        4. Nothing names it. Raise here, where the version asked for is
+        still at hand, rather than hand git a value it cannot resolve either.
+        Asking for no version is the exception: the default branch answers.
         '''
         url = str(requested.locator)
         version = requested.version
 
-        if version and not VersionResolver.is_range(version):
+        if version:
             revision = VersionResolver.revision_of(url, version)
             if revision:
                 return ResolvedVersion(reference=version, revision=revision)
@@ -114,11 +108,14 @@ class VersionResolver:
                         found_version))
             return ResolvedVersion(reference=found_version, revision=revision)
 
-        if VersionResolver.is_range(version):
-            raise RuntimeError(
-                "no tag of '{}' matches version range '{}'".format(url, version))
+        if not version:
+            return ResolvedVersion()
 
-        return ResolvedVersion(reference=version, revision=version)
+        if Version.parse_git_hash(version):
+            return ResolvedVersion(reference=version, revision=version)
+
+        raise RuntimeError(
+            "nothing in '{}' answers version '{}'".format(url, version))
 
     @staticmethod
     def find_version(versions, ver):
