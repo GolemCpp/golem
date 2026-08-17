@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem import cache_configuration
+from golemcpp.golem import cache_lock
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import helpers
 from golemcpp.golem.fetched import Fetched
@@ -47,6 +48,11 @@ class CachedResource:
     def staging_path(self) -> str:
         '''Where a fresh resource is built before being swapped into place.'''
         return self.path + '.tmp'
+
+    @property
+    def lock_path(self) -> str:
+        '''What a golem holds while it writes here (see cache_lock).'''
+        return self.path + '.lock'
 
     @property
     def is_identified(self) -> bool:
@@ -294,9 +300,13 @@ class CacheManager:
         '''
         Build a resource into a sibling `.tmp` staging directory, drop its
         manifest, then atomically swap it into place.
-        
+
         `populate(staging_root)` fills the staging directory with the resource's
         contents and hands back what it recorded, which the manifest keeps.
+
+        Held against another golem throughout: the staging directory is named
+        after the root, so two of these are not two installs side by side but two
+        writers in one directory.
         '''
         self.check_identity(cached_resource)
 
@@ -305,15 +315,16 @@ class CacheManager:
         # will live, so its manifest is staged and swapped along with the rest.
         staging = replace(cached_resource, path=cached_resource.staging_path)
 
-        helpers.remove_tree(staging.path)
-        os.makedirs(staging.path, exist_ok=True)
-        try:
-            self.write_manifest(staging, fetched=populate(staging.path))
-            helpers.remove_tree(resource_root)
-            os.makedirs(os.path.dirname(resource_root), exist_ok=True)
-            os.replace(staging.path, resource_root)
-        finally:
+        with cache_lock.held(cached_resource.lock_path):
             helpers.remove_tree(staging.path)
+            os.makedirs(staging.path, exist_ok=True)
+            try:
+                self.write_manifest(staging, fetched=populate(staging.path))
+                helpers.remove_tree(resource_root)
+                os.makedirs(os.path.dirname(resource_root), exist_ok=True)
+                os.replace(staging.path, resource_root)
+            finally:
+                helpers.remove_tree(staging.path)
 
         return resource_root
 
@@ -322,12 +333,17 @@ class CacheManager:
         A refresh cannot be staged: the resource is its own working copy. The
         manifest is recorded here instead, so what the root claims never outlives
         the source it was refreshed onto.
+
+        Which is also why it is held against another golem: there is no staging
+        directory standing between two of these, only the tree both are cleaning
+        and resetting.
         '''
         self.check_identity(cached_resource)
 
-        self.record_manifest(cached_resource, fetched=refresh(cached_resource.path))
+        with cache_lock.held(cached_resource.lock_path):
+            self.record_manifest(cached_resource, fetched=refresh(cached_resource.path))
 
-        # TODO: Add a try catch like guard_install to recover or trigger a fallback mechanism when it 
+        # TODO: Add a try catch like guard_install to recover or trigger a fallback mechanism when it
         # fails. Ideas are: removing the source, or running a hook function to let the derived manager
         # define how to recover.
 

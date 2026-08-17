@@ -27,6 +27,11 @@ from golemcpp.golem.fetcher import Fetcher
 
 class GitFetcher(Fetcher):
 
+    def __init__(self, path, source, policy):
+        super().__init__(path, source, policy)
+        # What the reference turns out to name
+        self._resolved_reset_reference = None
+
     def populate(self) -> Fetched:
         '''A source obtained fresh from its remote, as much of it as asked for.'''
         print("Cloning repository {} into {}".format(self.source.location, self.path))
@@ -37,8 +42,7 @@ class GitFetcher(Fetcher):
             # ask for that commit and nothing around it.
             self.run(['init'], quiet=True)
             self.run(['remote', 'add', 'origin', self.source.location], quiet=True)
-            self.run(['fetch', '--depth=1', 'origin', self.policy.reference])
-            self.run(['reset', '--hard', 'FETCH_HEAD'], quiet=True)
+            self.fetch_reference()
         else:
             self.run(['clone'] + self.mode_args() + ['--', self.source.location, '.'])
             if self.policy.checkout and not self.policy.reference:
@@ -46,8 +50,9 @@ class GitFetcher(Fetcher):
                 # followed by a reset materializes the same tree twice, and under a
                 # partial clone that is two round trips for the file content.
                 self.run(['checkout', self.policy.checkout], quiet=True)
-            self.ensure_reference()
-            self.reset()
+
+        self.require_reference()
+        self.reset()
 
         if self.has_submodules():
             self.update_submodules()
@@ -59,13 +64,11 @@ class GitFetcher(Fetcher):
         '''
         An already-cloned source brought back to what it should be.
 
-        Cleaning comes first: a reset alone leaves behind what the previous
-        reference put there, and a cached resource is only worth reading when it
-        holds the reference it names and nothing else.
+        Cleaning comes first by resetting to only leave behind what the
+        previous reference put there.
 
-        A refresh moves a root, it never converts one: how much of the source it
-        holds is what it already held, whatever the policy would ask for of a
-        fresh one. Changing that is a migration, and belongs to resolve.
+        A refresh may move a root to a different commit, when following a
+        branch for example.
         '''
         if self.is_up_to_date():
             # The mode has to be pulled from the state of the root. It can be different
@@ -77,11 +80,9 @@ class GitFetcher(Fetcher):
             self.run(['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'], quiet=True)
 
         if self.policy.fetch_remote:
-            # Pruning both ways: a branch deleted upstream stops being tracked, and a
-            # tag that moved is honoured rather than kept at what it used to point to.
-            self.run(['fetch', '--prune', '--prune-tags', '--tags', 'origin'])
+            self.fetch_for_refresh()
 
-        self.ensure_reference()
+        self.require_reference()
         self.reset()
 
         # Asked again: the reference just landed, and what it declares is not what
@@ -96,6 +97,8 @@ class GitFetcher(Fetcher):
 
             self.update_submodules(no_fetch=not self.policy.fetch_remote)
 
+        self.collect_garbage()
+
         # The mode has to be pulled from the state of the root. It can be different
         # from the mode asked, because a golem resolve is needed to migrate the root.
         return self.fetched(self.detected_mode())
@@ -104,9 +107,40 @@ class GitFetcher(Fetcher):
 
     def reset(self):
         '''Onto the reference, or onto the current HEAD when there is none.'''
-        self.run(
-            ['reset', '--hard'] + ([self.policy.reference] if self.policy.reference else []),
-            quiet=True)
+        reference = self.resolved_reset_reference()
+        self.run(['reset', '--hard'] + ([reference] if reference else []), quiet=True)
+
+    def resolved_reset_reference(self):
+        '''
+        Returns a non-ambiguous reference for `git reset` to function.
+
+        Handing the bare reference to git instead would answer nearly the same
+        way, and cannot be relied on to. Because cache clone always carries a
+        local branch, etc.
+        '''
+        if self._resolved_reset_reference is None:
+            self._resolved_reset_reference = self._resolve_reference()
+        return self._resolved_reset_reference
+
+    def _resolve_reference(self):
+        '''
+        Disambiguate a reference.
+
+        How should the reference be interpreted to remove any ambiguity?
+
+        Precedence:
+        1. Tag
+        2. Branch
+        3. The reference as given (e.g. a commit hash).
+        '''
+        reference = self.policy.reference
+        if not reference:
+            return ''
+        if self.holds_reference('refs/tags/' + reference):
+            return 'refs/tags/' + reference
+        if self.holds_reference('refs/remotes/origin/' + reference):
+            return 'origin/' + reference
+        return reference
 
     def update_submodules(self, no_fetch=False):
         '''
@@ -125,6 +159,34 @@ class GitFetcher(Fetcher):
         if no_fetch:
             args.append('--no-fetch')
         self.run(args)
+
+    def fetch_for_refresh(self):
+        '''
+        Fetches the remote, according to what the fetch mode asks for.
+
+        Shallow asks for one commit at a depth of one. The other modes ask for
+        everything and prune branches and tags.
+        '''
+        if self.policy.fetch_mode == FetchMode.SHALLOW:
+            self.fetch_reference()
+            return
+
+        self.run(['fetch', '--prune', '--prune-tags', '--tags', 'origin'])
+        # Every ref may have moved, so what the reference names has to be asked
+        # again rather than remembered from before.
+        self._resolved_reset_reference = None
+
+    def fetch_reference(self):
+        '''
+        Fetches the reference by name on the remote.
+
+        When asking for a reference without refspec, git doesn't write any ref, so
+        FETCH_HEAD comes to the rescue.
+        '''
+        self.run(['fetch'] + self.mode_args() + ['origin'] + (
+            [self.policy.reference] if self.policy.reference else []))
+
+        self._resolved_reset_reference = 'FETCH_HEAD'
 
     def mode_args(self):
         '''
@@ -147,31 +209,24 @@ class GitFetcher(Fetcher):
         '''What this fetch left behind, for the manifest to keep.'''
         return Fetched(head=self.read_head(), mode=mode)
 
-    def ensure_reference(self):
+    def require_reference(self):
         '''
         The reference has to name something the repository holds before anything
         resets to it.
+
+        Since no fetch is performed, the checks are local based on what was
+        previously fetched for the repository.
+        
+        It means that referring to a commit that can't be found locally, because
+        it can't be reached by any branch or any tag previously fetched, is
+        considered a missing commit.
         '''
-        if not self.policy.reference or self.holds_reference(self.policy.reference):
+        if not self.policy.reference or self.holds_reference(self.resolved_reset_reference()):
             return
 
-        missing = RuntimeError(
-            'Cannot find "{}" in "{}", and {} does not offer it. '
-            'Run golem resolve first.'.format(
-                self.policy.reference, self.path, self.source.location))
-
-        try:
-            self.run(['fetch', 'origin', self.policy.reference])
-        except RuntimeError as error:
-            # A reference the remote no longer has: a branch pruned away, a tag
-            # deleted, a commit never pushed.
-            #
-            # What git says about a refspec it could not find says nothing about
-            # which resource asked for it.
-            raise missing from error
-
-        if not self.holds_reference(self.policy.reference):
-            raise missing
+        raise RuntimeError(
+            'Cannot find "{}" in "{}": {} advertises no branch or tag that reaches it.'
+            .format(self.policy.reference, self.path, self.source.location))
 
     # -- changing what a root already holds --------------------------------
 
@@ -220,10 +275,22 @@ class GitFetcher(Fetcher):
         # recorded no mode stops being detected on every resolve.
         return replace(recorded, mode=target)
 
+    def collect_garbage(self):
+        '''
+        Git's own housekeeping, which it decides is due or not. A cache root is
+        fetched into for as long as it is kept, and nothing else would ever pack
+        what those fetches leave loose.
+
+        Never worth failing a refresh over: what it does is what a later command
+        would have done anyway.
+        '''
+        helpers.try_git(['gc', '--auto'], cwd=self.path,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def unset(self, key):
         '''A configuration key removed if it is there. Absent is the same as gone.'''
-        helpers.call_git(['config', '--unset', key], cwd=self.path,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        helpers.try_git(['config', '--unset', key], cwd=self.path,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # -- what the repository says about itself -----------------------------
 
@@ -239,14 +306,14 @@ class GitFetcher(Fetcher):
         '''
         if self.policy.fetch_remote:
             return False
-        if self.policy.reference and not self.is_at(self.policy.reference):
+        if self.policy.reference and not self.is_at(self.resolved_reset_reference()):
             return False
         return not self.is_dirty()
 
     def is_at(self, reference) -> bool:
         '''Whether HEAD is already the commit a reference names.'''
         try:
-            landed, wanted = helpers.check_git_output(
+            landed, wanted = helpers.read_git(
                 ['rev-parse', 'HEAD', '{}^{{commit}}'.format(reference)],
                 cwd=self.path, stderr=subprocess.DEVNULL).split()
         except Exception:
@@ -260,7 +327,7 @@ class GitFetcher(Fetcher):
         clean.
         '''
         try:
-            return bool(helpers.check_git_output(
+            return bool(helpers.read_git(
                 ['status', '--porcelain'], cwd=self.path,
                 stderr=subprocess.DEVNULL).strip())
         except Exception:
@@ -281,7 +348,7 @@ class GitFetcher(Fetcher):
     def reads_true(self, args) -> bool:
         '''What git says, for the questions it answers with a word.'''
         try:
-            return helpers.check_git_output(
+            return helpers.read_git(
                 args, cwd=self.path, stderr=subprocess.DEVNULL).strip() == 'true'
         except Exception:
             return False
@@ -294,9 +361,9 @@ class GitFetcher(Fetcher):
 
     def holds_reference(self, reference) -> bool:
         '''Whether the repository already holds the commit a reference names.'''
-        return helpers.call_git(
+        return helpers.try_git(
             ['rev-parse', '--verify', '--quiet', '{}^{{commit}}'.format(reference)],
-            cwd=self.path, stdout=subprocess.DEVNULL) == 0
+            cwd=self.path, stdout=subprocess.DEVNULL)
 
     def read_head(self) -> str:
         '''
@@ -304,7 +371,7 @@ class GitFetcher(Fetcher):
         what the root holds is worth knowing, never worth failing a fetch over.
         '''
         try:
-            return helpers.check_git_output(
+            return helpers.read_git(
                 ['rev-parse', 'HEAD'], cwd=self.path, stderr=subprocess.DEVNULL).strip()
         except Exception:
             return ''

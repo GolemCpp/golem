@@ -114,6 +114,18 @@ SETTINGS = (
         deserialize=require_positive,
     ),
     SettingDescriptor(
+        key='git.prompt.enabled',
+        env_name='GOLEM_GIT_PROMPT_ENABLED',
+        description='Let git stop and ask for the credentials of a repository it cannot '
+                    'read. Off by default: a prompt nobody is watching looks like a hang, '
+                    'where a refusal names the repository. Turn it on to authenticate '
+                    'interactively once. Only what git asks for itself: a repository '
+                    'reached over ssh is left to ssh and to the keys it is configured '
+                    'with. on/off, default off.',
+        value_type=SettingType.BOOL,
+        default=False,
+    ),
+    SettingDescriptor(
         key='cookbooks.locations',
         env_name='GOLEM_COOKBOOKS_LOCATIONS',
         option_name='cookbook_location',

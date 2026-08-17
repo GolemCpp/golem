@@ -52,7 +52,7 @@ def test_resolve_matches_tag_and_returns_hash(monkeypatch):
             return 'deadbeef\trefs/tags/v3.11.0\ncafebabe\trefs/tags/v3.12.0\n'
         return ''
 
-    monkeypatch.setattr(version_resolver.helpers, 'check_git_output', fake_git)
+    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
 
     resolved_version, resolved_hash = VersionResolver.resolve(
         'https://github.com/nlohmann/json.git', '^3.0.0')
@@ -68,7 +68,7 @@ def test_resolve_falls_back_to_branch_head(monkeypatch):
             return 'abc123\trefs/heads/main\n'
         return ''
 
-    monkeypatch.setattr(version_resolver.helpers, 'check_git_output', fake_git)
+    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
 
     resolved_version, resolved_hash = VersionResolver.resolve(
         'https://example.com/x.git', 'main')
