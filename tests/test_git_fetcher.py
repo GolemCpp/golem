@@ -30,17 +30,25 @@ def quiet_calls(monkeypatch):
     return calls
 
 
-def make_fetcher(policy=None, reference='main'):
-    return GitFetcher(
-        '/cache/r',
-        Source.for_repository('https://host/r.git', reference=reference),
-        policy if policy is not None else FetchPolicy(reference='origin/' + reference))
+@pytest.fixture
+def make_fetcher(tmp_path):
+    '''
+    A fetcher rooted where the test may write: populate() creates its root, so a
+    hard-coded location would be a real directory outside the temporary tree.
+    '''
+    def make(policy=None, reference='main'):
+        return GitFetcher(
+            str(tmp_path / 'r'),
+            Source.for_repository('https://host/r.git', reference=reference),
+            policy if policy is not None else FetchPolicy(reference='origin/' + reference))
+
+    return make
 
 
 # -- the git sequence a policy produces -------------------------------------
 
 
-def test_the_default_policy_clones_and_tracks_the_branch(git_calls):
+def test_the_default_policy_clones_and_tracks_the_branch(git_calls, make_fetcher):
     make_fetcher().populate()
 
     assert git_calls == [
@@ -50,7 +58,7 @@ def test_the_default_policy_clones_and_tracks_the_branch(git_calls):
     ]
 
 
-def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls):
+def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls, make_fetcher):
     make_fetcher().refresh()
 
     assert git_calls == [
@@ -64,7 +72,7 @@ def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls):
     ]
 
 
-def test_a_checkout_lands_between_the_clone_and_the_reset(git_calls):
+def test_a_checkout_lands_between_the_clone_and_the_reset(git_calls, make_fetcher):
     make_fetcher(FetchPolicy(checkout='v3.12.0', reference='cafebabe')).populate()
 
     assert git_calls == [
@@ -75,7 +83,7 @@ def test_a_checkout_lands_between_the_clone_and_the_reset(git_calls):
     ]
 
 
-def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls):
+def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls, make_fetcher):
     make_fetcher(
         FetchPolicy(shallow=True, checkout='v3.12.0', reference='cafebabe')).populate()
 
@@ -88,7 +96,7 @@ def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls):
     ]
 
 
-def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls):
+def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls, make_fetcher):
     # Every resource is cleaned and carries its submodules; a pin only says that
     # a refresh has nothing to fetch and lands back on the commit it holds. That
     # goes for the submodules too: --no-fetch is what keeps the whole refresh off
@@ -106,7 +114,7 @@ def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls):
     assert not any(helpers.is_network_git_command(['git'] + args) for args in git_calls)
 
 
-def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, git_calls):
+def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, git_calls, make_fetcher):
     # Most resources declare none, and a submodule command in a repository without
     # them is a process spent to do nothing.
     stub_git_probes(monkeypatch, has_submodules=False)
@@ -120,7 +128,7 @@ def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, gi
 # -- the reference has to be there before anything resets to it -------------
 
 
-def test_a_missing_reference_is_fetched_before_the_reset(monkeypatch, git_calls):
+def test_a_missing_reference_is_fetched_before_the_reset(monkeypatch, git_calls, make_fetcher):
     # The commit a resource names is not in this root -- a pin whose cache predates
     # the resolve that produced it. Ask for exactly that commit rather than dying at
     # the reset with git's own error.
@@ -133,7 +141,7 @@ def test_a_missing_reference_is_fetched_before_the_reset(monkeypatch, git_calls)
         git_calls.index(['reset', '--hard', 'cafebabe'])
 
 
-def test_a_reference_that_never_arrives_is_refused(monkeypatch, git_calls):
+def test_a_reference_that_never_arrives_is_refused(monkeypatch, git_calls, make_fetcher):
     # Still missing after asking for it: nothing to reset to, and the error says
     # what to do rather than what git saw.
     monkeypatch.setattr(helpers, 'call_git', lambda args, cwd=None, **kwargs: 1)
@@ -142,7 +150,7 @@ def test_a_reference_that_never_arrives_is_refused(monkeypatch, git_calls):
         make_fetcher(FetchPolicy(reference='cafebabe', fetch_remote=False)).refresh()
 
 
-def test_a_present_reference_is_reset_to_without_asking_for_it(git_calls):
+def test_a_present_reference_is_reset_to_without_asking_for_it(git_calls, make_fetcher):
     make_fetcher(FetchPolicy(reference='cafebabe', fetch_remote=False)).refresh()
 
     assert ['fetch', 'origin', 'cafebabe'] not in git_calls
@@ -151,7 +159,7 @@ def test_a_present_reference_is_reset_to_without_asking_for_it(git_calls):
 # -- what the fetch reports back --------------------------------------------
 
 
-def test_a_fetch_reports_the_commit_it_landed_on(git_calls):
+def test_a_fetch_reports_the_commit_it_landed_on(git_calls, make_fetcher):
     # What the source names is a branch as often as a commit; what the root holds
     # is always a commit, and that is what the manifest keeps.
     assert make_fetcher().populate().head == STUB_HEAD
@@ -161,7 +169,7 @@ def test_a_fetch_reports_the_commit_it_landed_on(git_calls):
 # -- only what reaches the remote speaks ------------------------------------
 
 
-def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls):
+def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls, make_fetcher):
     # Moving the working tree around is not worth reading; a command that has a
     # remote to wait on is.
     make_fetcher().populate()
@@ -177,7 +185,7 @@ def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls):
                for args, quiet in quiet_calls if not quiet)
 
 
-def test_a_shallow_clone_only_speaks_while_it_fetches(quiet_calls):
+def test_a_shallow_clone_only_speaks_while_it_fetches(quiet_calls, make_fetcher):
     make_fetcher(FetchPolicy(shallow=True, reference='cafebabe')).populate()
 
     assert [args for args, quiet in quiet_calls if not quiet] == [
