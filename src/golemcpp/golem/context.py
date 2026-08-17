@@ -4078,6 +4078,27 @@ class Context:
     def load_recipe(self):
         recipe_id = self.context.options.recipe
 
+        # A project carrying its own golemfile deosn't need any recipe. Only
+        # projects carrying no golemfile need to search for a recipe.
+
+        # First, we test if we need a recipe, so a cookbook is only ever made
+        # available for a lookup that is going to happen.
+        if not recipe_id and self.project is None:
+            recipe_url = self.load_git_remote_origin_url()
+            if not recipe_url:
+                return
+            recipe_id = Source.generate_id(recipe_url)
+
+        # A resolve makes the cookbooks available, whether or not it needs a recipe
+        # itself, because it updates once the recipes that the dependencies of the
+        # project may require.
+
+        # Therefore, when later performing a configure on the dependencies, the
+        # cache is already up-to-date with the needed recipes, so --no-cookbooks-fetch
+        # is added to guarantee Golem is reusing the recipes already in the cache.
+        if not recipe_id and not self.deps_resolve:
+            return
+
         # The built-in default (the GolemCpp cookbook) is part of the setting
         # definition, so an unset setting still yields a cookbook to search.
         manager = get_cookbook_manager(self.cache_configuration)
@@ -4086,12 +4107,6 @@ class Context:
             manager.get_cookbook(source) for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
         ]
         cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
-
-        if not recipe_id and self.project is None:
-            recipe_url = self.load_git_remote_origin_url()
-            if not recipe_url:
-                return
-            recipe_id = Source.generate_id(recipe_url)
 
         if not recipe_id:
             return

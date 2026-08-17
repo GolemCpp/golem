@@ -2,8 +2,8 @@
 A source obtained from a git remote.
 
 The mechanism here is the richest one any resource kind needs: shallow clones,
-submodules, cleaning, checkout-then-reset. A kind asks for what it wants through
-the FetchPolicy it hands over.
+submodules, cleaning, resetting onto a reference. A kind asks for what it wants
+through the FetchPolicy it hands over.
 
 Whatever a resource holds, it is fetched whole and kept faithful to the reference
 it names: the submodules come with it, and local changes are discarded before it
@@ -45,11 +45,6 @@ class GitFetcher(Fetcher):
             self.fetch_reference()
         else:
             self.run(['clone'] + self.mode_args() + ['--', self.source.location, '.'])
-            if self.policy.checkout and not self.policy.reference:
-                # Only when there is nothing to reset onto afterwards. A checkout
-                # followed by a reset materializes the same tree twice, and under a
-                # partial clone that is two round trips for the file content.
-                self.run(['checkout', self.policy.checkout], quiet=True)
 
         self.require_reference()
         self.reset()

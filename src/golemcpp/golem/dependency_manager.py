@@ -29,7 +29,6 @@ class DependencyManager(ResourceManager):
         return FetchPolicy(
             fetch_mode=FetchMode.SHALLOW if dep.shallow else self.fetch_mode,
             fetch_jobs=self.fetch_jobs,
-            checkout=dep.resolved_version,
             reference=dep.resolved_hash,
             fetch_remote=False)
 

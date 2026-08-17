@@ -96,9 +96,6 @@ class FetchPolicy:
     # How many submodules to obtain at once. What makes a superproject with a
     # couple of hundred of them bearable.
     fetch_jobs: int = 1
-    # Checked out before the reset, when the ref to land on is not the one to
-    # check out (a dependency resets to a hash under a version tag).
-    checkout: str = ''
     # What to reset to. Empty resets to the current HEAD, which is what a
     # resource pinned to a commit wants.
     reference: str = ''
