@@ -6,13 +6,13 @@ import json
 from golemcpp.golem import context as golem_context, helpers, qt_discovery
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
-    CacheConfiguration, DEPENDENCIES_SUBDIR, RECIPES_SUBDIR)
+    CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import get_dependency_manager
-from golemcpp.golem.recipes_repository_manager import get_recipes_repository_manager
+from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem.source import Source
 from conftest import absolute_path, make_cache_configuration
 
@@ -497,13 +497,13 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
         os.path.join(project_dir, 'shared')) in calls[0]
 
 
-def make_repository_context(project_dir, *, deps_resolve=True, no_recipes_repositories_fetch=False):
+def make_repository_context(project_dir, *, deps_resolve=True, no_cookbooks_fetch=False):
     context = Context.__new__(Context)
     context.project = SimpleNamespace()
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             project_dir=str(project_dir),
-            no_recipes_repositories_fetch=no_recipes_repositories_fetch,
+            no_cookbooks_fetch=no_cookbooks_fetch,
             cache_resolution_policy='strict',
             cache_minimization_enabled='',
             cache_minimization_length=0,
@@ -524,10 +524,10 @@ def test_directory_dependency_is_detected_as_non_git(tmp_path):
     dependency = Dependency(directory=directory.resolve().as_uri())
 
     assert dependency.is_non_git_directory()
-    assert Source.parse_local_non_git_repository(dependency.directory) == str(directory)
+    assert Source.detect(dependency.directory) == 'directory'
 
 
-def test_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
+def test_detect_ignores_local_git_directory(tmp_path):
     repository_dir = tmp_path / 'recipes'
     git_dir = repository_dir / '.git'
     git_dir.mkdir(parents=True)
@@ -535,42 +535,72 @@ def test_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
 
     dependency = Dependency(repository=repository_dir.resolve().as_uri())
 
-    assert Source.parse_local_non_git_repository(dependency.repository) is None
+    assert Source.detect(dependency.repository) == 'git'
     assert Source.parse_local_directory_path(url=dependency.repository) == str(repository_dir)
 
 
-def test_helpers_parse_local_non_git_repository_ignores_local_git_directory(tmp_path):
-    repository_dir = tmp_path / 'recipes'
-    git_dir = repository_dir / '.git'
-    git_dir.mkdir(parents=True)
-    (git_dir / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+def test_a_dependency_location_resolves_to_the_kind_it_spells(tmp_path):
+    lib_dir = tmp_path / 'mylib'
+    lib_dir.mkdir()
 
-    repository_uri = repository_dir.resolve().as_uri()
+    detected = Dependency(location='mylib')
+    detected.update_source(str(tmp_path))
+    assert detected.directory == lib_dir.resolve().as_uri()
+    assert detected.repository == ''
+    assert detected.location == ''
 
-    assert Source.parse_local_non_git_repository(repository_uri) is None
-    assert Source.parse_local_directory_path(repository_uri) == str(repository_dir)
+    cloned = Dependency(location='git+mylib')
+    cloned.update_source(str(tmp_path))
+    assert cloned.repository == lib_dir.resolve().as_uri()
+    assert cloned.directory == ''
 
 
-def test_load_recipes_repositories_normalizes_local_paths(monkeypatch, tmp_path):
+@pytest.mark.parametrize('sources', [
+    {'location': './mylib', 'repository': 'https://host/r.git'},
+    {'location': './mylib', 'directory': './mylib'},
+    {'repository': 'https://host/r.git', 'directory': './mylib'},
+    {'location': './mylib', 'repository': 'https://host/r.git', 'directory': './mylib'},
+])
+def test_a_dependency_declares_exactly_one_source(sources):
+    with pytest.raises(ValueError, match='declares several sources'):
+        Dependency(name='mylib', **sources)
+
+
+def test_a_dependency_may_declare_no_source_yet():
+    # unserialize_from_json builds an empty one before filling it in.
+    assert Dependency().get_source_location() == ''
+
+
+def test_several_sources_are_refused_when_read_from_a_configuration(tmp_path):
+    # read_json writes the members straight in, so __init__ never sees them.
+    override = Dependency.unserialize_from_json(
+        {'repository': 'https://host/r.git', 'directory': './mylib'})
+
+    with pytest.raises(ValueError, match='declares several sources'):
+        override.update_source(str(tmp_path))
+
+
+def test_get_cookbook_locations_normalizes_local_paths(monkeypatch, tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     recipes_dir = tmp_path / 'recipes'
     recipes_dir.mkdir()
 
-    monkeypatch.setenv('GOLEM_RECIPES_REPOSITORIES', 'recipes')
+    monkeypatch.setenv('GOLEM_COOKBOOKS_LOCATIONS', 'recipes')
 
-    repositories = context.load_recipes_repositories()
+    cookbooks = context.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
 
-    assert [repository.location for repository in repositories] == [recipes_dir.resolve().as_uri()]
+    assert [cookbook.location for cookbook in cookbooks] == [recipes_dir.resolve().as_uri()]
 
 
-def test_get_overrides_repository_normalizes_local_paths(monkeypatch, tmp_path):
+def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     overrides_dir = tmp_path / 'overrides'
     overrides_dir.mkdir()
 
-    monkeypatch.setenv('GOLEM_OVERRIDES_REPOSITORY', 'overrides')
+    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'overrides')
 
-    assert context.get_overrides_repository().location == overrides_dir.resolve().as_uri()
+    assert [overlay.location for overlay in context.get_overlay_locations()] == \
+        [overrides_dir.resolve().as_uri()]
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -578,7 +608,7 @@ def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
     recipes_dir = project_dir / 'recipes #1'
     recipes_dir.mkdir(parents=True)
 
-    repository = Source.detect('recipes #1', str(project_dir)).location
+    repository = Source.parse('recipes #1', str(project_dir)).location
 
     assert repository == recipes_dir.resolve().as_uri()
     assert Source.parse_local_directory_path(repository) == str(recipes_dir.resolve())
@@ -640,7 +670,7 @@ def test_clone_repository_copies_non_git_directory(tmp_path):
     repo_path = tmp_path / 'cache' / 'recipes'
 
     context = make_repository_context(project_dir=project_dir)
-    repository = Source.detect('recipes', str(project_dir))
+    repository = Source.parse('recipes', str(project_dir))
 
     context.clone_repository(path=str(repo_path), source=repository)
 
@@ -659,7 +689,7 @@ def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path)
     (repo_path / 'marker.txt').write_text('stale\n', encoding='utf-8')
 
     context = make_repository_context(project_dir=project_dir)
-    repository = Source.detect('recipes', str(project_dir))
+    repository = Source.parse('recipes', str(project_dir))
 
     context.clone_repository(path=str(repo_path), source=repository)
 
@@ -668,7 +698,7 @@ def test_clone_repository_recopies_non_git_directory_when_cache_exists(tmp_path)
 
 def test_clone_repository_raises_for_missing_local_directory(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
-    repository = Source.detect('missing-recipes', str(tmp_path))
+    repository = Source.parse('missing-recipes', str(tmp_path))
     repo_path = tmp_path / 'cache' / 'recipes'
 
     with pytest.raises(RuntimeError, match="Can't find local source directory"):
@@ -685,7 +715,7 @@ def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path
     repo_path = tmp_path / 'cache' / 'recipes'
 
     context = make_repository_context(project_dir=project_dir)
-    repository = Source.detect('recipes', str(project_dir))
+    repository = Source.parse('recipes', str(project_dir))
     calls = []
 
     monkeypatch.setattr(helpers, 'run_git', lambda args, cwd=None, stdout=None: calls.append((args, cwd)))
@@ -696,6 +726,92 @@ def test_clone_repository_uses_git_for_local_git_directory(monkeypatch, tmp_path
     assert calls[1] == (['reset', '--hard', 'origin/main'], str(repo_path))
 
 
+# -- overlays: several overrides.json layered in the order they are configured --
+
+
+def make_overlay(tmp_path, name, entries):
+    overlay_dir = tmp_path / name
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / 'overrides.json').write_text(json.dumps(entries), encoding='utf-8')
+    return overlay_dir
+
+
+def load_layered_overrides(monkeypatch, tmp_path, overlay_names):
+    project_dir = tmp_path / 'project'
+    project_dir.mkdir(exist_ok=True)
+    context = make_repository_context(project_dir=project_dir, deps_resolve=False)
+    context.resolved_overrides = ''
+
+    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', '|'.join(
+        'directory+{}'.format(tmp_path / name) for name in overlay_names))
+    monkeypatch.delenv('GOLEM_OVERRIDES_CONFIGURATION', raising=False)
+    # An overlay is read where it was installed; here that is the directory itself.
+    monkeypatch.setattr(context, 'install_overlay', lambda source: source.get_local_path())
+    monkeypatch.setattr(context, 'make_build_path',
+                        lambda path: str(tmp_path / 'build' / path))
+
+    return context.load_overrides_configuration()
+
+
+def test_a_later_overlay_overwrites_only_the_members_it_sets(monkeypatch, tmp_path):
+    make_overlay(tmp_path, 'first', [
+        {'repository': 'https://host/json.git', 'version': '^3.0.0', 'shallow': True}])
+    make_overlay(tmp_path, 'second', [
+        {'repository': 'https://host/json.git', 'version': '^4.0.0'}])
+
+    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
+
+    assert len(overrides) == 1
+    assert overrides[0].version == '^4.0.0'
+    # Untouched by the second overlay, so the first one still carries it.
+    assert overrides[0].shallow is True
+
+
+def test_layering_keeps_an_entry_only_one_overlay_defines(monkeypatch, tmp_path):
+    make_overlay(tmp_path, 'first', [
+        {'repository': 'https://host/json.git', 'version': '^3.0.0'}])
+    make_overlay(tmp_path, 'second', [
+        {'repository': 'https://host/fmt.git', 'version': '^10.0.0'}])
+
+    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
+
+    assert [override.repository for override in overrides] == \
+        ['https://host/json.git', 'https://host/fmt.git']
+
+
+def test_layering_identifies_an_entry_by_the_source_it_overrides(monkeypatch, tmp_path):
+    lib_dir = tmp_path / 'project' / 'mylib'
+    lib_dir.mkdir(parents=True)
+    make_overlay(tmp_path, 'first', [{'directory': 'mylib', 'variant': 'debug'}])
+    make_overlay(tmp_path, 'second', [{'location': 'mylib', 'variant': 'release'}])
+
+    overrides = load_layered_overrides(monkeypatch, tmp_path, ['first', 'second'])
+
+    assert len(overrides) == 1
+    assert overrides[0].directory == lib_dir.resolve().as_uri()
+    assert overrides[0].variant == ['release']
+
+
+def test_an_explicit_configuration_stands_in_for_the_overlays(monkeypatch, tmp_path):
+    make_overlay(tmp_path, 'first', [
+        {'repository': 'https://host/json.git', 'version': '^3.0.0'}])
+    project_dir = tmp_path / 'project'
+    project_dir.mkdir()
+    (project_dir / 'explicit.json').write_text(
+        json.dumps([{'repository': 'https://host/fmt.git', 'version': '^10.0.0'}]),
+        encoding='utf-8')
+
+    context = make_repository_context(project_dir=project_dir, deps_resolve=False)
+    context.resolved_overrides = ''
+    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS',
+                       'directory+{}'.format(tmp_path / 'first'))
+    monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', 'explicit.json')
+
+    overrides = context.load_overrides_configuration()
+
+    assert [override.repository for override in overrides] == ['https://host/fmt.git']
+
+
 def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     context.cache_configuration = make_cache_configuration(
@@ -703,10 +819,10 @@ def test_make_basic_dependency_repo_path_uses_repository_base_with_branch(tmp_pa
 
     repository = Source.for_repository(location='https://github.com/GolemCpp/recipes.git')
 
-    manager = get_recipes_repository_manager(context.cache_configuration)
+    manager = get_cookbook_manager(context.cache_configuration)
     repo_path = manager.resolve_cached_resource(repository).path
 
-    assert repo_path == os.path.join('/cache', RECIPES_SUBDIR, Source.make_repository_base(
+    assert repo_path == os.path.join('/cache', COOKBOOKS_SUBDIR, Source.make_repository_base(
         'https://github.com/GolemCpp/recipes.git', 'main')
     )
 

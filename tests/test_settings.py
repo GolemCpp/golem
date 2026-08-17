@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from conftest import absolute_path
+from conftest import absolute_path, ROOT
 from golemcpp.golem import config_store
 from golemcpp.golem import settings
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
@@ -41,6 +42,21 @@ def test_get_setting_returns_none_for_unknown_name():
     assert settings.get_setting('GOLEM_UNKNOWN') is None
 
 
+def read_clean_env(name, prefix=''):
+    lines = (ROOT / 'examples' / name).read_text(encoding='utf-8').splitlines()
+    return [line[len(prefix):].split('=', 1)[0]
+            for line in lines if line.startswith(prefix + 'GOLEM_')]
+
+
+def test_the_clean_env_scripts_clear_every_setting():
+    # They exist to hand a project a session no variable is answering for, which
+    # only holds while they list every variable a setting reads.
+    expected = [setting.env_name for setting in settings.SETTINGS]
+
+    assert read_clean_env('clean-env') == expected
+    assert read_clean_env('clean-env.bat', prefix='set ') == expected
+
+
 def test_falls_back_to_builtin_default(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     monkeypatch.delenv('GOLEM_CACHE_MINIMIZATION_LENGTH', raising=False)
@@ -72,14 +88,18 @@ def test_prefers_option_then_environment_then_store(monkeypatch, tmp_path):
 def test_local_store_wins_over_global_store(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
-    monkeypatch.delenv('GOLEM_OVERRIDES_REPOSITORY', raising=False)
+    global_overlays = absolute_path('global', 'overrides')
+    local_overlays = absolute_path('local', 'overrides')
+    monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
     manager = settings.get_settings(project_dir=project_dir)
 
-    config_store.set_value('overrides.repository', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
-    assert manager.get('GOLEM_OVERRIDES_REPOSITORY') == '/global/overrides'
+    config_store.set_value('overlays.locations', global_overlays, config_store.GLOBAL_SCOPE, project_dir)
+    assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
+        [Path(global_overlays).as_uri()]
 
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
-    assert manager.get('GOLEM_OVERRIDES_REPOSITORY') == '/local/overrides'
+    config_store.set_value('overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
+    assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
+        [Path(local_overlays).as_uri()]
 
 
 def test_reads_persisted_configure_options(monkeypatch, tmp_path):
@@ -169,7 +189,7 @@ def test_one_manager_answers_every_setting(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
     monkeypatch.delenv('GOLEM_CACHE_DIRECTORY', raising=False)
-    monkeypatch.setenv('GOLEM_RECIPES_REPOSITORIES', 'https://recipes.git')
+    monkeypatch.setenv('GOLEM_COOKBOOKS_LOCATIONS', 'https://recipes.git')
     config_store.set_value(
         'cache.resolution-policy', 'weak', config_store.LOCAL_SCOPE, project_dir)
 
@@ -178,22 +198,74 @@ def test_one_manager_answers_every_setting(monkeypatch, tmp_path):
 
     assert manager.get('GOLEM_CACHE_MINIMIZATION_LENGTH') == 16
     assert manager.get('GOLEM_CACHE_RESOLUTION_POLICY') == CacheResolutionPolicy.WEAK
-    assert manager.get('GOLEM_RECIPES_REPOSITORIES') == ['https://recipes.git']
+    assert [source.location for source in manager.get('GOLEM_COOKBOOKS_LOCATIONS')] == \
+        ['https://recipes.git']
     assert manager.get('GOLEM_CACHE_DIRECTORY').location == settings.get_default_cache_directory_path()
+
+
+def test_a_location_setting_reads_its_kind(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    project_dir = tmp_path / 'project'
+    (project_dir / 'my-cookbook').mkdir(parents=True)
+    monkeypatch.setenv(
+        'GOLEM_COOKBOOKS_LOCATIONS',
+        'directory+my-cookbook|git+https://github.com/GolemCpp/recipes.git')
+
+    sources = settings.get_settings(project_dir=str(project_dir)).get(
+        'GOLEM_COOKBOOKS_LOCATIONS')
+
+    assert [source.type for source in sources] == ['directory', 'git']
+    assert sources[1].location == 'https://github.com/GolemCpp/recipes.git'
+
+
+def test_a_location_setting_names_the_source_of_a_bad_kind(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.setenv('GOLEM_COOKBOOKS_LOCATIONS', 'gti+https://host/r.git')
+
+    with pytest.raises(ValueError) as error:
+        settings.get_settings(project_dir=str(tmp_path)).get('GOLEM_COOKBOOKS_LOCATIONS')
+
+    assert "unknown source kind 'gti'" in str(error.value)
+    assert 'environment variable GOLEM_COOKBOOKS_LOCATIONS' in str(error.value)
+
+
+def test_a_location_setting_forwards_an_explicit_kind(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    monkeypatch.setenv('GOLEM_COOKBOOKS_LOCATIONS', 'https://host/r.git')
+    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'https://host/o.git')
+    manager = settings.get_settings(project_dir=str(tmp_path))
+
+    assert manager.make_flag('GOLEM_COOKBOOKS_LOCATIONS') == \
+        ['--cookbook-location=git+https://host/r.git']
+    assert manager.make_flag('GOLEM_OVERLAYS_LOCATIONS') == \
+        ['--overlay-location=git+https://host/o.git']
+
+
+def test_parse_value_refuses_a_bad_location_where_it_is_written(monkeypatch, tmp_path):
+    _isolate_home(monkeypatch, tmp_path)
+    manager = settings.get_settings(project_dir=str(tmp_path))
+
+    with pytest.raises(ValueError):
+        manager.parse_value('cookbooks.locations', 'gti+https://host/r.git')
+
+    assert [source.type for source in
+            manager.parse_value('cookbooks.locations', 'https://host/r.git')] == ['git']
 
 
 def test_a_manager_sees_a_value_written_after_it_was_built(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
-    monkeypatch.delenv('GOLEM_OVERRIDES_REPOSITORY', raising=False)
+    local_overlays = absolute_path('local', 'overrides')
+    monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
     manager = settings.get_settings(project_dir=project_dir)
 
-    assert manager.get('GOLEM_OVERRIDES_REPOSITORY') == ''
+    assert manager.get('GOLEM_OVERLAYS_LOCATIONS') == []
 
     config_store.set_value(
-        'overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+        'overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
 
-    assert manager.get('GOLEM_OVERRIDES_REPOSITORY') == '/local/overrides'
+    assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
+        [Path(local_overlays).as_uri()]
 
 
 def test_legacy_names_keep_resolving(monkeypatch, tmp_path):
@@ -276,8 +348,6 @@ def test_make_flag_yields_nothing_without_an_option_or_a_value(monkeypatch, tmp_
     monkeypatch.delenv('GOLEM_ADDITIONAL_CACHE_DIRECTORIES', raising=False)
     manager = settings.get_settings(project_dir=str(tmp_path))
 
-    # No CLI option carries these settings.
-    assert manager.make_flag('GOLEM_RECIPES_REPOSITORIES') == []
     assert manager.make_flag('GOLEM_UNKNOWN') == []
     # Unset settings must not be forwarded as empty flags.
     assert manager.make_flag('GOLEM_OVERRIDES_CONFIGURATION') == []

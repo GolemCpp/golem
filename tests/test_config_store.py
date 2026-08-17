@@ -78,17 +78,17 @@ def test_read_config_invalid_file_returns_empty(tmp_path):
 def test_write_then_read_round_trip(tmp_path):
     path = str(tmp_path / 'nested' / 'config.json')
 
-    config_store.write_config(path, {'overrides.repository': '/opt/overrides'})
+    config_store.write_config(path, {'overlays.locations': '/opt/overrides'})
 
     assert os.path.exists(path)
-    assert config_store.read_config(path) == {'overrides.repository': '/opt/overrides'}
+    assert config_store.read_config(path) == {'overlays.locations': '/opt/overrides'}
     with open(path, 'r', encoding='utf-8') as fp:
-        assert json.load(fp) == {'overrides.repository': '/opt/overrides'}
+        assert json.load(fp) == {'overlays.locations': '/opt/overrides'}
 
 
 def test_write_config_empty_removes_file(tmp_path):
     path = str(tmp_path / 'config.json')
-    config_store.write_config(path, {'overrides.repository': '/opt/overrides'})
+    config_store.write_config(path, {'overlays.locations': '/opt/overrides'})
 
     config_store.write_config(path, {})
 
@@ -99,42 +99,42 @@ def test_set_and_get_local_value(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
 
-    assert config_store.get_scoped_value('overrides.repository', config_store.LOCAL_SCOPE, project_dir) == '/local/overrides'
-    assert config_store.get_value('overrides.repository', project_dir) == '/local/overrides'
+    assert config_store.get_scoped_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) == '/local/overrides'
+    assert config_store.get_value('overlays.locations', project_dir) == '/local/overrides'
 
 
 def test_local_overrides_global(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('overrides.repository', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
-    assert config_store.get_value('overrides.repository', project_dir) == '/global/overrides'
+    config_store.set_value('overlays.locations', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
+    assert config_store.get_value('overlays.locations', project_dir) == '/global/overrides'
 
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
-    assert config_store.get_value('overrides.repository', project_dir) == '/local/overrides'
+    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    assert config_store.get_value('overlays.locations', project_dir) == '/local/overrides'
 
 
 def test_unset_removes_value_and_reports(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
 
-    assert config_store.unset_value('overrides.repository', config_store.LOCAL_SCOPE, project_dir) is True
-    assert config_store.get_scoped_value('overrides.repository', config_store.LOCAL_SCOPE, project_dir) is None
+    assert config_store.unset_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) is True
+    assert config_store.get_scoped_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) is None
     # File is cleaned up once empty.
     assert not os.path.exists(config_store.get_local_config_path(project_dir))
     # Unsetting again reports nothing removed.
-    assert config_store.unset_value('overrides.repository', config_store.LOCAL_SCOPE, project_dir) is False
+    assert config_store.unset_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) is False
 
 
 def test_set_local_without_project_dir_raises(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
 
     try:
-        config_store.set_value('overrides.repository', '/x', config_store.LOCAL_SCOPE, '')
+        config_store.set_value('overlays.locations', '/x', config_store.LOCAL_SCOPE, '')
     except ValueError:
         return
     raise AssertionError('expected ValueError when setting a local value without a project directory')
@@ -145,10 +145,10 @@ def test_list_merged_combines_scopes(monkeypatch, tmp_path):
     project_dir = str(tmp_path / 'project')
 
     config_store.set_value('cache.directory', '/global/cache', config_store.GLOBAL_SCOPE, project_dir)
-    config_store.set_value('overrides.repository', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
-    config_store.set_value('overrides.repository', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value('overlays.locations', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
+    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
 
     merged = config_store.list_merged(project_dir)
 
-    assert merged == {'cache.directory': '/global/cache', 'overrides.repository': '/local/overrides'}
+    assert merged == {'cache.directory': '/global/cache', 'overlays.locations': '/local/overrides'}
 

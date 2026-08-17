@@ -5,6 +5,7 @@ from golemcpp.golem import cache_directory
 from golemcpp.golem import cache_resolution_policy
 from golemcpp.golem import config_store
 from golemcpp.golem import helpers
+from golemcpp.golem import source
 from golemcpp.golem.setting_descriptor import format_option_flag
 from golemcpp.golem.setting_descriptor import has_value
 from golemcpp.golem.setting_descriptor import require_positive
@@ -13,8 +14,8 @@ from golemcpp.golem.setting_descriptor import SettingProcessingContext
 from golemcpp.golem.setting_descriptor import SettingType
 
 
-# Default recipes repository used when nothing is configured.
-DEFAULT_RECIPES_REPOSITORY = 'https://github.com/GolemCpp/recipes.git'
+# Default cookbook used when nothing is configured.
+DEFAULT_COOKBOOK_LOCATION = 'git+https://github.com/GolemCpp/recipes.git'
 
 
 def get_default_cache_directory_path():
@@ -88,11 +89,15 @@ SETTINGS = (
         deserialize=require_positive,
     ),
     SettingDescriptor(
-        key='recipes.repositories',
-        env_name='GOLEM_RECIPES_REPOSITORIES',
-        description='Recipe repositories used to resolve dependencies.',
+        key='cookbooks.locations',
+        env_name='GOLEM_COOKBOOKS_LOCATIONS',
+        option_name='cookbook_location',
+        description='Cookbooks searched for the recipes used to resolve dependencies '
+                    '(pipe-separated [KIND+]LOCATOR).',
         value_type=SettingType.LIST,
-        default=(DEFAULT_RECIPES_REPOSITORY,),
+        default=(DEFAULT_COOKBOOK_LOCATION,),
+        deserialize=source.parse_location,
+        serialize=source.format_location,
     ),
     SettingDescriptor(
         key='overrides.configuration',
@@ -103,10 +108,15 @@ SETTINGS = (
         is_path=True,
     ),
     SettingDescriptor(
-        key='overrides.repository',
-        env_name='GOLEM_OVERRIDES_REPOSITORY',
-        description='Repository providing an overrides configuration.',
-        default='',
+        key='overlays.locations',
+        env_name='GOLEM_OVERLAYS_LOCATIONS',
+        option_name='overlay_location',
+        description='Overlays contributing an overrides configuration, layered in order '
+                    '(pipe-separated [KIND+]LOCATOR).',
+        value_type=SettingType.LIST,
+        default=(),
+        deserialize=source.parse_location,
+        serialize=source.format_location,
     ),
 )
 
@@ -240,6 +250,18 @@ class Settings:
             return self._process(setting, setting.parse(raw))
         except (TypeError, ValueError) as error:
             raise ValueError('{} (from {})'.format(error, origin)) from error
+
+    def parse_value(self, name, raw):
+        '''
+        A raw value read the way a resolved one is, without consulting any
+        source, so a writer can refuse a value where it is written rather than
+        leave it for the next command to trip over.
+        '''
+        setting = get_setting(name)
+        if setting is None:
+            return None
+
+        return self._process(setting, setting.parse(raw))
 
     def get_default(self, name):
         '''

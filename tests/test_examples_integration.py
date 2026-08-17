@@ -142,9 +142,9 @@ def make_golem_env(cache_dir: Path) -> dict[str, str]:
         pythonpath_entries.append(env['PYTHONPATH'])
 
     env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)
-    env['GOLEM_RECIPES_REPOSITORIES'] = ''
+    env['GOLEM_COOKBOOKS_LOCATIONS'] = ''
     env['GOLEM_ADDITIONAL_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
-    env['GOLEM_OVERRIDES_REPOSITORY'] = ''
+    env['GOLEM_OVERLAYS_LOCATIONS'] = ''
 
     return env
 

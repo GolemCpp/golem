@@ -27,14 +27,16 @@ from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.tool_manager import get_tool_manager
 from golemcpp.golem.dependency_manager import get_dependency_manager
-from golemcpp.golem.overrides_repository_manager import get_overrides_repository_manager
-from golemcpp.golem.recipes_repository_manager import get_recipes_repository_manager
+from golemcpp.golem.overlay_manager import get_overlay_manager
+from golemcpp.golem.cookbook_manager import get_cookbook_manager
+from golemcpp.golem import overrides
 from golemcpp.golem import helpers
 from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.source import Source
+from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 from golemcpp.golem.template import Template
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
@@ -139,28 +141,9 @@ class Context:
                                        dependency.runtime_variant)
 
     def load_resolved_dependencies(self):
-        overrides = self.load_overrides_configuration()
-        if overrides:
-            for dependency in self.project.deps:
-                for override in overrides:
-                    if dependency.repository == override.repository:
-                        if override.version:
-                            dependency.version = override.version
-                        if override.resolved_version:
-                            dependency.resolved_version = override.resolved_version
-                        if override.resolved_hash:
-                            dependency.resolved_hash = override.resolved_hash
-                        if override.shallow:
-                            dependency.shallow = override.shallow
-                        if override.link:
-                            dependency.link = override.link
-                        if override.variant:
-                            dependency.variant = override.variant
-                        if override.runtime_link:
-                            dependency.runtime_link = override.runtime_link
-                        if override.runtime_variant:
-                            dependency.runtime_variant = override.runtime_variant
-                        break
+        overrides_configuration = self.load_overrides_configuration()
+        if overrides_configuration:
+            overrides.apply_overrides(overrides_configuration, self.project.deps)
 
         if self.resolved_dependencies_path is not None:
             return
@@ -283,27 +266,35 @@ class Context:
         return self.make_local_path_absolute(
             path=self.get_overrides_configuration())
 
-    def get_overrides_repository(self):
-        overrides_repository = self.get_settings().get('GOLEM_OVERRIDES_REPOSITORY')
-        if not overrides_repository:
-            return None
+    def get_overlay_locations(self):
+        return self.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
 
-        return Source.detect(
-            overrides_repository,
-            project_dir=self.get_project_dir())
+    def load_overlay_overrides(self):
+        '''
+        The overrides every configured overlay contributes, one list per overlay,
+        in the order the overlays are configured.
+        '''
+        contributions = []
+        for source in self.get_overlay_locations():
+            overlay_path = self.install_overlay(source)
+            overrides_path = os.path.join(overlay_path, overrides.OVERRIDES_FILENAME)
+            if os.path.exists(overrides_path):
+                contributions.append(
+                    overrides.read_overrides(overrides_path, self.get_project_dir()))
+
+        return contributions
 
     def load_overrides_configuration(self):
-
         if not self.resolved_overrides:
+            # An explicit configuration file names the overrides directly and
+            # stands in for the whole overlay stack.
             overrides_configuration = self.make_overrides_configuration()
-            overrides_repository = self.get_overrides_repository()
-            if not overrides_configuration and overrides_repository:
-                repo_path = self.clone_overrides_repository(
-                    overrides_repository)
-                overrides_json = os.path.join(
-                    repo_path, 'overrides.json')
-                if os.path.exists(overrides_json):
-                    overrides_configuration = overrides_json
+            if not overrides_configuration:
+                contributions = self.load_overlay_overrides()
+                if contributions:
+                    overrides_configuration = overrides.write_overrides(
+                        overrides.merge_overrides(contributions),
+                        self.make_build_path(overrides.OVERRIDES_FILENAME))
 
             if overrides_configuration:
                 self.resolved_overrides = overrides_configuration
@@ -312,21 +303,7 @@ class Context:
                 self.resolved_overrides):
             return None
 
-        if not os.path.exists(self.resolved_overrides):
-            raise RuntimeError(
-                "Can't find overrides configuration: {}".format(
-                    self.resolved_overrides))
-
-        cache = None
-        with open(self.resolved_overrides, 'r') as fp:
-            cache = json.load(fp)
-
-        overrides = []
-        for entry in cache:
-            cached_dependency = Dependency.unserialize_from_json(entry)
-            overrides.append(cached_dependency)
-
-        return overrides
+        return overrides.read_overrides(self.resolved_overrides, self.get_project_dir())
 
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
@@ -981,15 +958,27 @@ class Context:
             help=
             "Overrides configuration file to resolve dependencies for the build")
 
+        context.add_option("--overlay-location",
+                           action="append",
+                           default=[],
+                           help="Overlay contributing an overrides configuration, "
+                                "as [KIND+]LOCATOR; repeat to layer several")
+
+        context.add_option("--cookbook-location",
+                           action="append",
+                           default=[],
+                           help="Cookbook searched for recipes, as [KIND+]LOCATOR; "
+                                "repeat to search several")
+
         context.add_option("--recipe",
                            action="store",
                            default='',
-                           help="Identifier to lookup a recide")
+                           help="Identifier to lookup a recipe")
 
-        context.add_option("--no-recipes-repositories-fetch",
+        context.add_option("--no-cookbooks-fetch",
                            action="store_true",
                            default=False,
-                           help="Disable recipes repositories git clone/fetch")
+                           help="Disable cookbooks git clone/fetch")
 
         context.add_option("--force-version",
                            action="store",
@@ -1701,7 +1690,7 @@ class Context:
         configure_options = path_options + [
             '--no-copy-artifacts',
             '--no-copy-licenses',
-            '--no-recipes-repositories-fetch',
+            '--no-cookbooks-fetch',
             '--targets={}'.format(dep.name),
             '--runtime-link={}'.format(self.runtime_link(dep)),
             '--runtime-variant={}'.format(self.runtime_variant(dep)),
@@ -1711,14 +1700,23 @@ class Context:
             '--export={}'.format(dep_path),
             '--resolved-dependencies-directory={}'.format(build_path),
             '--only-update-dependencies-regex={}'.format(self.get_only_update_dependencies_regex()),
-            '--overrides-configuration={}'.format(self.resolved_overrides),
             '--global-dependencies-configuration={}'.format(global_dependencies_configuration),
         ]
+
+        # The overlays are already layered into one file here; the sub-build gets
+        # that result rather than the overlays, so it does not re-resolve them.
+        configure_options.append('{}={}'.format(
+            settings.get_setting('overrides.configuration').option_flag,
+            self.resolved_overrides))
 
         # The sub-build must reach the same caches with the same layout, so every
         # cache setting is forwarded as the flag the settings themselves spell.
         for name in cache_configuration.CACHE_SETTINGS:
             configure_options += self.get_settings().make_flag(name)
+
+        # A cookbook passed on the command line would not reach the sub-build
+        # otherwise, where an environment variable or a stored key would.
+        configure_options += self.get_settings().make_flag('GOLEM_COOKBOOKS_LOCATIONS')
 
         if hasattr(self.context.options, 'check_c_compiler') and self.context.options.check_c_compiler:
             configure_options += [
@@ -4193,7 +4191,7 @@ class Context:
                 raise RuntimeError(
                     "Local source path is not a directory: {}".format(local_path))
 
-        if source.type == 'directory':
+        if source.type == SOURCE_TYPE_DIRECTORY:
             print("Copying directory {} into {}".format(source.location, path))
             self.copy_non_git_repo(source.location, local_path, path)
             return
@@ -4207,7 +4205,7 @@ class Context:
     def update_repository_source(self, path, source):
         '''Refresh an already-cached repository in place (no re-clone), preserving
         its cache root: recopy a directory source, or fetch + reset a git source.'''
-        if source.type == 'directory':
+        if source.type == SOURCE_TYPE_DIRECTORY:
             local_path = source.get_local_path()
             self.copy_non_git_repo(source.location, local_path, path)
         else:
@@ -4226,46 +4224,37 @@ class Context:
                 cached_repository,
                 lambda staging_root: self.clone_repository(staging_root, source))
 
-    def clone_overrides_repository(self, source):
-        manager = get_overrides_repository_manager(self.cache_configuration)
-        cached_repository = manager.resolve_cached_resource(source)
+    def install_overlay(self, source):
+        manager = get_overlay_manager(self.cache_configuration)
+        cached_overlay = manager.resolve_cached_resource(source)
 
         if not self.deps_resolve:
-            return cached_repository.path
+            return cached_overlay.path
 
-        self.install_repository(manager, source, cached_repository)
+        self.install_repository(manager, source, cached_overlay)
 
-        return cached_repository.path
+        return cached_overlay.path
 
-    def clone_recipes_repository(self, source):
-        manager = get_recipes_repository_manager(self.cache_configuration)
-        cached_repository = manager.resolve_cached_resource(source)
+    def install_cookbook(self, source):
+        manager = get_cookbook_manager(self.cache_configuration)
+        cached_cookbook = manager.resolve_cached_resource(source)
 
-        if self.context.options.no_recipes_repositories_fetch or not self.deps_resolve:
-            return cached_repository.path
+        if self.context.options.no_cookbooks_fetch or not self.deps_resolve:
+            return cached_cookbook.path
 
-        self.install_repository(manager, source, cached_repository)
+        self.install_repository(manager, source, cached_cookbook)
 
-        return cached_repository.path
-
-    def load_recipes_repositories(self):
-        # The built-in default (the GolemCpp recipes repository) is part of the
-        # setting definition, so an unset setting still yields a repository.
-        urls = self.get_settings().get('GOLEM_RECIPES_REPOSITORIES')
-
-        return [
-            Source.detect(url, project_dir=self.get_project_dir())
-            for url in urls
-        ]
+        return cached_cookbook.path
 
     def load_recipe(self):
         recipe_id = self.context.options.recipe
 
-        recipes_repositories = self.load_recipes_repositories()
-        recipes_repos_paths = []
-        for source in recipes_repositories:
-            repo_path = self.clone_recipes_repository(source=source)
-            recipes_repos_paths.append(repo_path)
+        # The built-in default (the GolemCpp cookbook) is part of the setting
+        # definition, so an unset setting still yields a cookbook to search.
+        cookbook_paths = [
+            self.install_cookbook(source=source)
+            for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
+        ]
 
         if not recipe_id and self.project is None:
             recipe_url = self.load_git_remote_origin_url()
@@ -4277,11 +4266,11 @@ class Context:
             return
 
         found_recipe_dir = None
-        for repo in recipes_repos_paths:
-            directory = os.path.join(repo, recipe_id)
+        for cookbook_path in cookbook_paths:
+            directory = os.path.join(cookbook_path, recipe_id)
             if os.path.exists(directory):
                 found_recipe_dir = directory
-                resource_manifest.touch_last_used(repo)
+                resource_manifest.touch_last_used(cookbook_path)
 
         if not found_recipe_dir:
             raise RuntimeError(

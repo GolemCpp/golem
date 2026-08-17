@@ -127,7 +127,7 @@ def test_size_totals(capsys, tmp_path):
 
 
 def test_unidentified_lists_and_removes(monkeypatch, capsys, tmp_path):
-    seed_resource(str(tmp_path), cache_configuration.RECIPES_SUBDIR, 'mystery@host+main')  # no manifest
+    seed_resource(str(tmp_path), cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')  # no manifest
     seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
                   kind=resource_manifest.ResourceKind.DEPENDENCY)
 
@@ -138,7 +138,7 @@ def test_unidentified_lists_and_removes(monkeypatch, capsys, tmp_path):
 
     monkeypatch.setattr(helpers, 'confirm', lambda prompt, assume_yes=False: True)
     assert run(tmp_path, 'unidentified', '--remove') == 0
-    assert not os.path.exists(os.path.join(str(tmp_path), cache_configuration.RECIPES_SUBDIR, 'mystery@host+main'))
+    assert not os.path.exists(os.path.join(str(tmp_path), cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main'))
     # Identified resource is untouched.
     assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 

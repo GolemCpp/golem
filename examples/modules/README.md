@@ -1,4 +1,4 @@
-# cppfront
+# modules
 
 Start a [clean session](#start-a-clean-session) to run commands, if needed.
 
@@ -8,6 +8,8 @@ Build the program:
 
 ``` bash
 golem configure --variant=debug
+golem resolve
+golem dependencies
 golem build
 ```
 

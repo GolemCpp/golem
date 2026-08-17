@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,13 @@ from golemcpp.golem import helpers
 # a git repository (cloned) or a local directory (copied as-is).
 SOURCE_TYPE_GIT = 'git'
 SOURCE_TYPE_DIRECTORY = 'directory'
+
+# A configured location may spell its kind: `<kind>+<locator>`.
+SOURCE_KIND_SEPARATOR = '+'
+
+# A leading bare word followed by the separator claims a kind. Kept narrow so a
+# real locator never matches: a URL has `:` after its scheme, a path has none.
+KIND_CLAIM = re.compile(r'^([a-z][a-z0-9]*)\{}'.format(SOURCE_KIND_SEPARATOR))
 
 
 @dataclass(frozen=True)
@@ -30,16 +38,27 @@ class Source:
         return cls(location=location, reference='', type=SOURCE_TYPE_DIRECTORY)
 
     @classmethod
-    def detect(cls, locator, project_dir, reference='main'):
+    def parse(cls, location, project_dir):
         '''
-        Classify a bare locator string (used where a source is configured as a
-        single value, e.g. recipes/overrides repositories) into a git repository
-        or a local directory to copy.
+        The Source a configured location denotes: `<kind>+<locator>`, or a bare
+        locator whose kind detect() works out.
         '''
+        kind, locator = split_kind(location)
         normalized = cls.normalize_url(url=locator, project_dir=project_dir)
-        if cls.parse_local_non_git_repository(normalized) is not None:
-            return cls.for_directory(normalized)
-        return cls.for_repository(normalized, reference)
+        return SOURCE_KINDS[kind or cls.detect(normalized)](normalized)
+
+    @classmethod
+    def detect(cls, location):
+        '''
+        The kind of a location that does not spell one: a local directory that is
+        not a git checkout is copied, anything else is cloned.
+        '''
+        path = cls.parse_local_directory_path(location)
+        if path is None or not os.path.isdir(path):
+            return SOURCE_TYPE_GIT
+        if helpers.is_git_repository(path=path):
+            return SOURCE_TYPE_GIT
+        return SOURCE_TYPE_DIRECTORY
 
     # -- identity serialization (recorded in a resource manifest) ---------
 
@@ -92,25 +111,6 @@ class Source:
             if path.startswith("/") and len(path) > 2 and path[2] == ":":
                 path = path[1:]
             path = path.replace("/", "\\")
-
-        return path
-
-    @staticmethod
-    def is_git_repository(path):
-        git_index = os.path.join(path, '.git', 'HEAD')
-        return os.path.exists(git_index)
-
-    @classmethod
-    def parse_local_non_git_repository(cls, url):
-        path = cls.parse_local_directory_path(url)
-        if path is None:
-            return None
-
-        if not os.path.isdir(path):
-            return None
-
-        if cls.is_git_repository(path=path):
-            return None
 
         return path
 
@@ -180,3 +180,43 @@ class Source:
 
     def get_cache_key(self):
         return self.make_repository_base(self.location, self.reference)
+
+
+# Every kind a location may claim, and how to build it. A new kind (an archive,
+# an SVN checkout) is one entry here plus its branch in Context.clone_repository.
+SOURCE_KINDS = {
+    SOURCE_TYPE_GIT: Source.for_repository,
+    SOURCE_TYPE_DIRECTORY: Source.for_directory,
+}
+
+
+def split_kind(location):
+    '''
+    The kind a location claims and the locator left once it is removed, the kind
+    being None when nothing is claimed. A claim naming a kind we do not know is
+    a typo worth reporting: read as a locator it would fail much later, inside
+    git, against a path the user never wrote.
+    '''
+    match = KIND_CLAIM.match(location)
+    if not match:
+        return None, location
+
+    kind = match.group(1)
+    if kind not in SOURCE_KINDS:
+        raise ValueError("unknown source kind '{}': expected {}".format(
+            kind, ', '.join(name + SOURCE_KIND_SEPARATOR for name in SOURCE_KINDS)))
+
+    return kind, location[match.end():]
+
+
+def parse_location(value, context):
+    '''A location setting into the Source it denotes.'''
+    return Source.parse(value, project_dir=context.project_dir)
+
+
+def format_location(source, context):
+    '''
+    The way a Source is spelled back into a setting, the reverse of
+    parse_location. Always explicit: what is written is never re-detected.
+    '''
+    return '{}{}{}'.format(source.type, SOURCE_KIND_SEPARATOR, source.location)
