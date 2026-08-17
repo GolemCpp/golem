@@ -50,11 +50,13 @@ class CacheConfiguration:
     '''
 
     def __init__(self, locations, resolution_policy,
-                 minimization_enabled, minimization_length):
+                 minimization_enabled, minimization_length, fetch_mode, fetch_jobs):
         for name, value in (('locations', locations),
                             ('resolution_policy', resolution_policy),
                             ('minimization_enabled', minimization_enabled),
-                            ('minimization_length', minimization_length)):
+                            ('minimization_length', minimization_length),
+                            ('fetch_mode', fetch_mode),
+                            ('fetch_jobs', fetch_jobs)):
             if value is None:
                 raise ValueError('CacheConfiguration requires {}'.format(name))
 
@@ -62,6 +64,8 @@ class CacheConfiguration:
         self.resolution_policy = resolution_policy
         self.minimization_enabled = minimization_enabled
         self.minimization_length = minimization_length
+        self.fetch_mode = fetch_mode
+        self.fetch_jobs = fetch_jobs
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -101,4 +105,6 @@ def get_cache_configuration(settings):
         locations=resolve_cache_locations(settings),
         resolution_policy=settings.get('GOLEM_CACHE_RESOLUTION_POLICY'),
         minimization_enabled=settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED'),
-        minimization_length=settings.get('GOLEM_CACHE_MINIMIZATION_LENGTH'))
+        minimization_length=settings.get('GOLEM_CACHE_MINIMIZATION_LENGTH'),
+        fetch_mode=settings.get('GOLEM_GIT_FETCH_MODE'),
+        fetch_jobs=settings.get('GOLEM_GIT_JOBS'))

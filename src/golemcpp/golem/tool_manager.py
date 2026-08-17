@@ -57,13 +57,14 @@ class ToolManager(ResourceManager):
         tool.resolve()
         return tool
 
-    @classmethod
-    def policy_for(cls, tool: Tool) -> FetchPolicy:
+    def policy_for(self, tool: Tool) -> FetchPolicy:
         # Lands on the exact commit its version resolved to. Not pinned the way a
         # dependency is: a tool is keyed by its name, so the same root is reused
         # for whatever version is asked for next, and reaching a tag pushed after
         # the clone needs the remote.
         return FetchPolicy(
+            fetch_mode=self.fetch_mode,
+            fetch_jobs=self.fetch_jobs,
             checkout=tool.resolved_version,
             reference=tool.resolved_hash,
             fetch_remote=True)

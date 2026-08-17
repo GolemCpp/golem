@@ -9,6 +9,8 @@ from golemcpp.golem import config_store
 from golemcpp.golem import settings
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.setting_descriptor import SettingDescriptor
+from golemcpp.golem import helpers
+from golemcpp.golem.fetch_policy import FetchMode
 
 
 def _isolate_home(monkeypatch, tmp_path):
@@ -430,3 +432,28 @@ def test_get_default_processes_the_built_in_default(monkeypatch, tmp_path):
     assert manager.get_default('GOLEM_CACHE_MINIMIZATION_LENGTH') == 8
     assert manager.get_default('GOLEM_CACHE_MINIMIZATION_ENABLED') is True
     assert manager.get_default('GOLEM_UNKNOWN') is None
+
+
+def test_the_fetch_mode_reads_back_as_a_mode(monkeypatch):
+    monkeypatch.setenv('GOLEM_GIT_FETCH_MODE', 'shallow')
+
+    assert settings.get_settings().get('GOLEM_GIT_FETCH_MODE') == FetchMode.SHALLOW
+
+
+def test_an_unknown_fetch_mode_is_refused(monkeypatch):
+    monkeypatch.setenv('GOLEM_GIT_FETCH_MODE', 'sparse')
+
+    with pytest.raises(ValueError):
+        settings.get_settings().get('GOLEM_GIT_FETCH_MODE')
+
+
+def test_the_fetch_mode_default_follows_what_git_can_do(monkeypatch):
+    # Asked for explicitly, any mode is honoured; the capability gate only decides
+    # what nobody asking gets.
+    monkeypatch.delenv('GOLEM_GIT_FETCH_MODE', raising=False)
+    monkeypatch.setattr(helpers, 'git_version', lambda: (2, 36, 0))
+
+    assert settings.get_settings().get_default('GOLEM_GIT_FETCH_MODE') == FetchMode.FULL
+
+    monkeypatch.setenv('GOLEM_GIT_FETCH_MODE', 'blobless')
+    assert settings.get_settings().get('GOLEM_GIT_FETCH_MODE') == FetchMode.BLOBLESS

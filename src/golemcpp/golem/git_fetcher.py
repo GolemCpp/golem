@@ -16,8 +16,11 @@ decides whether reaching one is allowed here at all.
 
 import os
 import subprocess
+from dataclasses import replace
 
 from golemcpp.golem import helpers
+from golemcpp.golem.fetch_policy import BLOBLESS_FILTER
+from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.fetcher import Fetcher
 
@@ -29,25 +32,28 @@ class GitFetcher(Fetcher):
         print("Cloning repository {} into {}".format(self.source.location, self.path))
         os.makedirs(self.path, exist_ok=True)
 
-        if self.policy.shallow:
+        if self.policy.fetch_mode == FetchMode.SHALLOW:
+            # Not a clone at all: fetching one commit by name is the only way to
+            # ask for that commit and nothing around it.
             self.run(['init'], quiet=True)
             self.run(['remote', 'add', 'origin', self.source.location], quiet=True)
             self.run(['fetch', '--depth=1', 'origin', self.policy.reference])
             self.run(['reset', '--hard', 'FETCH_HEAD'], quiet=True)
         else:
-            self.run(['clone', '--', self.source.location, '.'])
-            if self.policy.checkout:
+            self.run(['clone'] + self.mode_args() + ['--', self.source.location, '.'])
+            if self.policy.checkout and not self.policy.reference:
+                # Only when there is nothing to reset onto afterwards. A checkout
+                # followed by a reset materializes the same tree twice, and under a
+                # partial clone that is two round trips for the file content.
                 self.run(['checkout', self.policy.checkout], quiet=True)
             self.ensure_reference()
             self.reset()
 
         if self.has_submodules():
-            # Only a shallow resource takes shallow submodules: at a depth of one, a
-            # submodule whose recorded commit is not a tip the remote advertises
-            # cannot be fetched at all.
-            self.update_submodules(depth=self.policy.shallow)
+            self.update_submodules()
 
-        return Fetched(head=self.read_head())
+        # Obtained just now, exactly the way it was asked for.
+        return self.fetched(self.policy.fetch_mode)
 
     def refresh(self) -> Fetched:
         '''
@@ -56,7 +62,16 @@ class GitFetcher(Fetcher):
         Cleaning comes first: a reset alone leaves behind what the previous
         reference put there, and a cached resource is only worth reading when it
         holds the reference it names and nothing else.
+
+        A refresh moves a root, it never converts one: how much of the source it
+        holds is what it already held, whatever the policy would ask for of a
+        fresh one. Changing that is a migration, and belongs to resolve.
         '''
+        if self.is_up_to_date():
+            # The mode has to be pulled from the state of the root. It can be different
+            # from the mode asked, because a golem resolve is needed to migrate the root.
+            return self.fetched(self.detected_mode())
+
         self.run(['clean', '-ffxd'], quiet=True)
         if self.has_submodules():
             self.run(['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'], quiet=True)
@@ -81,7 +96,9 @@ class GitFetcher(Fetcher):
 
             self.update_submodules(no_fetch=not self.policy.fetch_remote)
 
-        return Fetched(head=self.read_head())
+        # The mode has to be pulled from the state of the root. It can be different
+        # from the mode asked, because a golem resolve is needed to migrate the root.
+        return self.fetched(self.detected_mode())
 
     # -- the steps a fetch is made of --------------------------------------
 
@@ -91,21 +108,44 @@ class GitFetcher(Fetcher):
             ['reset', '--hard'] + ([self.policy.reference] if self.policy.reference else []),
             quiet=True)
 
-    def update_submodules(self, depth=False, no_fetch=False):
+    def update_submodules(self, no_fetch=False):
         '''
-        The submodules brought to what the revision in place records.
+        The submodules brought to what the revision in place records, obtained the
+        way the resource itself was.
 
         `no_fetch` tells git to work from the objects this repository already holds
         and to fail rather than go looking. Which is what a resource being refreshed
         without consulting its remote needs, and what keeps such a refresh allowed
         outside a resolve.
         '''
-        args = ['submodule', 'update', '--init', '--recursive']
-        if depth:
-            args.append('--depth=1')
+        # --init is not optional here: --filter is only read beside it.
+        args = ['submodule', 'update', '--init', '--recursive'] + self.mode_args()
+        if self.policy.fetch_jobs > 1:
+            args += ['--jobs', str(self.policy.fetch_jobs)]
         if no_fetch:
             args.append('--no-fetch')
         self.run(args)
+
+    def mode_args(self):
+        '''
+        What obtaining this source the way the policy asks for takes.
+
+        A shallow resource takes shallow submodules: at a depth of one, a submodule
+        whose recorded commit is not a tip the remote advertises cannot be fetched
+        at all, which is the bargain shallow is.
+
+        A server that will not filter says so and hands over everything instead, so
+        asking costs a warning at worst.
+        '''
+        if self.policy.fetch_mode == FetchMode.SHALLOW:
+            return ['--depth=1']
+        if self.policy.fetch_mode == FetchMode.BLOBLESS:
+            return ['--filter=' + BLOBLESS_FILTER]
+        return []
+
+    def fetched(self, mode) -> Fetched:
+        '''What this fetch left behind, for the manifest to keep.'''
+        return Fetched(head=self.read_head(), mode=mode)
 
     def ensure_reference(self):
         '''
@@ -133,7 +173,118 @@ class GitFetcher(Fetcher):
         if not self.holds_reference(self.policy.reference):
             raise missing
 
+    # -- changing what a root already holds --------------------------------
+
+    def migrate(self, recorded) -> Fetched | None:
+        '''
+        A root fetched one way brought to another, in place where that costs less
+        than obtaining it again: git got upgraded and blobless became available, a
+        dependency was switched to shallow, a cache was asked to become portable.
+
+        None means it cannot be converted and has to be re-cloned, which is
+        always correct and never wrong, only slower.
+        '''
+        target = self.policy.fetch_mode
+        # A root cloned before golem recorded any of this still has to be
+        # recognisable, or upgrading would re-clone every cache there is.
+        current = recorded.mode or self.detected_mode()
+
+        if current != target:
+            # Truncating a history in place is not worth the subtlety, and shallow
+            # is asked for by someone who wants the cheap thing anyway.
+            if target == FetchMode.SHALLOW:
+                return None
+
+            print("Migrating {} from {} to {}".format(
+                self.path, current.value, target.value))
+
+            if current == FetchMode.SHALLOW:
+                # The history it never had. Everything else it holds stays.
+                self.run(['fetch', '--unshallow', 'origin'])
+
+            if target == FetchMode.BLOBLESS:
+                # Nothing to transfer: the objects are already here, and this only
+                # says that later fetches may leave file content behind.
+                self.run(['config', 'remote.origin.promisor', 'true'], quiet=True)
+                self.run(['config', 'remote.origin.partialclonefilter', BLOBLESS_FILTER],
+                         quiet=True)
+            else:
+                # Back to a self-contained root: drop the filter, then ask for
+                # everything it was allowed to leave out.
+                self.unset('remote.origin.partialclonefilter')
+                self.unset('remote.origin.promisor')
+                self.run(['fetch', '--refetch', 'origin'])
+
+        # A migration changes how much of a history a root holds, never which
+        # commit it is on. Said even when nothing was converted, so a root that
+        # recorded no mode stops being detected on every resolve.
+        return replace(recorded, mode=target)
+
+    def unset(self, key):
+        '''A configuration key removed if it is there. Absent is the same as gone.'''
+        helpers.call_git(['config', '--unset', key], cwd=self.path,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     # -- what the repository says about itself -----------------------------
+
+    def is_up_to_date(self) -> bool:
+        '''
+        Whether the whole refresh would leave the root exactly as it found it.
+
+        Only a resource that consults no remote can be known to be up to date;
+        anything else may have moved since it was last looked at.
+
+        `status --porcelain` answers for the submodules too: untracked content in
+        one, a modified file, a moved HEAD all show up as a change here.
+        '''
+        if self.policy.fetch_remote:
+            return False
+        if self.policy.reference and not self.is_at(self.policy.reference):
+            return False
+        return not self.is_dirty()
+
+    def is_at(self, reference) -> bool:
+        '''Whether HEAD is already the commit a reference names.'''
+        try:
+            landed, wanted = helpers.check_git_output(
+                ['rev-parse', 'HEAD', '{}^{{commit}}'.format(reference)],
+                cwd=self.path, stderr=subprocess.DEVNULL).split()
+        except Exception:
+            return False
+        return landed == wanted
+
+    def is_dirty(self) -> bool:
+        '''
+        Whether anything in the root differs from what its revision records.
+        Unreadable counts as dirty: what cannot be checked is not known to be
+        clean.
+        '''
+        try:
+            return bool(helpers.check_git_output(
+                ['status', '--porcelain'], cwd=self.path,
+                stderr=subprocess.DEVNULL).strip())
+        except Exception:
+            return True
+
+    def detected_mode(self) -> FetchMode:
+        '''
+        What a root looks like it was fetched as, for one whose manifest does not
+        say: a cache populated before golem knew about modes, or by a golem that
+        knows ones this one does not.
+        '''
+        if self.reads_true(['rev-parse', '--is-shallow-repository']):
+            return FetchMode.SHALLOW
+        if self.reads_true(['config', '--get', 'remote.origin.promisor']):
+            return FetchMode.BLOBLESS
+        return FetchMode.FULL
+
+    def reads_true(self, args) -> bool:
+        '''What git says, for the questions it answers with a word.'''
+        try:
+            return helpers.check_git_output(
+                args, cwd=self.path, stderr=subprocess.DEVNULL).strip() == 'true'
+        except Exception:
+            return False
 
     def has_submodules(self) -> bool:
         '''

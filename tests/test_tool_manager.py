@@ -287,10 +287,9 @@ def test_install_tool_fetches_through_the_shared_mechanism(monkeypatch, tmp_path
     # The tool clones through the same policy-driven sequence as every other kind,
     # landing on the resolved commit under the tag it asked for.
     assert git_calls == [
-        ['clone', '--', tool_registry.TOOLS['cppfront'].repository, '.'],
-        ['checkout', 'v0.8.1'],
+        ['clone', '--filter=blob:none', '--', tool_registry.TOOLS['cppfront'].repository, '.'],
         ['reset', '--hard', 'deadbeef'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
     assert (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
             / cache_configuration.SOURCE_DIRNAME).is_dir()
@@ -328,7 +327,7 @@ def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp
         ['reset', '--hard', 'deadbeef'],
         ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
         ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
     assert os.path.isfile(os.path.join(root, 'bin', 'cppfront'))
     # And the root stops claiming the version it used to hold.

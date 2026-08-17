@@ -23,6 +23,7 @@ import os
 
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import fetcher
+from golemcpp.golem import network
 from golemcpp.golem.fetch_policy import FetchPolicy
 
 
@@ -78,13 +79,29 @@ class ResourceManager:
         '''Where a resource keeps its fetched content under its root.'''
         return cache_configuration.source_path(root)
 
-    @classmethod
-    def policy_for(cls, item):
+    @property
+    def fetch_mode(self):
+        '''
+        How much of a source to obtain. Configured once for every kind: each has
+        to be refreshable in place, and some follow a branch, so none of them is
+        in a position to want something different.
+        '''
+        return self.cache_manager.cache_configuration.fetch_mode
+
+    @property
+    def fetch_jobs(self):
+        '''How many submodules to obtain at once, configured for every kind.'''
+        return self.cache_manager.cache_configuration.fetch_jobs
+
+    def policy_for(self, item):
         '''
         How to fetch this item. Tracks a branch on the remote, which is what a
         resource that is not pinned to a commit wants.
         '''
-        return FetchPolicy(reference='origin/' + cls.source_for(item).reference)
+        return FetchPolicy(
+            fetch_mode=self.fetch_mode,
+            fetch_jobs=self.fetch_jobs,
+            reference='origin/' + self.source_for(item).reference)
 
     @staticmethod
     def pre_install(item):
@@ -118,6 +135,18 @@ class ResourceManager:
         '''
         return os.path.isdir(cached_resource.source_path)
 
+    @staticmethod
+    def may_migrate(cached_resource) -> bool:
+        '''
+        Whether this is a moment to change what a root holds.
+
+        Converting one may have to reach a remote, so it belongs to resolve, the
+        command allowed to; and it writes, so a read-only location keeps whatever
+        it was given. Everywhere else a root is used in the shape it is in, and
+        changes shape the next time it is resolved.
+        '''
+        return network.is_allowed() and not cached_resource.is_read_only
+
     def install(self, item, refresh=True, cached_resource=None):
         '''
         Installs the item in cache and returns the cached resource associated.
@@ -127,7 +156,12 @@ class ResourceManager:
 
         Existing install: refreshed in place, keeping the cache root.
 
-        An installed resource is handed back untouched without `refresh`.
+        An installed resource is handed back untouched without `refresh`, as long
+        as it already is in the fetch mode asked for.
+        
+        If the asked fetch mode and the detected one are different, the resource
+        is migrated. This can involve obtaining it again, whether or not anything
+        only wanted it refreshed.
 
         Installing into a read-only cache location is refused. Nothing is written
         there, whether the resource has to be populated or refreshed.
@@ -138,6 +172,13 @@ class ResourceManager:
             cached_resource = self.resolve_cached_resource(item)
 
         installed = self.is_installed(cached_resource)
+
+        if installed and self.may_migrate(cached_resource) \
+                and not self.migrate(cached_resource, item):
+            # What the root holds is not what is asked for any more, and cannot be
+            # turned into it. Obtaining it again always can.
+            installed = False
+
         if installed and not refresh:
             return cached_resource
 
@@ -196,6 +237,31 @@ class ResourceManager:
         business.
         '''
         return fetcher.fetcher_for(path, self.source_for(item), self.policy_for(item))
+
+    def migrate(self, cached_resource, item) -> bool:
+        '''
+        Whether the root can keep being used, given what the manifest says it was
+        fetched as and what is asked for now. What it then holds is written back,
+        so a conversion is done once rather than on every resolve.
+
+        A conversion that fails leaves a root nobody has read yet, so the answer
+        is simply no and the caller obtains it again.
+        '''
+        recorded = self.cache_manager.read_manifest_fetched(cached_resource)
+        try:
+            fetched = self.fetcher_for(
+                self.source_path(cached_resource.path), item).migrate(recorded)
+        except RuntimeError as error:
+            print("Cannot migrate {}, fetching it again: {}".format(
+                cached_resource.path, error))
+            return False
+
+        if fetched is None:
+            return False
+
+        if fetched != recorded:
+            self.cache_manager.write_manifest(cached_resource, fetched=fetched)
+        return True
 
     def populate(self, path, item):
         '''Materialize a source freshly into `path`, writing no manifest.'''

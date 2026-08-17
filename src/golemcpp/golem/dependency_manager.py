@@ -1,5 +1,6 @@
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.resource import Resource
+from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resource_manifest import ResourceKind
@@ -18,12 +19,16 @@ class DependencyManager(ResourceManager):
     def source_for(dep):
         return dep.to_source()
 
-    @classmethod
-    def policy_for(cls, dep):
+    def policy_for(self, dep):
         # Pinned to a resolved commit, so there is nothing to fetch on a refresh
         # and the reset lands on the hash rather than on a moving branch.
+        #
+        # A dependency is the one resource that departs from the configured mode:
+        # `shallow` is asked for in a golemfile, for a repository too heavy to
+        # clone whole, and pays for it by having no history to describe from.
         return FetchPolicy(
-            shallow=dep.shallow,
+            fetch_mode=FetchMode.SHALLOW if dep.shallow else self.fetch_mode,
+            fetch_jobs=self.fetch_jobs,
             checkout=dep.resolved_version,
             reference=dep.resolved_hash,
             fetch_remote=False)

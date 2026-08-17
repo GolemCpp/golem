@@ -9,6 +9,8 @@ from golemcpp.golem.dependency_manager import DependencyManager, get_dependency_
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
+from golemcpp.golem.fetch_policy import FetchMode
+from conftest import default_setting
 from conftest import make_cache_configuration
 from conftest import stub_git_probes
 
@@ -124,25 +126,28 @@ def test_the_source_tree_sits_under_the_resource_root():
         '/cache/json@x', cache_configuration.SOURCE_DIRNAME)
 
 
-def test_the_policy_pins_to_the_resolved_commit():
+def test_the_policy_pins_to_the_resolved_commit(tmp_path):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
     dep.resolved_version = 'v3.12.0'
     dep.resolved_hash = 'cafebabecafebabe'
 
-    policy = DependencyManager.policy_for(dep)
+    policy = make_manager(tmp_path).policy_for(dep)
 
     assert policy.checkout == 'v3.12.0'
     assert policy.reference == 'cafebabecafebabe'
     # Pinned to a commit, so a refresh has nothing to fetch.
     assert policy.fetch_remote is False
-    assert policy.shallow is False
+    # Nothing of its own to say about how much to fetch.
+    assert policy.fetch_mode == default_setting('GOLEM_GIT_FETCH_MODE')
 
 
-def test_the_policy_carries_the_shallow_request():
+def test_the_policy_carries_the_shallow_request(tmp_path):
+    # The one resource that departs from the configured mode, because a golemfile
+    # said so about a repository too heavy to clone whole.
     dep = Dependency(repository='https://example.com/json.git', shallow=True)
     dep.resolved_hash = 'cafebabe'
 
-    assert DependencyManager.policy_for(dep).shallow is True
+    assert make_manager(tmp_path).policy_for(dep).fetch_mode == FetchMode.SHALLOW
 
 
 def test_locating_a_dependency_resolves_its_version(monkeypatch):
@@ -167,7 +172,7 @@ def test_a_refresh_keeps_what_was_built_from_the_dependency(tmp_path):
     assert os.path.isdir(os.path.join(root, 'include'))
 
 
-def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch, tmp_path):
+def test_a_dependency_produces_the_expected_clone_sequence(tmp_path, monkeypatch):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
     dep.resolved_version = 'v3.12.0'
     dep.resolved_hash = 'cafebabecafebabe'
@@ -176,16 +181,14 @@ def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch, tmp_path
         helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
     stub_git_probes(monkeypatch)
 
-    # populate() creates the root it is given, so it has to be one the test owns.
-    source_root = str(tmp_path / 'json' / 'source')
-
-    DependencyManager(cache_manager=None).fetcher_for(source_root, dep).populate()
+    # A root under the temporary tree: the clone creates the directory it works
+    # in, and a hard-coded one would be a real directory outside the run.
+    make_manager(tmp_path).fetcher_for(str(tmp_path / 'json' / 'source'), dep).populate()
 
     assert calls == [
-        ['clone', '--', 'https://example.com/json.git', '.'],
-        ['checkout', 'v3.12.0'],
+        ['clone', '--filter=blob:none', '--', 'https://example.com/json.git', '.'],
         ['reset', '--hard', 'cafebabecafebabe'],
-        ['submodule', 'update', '--init', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
 
 

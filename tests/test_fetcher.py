@@ -2,6 +2,7 @@ import pytest
 
 from golemcpp.golem.directory_fetcher import DirectoryFetcher
 from golemcpp.golem.fetch_policy import FetchPolicy
+from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.fetcher import Fetcher
 from golemcpp.golem.fetcher import fetcher_for
 from golemcpp.golem.git_fetcher import GitFetcher
@@ -43,6 +44,14 @@ def test_a_way_of_obtaining_a_source_has_to_say_how():
         fetcher.populate()
     with pytest.raises(NotImplementedError):
         fetcher.refresh()
+
+
+def test_a_source_obtained_one_single_way_is_never_holding_the_wrong_one():
+    # Nothing to convert, so the root keeps saying exactly what it said.
+    fetcher = Fetcher('/cache/r', Source.for_repository('https://host/r.git'), FetchPolicy())
+    recorded = Fetched(head='c0mmit')
+
+    assert fetcher.migrate(recorded) == recorded
 
 
 # -- the local source is checked before anything touches it -----------------
