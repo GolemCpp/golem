@@ -3,6 +3,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.template import Template
 import json
 
@@ -115,8 +116,9 @@ class TargetConfigurationFile(object):
 
         conf_file = TargetConfigurationFile.unserialize_from_json(json_content)
 
+        manager = get_dependency_manager(context.cache_configuration)
         for dependency in conf_file.dependencies:
-            dependency.update_cached_resource(context.cache_configuration)
+            manager.update_cached_resource(dependency)
 
         conf_file.configuration.artifacts_dev = context.translate_cache_dir_paths(
             conf_file.configuration.artifacts_dev)

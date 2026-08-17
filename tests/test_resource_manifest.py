@@ -70,7 +70,7 @@ def test_touch_last_used_updates_timestamp(tmp_path):
     manifest_before.last_used_at = '2000-01-01T00:00:00+00:00'
     manifest_before.write_to_root(str(root))
 
-    resource_manifest.touch_last_used(str(root))
+    resource_manifest.ResourceManifest.touch(str(root))
 
     manifest_after = resource_manifest.ResourceManifest.read_from_root(str(root))
     assert manifest_after.last_used_at > '2000-01-01T00:00:00+00:00'
@@ -78,7 +78,7 @@ def test_touch_last_used_updates_timestamp(tmp_path):
 
 def test_touch_last_used_no_manifest_is_noop(tmp_path):
     # Should not raise when there is no manifest.
-    resource_manifest.touch_last_used(str(tmp_path))
+    resource_manifest.ResourceManifest.touch(str(tmp_path))
     assert not (tmp_path / resource_manifest.MANIFEST_FILENAME).exists()
 
 

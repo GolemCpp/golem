@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from golemcpp.golem import cppfront_tool
 
 
@@ -21,34 +23,41 @@ def test_find_cppfront_cache_uses_cache_directory(tmp_path):
     assert found.resource_root == str(cache_directory / cppfront_tool.CPPFRONT_NAME)
 
 
-def test_install_cppfront_writes_into_install_root(monkeypatch, tmp_path):
-    cache_directory = tmp_path / 'tools-cache'
-    install_root = cache_directory / (cppfront_tool.CPPFRONT_NAME + '.tmp')
-    install_root.mkdir(parents=True)
+def test_build_cppfront_builds_from_the_fetched_source(monkeypatch, tmp_path):
+    resource_root = tmp_path / 'tools-cache' / cppfront_tool.CPPFRONT_NAME
+    source_dir = resource_root / 'source'
+    build_dir = source_dir / 'build-golem-cppfront'
+    (source_dir / 'include').mkdir(parents=True)
+    commands = []
 
-    def fake_run_git(params, cwd, **kwargs):
-        if params[0] == 'clone':
-            repository_dir = install_root / 'source'
-            (repository_dir / 'include').mkdir(parents=True)
-            return
-        if params[0] == 'checkout':
-            return
-        raise AssertionError('Unexpected git command: {}'.format(params))
+    def fake_run_task(command, cwd=None, **kwargs):
+        commands.append((command[2], cwd))
+        # Stand in for the build: Golem drops the executable in the build dir.
+        built = build_dir / 'bin' / cppfront_tool.get_cppfront_binary_name()
+        os.makedirs(built.parent, exist_ok=True)
+        built.write_text('', encoding='utf-8')
 
-    def fake_build_cppfront_executable(source_dir, executable_path):
-        os.makedirs(os.path.dirname(executable_path), exist_ok=True)
-        with open(executable_path, 'w', encoding='utf-8') as fileout:
-            fileout.write('')
-        return ['c++']
+    def refuse_git(params, cwd=None, **kwargs):
+        raise AssertionError('the source is fetched by the resource manager: {}'.format(params))
 
-    monkeypatch.setattr(cppfront_tool.helpers, 'run_git', fake_run_git)
-    monkeypatch.setattr(cppfront_tool, 'build_cppfront_executable', fake_build_cppfront_executable)
+    monkeypatch.setattr(cppfront_tool.helpers, 'run_git', refuse_git)
+    monkeypatch.setattr(cppfront_tool.helpers, 'run_task', fake_run_task)
 
-    result = cppfront_tool.install_cppfront(
-        version='v0.8.1',
-        install_root=str(install_root),
-    )
+    assert cppfront_tool.build_cppfront(resource_root=str(resource_root)) is None
 
-    assert result is None
-    assert (install_root / 'source').is_dir()
-    assert (install_root / 'bin' / cppfront_tool.get_cppfront_binary_name()).is_file()
+    # Golem builds cppfront like any other project, from the golemfile written
+    # into the fetched source.
+    assert commands == [('configure', str(source_dir)), ('build', str(source_dir))]
+    assert (source_dir / 'golemfile.py').is_file()
+    # And the result is copied where the tool is looked up.
+    assert (resource_root / 'bin' / cppfront_tool.get_cppfront_binary_name()).is_file()
+
+
+def test_build_cppfront_reports_a_build_that_produced_nothing(monkeypatch, tmp_path):
+    resource_root = tmp_path / 'tools-cache' / cppfront_tool.CPPFRONT_NAME
+    (resource_root / 'source').mkdir(parents=True)
+
+    monkeypatch.setattr(cppfront_tool.helpers, 'run_task', lambda *a, **k: None)
+
+    with pytest.raises(RuntimeError, match='executable was not found'):
+        cppfront_tool.build_cppfront(resource_root=str(resource_root))

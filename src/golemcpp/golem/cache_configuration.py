@@ -1,3 +1,5 @@
+import os
+
 from golemcpp.golem import helpers
 
 
@@ -19,6 +21,15 @@ RESOURCE_SUBDIRS = (
 # Subdirectory inside a cached resource root that holds the fetched source content
 # (a git clone or a copied directory).
 SOURCE_DIRNAME = 'source'
+
+
+def source_path(root):
+    '''
+    Where a resource keeps its fetched content under its root. Never the root
+    itself: that is the resource, and it also holds the manifest naming it and
+    whatever gets built from the source.
+    '''
+    return os.path.join(root, SOURCE_DIRNAME)
 
 # Every setting describing the cache. A dependency sub-build inherits all of
 # them, so it reaches the same caches with the same layout as its parent.

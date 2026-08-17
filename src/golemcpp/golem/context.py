@@ -23,13 +23,13 @@ from golemcpp.golem.module import Module
 from golemcpp.golem.cache_configuration import get_cache_configuration
 from golemcpp.golem import cache_configuration
 from golemcpp.golem.configuration import Configuration
-from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.tool_manager import get_tool_manager
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.overlay_manager import get_overlay_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem import overrides
+from golemcpp.golem import resource_manager
 from golemcpp.golem import helpers
 from golemcpp.golem import settings
 from golemcpp.golem.project import Project
@@ -259,45 +259,14 @@ class Context:
     def get_project_dir(self):
         return self.context.options.project_dir
 
-    def get_overrides_configuration(self):
-        return self.get_settings().get('GOLEM_OVERRIDES_CONFIGURATION')
-
-    def make_overrides_configuration(self):
-        return self.make_local_path_absolute(
-            path=self.get_overrides_configuration())
-
-    def get_overlay_locations(self):
-        return self.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
-
-    def load_overlay_overrides(self):
-        '''
-        The overrides every configured overlay contributes, one list per overlay,
-        in the order the overlays are configured.
-        '''
-        contributions = []
-        for source in self.get_overlay_locations():
-            overlay_path = self.install_overlay(source)
-            overrides_path = os.path.join(overlay_path, overrides.OVERRIDES_FILENAME)
-            if os.path.exists(overrides_path):
-                contributions.append(
-                    overrides.read_overrides(overrides_path, self.get_project_dir()))
-
-        return contributions
-
     def load_overrides_configuration(self):
         if not self.resolved_overrides:
-            # An explicit configuration file names the overrides directly and
-            # stands in for the whole overlay stack.
-            overrides_configuration = self.make_overrides_configuration()
-            if not overrides_configuration:
-                contributions = self.load_overlay_overrides()
-                if contributions:
-                    overrides_configuration = overrides.write_overrides(
-                        overrides.merge_overrides(contributions),
-                        self.make_build_path(overrides.OVERRIDES_FILENAME))
-
-            if overrides_configuration:
-                self.resolved_overrides = overrides_configuration
+            # An explicit configuration file names the overrides outright and
+            # stands in for the whole overlay stack. The setting is declared a
+            # path, so it already arrives absolute.
+            self.resolved_overrides = \
+                self.get_settings().get('GOLEM_OVERRIDES_CONFIGURATION') or \
+                self.load_overlay_overrides()
 
         if not self.resolved_overrides or not os.path.exists(
                 self.resolved_overrides):
@@ -305,16 +274,21 @@ class Context:
 
         return overrides.read_overrides(self.resolved_overrides, self.get_project_dir())
 
+    def load_overlay_overrides(self):
+        '''The overrides the configured overlays contribute, installed then read.'''
+        manager = get_overlay_manager(self.cache_configuration)
+        overlays = [
+            manager.get_overlay(source) for source in self.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
+        ]
+        cached_overlays = manager.make_available_all(overlays, fetch=self.deps_resolve)
+
+        return manager.load_overrides(
+            cached_overlays,
+            project_dir=self.get_project_dir(),
+            merged_path=self.make_build_path(overrides.OVERRIDES_FILENAME))
+
     def get_only_update_dependencies_regex(self):
         return self.context.options.only_update_dependencies_regex
-
-    def make_local_path_absolute(self, path):
-        abolute_path = path
-        if not abolute_path:
-            return ''
-        if not os.path.isabs(abolute_path):
-            abolute_path = os.path.join(self.get_project_dir(), abolute_path)
-        return abolute_path
 
     def make_project_path(self, path):
         return os.path.join(self.get_project_dir(), str(Path(path)))
@@ -1290,8 +1264,9 @@ class Context:
         if self.context.options.force_version:
             self.version.force_version(self.context.options.force_version)
 
+        manager = get_dependency_manager(self.cache_configuration)
         for dependency in self.project.deps:
-            dependency.update_cached_resource(self.cache_configuration)
+            manager.update_cached_resource(dependency)
 
     def dep_system(self, context, libs):
         context.env['LIB'] += libs
@@ -1339,10 +1314,11 @@ class Context:
 
     def get_dep_cached_resource(self, dep):
         '''
-        Where the dependency lives in the caches. The dependency resolves it once
-        and holds on to it, so every path below is derived from the same resolution.
+        Where the dependency lives in the caches. It is resolved once and kept on
+        the dependency, so every path below is derived from the same resolution.
         '''
-        return dep.get_cached_resource(self.cache_configuration)
+        return get_dependency_manager(
+            self.cache_configuration).get_cached_resource(dep)
 
     def get_dep_location(self, dep):
         return self.get_dep_cached_resource(dep).path
@@ -1567,103 +1543,6 @@ class Context:
                         Artifact(abspath, relpath, path_build))
         return artifacts_list
 
-    def copy_non_git_repo(self, repository, local_path, repo_path):
-        if os.path.isdir(repo_path):
-            shutil.rmtree(repo_path)
-        shutil.copytree(
-            local_path,
-            repo_path,
-            dirs_exist_ok=True,
-            symlinks=True)
-        with open(os.path.join(repo_path, '.golem-origin'), 'w') as f:
-            f.write(repository)
-
-    def clean_repo(self, dep, repo_path):
-        if dep.is_non_git_directory():
-            local_path = Source.parse_local_directory_path(dep.directory)
-            self.copy_non_git_repo(dep.directory, local_path, repo_path)
-            return
-
-        helpers.run_git(['clean', '-ffxd'],
-                         cwd=repo_path,
-                         stdout=subprocess.DEVNULL)
-        helpers.run_git([
-            'submodule', 'foreach', '--recursive', 'git', 'clean',
-            '-ffxd'
-        ],
-                         cwd=repo_path,
-                         stdout=subprocess.DEVNULL)
-        helpers.run_git(['reset', '--hard'],
-                         cwd=repo_path,
-                         stdout=subprocess.DEVNULL)
-        helpers.run_git([
-            'submodule', 'foreach', '--recursive', 'git', 'reset',
-            '--hard'
-        ],
-                         cwd=repo_path,
-                         stdout=subprocess.DEVNULL)
-        helpers.run_git(
-            ['submodule', 'update', '--init', '--recursive'],
-            cwd=repo_path,
-            stdout=subprocess.DEVNULL)
-
-    def clone_repo(self, dep, repo_path):
-        dep.resolve()
-        # NOTE: Can't use ['--depth', '1'] by default because of git describe --tags required for golem repos
-
-        os.makedirs(repo_path)
-
-        if dep.is_non_git_directory():
-            local_path = Source.parse_local_directory_path(dep.directory)
-            print("Copying directory {} into {}".format(dep.directory, repo_path))
-            self.copy_non_git_repo(dep.directory, local_path, repo_path)
-            return
-
-        print("Cloning repository {} into {}".format(dep.repository,
-                                                     repo_path))
-
-        if dep.shallow:
-            helpers.run_git(['init'], cwd=repo_path)
-            helpers.run_git(
-                ['remote', 'add', 'origin', dep.repository],
-                cwd=repo_path)
-            helpers.run_git(
-                ['fetch', '--depth=1', 'origin', dep.resolved_hash],
-                cwd=repo_path)
-            helpers.run_git(['reset', '--hard', 'FETCH_HEAD'],
-                             cwd=repo_path)
-        else:
-            helpers.run_git(['clone', '--', dep.repository, '.'],
-                             cwd=repo_path)
-            helpers.run_git(['checkout', dep.resolved_version],
-                             cwd=repo_path)
-            helpers.run_git(['reset', '--hard', dep.resolved_hash],
-                             cwd=repo_path)
-
-        helpers.run_git([
-            'submodule', 'update', '--init', '--recursive', '--depth=1'
-        ],
-                         cwd=repo_path)
-
-    def make_repo_ready(self, dep, should_clean=False):
-        cached_dep = self.get_dep_cached_resource(dep)
-        repo_path = os.path.join(cached_dep.path, cache_configuration.SOURCE_DIRNAME)
-
-        if os.path.exists(repo_path):
-            if should_clean:
-                self.clean_repo(dep, repo_path)
-            resource_manifest.touch_last_used(cached_dep.path)
-        else:
-            # Clone the source atomically through the dependency manager: it stages
-            # the whole resource root (with the clone under source/) and its manifest
-            # in a sibling .tmp dir, then swaps it into place in one step.
-            get_dependency_manager(self.cache_configuration).staged_install(
-                cached_dep,
-                lambda staging_root: self.clone_repo(
-                    dep, os.path.join(staging_root, cache_configuration.SOURCE_DIRNAME)))
-
-        return repo_path
-
     def run_dep_command(self, dep, command):
 
         should_clean_repo = False
@@ -1676,8 +1555,17 @@ class Context:
             Logs.info("Running {} on {} ({})...".format(
                 command, dep.name, dep.version))
 
+        manager = get_dependency_manager(self.cache_configuration)
+        cached_dep = manager.get_cached_resource(dep)
+        # The command builds into the dependency's cache root, which a read-only
+        # location does not allow -- refuse before running anything.
+        if cached_dep.is_read_only:
+            raise RuntimeError(
+                "Cannot run {} on {} from the read-only cache location {}".format(
+                    command, dep.name, cached_dep.cache_root))
+
         dep_path = self.get_dep_location(dep)
-        repo_path = self.make_repo_ready(dep, should_clean=should_clean_repo)
+        repo_path = manager.install(dep, refresh=should_clean_repo).source_path
         build_path = self.get_dep_build_location(dep)
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file()
@@ -4178,83 +4066,17 @@ class Context:
             command += ["--sign", "", "--storepass", "", "--keypass", ""]
         helpers.run_task(command, cwd=self.get_output_path())
 
-    def clone_repository(self, path, source):
-        '''Materialize a repository source freshly into `path`: git-clone (and reset
-        to the requested ref) a git source, or copy a local directory source. Used
-        as the populate step of a staged install, so it never writes a manifest.'''
-        local_path = source.get_local_path()
-        if local_path is not None:
-            if not os.path.exists(local_path):
-                raise RuntimeError(
-                    "Can't find local source directory: {}".format(local_path))
-            if not os.path.isdir(local_path):
-                raise RuntimeError(
-                    "Local source path is not a directory: {}".format(local_path))
-
-        if source.type == SOURCE_TYPE_DIRECTORY:
-            print("Copying directory {} into {}".format(source.location, path))
-            self.copy_non_git_repo(source.location, local_path, path)
-            return
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-        helpers.run_git(['clone', '--', source.location, '.'], cwd=path)
-        helpers.run_git(['reset', '--hard', 'origin/' + source.reference],
-                         cwd=path)
-
-    def update_repository_source(self, path, source):
-        '''Refresh an already-cached repository in place (no re-clone), preserving
-        its cache root: recopy a directory source, or fetch + reset a git source.'''
-        if source.type == SOURCE_TYPE_DIRECTORY:
-            local_path = source.get_local_path()
-            self.copy_non_git_repo(source.location, local_path, path)
-        else:
-            helpers.run_git(['fetch', 'origin'], cwd=path)
-            helpers.run_git(['reset', '--hard', 'origin/' + source.reference],
-                            cwd=path)
-        resource_manifest.touch_last_used(path)
-
-    def install_repository(self, manager, source, cached_repository):
-        # Fresh: clone the source atomically through the repository manager (staging
-        # + manifest + swap). Existing: update in place, keeping the cache root.
-        if cached_repository.exists():
-            self.update_repository_source(cached_repository.path, source)
-        else:
-            manager.staged_install(
-                cached_repository,
-                lambda staging_root: self.clone_repository(staging_root, source))
-
-    def install_overlay(self, source):
-        manager = get_overlay_manager(self.cache_configuration)
-        cached_overlay = manager.resolve_cached_resource(source)
-
-        if not self.deps_resolve:
-            return cached_overlay.path
-
-        self.install_repository(manager, source, cached_overlay)
-
-        return cached_overlay.path
-
-    def install_cookbook(self, source):
-        manager = get_cookbook_manager(self.cache_configuration)
-        cached_cookbook = manager.resolve_cached_resource(source)
-
-        if self.context.options.no_cookbooks_fetch or not self.deps_resolve:
-            return cached_cookbook.path
-
-        self.install_repository(manager, source, cached_cookbook)
-
-        return cached_cookbook.path
-
     def load_recipe(self):
         recipe_id = self.context.options.recipe
 
         # The built-in default (the GolemCpp cookbook) is part of the setting
         # definition, so an unset setting still yields a cookbook to search.
-        cookbook_paths = [
-            self.install_cookbook(source=source)
-            for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
+        manager = get_cookbook_manager(self.cache_configuration)
+        fetch = self.deps_resolve and not self.context.options.no_cookbooks_fetch
+        cookbooks = [
+            manager.get_cookbook(source) for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
         ]
+        cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
 
         if not recipe_id and self.project is None:
             recipe_url = self.load_git_remote_origin_url()
@@ -4266,11 +4088,11 @@ class Context:
             return
 
         found_recipe_dir = None
-        for cookbook_path in cookbook_paths:
-            directory = os.path.join(cookbook_path, recipe_id)
+        for cached_cookbook in cached_cookbooks:
+            # Recipes sit in the cookbook's content, never at the resource root.
+            directory = os.path.join(cached_cookbook.source_path, recipe_id)
             if os.path.exists(directory):
                 found_recipe_dir = directory
-                resource_manifest.touch_last_used(cookbook_path)
 
         if not found_recipe_dir:
             raise RuntimeError(
@@ -4296,7 +4118,7 @@ class Context:
         except Exception:
             pass
         if self.repository == '':
-            repository_origin = os.path.join(self.get_project_dir(), '.golem-origin')
+            repository_origin = os.path.join(self.get_project_dir(), resource_manager.ORIGIN_FILENAME)
             if os.path.exists(repository_origin):
                 with open(repository_origin, 'r', encoding='utf-8') as f:
                     for line in f.readlines():
@@ -4380,7 +4202,9 @@ class Context:
     def autodiscover_cppfront(self):
         # Resolve the tool root exactly like it was installed (classic tools/
         # subdir or a minimized flat path) so the build finds it either way.
-        cached_tool = get_tool_manager(self.cache_configuration).resolve_cached_tool(cppfront_tool.CPPFRONT_NAME)
+        manager = get_tool_manager(self.cache_configuration)
+        tool = manager.get_tool(cppfront_tool.CPPFRONT_NAME)
+        cached_tool = manager.resolve_cached_resource(tool, with_version_resolution=False)
 
         cppfront_cache_info = cppfront_tool.find_cppfront_cache_root(cached_tool.path)
 

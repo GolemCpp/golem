@@ -3,7 +3,6 @@ import pickle
 from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
-from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.helpers import *
 from golemcpp.golem.source import Source
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
@@ -42,6 +41,9 @@ class Dependency(Configuration):
         self.resolved_version = ''
         self.resolved_hash = ''
         self.shallow = shallow
+        # Where this dependency lives in the caches, once a DependencyManager has
+        # worked it out. Not part of serialized_members, so a dependency restored
+        # from a dependencies.json comes back without one.
         self.cached_resource = None
         self.dynamically_added = False
 
@@ -75,22 +77,6 @@ class Dependency(Configuration):
         return Source.for_repository(
             self.repository,
             helpers.resolved_reference(self.resolved_version, self.resolved_hash))
-
-    def update_cached_resource(self, cache_configuration):
-        '''(Re)resolve where this dependency lives in the caches.'''
-        self.cached_resource = get_dependency_manager(
-            cache_configuration).resolve_cached_resource(self)
-        return self.cached_resource
-
-    def get_cached_resource(self, cache_configuration):
-        '''
-        Where this dependency lives in the caches, resolved on first use: a
-        dependency restored from a dependencies.json comes back without one (it is
-        not part of serialized_members).
-        '''
-        if self.cached_resource is None:
-            return self.update_cached_resource(cache_configuration)
-        return self.cached_resource
 
     def update_source(self, project_dir):
         # Also the gate on a dependency read from a configuration: read_json

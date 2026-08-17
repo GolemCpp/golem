@@ -1,7 +1,7 @@
 import hashlib
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem import cache_configuration
@@ -31,8 +31,21 @@ class CachedResource:
     resource: object = None  # resource.Resource | None
 
     def exists(self) -> bool:
-        '''Whether the resource root is present on disk.'''
+        '''
+        Whether the resource root is present on disk. This is about the location
+        in cache, not its content. See ResourceManager.is_installed.
+        '''
         return os.path.isdir(self.path)
+
+    @property
+    def source_path(self) -> str:
+        '''The fetched content under the root, which is what a consumer reads.'''
+        return cache_configuration.source_path(self.path)
+
+    @property
+    def staging_path(self) -> str:
+        '''Where a fresh resource is built before being swapped into place.'''
+        return self.path + '.tmp'
 
     @property
     def is_identified(self) -> bool:
@@ -101,7 +114,7 @@ class CacheManager:
         Resolves the CacheDirectory corresponding to the resource and all the cache settings.
         '''
         identifier = resource.location
-        exists_in_cache = lambda cache_directory: self._make_cached_resource(cache_directory, resource).exists()
+        exists_in_cache = lambda cache_directory: self.make_cached_resource(cache_directory, resource).exists()
 
         read_only_caches_with_regex = self._find_matching_caches(
             identifier,
@@ -142,7 +155,7 @@ class CacheManager:
 
         raise RuntimeError("Can't find any writable cache location")
 
-    def get_resource_location(self, cache_directory, resource) -> str:
+    def _get_resource_location(self, cache_directory, resource) -> str:
         '''
         When minimization is disabled the classic "<cache_root>/<subdir>/<cache_key>" 
         layout is used.
@@ -165,17 +178,24 @@ class CacheManager:
         The cached form of a resource, in whichever cache directory the
         resolution settles on.
         '''
-        return self._make_cached_resource(
+        cached_resource = self.make_cached_resource(
             self.resolve_cache_directory(resource), resource,
             compute_size=compute_size, read_manifest=read_manifest)
+        self.mark_used(cached_resource)
+        return cached_resource
 
-    def _make_cached_resource(self, cache_directory, resource,
-                              compute_size=False, read_manifest=False):
-        # The resource is what names its cached form here, where a scanned entry
-        # names itself (see _make_scanned_resource). resolve_cache_directory
-        # probes candidate directories through this one, so it cannot go through
-        # the resolving entry point above.
-        path = self.get_resource_location(cache_directory, resource)
+    def mark_used(self, cached_resource) -> None:
+        '''
+        Resolving a resource is an attempt to use it, which is what keeps it from
+        being pruned. A read-only location has no timestamp to record.
+        '''
+        if not cached_resource.is_read_only:
+            ResourceManifest.touch(cached_resource.path)
+
+    def make_cached_resource(self, cache_directory, resource,
+                             compute_size=False, read_manifest=False):
+        # Makes a cached resource from a Resource
+        path = self._get_resource_location(cache_directory, resource)
 
         return CachedResource(
             path=path,
@@ -232,58 +252,84 @@ class CacheManager:
     # -- per-resource manifests -------------------------------------------
 
     @staticmethod
-    def read_manifest(resource_root: str):
-        return ResourceManifest.read_from_root(resource_root)
-
-    @staticmethod
-    def read_manifest_source(resource_root: str):
+    def read_manifest_source(cached_resource):
         '''The Source recorded in a resource's manifest, or None if unidentified.'''
-        manifest = ResourceManifest.read_from_root(resource_root)
+        manifest = ResourceManifest.read_from_root(cached_resource.path)
         if manifest is None:
             return None
         return Source.from_manifest(manifest)
 
     @staticmethod
-    def write_manifest(resource_root: str, resource) -> None:
+    def write_manifest(cached_resource) -> None:
+        resource = cached_resource.resource
         resource_manifest.write_manifest(
-            resource_root=resource_root,
+            resource_root=cached_resource.path,
             kind=resource.kind,
             cache_key=resource.cache_key,
             source=resource.source.to_dict())
 
-    @staticmethod
-    def touch_last_used(resource_root: str) -> None:
-        resource_manifest.touch_last_used(resource_root)
+    def record_manifest(self, cached_resource) -> None:
+        '''
+        Keep the manifest telling the truth about what the root holds. A kind
+        whose cache key does not carry its reference, a tool is keyed by its
+        name, can be refreshed onto another version, and the root would then
+        claim the one it used to hold.
+        '''
+        if self.read_manifest_source(cached_resource) != cached_resource.resource.source:
+            self.write_manifest(cached_resource)
 
     # -- per-resource mutations -------------------------------------------
 
-    def staged_install(self, cached_resource, populate) -> str:
+    def guard_install(self, cached_resource, populate) -> str:
         '''
         Build a resource into a sibling `.tmp` staging directory, drop its
         manifest, then atomically swap it into place. `populate(staging_root)`
         fills the staging directory with the resource's contents.
         '''
+        self.check_identity(cached_resource)
+
+        resource_root = cached_resource.path
+        # The same resource, seen where it is being built rather than where it
+        # will live, so its manifest is staged and swapped along with the rest.
+        staging = replace(cached_resource, path=cached_resource.staging_path)
+
+        helpers.remove_tree(staging.path)
+        os.makedirs(staging.path, exist_ok=True)
+        try:
+            populate(staging.path)
+            self.write_manifest(staging)
+            helpers.remove_tree(resource_root)
+            os.makedirs(os.path.dirname(resource_root), exist_ok=True)
+            os.replace(staging.path, resource_root)
+        finally:
+            helpers.remove_tree(staging.path)
+
+        return resource_root
+
+    def guard_refresh(self, cached_resource, refresh) -> str:
+        '''
+        A refresh cannot be staged: the resource is its own working copy. The
+        manifest is recorded here instead, so what the root claims never outlives
+        the source it was refreshed onto.
+        '''
+        self.check_identity(cached_resource)
+
+        refresh(cached_resource.path)
+        self.record_manifest(cached_resource)
+
+        # TODO: Add a try catch like guard_install to recover or trigger a fallback mechanism when it 
+        # fails. Ideas are: removing the source, or running a hook function to let the derived manager
+        # define how to recover.
+
+        return cached_resource.path
+
+    @staticmethod
+    def check_identity(cached_resource) -> None:
         if cached_resource.resource is None:
             raise ValueError(
                 'cannot install {}: this cached resource was not made from a '
                 'resource, so it has no identity to write a manifest from'.format(
                     cached_resource.path))
-
-        resource_root = cached_resource.path
-        staging_root = resource_root + '.tmp'
-
-        helpers.remove_tree(staging_root)
-        os.makedirs(staging_root, exist_ok=True)
-        try:
-            populate(staging_root)
-            self.write_manifest(staging_root, cached_resource.resource)
-            helpers.remove_tree(resource_root)
-            os.makedirs(os.path.dirname(resource_root), exist_ok=True)
-            os.replace(staging_root, resource_root)
-        finally:
-            helpers.remove_tree(staging_root)
-
-        return resource_root
 
     # -- cache inventory --------------------------------------------------
 
@@ -299,10 +345,8 @@ class CacheManager:
 
     def _make_scanned_resource(self, cache_directory, subdir, entry, entry_path,
                        compute_size):
-        # The manifest is the source of truth for a resource's identity,
-        # wherever it lives: an entry with a valid manifest is identified (by its
-        # own kind and cache_key), one without stays unidentified. Storage layout
-        # (classic subdir vs minimized flat) is not the resource's concern.
+        # Makes a cached resource from a manifest living in the given path.
+        # No manifest means the resource is unidentified.
         manifest = ResourceManifest.read_from_root(entry_path)
         size = helpers.get_tree_size(entry_path) if compute_size else 0
 
