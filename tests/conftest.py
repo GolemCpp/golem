@@ -57,10 +57,26 @@ def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_revision=True,
         'remote.origin.promisor': mode == FetchMode.BLOBLESS,
     }
 
+    def advertisement():
+        '''
+        What the remote publishes, in the shape `ls-remote --symref` answers with.
+        The first branch is the one HEAD points at, since that is what a
+        repository with one branch means.
+        '''
+        lines = []
+        if branches:
+            lines.append('ref: refs/heads/{}\tHEAD'.format(branches[0]))
+        lines.append('{}\tHEAD'.format(head))
+        lines += ['{}\trefs/heads/{}'.format(head, branch) for branch in branches]
+        lines += ['{}\trefs/tags/{}'.format(head, tag) for tag in tags]
+        return '\n'.join(lines) + '\n'
+
     def read_git(params, cwd=None, **kwargs):
         for question, answer in shape.items():
             if question in params:
                 return ('true' if answer else 'false') + '\n'
+        if params[0] == 'ls-remote':
+            return advertisement()
         return head + '\n'
 
     def try_git(params, cwd=None, **kwargs):

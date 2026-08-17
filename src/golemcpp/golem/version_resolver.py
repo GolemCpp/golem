@@ -8,6 +8,7 @@ a commit) and `VersionResolver` resolves it against the remote to make it a
 
 import os
 import re
+from dataclasses import dataclass, field
 
 from golemcpp.golem import helpers
 from golemcpp.golem import source
@@ -17,63 +18,94 @@ from semver import max_satisfying
 
 
 # What `ls-remote --symref` puts in front of the ref HEAD points at, and what
-# git puts in front of a branch name.
+# git puts in front of a branch name and a tag name.
 SYMREF_PREFIX = 'ref: '
 BRANCH_PREFIX = 'refs/heads/'
+TAG_PREFIX = 'refs/tags/'
+
+# What git appends to a ref it peeled. The peeled entry names the commit a
+# checkout lands on, which is what an annotated tag resolves to.
+PEELED_SUFFIX = '^{}'
 
 # Asking for the default branch by name, the way git spells it.
 HEAD_VERSION = 'HEAD'
 
+# What to ask a remote to advertise. Under protocol v2 these become server-side
+# ref-prefix filters, so the answer leaves out everything else a repository may
+# publish. E.g. `refs/pull/*` on a busy forge outnumbers branches and tags by far.
+ADVERTISED_PREFIXES = (HEAD_VERSION, BRANCH_PREFIX + '*', TAG_PREFIX + '*')
+
+
+@dataclass(frozen=True)
+class Advertisement:
+    '''What a remote publishes: the branch it defaults to, and every ref it has.'''
+
+    # The default branch, read off the symref line and stripped of `refs/heads/`.
+    head_reference: str = ''
+    # Every advertised ref, by full name, against the commit it lands on.
+    refs: dict = field(default_factory=dict)
+
+    @classmethod
+    def parse(cls, listing) -> 'Advertisement':
+        '''
+        Read what `ls-remote --symref` answered.
+
+        A peeled entry overwrites the ref it belongs to, so an annotated tag
+        holds the commit it points at rather than the tag object. A lightweight
+        tag and a branch have no peeled entry, therefore their own value stands.
+        '''
+        head_reference = ''
+        refs = {}
+        for line in listing.splitlines():
+            if line.startswith(SYMREF_PREFIX):
+                head_reference = line[len(SYMREF_PREFIX):].split(
+                    '\t')[0].removeprefix(BRANCH_PREFIX)
+                continue
+
+            revision, _, name = line.partition('\t')
+            if not name:
+                continue
+            refs[name.removesuffix(PEELED_SUFFIX)] = revision
+
+        return cls(head_reference=head_reference, refs=refs)
+
+    def revision_of(self, version) -> str:
+        '''
+        The commit a version names, the way git looks a bare name up.
+
+        `gitrevisions` gives the order, and a tag beating a branch of the same
+        name follows from it rather than from a rule of ours. The remote-tracking
+        steps git ends with have no equivalent here: a remote advertises none.
+        '''
+        for candidate in (version, 'refs/' + version,
+                          TAG_PREFIX + version, BRANCH_PREFIX + version):
+            if candidate in self.refs:
+                return self.refs[candidate]
+
+        return ''
+
+    def tags(self, version_regex='') -> list:
+        '''
+        Every tag advertised, but without whatever `version_regex` rejects.
+        '''
+        names = [name.removeprefix(TAG_PREFIX)
+                 for name in self.refs if name.startswith(TAG_PREFIX)]
+        if not version_regex:
+            return names
+
+        pattern = re.compile(version_regex)
+        return [name for name in names if pattern.match(name)]
+
 
 class VersionResolver:
     @staticmethod
-    def revision_of(url, ref) -> str:
+    def advertised(url) -> Advertisement:
         '''
-        What is the revision corresponding to the ref on the remote? if any.
+        Ask the remote what it publishes. The one call a resolution makes.
         '''
-        answer = helpers.read_git(['ls-remote', url, ref], cwd=os.getcwd())
-        if not answer:
-            return ''
-        return answer.splitlines()[0].split('\t')[0]
-
-    @staticmethod
-    def head_of(url) -> ResolvedVersion:
-        '''
-        What the remote's default branch is called, and the commit it points at.
-
-        `--symref` answers both at once, so the branch is named rather than the
-        HEAD that was asked for.
-        '''
-        answer = helpers.read_git(['ls-remote', '--symref', url, 'HEAD'],
-                                  cwd=os.getcwd())
-        reference = ''
-        revision = ''
-        for line in answer.splitlines():
-            if line.startswith(SYMREF_PREFIX):
-                reference = line[len(SYMREF_PREFIX):].split('\t')[0]
-                if reference.startswith(BRANCH_PREFIX):
-                    reference = reference[len(BRANCH_PREFIX):]
-            elif line.endswith('HEAD'):
-                revision = line.split('\t')[0]
-
-        return ResolvedVersion(reference=reference, revision=revision)
-
-    @staticmethod
-    def published_tags(url, version_regex='') -> list:
-        '''
-        Every tag the remote publishes, but without whatever `version_regex`
-        rejects.
-        '''
-        listing = helpers.read_git(['ls-remote', '--tags', url], cwd=os.getcwd())
-        named = '\n'.join(
-            line for line in listing.split('\n') if '^{}' not in line)
-        tags = set(re.findall(r'refs/tags/(.*)', named))
-
-        if version_regex:
-            pattern = re.compile(version_regex)
-            tags = {tag for tag in tags if pattern.match(tag)}
-
-        return list(tags)
+        return Advertisement.parse(helpers.read_git(
+            ['ls-remote', '--symref', url] + list(ADVERTISED_PREFIXES),
+            cwd=os.getcwd()))
 
     @staticmethod
     def resolve_requested(requested, resolved,
@@ -103,14 +135,12 @@ class VersionResolver:
         '''
         Resolve what a `RequestedSource` asks for, returning a `ResolvedVersion`.
 
-        The remote answers, in five steps:
+        The remote is asked once, then answers in five steps:
 
         1. No version, or `HEAD`: the default branch. Asking for nothing is
         asking for what a plain `git clone` gives.
 
-        2. Ask it for a ref by that name. A branch and a tag alike come back
-        in one round trip, and a range comes back as nothing, so the question is
-        worth asking whatever was requested.
+        2. A ref by that name, looked up the way git looks a bare name up.
 
         3. Gather the tags looking like semvers and normalize them to find
         if any matches. Multiples can match so only the last one is selected to
@@ -124,28 +154,26 @@ class VersionResolver:
         '''
         url = str(requested.locator)
         version = requested.version
+        advertisement = VersionResolver.advertised(url)
 
         if not version or version == HEAD_VERSION:
-            resolved = VersionResolver.head_of(url)
-            if not resolved.revision:
+            revision = advertisement.revision_of(HEAD_VERSION)
+            if not advertisement.head_reference or not revision:
                 raise RuntimeError(
                     "nothing in '{}' answers version '{}'".format(url, version))
-            return resolved
+            return ResolvedVersion(reference=advertisement.head_reference,
+                                   revision=revision)
 
-        revision = VersionResolver.revision_of(url, version)
+        revision = advertisement.revision_of(version)
         if revision:
             return ResolvedVersion(reference=version, revision=revision)
 
         found_version = VersionResolver.find_version(
-            VersionResolver.published_tags(url, requested.version_regex), version)
+            advertisement.tags(requested.version_regex), version)
         if found_version:
-            revision = VersionResolver.revision_of(
-                url, 'refs/tags/' + found_version)
-            if not revision:
-                raise RuntimeError(
-                    "Can't find any hash related to found tag {}".format(
-                        found_version))
-            return ResolvedVersion(reference=found_version, revision=revision)
+            return ResolvedVersion(
+                reference=found_version,
+                revision=advertisement.revision_of(TAG_PREFIX + found_version))
 
         if Version.parse_git_hash(version):
             return ResolvedVersion(reference=version, revision=version)

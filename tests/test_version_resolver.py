@@ -48,15 +48,32 @@ def test_find_version_accepts_prefixed_short_underscore_tag():
     assert VersionResolver.find_version(['foo_1_1', 'foo_1_2'], '1.2') == 'foo_1_2'
 
 
-def test_resolve_matches_tag_and_returns_hash(monkeypatch):
+# -- one call, and every selection made from what it answered ---------------
+
+
+def advertise(monkeypatch, listing, calls=None):
+    '''
+    The one call a resolution makes, answered with what a remote publishes.
+
+    Anything else reaching git is a second round trip, which is what this stage
+    removed, so it fails the test rather than being quietly answered.
+    '''
     def fake_git(args, cwd):
-        if args[-1] == 'refs/tags/v3.12.0':
-            return 'cafebabecafebabe\trefs/tags/v3.12.0\n'
-        if '--tags' in args:
-            return 'deadbeef\trefs/tags/v3.11.0\ncafebabe\trefs/tags/v3.12.0\n'
-        return ''
+        if calls is not None:
+            calls.append(args)
+        assert args[0] == 'ls-remote', 'asked the remote something else: {}'.format(args)
+        return listing
 
     monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+
+
+MAIN = 'ref: refs/heads/main\tHEAD\nabc123\tHEAD\nabc123\trefs/heads/main\n'
+
+
+def test_resolve_matches_tag_and_returns_hash(monkeypatch):
+    advertise(monkeypatch, MAIN
+              + 'deadbeef\trefs/tags/v3.11.0\n'
+              + 'cafebabecafebabe\trefs/tags/v3.12.0\n')
 
     resolved = VersionResolver.resolve(
         RequestedSource.for_repository('https://github.com/nlohmann/json.git', '^3.0.0'))
@@ -65,10 +82,7 @@ def test_resolve_matches_tag_and_returns_hash(monkeypatch):
 
 
 def test_resolve_reads_a_branch_head(monkeypatch):
-    def fake_git(args, cwd):
-        return 'abc123\trefs/heads/main\n' if args[-1] == 'main' else ''
-
-    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+    advertise(monkeypatch, MAIN)
 
     resolved = VersionResolver.resolve(
         RequestedSource.for_repository('https://example.com/x.git', 'main'))
@@ -76,78 +90,114 @@ def test_resolve_reads_a_branch_head(monkeypatch):
     assert resolved.revision == 'abc123'
 
 
-# -- what has to be asked of a remote, and what does not --------------------
-
-
 def test_a_ref_the_remote_has_is_taken_verbatim(monkeypatch):
     # The bug this fixes: `v1.2.0` and `v1_2_0` normalize to the same semver, so
     # matching could answer either question with the other tag.
-    calls = []
-
-    def fake_git(args, cwd):
-        calls.append(args)
-        if args[-1] == 'v1.2.0':
-            return 'cafebabecafebabe\trefs/tags/v1.2.0\n'
-        raise AssertionError('asked the remote something else: {}'.format(args))
-
-    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+    advertise(monkeypatch, MAIN
+              + 'cafebabecafebabe\trefs/tags/v1.2.0\n'
+              + 'deadbeefdeadbeef\trefs/tags/v1_2_0\n')
 
     assert VersionResolver.resolve(
         RequestedSource.for_repository('https://host/r.git', 'v1.2.0')) == \
         ResolvedVersion(reference='v1.2.0', revision='cafebabecafebabe')
-    # One round trip, and no tag listing to match against.
+
+
+@pytest.mark.parametrize('version', ['', 'HEAD', 'main', 'v1.2.0', '^1.0.0',
+                                     '65ee68451d8eb2b5f3a30b410476ab83deb3289b'])
+def test_every_version_costs_one_round_trip(monkeypatch, version):
+    # The point of the stage: whatever is asked for, the remote is asked once and
+    # everything after that is decided from its answer.
+    calls = []
+    advertise(monkeypatch, MAIN + 'cafebabe\trefs/tags/v1.2.0\n', calls=calls)
+
+    VersionResolver.resolve(
+        RequestedSource.for_repository('https://host/r.git', version))
+
     assert len(calls) == 1
-
-
-def test_a_branch_costs_one_round_trip(monkeypatch):
-    def fake_git(args, cwd):
-        return 'abc123\trefs/heads/main\n' if args[-1] == 'main' else ''
-
-    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
-
-    assert VersionResolver.resolve(
-        RequestedSource.for_repository('https://example.com/x.git', 'main')) == \
-        ResolvedVersion(reference='main', revision='abc123')
 
 
 def test_a_spec_the_remote_does_not_have_falls_back_to_matching(monkeypatch):
     # `1.2.3` against a repository that tags `v1.2.3`: no such ref, so the spec
     # is matched as a range, which is what it took before this.
-    def fake_git(args, cwd):
-        if args[-1] == '1.2.3':
-            return ''
-        if args[-1] == 'refs/tags/v1.2.3':
-            return 'cafebabecafebabe\trefs/tags/v1.2.3\n'
-        if '--tags' in args:
-            return 'cafebabe\trefs/tags/v1.2.3\n'
-        return ''
-
-    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+    advertise(monkeypatch, MAIN + 'cafebabecafebabe\trefs/tags/v1.2.3\n')
 
     assert VersionResolver.resolve(
         RequestedSource.for_repository('https://host/r.git', '1.2.3')) == \
         ResolvedVersion(reference='v1.2.3', revision='cafebabecafebabe')
 
 
-def test_a_range_is_asked_for_as_a_ref_and_then_matched(monkeypatch):
-    # The remote decides which spelling exists, not the regex: a range comes back
-    # as nothing, for one round trip.
-    calls = []
+def test_a_suffix_of_a_ref_name_does_not_match_it(monkeypatch):
+    # git matches whole path components, so `1.2.0` names nothing when the tag is
+    # `v1.2.0`. It reaches the semver matching instead, which is a different
+    # question with a different answer.
+    advertise(monkeypatch, MAIN + 'cafebabe\trefs/tags/v1.2.0\n')
+    advertisement = VersionResolver.advertised('https://host/r.git')
 
-    def fake_git(args, cwd):
-        calls.append(args)
-        if args[-1] == 'refs/tags/v3.12.0':
-            return 'cafebabecafebabe\trefs/tags/v3.12.0\n'
-        if '--tags' in args:
-            return 'cafebabe\trefs/tags/v3.12.0\n'
-        return ''
+    assert advertisement.revision_of('1.2.0') == ''
+    assert advertisement.revision_of('v1.2.0') == 'cafebabe'
 
-    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+
+def test_an_ambiguous_name_resolves_the_way_git_does(monkeypatch):
+    # `git rev-parse v1.2.0` answers the tag, warning that the name is ambiguous:
+    # `gitrevisions` looks in refs/tags/ before refs/heads/. Golem used to answer
+    # the branch, because that is the order ls-remote happens to print them in.
+    advertise(monkeypatch, MAIN
+              + 'b2a4c400\trefs/heads/v1.2.0\n'
+              + 'ta61e5000\trefs/tags/v1.2.0\n')
 
     assert VersionResolver.resolve(
-        RequestedSource.for_repository('https://host/r.git', '^3.0.0')) == \
-        ResolvedVersion(reference='v3.12.0', revision='cafebabecafebabe')
-    assert any(args[-1] == '^3.0.0' for args in calls)
+        RequestedSource.for_repository('https://host/r.git', 'v1.2.0')) == \
+        ResolvedVersion(reference='v1.2.0', revision='ta61e5000')
+
+
+def test_each_step_of_the_lookup_order_answers(monkeypatch):
+    # The order `gitrevisions` gives, minus the remote-tracking steps a remote
+    # advertises nothing for.
+    advertise(monkeypatch, MAIN + 'cafebabe\trefs/tags/v1.2.0\n')
+    advertisement = VersionResolver.advertised('https://host/r.git')
+
+    assert advertisement.revision_of('HEAD') == 'abc123'
+    assert advertisement.revision_of('refs/tags/v1.2.0') == 'cafebabe'
+    assert advertisement.revision_of('tags/v1.2.0') == 'cafebabe'
+    assert advertisement.revision_of('heads/main') == 'abc123'
+    assert advertisement.revision_of('v1.2.0') == 'cafebabe'
+    assert advertisement.revision_of('main') == 'abc123'
+
+
+# -- annotated tags ---------------------------------------------------------
+
+
+ANNOTATED = (MAIN
+             + '0bjec7ff\trefs/tags/v2.0.0\n'
+             + 'c0mm17ff\trefs/tags/v2.0.0^{}\n')
+
+
+def test_an_annotated_tag_resolves_to_the_commit_a_checkout_lands_on(monkeypatch):
+    # Not the tag object: `git checkout v2.0.0` leaves HEAD at the commit, and a
+    # revision is what HEAD holds.
+    advertise(monkeypatch, ANNOTATED)
+
+    assert VersionResolver.resolve(
+        RequestedSource.for_repository('https://host/r.git', 'v2.0.0')) == \
+        ResolvedVersion(reference='v2.0.0', revision='c0mm17ff')
+
+
+def test_an_annotated_tag_is_still_matched_as_a_range(monkeypatch):
+    advertise(monkeypatch, ANNOTATED)
+
+    assert VersionResolver.resolve(
+        RequestedSource.for_repository('https://host/r.git', '^2.0.0')) == \
+        ResolvedVersion(reference='v2.0.0', revision='c0mm17ff')
+
+
+def test_a_peeled_entry_is_never_a_reference_of_its_own(monkeypatch):
+    # `v2.0.0^{}` is a spelling of one tag, not a second tag, so it may reach
+    # neither a resolved reference nor the list a range is matched against.
+    advertise(monkeypatch, ANNOTATED)
+    advertisement = VersionResolver.advertised('https://host/r.git')
+
+    assert advertisement.tags() == ['v2.0.0']
+    assert version_resolver.PEELED_SUFFIX not in str(advertisement.refs)
 
 
 def test_nothing_matched_leaves_the_spec_standing_for_itself(monkeypatch):
@@ -204,16 +254,10 @@ def test_a_version_nothing_answers_is_refused(monkeypatch, version):
 
 def test_a_tag_that_reads_as_a_range_is_still_found(monkeypatch):
     # `v1.x.0` is a real tag that semver reads as a range, and matching it as one
-    # answers v1.2.0. Asking the remote for it first is what keeps them apart.
-    def fake_git(args, cwd):
-        if args[-1] == 'v1.x.0':
-            return 'cafebabecafebabe\trefs/tags/v1.x.0\n'
-        if '--tags' in args:
-            return ('cafebabe\trefs/tags/v1.2.0\n'
-                    'cafebabecafebabe\trefs/tags/v1.x.0\n')
-        return ''
-
-    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+    # answers v1.2.0. Looking it up as a name first is what keeps them apart.
+    advertise(monkeypatch, MAIN
+              + 'cafebabe\trefs/tags/v1.2.0\n'
+              + 'cafebabecafebabe\trefs/tags/v1.x.0\n')
 
     assert VersionResolver.find_version(['v1.2.0', 'v1.x.0'], 'v1.x.0') == 'v1.2.0'
     assert VersionResolver.resolve(
