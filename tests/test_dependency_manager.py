@@ -1,6 +1,7 @@
 import hashlib
 import os
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem import helpers
@@ -28,14 +29,14 @@ def make_dependency():
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
         version='^3.0.0')
-    dep.resolved_hash = '1234567890abcdef'
+    dep.resolved = ResolvedVersion(revision='1234567890abcdef')
     return dep
 
 
 def expected_cache_key(dep):
     return Source.for_repository(
         location=dep.repository,
-        reference=helpers.resolved_reference(dep.resolved_version, dep.resolved_hash)
+        reference=dep.resolved.revision or dep.resolved.reference
     ).get_cache_key()
 
 
@@ -54,7 +55,7 @@ def make_resolved_dependency():
     # Locating a dependency resolves it, and a unit test has no remote to resolve
     # against: these come pre-resolved.
     dep = Dependency(name='json', repository='https://example.com/json.git')
-    dep.resolved_hash = '1234567890abcdef'
+    dep.resolved = ResolvedVersion(revision='1234567890abcdef')
     return dep
 
 
@@ -104,7 +105,7 @@ def test_resolved_location_is_minimized_flat_when_enabled(tmp_path):
     manager = make_manager(tmp_path, minimization_enabled=True)
     dep = make_dependency()
 
-    expected_name = hashlib.sha1(
+    expected_name = hashlib.sha256(
         '{}/{}'.format(DEPENDENCIES_SUBDIR, expected_cache_key(dep)).encode('utf-8')
     ).hexdigest()[:8]
 
@@ -128,8 +129,7 @@ def test_the_source_tree_sits_under_the_resource_root():
 
 def test_the_policy_pins_to_the_resolved_commit(tmp_path):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
-    dep.resolved_version = 'v3.12.0'
-    dep.resolved_hash = 'cafebabecafebabe'
+    dep.resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabecafebabe')
 
     policy = make_manager(tmp_path).policy_for(dep)
 
@@ -144,7 +144,7 @@ def test_the_policy_carries_the_shallow_request(tmp_path):
     # The one resource that departs from the configured mode, because a golemfile
     # said so about a repository too heavy to clone whole.
     dep = Dependency(repository='https://example.com/json.git', shallow=True)
-    dep.resolved_hash = 'cafebabe'
+    dep.resolved = ResolvedVersion(revision='cafebabe')
 
     assert make_manager(tmp_path).policy_for(dep).fetch_mode == FetchMode.SHALLOW
 
@@ -173,8 +173,7 @@ def test_a_refresh_keeps_what_was_built_from_the_dependency(tmp_path):
 
 def test_a_dependency_produces_the_expected_clone_sequence(tmp_path, monkeypatch):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
-    dep.resolved_version = 'v3.12.0'
-    dep.resolved_hash = 'cafebabecafebabe'
+    dep.resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabecafebabe')
     calls = []
     monkeypatch.setattr(
         helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
@@ -222,11 +221,12 @@ def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch)
     dep = Dependency(name='json', repository='https://example.com/json.git')
     monkeypatch.setattr(
         VersionResolver, 'resolve',
-        staticmethod(lambda *args, **kwargs: ('3.11.3', '1234567890abcdef')))
+        staticmethod(lambda *args, **kwargs: ResolvedVersion(
+            reference='3.11.3', revision='1234567890abcdef')))
 
     cached = manager.get_cached_resource(dep)
 
-    assert dep.resolved_hash == '1234567890abcdef'
+    assert dep.resolved.revision == '1234567890abcdef'
     assert cached.cache_key == dep.to_source().get_cache_key()
 
 

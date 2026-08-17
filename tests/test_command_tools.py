@@ -1,5 +1,6 @@
 import os
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import settings
 from golemcpp.golem import helpers
@@ -85,7 +86,9 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
         captured['tool_name'] = tool.name
         captured['version'] = tool.version
         captured['location'] = self.locations[0].location
-        tool.resolved_version = cppfront_tool.DEFAULT_CPPFRONT_VERSION
+        tool.resolved = ResolvedVersion(
+            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
+            revision='deadbeef')
         return make_cached_tool(
             path='/tmp/golem-tools-cache/cppfront',
             cache_root=self.locations[0].location)
@@ -119,7 +122,9 @@ def test_installing_a_tool_may_reach_a_remote(monkeypatch, tmp_path):
 
     def fake_make_available(self, tool, fetch=True, refresh=True):
         captured['network_allowed'] = network.is_allowed()
-        tool.resolved_version = cppfront_tool.DEFAULT_CPPFRONT_VERSION
+        tool.resolved = ResolvedVersion(
+            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
+            revision='deadbeef')
         return make_cached_tool(
             path='/tmp/golem-tools-cache/cppfront',
             cache_root=self.locations[0].location)
@@ -225,7 +230,9 @@ def test_handle_tools_command_reports_a_tool_served_from_a_read_only_cache(
     project_dir.mkdir()
 
     def fake_make_available(self, tool, fetch=True, refresh=True):
-        tool.resolved_version = cppfront_tool.DEFAULT_CPPFRONT_VERSION
+        tool.resolved = ResolvedVersion(
+            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
+            revision='deadbeef')
         return make_cached_tool(
             path='/shared/cache/tools/cppfront',
             cache_root='/shared/cache',

@@ -1,5 +1,6 @@
 import pytest
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import tool_registry
 from golemcpp.golem.tool import Tool
 from golemcpp.golem.version_resolver import VersionResolver
@@ -12,7 +13,7 @@ def resolutions(monkeypatch):
 
     def resolve(url, version, version_regex=''):
         asked.append((url, version))
-        return 'v0.8.1', 'deadbeef'
+        return ResolvedVersion(reference='v0.8.1', revision='deadbeef')
 
     monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(resolve))
     return asked
@@ -39,9 +40,9 @@ def test_a_definition_naming_no_default_leaves_the_version_empty():
 def test_resolving_asks_the_remote_for_the_requested_version(resolutions):
     tool = Tool(definition=make_definition(), version='^0.8.0')
 
-    assert tool.resolve() == 'deadbeef'
+    assert tool.resolve() == ResolvedVersion(reference='v0.8.1', revision='deadbeef')
     assert resolutions == [('https://host/cppfront.git', '^0.8.0')]
-    assert tool.resolved_version == 'v0.8.1'
+    assert tool.resolved.reference == 'v0.8.1'
 
 
 def test_resolving_twice_asks_once(resolutions):

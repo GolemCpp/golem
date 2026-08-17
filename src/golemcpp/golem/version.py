@@ -2,6 +2,8 @@ import sys
 import re
 import subprocess
 
+from golemcpp.golem.resolved_version import ResolvedVersion
+
 
 class Version:
     def __init__(self, working_dir=None, build_number=None):
@@ -31,6 +33,13 @@ class Version:
         self.gitlong = version
         self.gitshort = version
         self.update_semver()
+
+    def to_resolved_version(self, force_reference=''):
+        '''
+        This project's own version as the pair every resolved resource carries.
+        '''
+        return ResolvedVersion(reference=force_reference or self.gitlong,
+                               revision=self.githash)
 
     def update_semver(self):
         git_hash = Version.parse_git_hash(self.gitlong)
@@ -107,7 +116,9 @@ class Version:
 
     @staticmethod
     def parse_git_hash(version):
-        hash_regex = r'^[0-9a-fA-F]{7,40}$'
+        # Up to 64: a SHA-256 object name is twice the length of a SHA-1 one, and
+        # git is migrating to it.
+        hash_regex = r'^[0-9a-fA-F]{7,64}$'
         if re.fullmatch(hash_regex, version):
             return version[:7], version
         return None

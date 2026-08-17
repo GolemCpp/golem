@@ -499,7 +499,7 @@ def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
 
     dependencies = read_dependencies_json(project_dir)
     json_dependency = next(dep for dep in dependencies if dep['name'] == 'json')
-    assert json_dependency['resolved_version'] == 'v3.10.0'
+    assert json_dependency['resolved']['reference'] == 'v3.10.0'
 
     binary = program_path(project_dir, 'hello-dependencies-debug')
     assert binary.exists()

@@ -221,7 +221,7 @@ class CacheManager:
         Hashing "<subdir>/<cache_key>" keeps names unique across resource kinds once 
         the per-kind subdirectory is dropped.
         '''
-        digest = hashlib.sha1('{}/{}'.format(resource.subdir, resource.cache_key).encode('utf-8')).hexdigest()
+        digest = hashlib.sha256('{}/{}'.format(resource.subdir, resource.cache_key).encode('utf-8')).hexdigest()
         return digest[:length]
 
     def _find_matching_caches(self, identifier, is_read_only, with_regex):

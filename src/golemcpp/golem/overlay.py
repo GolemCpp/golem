@@ -1,5 +1,6 @@
 from dataclasses import dataclass, replace
 
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 
 
@@ -10,8 +11,7 @@ class Overlay:
     source: Source
     
     version: str = ''
-    resolved_version: str = ''
-    resolved_hash: str = ''
+    resolved: ResolvedVersion = ResolvedVersion()
 
     def __post_init__(self):
         # An overlay asked for without a version is asked for at the reference its
@@ -27,7 +27,7 @@ class Overlay:
         # View the overlay as a Source to compute its identity the same way as every
         # other resource kind. Readable before resolution: an overlay names its
         # reference from the moment it is configured.
-        return replace(self.source, reference=self.resolved_version or self.version)
+        return replace(self.source, reference=self.resolved.reference or self.version)
 
     def resolve(self):
         # For now, an overlay follows the reference it was configured with.
@@ -35,8 +35,7 @@ class Overlay:
         # The day an overlay may name a version, this is where 
         # VersionResolver.resolve goes, as the other kinds do.
         # 
-        # Naming the hash after the reference is what VersionResolver itself 
-        # falls back to when no tag matches.
-        self.resolved_version = self.version
-        self.resolved_hash = self.version
-        return self.resolved_hash
+        # Naming the revision after the reference is what VersionResolver
+        # itself falls back to when no tag matches.
+        self.resolved = ResolvedVersion(reference=self.version, revision=self.version)
+        return self.resolved

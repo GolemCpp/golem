@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import sys
@@ -19,6 +20,51 @@ SOURCE_KIND_SEPARATOR = '+'
 # A leading bare word followed by the separator claims a kind. Kept narrow so a
 # real locator never matches: a URL has `:` after its scheme, a path has none.
 KIND_CLAIM = re.compile(r'^([a-z][a-z0-9]*)\{}'.format(SOURCE_KIND_SEPARATOR))
+
+# What separates the major fields of a cache key: `<source id>+<revision>`.
+CACHE_KEY_SEPARATOR = '+'
+
+# 40 hex is a SHA-1 object name, 64 a SHA-256 one. Git is migrating to SHA-256 and
+# a repository names its objects in one format or the other, so both have to read
+# as an object name here.
+GIT_OBJECT_NAME = re.compile(r'^([0-9a-f]{40}|[0-9a-f]{64})$')
+
+# What a directory name may hold, on the strictest of the platforms golem runs on.
+# Lowercase only: NTFS and APFS are case-insensitive, so case cannot carry meaning
+# there the way it does in a git ref name.
+UNSAFE_IN_COMPONENT = re.compile(r'[^0-9a-z._-]')
+
+# Binds a spelled-out revision to the digest identifying it. Outside the safe set
+# above, so it can never appear in what it delimits, and distinct from
+# CACHE_KEY_SEPARATOR so the two boundaries stay tellable apart.
+REVISION_DIGEST_SEPARATOR = '='
+
+# How much of a revision is kept for reading, and how much digest identifies it.
+REVISION_SLUG_LENGTH = 40
+REVISION_DIGEST_LENGTH = 8
+
+
+def make_revision_component(revision):
+    '''
+    Makes a revision as one directory-name component.
+
+    It can be a hash: In which case it is abbreviated to 8 characters.
+    
+    It can be a reference: In which case it can be abbreviated if it is too long.
+    But it will also always be appended with a digest of it since the reference
+    is processed to be safe for any filesystem, which can be lossy.
+    '''
+    if not revision:
+        return ''
+
+    if GIT_OBJECT_NAME.match(revision):
+        return revision[:REVISION_DIGEST_LENGTH]
+
+    slug = UNSAFE_IN_COMPONENT.sub('-', revision.lower())
+    digest = hashlib.sha256(revision.encode('utf-8')).hexdigest()
+
+    return '{}{}{}'.format(slug[:REVISION_SLUG_LENGTH], REVISION_DIGEST_SEPARATOR,
+                           digest[:REVISION_DIGEST_LENGTH])
 
 
 @dataclass(frozen=True)
@@ -167,11 +213,6 @@ class Source:
 
         return ''.join(repo_id)
 
-    @classmethod
-    def make_repository_base(cls, location, reference):
-        repo_id = cls.generate_id(location)
-        return repo_id + '+' + str(reference)
-
     def get_local_path(self):
         return self.parse_local_directory_path(self.location)
 
@@ -179,7 +220,19 @@ class Source:
         return self.generate_id(self.location)
 
     def get_cache_key(self):
-        return self.make_repository_base(self.location, self.reference)
+        '''
+        What identifies this source in a cache, as one directory name: which
+        repository it is, and which revision of it.
+
+        A source with no revision to name (e.g. a copied directory) is identified
+        by the repository alone, rather than by a separator with nothing after it.
+        '''
+        component = make_revision_component(str(self.reference))
+
+        if not component:
+            return self.get_id()
+
+        return self.get_id() + CACHE_KEY_SEPARATOR + component
 
 
 # Every kind a location may claim, and how to build it. A new kind (an archive,

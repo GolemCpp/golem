@@ -44,6 +44,18 @@ def test_remove_tree_handles_windows_style_paths_with_spaces_and_non_ascii(tmp_p
     assert not directory.exists()
 
 
+def test_remove_tree_handles_a_name_a_command_line_would_split(tmp_path):
+    # What a cache root is called: the reference it holds, spelled with the '='
+    # cmd breaks a bare command line on.
+    directory = tmp_path / 'r@host+main=0d6e4079'
+    directory.mkdir()
+    (directory / 'artifact.txt').write_text('content', encoding='utf-8')
+
+    helpers.remove_tree(str(directory))
+
+    assert not directory.exists()
+
+
 @pytest.mark.parametrize('params', [
     ['clone', '--', 'https://example.test/repo.git', '.'],
     ['fetch', 'origin'],

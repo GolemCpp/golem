@@ -4,6 +4,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 from golemcpp.golem.version_resolver import VersionResolver
@@ -38,8 +39,7 @@ class Dependency(Configuration):
         self.validate_source()
         self.version = '' if version is None else version
         self.version_regex = '' if version_regex is None else version_regex
-        self.resolved_version = ''
-        self.resolved_hash = ''
+        self.resolved = ResolvedVersion()
         self.shallow = shallow
         # Where this dependency lives in the caches, once a DependencyManager has
         # worked it out. Not part of serialized_members, so a dependency restored
@@ -75,8 +75,7 @@ class Dependency(Configuration):
         if self.directory:
             return Source.for_directory(self.directory)
         return Source.for_repository(
-            self.repository,
-            helpers.resolved_reference(self.resolved_version, self.resolved_hash))
+            self.repository, self.resolved.revision or self.resolved.reference)
 
     def update_source(self, project_dir):
         # Also the gate on a dependency read from a configuration: read_json
@@ -96,18 +95,18 @@ class Dependency(Configuration):
         return bool(self.directory)
 
     def resolve(self):
-        if self.resolved_hash:
-            return self.resolved_hash
-
         if self.directory:
-            # A copied directory has no version to resolve.
-            self.resolved_version = '-'
-            self.resolved_hash = '-'
-        else:
-            self.resolved_version, self.resolved_hash = VersionResolver.resolve(
-                self.repository, self.version, self.version_regex)
+            # A copied directory has no version: nothing to resolve, and nothing a
+            # resolution could name. What DirectoryFetcher says with Fetched().
+            return self.resolved
 
-        if not self.resolved_hash:
+        if self.resolved:
+            return self.resolved
+
+        self.resolved = VersionResolver.resolve(
+            self.repository, self.version, self.version_regex)
+
+        if not self.resolved.revision:
             raise RuntimeError(
                 "Bad version {} can't find any hash related".format(
                     self.version))
@@ -117,9 +116,9 @@ class Dependency(Configuration):
         self.cached_resource = None
 
         print("{}: {} -> {} ({})".format(self.name, self.version,
-                                         self.resolved_version,
-                                         self.resolved_hash))
-        return self.resolved_hash
+                                         self.resolved.reference,
+                                         self.resolved.revision))
+        return self.resolved
 
     def build(self, context, config):
         context.dep_command(config, self, 'build', False)
@@ -127,13 +126,15 @@ class Dependency(Configuration):
     def configure(self, context, config):
         context.dep_command(config, self, 'resolve', False)
 
+    RESOLVED_MEMBER = 'resolved'
+
     @staticmethod
     def serialized_members():
         # `location` is read from a configuration but never written back:
         # update_source resolves it into `repository` or `directory` and clears it.
         return [
             'name', 'repository', 'directory', 'location', 'version',
-            'version_regex', 'resolved_version', 'resolved_hash', 'shallow'
+            'version_regex', 'resolved', 'shallow'
         ]
 
     @staticmethod
@@ -145,6 +146,9 @@ class Dependency(Configuration):
                 if o.__dict__[key]:
                     json_obj[key] = o.__dict__[key]
 
+        if o.resolved:
+            json_obj[Dependency.RESOLVED_MEMBER] = o.resolved.to_dict()
+
         return json_obj
 
     def read_json(self, o):
@@ -153,6 +157,10 @@ class Dependency(Configuration):
         for key, value in o.items():
             if key in Dependency.serialized_members():
                 self.__dict__[key] = value
+
+        if Dependency.RESOLVED_MEMBER in o:
+            self.resolved = ResolvedVersion.from_dict(
+                o[Dependency.RESOLVED_MEMBER])
 
     @staticmethod
     def unserialize_from_json(o):

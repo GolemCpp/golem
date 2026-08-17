@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from golemcpp.golem import tool_registry
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
 
@@ -12,8 +13,7 @@ class Tool:
     definition: tool_registry.ToolDefinition
 
     version: str = ''
-    resolved_version: str = ''
-    resolved_hash: str = ''
+    resolved: ResolvedVersion = ResolvedVersion()
 
     def __post_init__(self):
         # A tool asked for without a version is asked for at the one its
@@ -29,16 +29,16 @@ class Tool:
         # View the tool as a Source to compute its identity the same way as every
         # other resource kind.
         return Source.for_repository(
-            self.definition.repository, reference=self.resolved_version)
+            self.definition.repository, reference=self.resolved.reference)
 
     def resolve(self):
         # Resolves the requested version through VersionResolver
         # Don't do anything if already resolved
-        
-        if self.resolved_hash:
-            return self.resolved_hash
 
-        self.resolved_version, self.resolved_hash = VersionResolver.resolve(
+        if self.resolved:
+            return self.resolved
+
+        self.resolved = VersionResolver.resolve(
             self.definition.repository, self.version)
 
-        return self.resolved_hash
+        return self.resolved

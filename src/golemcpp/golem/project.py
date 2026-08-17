@@ -50,8 +50,7 @@ class Project:
             is_dependency_to_keep = False
             for dependency_to_keep in dependencies_to_keep:
                 if dependency.repository == dependency_to_keep.repository and dependency.version == dependency_to_keep.version:
-                    dependency.resolved_version = dependency_to_keep.resolved_version
-                    dependency.resolved_hash = dependency_to_keep.resolved_hash
+                    dependency.resolved = dependency_to_keep.resolved
                     is_dependency_to_keep = True
                     break
 
@@ -69,12 +68,11 @@ class Project:
                 cached_dep = copy.deepcopy(dependency)
                 cached_dependencies.append(cached_dep)
             else:
-                dependency.resolved_version = cached_deps[0].resolved_version
-                dependency.resolved_hash = cached_deps[0].resolved_hash
+                dependency.resolved = cached_deps[0].resolved
 
             Logs.debug("Found {}: {} -> {} ({})".format(
                 dependency.name, dependency.version,
-                dependency.resolved_version, dependency.resolved_hash))
+                dependency.resolved.reference, dependency.resolved.revision))
 
         for dependency in cached_dependencies:
             dependency.name = None
@@ -95,14 +93,13 @@ class Project:
                 if cached_dependency.name == dependency.name and cached_dependency.version == dependency.version:
                     print("{}: {} -> {} ({})".format(
                         cached_dependency.name, cached_dependency.version,
-                        cached_dependency.resolved_version,
-                        cached_dependency.resolved_hash))
-                    self.deps[
-                        i].resolved_version = cached_dependency.resolved_version
-                    self.deps[
-                        i].resolved_hash = cached_dependency.resolved_hash
+                        cached_dependency.resolved.reference,
+                        cached_dependency.resolved.revision))
+                    self.deps[i].resolved = cached_dependency.resolved
                     break
-            if not self.deps[i].resolved_hash:
+            # A copied directory has no version to have cached, so saying so about
+            # one would report a failure that cannot happen.
+            if not self.deps[i].resolved and not dependency.is_non_git_directory():
                 print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()

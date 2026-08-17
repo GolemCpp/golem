@@ -4,6 +4,8 @@ from golemcpp.golem.version import Version
 def test_parse_git_hash_accepts_short_and_long_hashes():
     assert Version.parse_git_hash('abcdef1') == ('abcdef1', 'abcdef1')
     assert Version.parse_git_hash('abcdef1234567890') == ('abcdef1', 'abcdef1234567890')
+    # A SHA-256 object name is twice as long as a SHA-1 one, and still a hash.
+    assert Version.parse_git_hash('a' * 64) == ('aaaaaaa', 'a' * 64)
 
 
 def test_parse_git_hash_rejects_non_hash_values():

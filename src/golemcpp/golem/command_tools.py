@@ -121,11 +121,11 @@ class ToolsCommandHandler:
         # report an install that did not happen.
         if cached_tool.is_read_only:
             print('{} {} is served from the read-only cache location {}; nothing was installed'
-                  .format(tool.name, tool.resolved_version, cached_tool.cache_root))
+                  .format(tool.name, tool.resolved.reference, cached_tool.cache_root))
             return 0
 
         print('Installed {} {} in {}'.format(
-            tool.name, tool.resolved_version, cached_tool.path))
+            tool.name, tool.resolved.reference, cached_tool.path))
         print('Selected cache location: {}'.format(cached_tool.cache_root))
         return 0
 
