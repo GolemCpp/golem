@@ -210,17 +210,16 @@ def copy_file_if_recent(source_path, destination_directory, callback=None):
     return True
 
 def is_git_repository(path):
-    '''Whether a repository is there to work in: one with a HEAD to read.'''
-    git_index = os.path.join(path, '.git', 'HEAD')
-    return os.path.exists(git_index)
-
-def has_git_directory(path):
     '''
-    Whether git has anything here at all. Not the opposite of is_git_repository:
-    that one asks whether a repository can be worked in, this one whether the
-    ground is free for a clone.
+    Whether a git repository is there: one to clone from, or one to work in.
     '''
-    return os.path.exists(os.path.join(path, '.git'))
+    # Testing for a checkout, a worktree, a submodule checkout
+    if os.path.exists(os.path.join(path, '.git')):
+        return True
+    
+    # Testing for a bare repository
+    return all(os.path.exists(os.path.join(path, entry))
+               for entry in ('HEAD', 'objects', 'refs'))
 
 def does_git_command_need_no_repository(params):
     if params[0] in ['init', 'clone']:
@@ -285,7 +284,7 @@ def validate_git_command(params, cwd):
             "Run golem resolve first.".format(' '.join(params), cwd))
 
     if does_git_command_need_no_repository(params=params):
-        if has_git_directory(path=cwd):
+        if is_git_repository(path=cwd):
             raise RuntimeError(
                 "Already a git repository: \"git {}\" from \"{}\"".format(
                     ' '.join(params), cwd))

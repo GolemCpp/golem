@@ -21,5 +21,5 @@ class Resource:
         return self.kind.subdir
 
     @property
-    def location(self):
-        return self.source.location
+    def locator(self):
+        return self.source.locator

@@ -1,10 +1,10 @@
 import os
 from dataclasses import dataclass
 
+from golemcpp.golem import cache_configuration
 from golemcpp.golem import helpers
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import tool_registry
-from golemcpp.golem.cache_configuration import SOURCE_DIRNAME
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.fetch_policy import FetchPolicy
@@ -72,7 +72,8 @@ class ToolManager(ResourceManager):
         # A tool's root stores many things, only the manifest and the source
         # directory should remain before a refresh.
         for name in os.listdir(root):
-            if name in (SOURCE_DIRNAME, resource_manifest.MANIFEST_FILENAME):
+            if name in (cache_configuration.SOURCE_DIRNAME,
+                        resource_manifest.MANIFEST_FILENAME):
                 continue
             path = os.path.join(root, name)
             if os.path.isdir(path):

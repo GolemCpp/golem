@@ -1,9 +1,12 @@
 import pytest
 
+from golemcpp.golem.requested_source import DEFAULT_GIT_VERSION
+from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
+from golemcpp.golem.locator import Locator
 
 
 @pytest.fixture
@@ -19,8 +22,8 @@ def resolutions(monkeypatch):
     return asked
 
 
-def make_source(reference='main'):
-    return Source.for_repository('https://host/recipes.git', reference=reference)
+def make_source(version=''):
+    return RequestedSource.for_repository('https://host/recipes.git', version=version)
 
 
 def test_a_cookbook_asked_for_without_a_version_takes_its_sources_reference():
@@ -29,7 +32,7 @@ def test_a_cookbook_asked_for_without_a_version_takes_its_sources_reference():
 
 
 def test_resolving_follows_the_configured_reference_without_asking_a_remote(resolutions):
-    cookbook = Cookbook(source=make_source(reference='develop'))
+    cookbook = Cookbook(source=make_source(version='develop'))
 
     assert cookbook.resolve() == ResolvedVersion(reference='develop', revision='develop')
     assert cookbook.resolved.reference == 'develop'
@@ -43,25 +46,33 @@ def test_the_source_carries_the_resolved_reference():
 
     source = cookbook.to_source()
 
-    assert source.location == 'https://host/recipes.git'
+    assert source.locator == Locator('https://host/recipes.git')
     assert source.reference == 'v1.2.0'
 
 
 def test_the_source_is_readable_before_the_cookbook_is_resolved():
     # Locating a resource resolves it first, but nothing should depend on that to
     # read the identity a cookbook already carries.
-    assert Cookbook(source=make_source()).to_source() == make_source()
+    source = Cookbook(source=make_source()).to_source()
+
+    assert source.locator == Locator('https://host/recipes.git')
+    assert source.reference == DEFAULT_GIT_VERSION
 
 
 def test_a_directory_cookbook_keeps_its_empty_reference():
-    source = Source.for_directory('file:///cookbooks/local')
-    cookbook = Cookbook(source=source)
+    requested = RequestedSource.for_directory('file:///cookbooks/local')
+    cookbook = Cookbook(source=requested)
 
     cookbook.resolve()
 
+    # No default branch to fall back on: a copied directory is what it holds.
     assert cookbook.version == ''
-    assert cookbook.to_source() == source
-    assert cookbook.to_source().get_cache_key() == source.get_cache_key()
+    source = cookbook.to_source()
+    assert source.type == 'directory'
+    assert source.locator == requested.locator
+    assert source.reference == ''
+    # And with no revision to name, the key is the source id alone.
+    assert source.get_cache_key() == requested.get_id()
 
 
 def test_a_cookbook_is_named_after_its_source():

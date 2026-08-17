@@ -15,6 +15,7 @@ from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem import cppfront_tool
 from golemcpp.golem import tool_manager
+from golemcpp.golem.locator import Locator
 from conftest import make_cache_configuration
 
 
@@ -272,7 +273,9 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
 
     assert source.type == 'git'
     assert source.reference == cppfront_tool.DEFAULT_CPPFRONT_VERSION
-    assert source.location == cppfront_tool.CPPFRONT_REPOSITORY
+    # A Locator deliberately does not compare equal to the string spelling it, so
+    # this asserts the manifest read the locator back as one rather than as text.
+    assert source.locator == Locator(cppfront_tool.CPPFRONT_REPOSITORY)
 
 
 def test_tools_list_available_mentions_supported_tools(example_tmp_path):

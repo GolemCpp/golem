@@ -26,14 +26,14 @@ class DirectoryFetcher(Fetcher):
         return self.copy()
 
     def copy(self) -> Fetched:
-        print("Copying directory {} into {}".format(self.source.location, self.path))
+        print("Copying directory {} into {}".format(self.source.locator, self.path))
         local_path = self.local_path
 
         if os.path.isdir(self.path):
             shutil.rmtree(self.path)
         shutil.copytree(local_path, self.path, dirs_exist_ok=True, symlinks=True)
         with open(os.path.join(self.path, ORIGIN_FILENAME), 'w') as fileout:
-            fileout.write(self.source.location)
+            fileout.write(str(self.source.locator))
 
         # A copied directory has no commit to name.
         return Fetched()

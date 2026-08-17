@@ -15,6 +15,7 @@ from golemcpp.golem import resource_manifest
 from conftest import default_setting
 from conftest import make_cache_configuration
 from conftest import stub_git_probes
+from golemcpp.golem.locator import Locator
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +47,7 @@ def write_tool_manifest(resource_root, *, name='cppfront', version='v0.8.1'):
     resource_manifest.ResourceManifest.create(
         kind=resource_manifest.ResourceKind.TOOL,
         cache_key=name,
-        source={'type': 'git', 'location': 'u', 'reference': version},
+        source={'type': 'git', 'locator': 'https://host/u.git', 'reference': version},
     ).write_to_root(str(resource_root))
 
 
@@ -115,7 +116,7 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path):
     assert source.type == 'git'
     assert source.reference == 'v0.8.1'
     # The remote is recorded under the unified `location` key.
-    assert source.location == tool_registry.TOOLS['cppfront'].repository
+    assert source.locator == Locator(tool_registry.TOOLS['cppfront'].repository)
     assert not (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront.tmp').exists()
 
 

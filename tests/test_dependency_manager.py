@@ -14,6 +14,7 @@ from golemcpp.golem.fetch_policy import FetchMode
 from conftest import default_setting
 from conftest import make_cache_configuration
 from conftest import stub_git_probes
+from golemcpp.golem.locator import Locator
 
 
 DEPENDENCIES_SUBDIR = cache_configuration.DEPENDENCIES_SUBDIR
@@ -35,7 +36,7 @@ def make_dependency():
 
 def expected_cache_key(dep):
     return Source.for_repository(
-        location=dep.repository,
+        locator=dep.repository,
         reference=dep.resolved.revision or dep.resolved.reference
     ).get_cache_key()
 
@@ -46,8 +47,8 @@ def test_resource_for_uses_the_dependency_source():
 
     assert resource.kind == ResourceKind.DEPENDENCY
     assert resource.source.type == 'git'
-    assert resource.source.location == 'https://example.com/json.git'
-    assert resource.location == resource.source.location
+    assert resource.source.locator == Locator('https://example.com/json.git')
+    assert resource.locator == resource.source.locator
     assert resource.cache_key == resource.source.get_cache_key()
 
 
@@ -68,7 +69,7 @@ def test_resolve_and_write(tmp_path):
     manager.cache_manager.write_manifest(cached)
 
     source = manager.cache_manager.read_manifest_source(cached)
-    assert source.location == 'https://example.com/json.git'
+    assert source.locator == Locator('https://example.com/json.git')
 
 
 def test_guard_install_swaps_source_and_manifest(tmp_path):
@@ -88,7 +89,7 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
         os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))
     assert not os.path.exists(cached.staging_path)
     source = manager.cache_manager.read_manifest_source(cached)
-    assert source.location == 'https://example.com/json.git'
+    assert source.locator == Locator('https://example.com/json.git')
 
 
 def test_resolved_location_reuses_the_repository_cache_key(tmp_path):

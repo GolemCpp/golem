@@ -23,7 +23,7 @@ def test_write_and_read_manifest_roundtrip(tmp_path):
         resource_root=str(root),
         kind=resource_manifest.ResourceKind.DEPENDENCY,
         cache_key=root.name,
-        source={'type': 'git', 'location': 'u', 'reference': 'v3.12.0'},
+        source={'type': 'git', 'locator': 'u', 'reference': 'v3.12.0'},
     )
 
     manifest_file = root / resource_manifest.MANIFEST_FILENAME
@@ -33,7 +33,7 @@ def test_write_and_read_manifest_roundtrip(tmp_path):
     assert manifest.kind == 'dependency'
     assert manifest.cache_key == root.name
     assert manifest.version == resource_manifest.MANIFEST_VERSION
-    assert manifest.source == {'type': 'git', 'location': 'u', 'reference': 'v3.12.0'}
+    assert manifest.source == {'type': 'git', 'locator': 'u', 'reference': 'v3.12.0'}
     assert manifest.created_at
     assert manifest.last_used_at == manifest.created_at
     assert manifest.golem_version
@@ -52,7 +52,7 @@ def test_what_the_fetch_left_survives_the_roundtrip(tmp_path):
         resource_root=str(root),
         kind=resource_manifest.ResourceKind.COOKBOOK,
         cache_key=root.name,
-        source={'type': 'git', 'location': 'u', 'reference': 'main'},
+        source={'type': 'git', 'locator': 'u', 'reference': 'main'},
         fetched={'head': 'cafebabe'},
     )
 
@@ -73,7 +73,7 @@ def test_a_manifest_written_without_a_fetch_reads_back_empty(tmp_path):
         resource_root=str(root),
         kind=resource_manifest.ResourceKind.OVERLAY,
         cache_key=root.name,
-        source={'type': 'directory', 'location': 'file:///somewhere', 'reference': ''},
+        source={'type': 'directory', 'locator': 'file:///somewhere', 'reference': ''},
     )
 
     assert resource_manifest.ResourceManifest.read_from_root(str(root)).fetched == {}
@@ -99,7 +99,7 @@ def test_touch_last_used_updates_timestamp(tmp_path):
         resource_root=str(root),
         kind=resource_manifest.ResourceKind.TOOL,
         cache_key='cppfront',
-        source={'type': 'git', 'location': 'u', 'reference': 'v0.8.1'},
+        source={'type': 'git', 'locator': 'u', 'reference': 'v0.8.1'},
     )
 
     manifest_before = resource_manifest.ResourceManifest.read_from_root(str(root))

@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem import cache_directory
 from golemcpp.golem import helpers
 from golemcpp.golem import network
@@ -114,7 +115,7 @@ def test_populate_and_refresh_hand_back_what_the_fetch_left(tmp_path, monkeypatc
 
 def make_cookbook():
     return Cookbook(
-        source=Source.for_repository('https://host/r.git', reference='main'))
+        source=RequestedSource.for_repository('https://host/r.git', version='main'))
 
 
 def make_recording_manager(tmp_path, recorded):
@@ -484,8 +485,8 @@ def test_make_available_does_not_touch_the_cache_when_not_fetching(tmp_path, git
 def test_make_available_all_hands_back_a_resource_per_item_in_order(tmp_path, git_calls):
     manager = make_manager(tmp_path)
     items = [
-        Cookbook(source=Source.for_repository(
-            'https://host/{}.git'.format(name), reference='main'))
+        Cookbook(source=RequestedSource.for_repository(
+            'https://host/{}.git'.format(name), version='main'))
         for name in ('first', 'second')
     ]
 

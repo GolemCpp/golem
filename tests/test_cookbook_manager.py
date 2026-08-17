@@ -1,5 +1,6 @@
 import os
 
+from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem.cache_directory import CacheDirectory
@@ -19,7 +20,7 @@ def make_manager(tmp_path):
 
 
 def make_source():
-    return Source.for_repository('https://example.com/recipes.git', reference='main')
+    return RequestedSource.for_repository('https://example.com/recipes.git', version='main')
 
 
 def test_resource_for_bakes_in_the_recipes_kind():
@@ -28,18 +29,20 @@ def test_resource_for_bakes_in_the_recipes_kind():
 
     assert resource.kind == ResourceKind.COOKBOOK
     assert resource.subdir == cache_configuration.COOKBOOKS_SUBDIR
-    assert resource.source == source
-    assert resource.cache_key == source.get_cache_key()
+    assert resource.source == source.resolved_at('main')
+    assert resource.cache_key == source.resolved_at('main').get_cache_key()
 
 
-def test_a_cookbook_lands_where_its_bare_source_did():
-    # A cookbook follows the reference it was configured with, so wrapping a source
-    # into one may never move what is already cached.
+def test_a_cookbook_lands_where_it_did_before_being_resolved():
+    # A cookbook follows the version it was configured with, so resolving one may
+    # never move what is already cached.
     source = make_source()
 
-    assert CookbookManager.resource_for(
-        CookbookManager.resolve_version(Cookbook(source=source))).cache_key == \
-        source.get_cache_key()
+    unresolved = CookbookManager.resource_for(Cookbook(source=source))
+    resolved = CookbookManager.resource_for(
+        CookbookManager.resolve_version(Cookbook(source=source)))
+
+    assert resolved.cache_key == unresolved.cache_key
 
 
 def test_resolve_and_locate(tmp_path):
@@ -50,7 +53,8 @@ def test_resolve_and_locate(tmp_path):
 
     assert cached_repository.cache_root == str(tmp_path / 'cache')
     assert cached_repository.path == os.path.join(
-        str(tmp_path / 'cache'), cache_configuration.COOKBOOKS_SUBDIR, source.get_cache_key())
+        str(tmp_path / 'cache'), cache_configuration.COOKBOOKS_SUBDIR,
+        source.resolved_at('main').get_cache_key())
 
 
 def test_guard_install_swaps_source_and_manifest(tmp_path):
@@ -74,7 +78,7 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
 def test_making_cookbooks_available_keeps_the_configured_order(tmp_path):
     manager = make_manager(tmp_path)
     sources = [
-        Source.for_repository('https://example.com/{}.git'.format(name), reference='main')
+        RequestedSource.for_repository('https://example.com/{}.git'.format(name), version='main')
         for name in ('first', 'second')
     ]
 
@@ -99,7 +103,7 @@ def test_weak_policy_falls_back_to_the_regex_cache_when_no_probe_hits():
         resolution_policy=CacheResolutionPolicy.WEAK))
 
     cached_repository = manager.resolve_cached_resource(Cookbook(
-        source=Source.for_repository(location='https://github.com/GolemCpp/recipes.git')))
+        source=RequestedSource.for_repository('https://github.com/GolemCpp/recipes.git')))
 
     assert cached_repository.cache_root == '/static-regex'
     assert cached_repository.is_read_only is True

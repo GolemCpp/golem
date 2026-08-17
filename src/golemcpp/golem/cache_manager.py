@@ -120,7 +120,7 @@ class CacheManager:
         '''
         Resolves the CacheDirectory corresponding to the resource and all the cache settings.
         '''
-        identifier = resource.location
+        identifier = str(resource.locator)
         exists_in_cache = lambda cache_directory: self.make_cached_resource(cache_directory, resource).exists()
 
         read_only_caches_with_regex = self._find_matching_caches(

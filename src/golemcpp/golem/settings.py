@@ -6,10 +6,8 @@ from golemcpp.golem import cache_resolution_policy
 from golemcpp.golem import config_store
 from golemcpp.golem import fetch_policy
 from golemcpp.golem import helpers
-from golemcpp.golem import source
-from golemcpp.golem.setting_descriptor import format_option_flag
-from golemcpp.golem.setting_descriptor import has_value
-from golemcpp.golem.setting_descriptor import require_positive
+from golemcpp.golem import requested_source
+from golemcpp.golem import setting_descriptor
 from golemcpp.golem.setting_descriptor import SettingDescriptor
 from golemcpp.golem.setting_descriptor import SettingProcessingContext
 from golemcpp.golem.setting_descriptor import SettingType
@@ -87,7 +85,7 @@ SETTINGS = (
                     '(default 8).',
         value_type=SettingType.INT,
         default=8,
-        deserialize=require_positive,
+        deserialize=setting_descriptor.require_positive,
     ),
     SettingDescriptor(
         key='git.fetch-mode',
@@ -111,7 +109,7 @@ SETTINGS = (
                     'capped at 8).',
         value_type=SettingType.INT,
         default=fetch_policy.default_fetch_jobs,
-        deserialize=require_positive,
+        deserialize=setting_descriptor.require_positive,
     ),
     SettingDescriptor(
         key='git.prompt.enabled',
@@ -130,11 +128,11 @@ SETTINGS = (
         env_name='GOLEM_COOKBOOKS_LOCATIONS',
         option_name='cookbook_location',
         description='Cookbooks searched for the recipes used to resolve dependencies '
-                    '(pipe-separated [KIND+]LOCATOR).',
+                    '(pipe-separated [KIND+]LOCATOR[#VERSION]).',
         value_type=SettingType.LIST,
         default=(DEFAULT_COOKBOOK_LOCATION,),
-        deserialize=source.parse_location,
-        serialize=source.format_location,
+        deserialize=requested_source.parse_location,
+        serialize=requested_source.format_location,
     ),
     SettingDescriptor(
         key='overrides.configuration',
@@ -149,11 +147,11 @@ SETTINGS = (
         env_name='GOLEM_OVERLAYS_LOCATIONS',
         option_name='overlay_location',
         description='Overlays contributing an overrides configuration, layered in order '
-                    '(pipe-separated [KIND+]LOCATOR).',
+                    '(pipe-separated [KIND+]LOCATOR[#VERSION]).',
         value_type=SettingType.LIST,
         default=(),
-        deserialize=source.parse_location,
-        serialize=source.format_location,
+        deserialize=requested_source.parse_location,
+        serialize=requested_source.format_location,
     ),
 )
 
@@ -342,7 +340,7 @@ class Settings:
             return []
 
         value = self.get(name)
-        if not has_value(value):
+        if not setting_descriptor.has_value(value):
             return []
 
         values = value if isinstance(value, list) else [value]
@@ -366,8 +364,8 @@ class Settings:
         '''
         # CLI option, either the live waf options or a native command Namespace.
         value, option_name = self._get_option_value(self.options, setting.option_names)
-        if has_value(value):
-            return value, 'option {}'.format(format_option_flag(option_name))
+        if setting_descriptor.has_value(value):
+            return value, 'option {}'.format(setting_descriptor.format_option_flag(option_name))
 
         # Persisted `golem configure` options, so a command reached through a
         # build directory honours what the project was configured with, without
@@ -375,14 +373,14 @@ class Settings:
         if self.build_dir:
             value, option_name = self._get_option_value(
                 get_persisted_configure_options(self.build_dir), setting.option_names)
-            if has_value(value):
+            if setting_descriptor.has_value(value):
                 return value, 'option {} persisted by golem configure'.format(
-                    format_option_flag(option_name))
+                    setting_descriptor.format_option_flag(option_name))
 
         # Environment variable.
         for env_name in setting.env_names:
             value = helpers.get_environ(env_name)
-            if has_value(value):
+            if setting_descriptor.has_value(value):
                 return value, 'environment variable {}'.format(env_name)
 
         # Configuration store, project-local scope first, then the user-global one.
@@ -392,7 +390,7 @@ class Settings:
             for key in setting.keys:
                 value = config_store.get_scoped_value(
                     key=key, scope=scope, project_dir=self.project_dir)
-                if has_value(value):
+                if setting_descriptor.has_value(value):
                     return value, '{} configuration key {}'.format(scope, key)
 
         return None, None
@@ -410,7 +408,7 @@ class Settings:
                 value = options.get(option_name)
             else:
                 value = getattr(options, option_name, None)
-            if has_value(value):
+            if setting_descriptor.has_value(value):
                 return value, option_name
 
         return None, None

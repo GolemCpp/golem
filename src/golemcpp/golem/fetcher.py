@@ -15,6 +15,8 @@ archive to unpack, is a Fetcher beside these ones and one line here.
 import os
 
 from golemcpp.golem.fetched import Fetched
+# Import this kind alone, rather than the `source` module every other reader
+# imports, to avoid naming conflicts.
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 
 
@@ -56,7 +58,7 @@ class Fetcher:
         The local path the source lives at, refused here rather than deep inside a
         copy or a clone. None when the source is not local.
         '''
-        local_path = self.source.get_local_path()
+        local_path = self.source.locator.get_local_path()
         if local_path is None:
             return None
 

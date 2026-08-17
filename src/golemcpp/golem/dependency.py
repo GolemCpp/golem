@@ -4,9 +4,11 @@ from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
+from golemcpp.golem import requested_source
+from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem import source
 from golemcpp.golem.source import Source
-from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
 
@@ -82,14 +84,39 @@ class Dependency(Configuration):
         # writes the members straight in, so __init__ never saw them.
         self.validate_source()
         if self.location:
-            source = Source.parse(self.location, project_dir=project_dir)
-            self.directory = source.location if source.type == SOURCE_TYPE_DIRECTORY else ''
-            self.repository = '' if self.directory else source.location
+            requested = RequestedSource.parse(self.location, project_dir=project_dir)
+            # These two stay strings: they are golemfile keywords and
+            # dependencies.json keys, so a Locator is built from them rather than
+            # stored in them.
+            self.directory = str(requested.locator) \
+                if requested.type == source.SOURCE_TYPE_DIRECTORY else ''
+            self.repository = '' if self.directory else str(requested.locator)
             self.location = ''
+            self.update_version(requested.version)
         elif self.directory:
-            self.directory = Source.normalize_url(self.directory, project_dir)
+            # These two name their kind by being the field they are, so it is
+            # stated rather than detected. No # version fragment.
+            self.directory = str(requested_source.resolve_locator(
+                self.directory, source.SOURCE_TYPE_DIRECTORY, project_dir))
         elif self.repository:
-            self.repository = Source.normalize_url(self.repository, project_dir)
+            self.repository = str(requested_source.resolve_locator(
+                self.repository, source.SOURCE_TYPE_GIT, project_dir))
+
+    def update_version(self, requested_version):
+        '''
+        Take the version a location named, refusing one that contradicts a version
+        the dependency also declares.
+        '''
+        if not requested_version:
+            return
+
+        if self.version:
+            raise ValueError(
+                "dependency '{}' declares version '{}' and a location naming "
+                "'{}'; it asks for exactly one".format(
+                    self.name, self.version, requested_version))
+
+        self.version = requested_version
 
     def is_non_git_directory(self):
         return bool(self.directory)
