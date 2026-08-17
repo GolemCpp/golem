@@ -22,8 +22,8 @@ class OverlayManager(ResourceManager):
     kind = ResourceKind.OVERLAY
 
     @staticmethod
-    def get_overlay(source, version: str = '') -> Overlay:
-        return Overlay(source=source, version=version)
+    def get_overlay(source) -> Overlay:
+        return Overlay(source=source)
 
     def load_overrides(self, cached_overlays, project_dir, merged_path):
         '''

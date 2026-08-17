@@ -1,17 +1,19 @@
 '''
 A source obtained from a git remote.
 
-The mechanism here is the richest one any resource kind needs: shallow clones,
-submodules, cleaning, resetting onto a revision. A kind asks for what it wants
-through the FetchPolicy it hands over.
+This is the one fetcher that clones, fetches shallow, updates submodules, cleans
+a working tree and resets onto a revision. A kind asks for what it wants through
+the FetchPolicy it hands over.
 
-Whatever a resource holds, it is fetched whole and kept faithful to the revision
-it names: the submodules come with it, and local changes are discarded before it
-is refreshed.
+A resource is obtained whole and left on the revision the policy names: the
+submodules come with it, and local changes are discarded before a refresh.
+
+The revision is a commit. Resolution settled which one before the policy was
+built, therefore nothing here interprets a name.
 
 Everything that only moves the working tree runs quiet. What reaches the remote
-keeps reporting its progress, and stays recognisable to the network guard that
-decides whether reaching one is allowed here at all.
+keeps reporting its progress, and keeps the spelling `helpers.validate_git_command`
+reads to decide whether reaching one is allowed.
 '''
 
 import os
@@ -29,11 +31,11 @@ class GitFetcher(Fetcher):
 
     def __init__(self, path, source, policy):
         super().__init__(path, source, policy)
-        # What the revision turns out to name
-        self._resolved_reset_revision = None
+        # What the last fetch left to land on, when it named no ref for it.
+        self._fetched_head = ''
 
     def populate(self) -> Fetched:
-        '''A source obtained fresh from its remote, as much of it as asked for.'''
+        '''Obtain a source fresh from its remote, as much of it as asked for.'''
         print("Cloning repository {} into {}".format(self.source.locator, self.path))
         os.makedirs(self.path, exist_ok=True)
 
@@ -57,17 +59,15 @@ class GitFetcher(Fetcher):
 
     def refresh(self) -> Fetched:
         '''
-        An already-cloned source brought back to what it should be.
+        Bring a source that is already cloned back to what it should be.
 
-        Cleaning comes first by resetting to only leave behind what the
-        previous revision put there.
+        Clean first, so what the previous revision left behind does not survive
+        into what this one holds.
 
-        A refresh may move a root to a different commit, when following a
-        branch for example.
+        A refresh may land the root on a different commit, which is what a
+        resource following a branch is for.
         '''
         if self.is_up_to_date():
-            # The mode has to be pulled from the state of the root. It can be different
-            # from the mode asked, because a golem resolve is needed to migrate the root.
             return self.fetched(self.detected_mode())
 
         self.run(['clean', '-ffxd'], quiet=True)
@@ -80,8 +80,8 @@ class GitFetcher(Fetcher):
         self.require_revision()
         self.reset()
 
-        # Asked again: the revision just landed, and what it declares is not what
-        # the previous one did.
+        # Asked again rather than remembered: the revision that just landed may
+        # declare submodules the previous one did not.
         if self.has_submodules():
             self.run(['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'], quiet=True)
 
@@ -94,51 +94,29 @@ class GitFetcher(Fetcher):
 
         self.collect_garbage()
 
-        # The mode has to be pulled from the state of the root. It can be different
-        # from the mode asked, because a golem resolve is needed to migrate the root.
         return self.fetched(self.detected_mode())
 
     # -- the steps a fetch is made of --------------------------------------
 
     def reset(self):
-        '''Onto the revision, or onto the current HEAD when there is none.'''
-        revision = self.resolved_reset_revision()
+        '''Land the working tree on the revision, or on the current HEAD when
+        there is none.'''
+        revision = self.reset_revision()
         self.run(['reset', '--hard'] + ([revision] if revision else []), quiet=True)
 
-    def resolved_reset_revision(self):
+    def reset_revision(self):
         '''
-        Returns a non-ambiguous revision for `git reset` to function.
+        Give `git reset` what to land on.
 
-        Handing the bare revision to git instead would answer nearly the same
-        way, and cannot be relied on to. Because cache clone always carries a
-        local branch, etc.
+        The policy names a commit, which needs no interpreting. A shallow fetch
+        is the exception: it asks the remote for one object by name and git
+        writes no ref for it, so FETCH_HEAD is the only thing naming what landed.
         '''
-        if self._resolved_reset_revision is None:
-            self._resolved_reset_revision = self._resolve_revision()
-        return self._resolved_reset_revision
-
-    def _resolve_revision(self):
-        '''
-        Disambiguate a revision.
-
-        A tag and a branch may share a name. Here is the order to interpret the
-        revision and remove any ambiguity:
-        1. Tag
-        2. Branch
-        3. The revision as given (e.g. a commit hash).
-        '''
-        revision = self.policy.revision
-        if not revision:
-            return ''
-        if self.holds_revision('refs/tags/' + revision):
-            return 'refs/tags/' + revision
-        if self.holds_revision('refs/remotes/origin/' + revision):
-            return 'origin/' + revision
-        return revision
+        return self._fetched_head or self.policy.revision
 
     def update_submodules(self, no_fetch=False):
         '''
-        The submodules brought to what the revision in place records, obtained the
+        Bring the submodules to what the revision in place records, obtained the
         way the resource itself was.
 
         `no_fetch` tells git to work from the objects this repository already holds
@@ -156,7 +134,7 @@ class GitFetcher(Fetcher):
 
     def fetch_for_refresh(self):
         '''
-        Fetches the remote, according to what the fetch mode asks for.
+        Fetch the remote, as much of it as the fetch mode asks for.
 
         Shallow asks for one commit at a depth of one. The other modes ask for
         everything and prune branches and tags.
@@ -166,29 +144,26 @@ class GitFetcher(Fetcher):
             return
 
         self.run(['fetch', '--prune', '--prune-tags', '--tags', 'origin'])
-        # Every ref may have moved, so what the revision names has to be asked
-        # again rather than remembered from before.
-        self._resolved_reset_revision = None
 
     def fetch_revision(self):
         '''
-        Fetches the revision by name on the remote.
+        Fetch one object from the remote, by name.
 
-        When asking for a revision without refspec, git doesn't write any ref, so
-        FETCH_HEAD comes to the rescue.
+        Asked for a revision and no refspec, git writes no ref, therefore
+        FETCH_HEAD is the only thing naming what landed.
         '''
         self.run(['fetch'] + self.mode_args() + ['origin'] + (
             [self.policy.revision] if self.policy.revision else []))
 
-        self._resolved_reset_revision = 'FETCH_HEAD'
+        self._fetched_head = 'FETCH_HEAD'
 
     def mode_args(self):
         '''
-        What obtaining this source the way the policy asks for takes.
+        Make the arguments that obtain this source the way the policy asks for.
 
         A shallow resource takes shallow submodules: at a depth of one, a submodule
         whose recorded commit is not a tip the remote advertises cannot be fetched
-        at all, which is the bargain shallow is.
+        at all. That is what shallow costs.
 
         A server that will not filter says so and hands over everything instead, so
         asking costs a warning at worst.
@@ -200,22 +175,21 @@ class GitFetcher(Fetcher):
         return []
 
     def fetched(self, mode) -> Fetched:
-        '''What this fetch left behind, for the manifest to keep.'''
+        '''Make the record of what this fetch left behind, for the manifest.'''
         return Fetched(head=self.read_head(), mode=mode)
 
     def require_revision(self):
         '''
-        The revision has to name something the repository holds before anything
-        resets to it.
+        Refuse a revision the repository does not hold, before anything resets
+        onto it.
 
-        Since no fetch is performed, the checks are local based on what was
-        previously fetched for the repository.
-        
-        It means that referring to a commit that can't be found locally, because
-        it can't be reached by any branch or any tag previously fetched, is
-        considered a missing commit.
+        The check is local: whatever was going to be fetched has been by now, so
+        a commit no branch and no tag reaches is one this root will never have.
+
+        `git reset` would fail on its own. It names neither the repository nor
+        what is missing, which is what this is for.
         '''
-        if not self.policy.revision or self.holds_revision(self.resolved_reset_revision()):
+        if not self.policy.revision or self.holds_revision(self.reset_revision()):
             return
 
         raise RuntimeError(
@@ -226,12 +200,13 @@ class GitFetcher(Fetcher):
 
     def migrate(self, recorded) -> Fetched | None:
         '''
-        A root fetched one way brought to another, in place where that costs less
-        than obtaining it again: git got upgraded and blobless became available, a
-        dependency was switched to shallow, a cache was asked to become portable.
+        Convert a root fetched one way into one fetched another, in place where
+        that costs less than obtaining it again: git got upgraded and blobless
+        became available, a dependency was switched to shallow, a cache was asked
+        to become portable.
 
-        None means it cannot be converted and has to be re-cloned, which is
-        always correct and never wrong, only slower.
+        Return None when it cannot be converted, so the caller obtains it again.
+        That is correct whatever the root held, only slower.
         '''
         target = self.policy.fetch_mode
         # A root cloned before golem recorded any of this still has to be
@@ -272,9 +247,9 @@ class GitFetcher(Fetcher):
 
     def collect_garbage(self):
         '''
-        Git's own housekeeping, which it decides is due or not. A cache root is
-        fetched into for as long as it is kept, and nothing else would ever pack
-        what those fetches leave loose.
+        Let git do its own housekeeping, if it decides any is due. A cache root
+        is fetched into for as long as it is kept, and nothing else would ever
+        pack what those fetches leave loose.
 
         Never worth failing a refresh over: what it does is what a later command
         would have done anyway.
@@ -283,7 +258,7 @@ class GitFetcher(Fetcher):
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def unset(self, key):
-        '''A configuration key removed if it is there. Absent is the same as gone.'''
+        '''Remove a configuration key, succeeding when it was not there.'''
         helpers.try_git(['config', '--unset', key], cwd=self.path,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -291,7 +266,7 @@ class GitFetcher(Fetcher):
 
     def is_up_to_date(self) -> bool:
         '''
-        Whether the whole refresh would leave the root exactly as it found it.
+        Would the whole refresh leave the root exactly as it found it?
 
         Only a resource that consults no remote can be known to be up to date;
         anything else may have moved since it was last looked at.
@@ -301,12 +276,12 @@ class GitFetcher(Fetcher):
         '''
         if self.policy.fetch_remote:
             return False
-        if self.policy.revision and not self.is_at(self.resolved_reset_revision()):
+        if self.policy.revision and not self.is_at(self.reset_revision()):
             return False
         return not self.is_dirty()
 
     def is_at(self, revision) -> bool:
-        '''Whether HEAD is already the commit a revision names.'''
+        '''Is HEAD already the commit this revision names?'''
         try:
             landed, wanted = helpers.read_git(
                 ['rev-parse', 'HEAD', '{}^{{commit}}'.format(revision)],
@@ -317,7 +292,8 @@ class GitFetcher(Fetcher):
 
     def is_dirty(self) -> bool:
         '''
-        Whether anything in the root differs from what its revision records.
+        Does anything in the root differ from what its revision records?
+
         Unreadable counts as dirty: what cannot be checked is not known to be
         clean.
         '''
@@ -330,9 +306,12 @@ class GitFetcher(Fetcher):
 
     def detected_mode(self) -> FetchMode:
         '''
-        What a root looks like it was fetched as, for one whose manifest does not
-        say: a cache populated before golem knew about modes, or by a golem that
-        knows ones this one does not.
+        Read what a root looks like it was fetched as.
+
+        A manifest says so, until one does not: a cache populated before golem
+        knew about modes, or by a golem that knows ones this one does not. The
+        mode a refresh reports comes from here for that reason, and may differ
+        from the mode asked for, since migrating a root is a resolve step.
         '''
         if self.reads_true(['rev-parse', '--is-shallow-repository']):
             return FetchMode.SHALLOW
@@ -341,7 +320,7 @@ class GitFetcher(Fetcher):
         return FetchMode.FULL
 
     def reads_true(self, args) -> bool:
-        '''What git says, for the questions it answers with a word.'''
+        '''Read git's answer to a question it answers with one word.'''
         try:
             return helpers.read_git(
                 args, cwd=self.path, stderr=subprocess.DEVNULL).strip() == 'true'
@@ -350,20 +329,22 @@ class GitFetcher(Fetcher):
 
     def has_submodules(self) -> bool:
         '''
-        Whether the revision in place declares any submodule.
+        Does the revision in place declare any submodule?
         '''
         return os.path.isfile(os.path.join(self.path, '.gitmodules'))
 
     def holds_revision(self, revision) -> bool:
-        '''Whether the repository already holds the commit a revision names.'''
+        '''Does the repository already hold the commit this revision names?'''
         return helpers.try_git(
             ['rev-parse', '--verify', '--quiet', '{}^{{commit}}'.format(revision)],
             cwd=self.path, stdout=subprocess.DEVNULL)
 
     def read_head(self) -> str:
         '''
-        The commit the working tree is on, for the manifest to record. Best-effort:
-        what the root holds is worth knowing, never worth failing a fetch over.
+        Read the commit the working tree is on, for the manifest to record.
+
+        An unreadable one answers empty: what a root holds is worth recording,
+        never worth failing a fetch over.
         '''
         try:
             return helpers.read_git(
@@ -372,5 +353,5 @@ class GitFetcher(Fetcher):
             return ''
 
     def run(self, args, quiet=False):
-        '''Every git command this fetcher runs, in the directory it works in.'''
+        '''Run a git command in the directory this fetcher works in.'''
         helpers.run_git(args, cwd=self.path, quiet=quiet)

@@ -18,8 +18,8 @@ class CookbookManager(ResourceManager):
     kind = ResourceKind.COOKBOOK
 
     @staticmethod
-    def get_cookbook(source, version: str = '') -> Cookbook:
-        return Cookbook(source=source, version=version)
+    def get_cookbook(source) -> Cookbook:
+        return Cookbook(source=source)
 
 
 def get_cookbook_manager(cache_configuration) -> CookbookManager:

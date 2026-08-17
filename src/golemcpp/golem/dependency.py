@@ -8,6 +8,8 @@ from golemcpp.golem import requested_source
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import source
+from golemcpp.golem.version import Version
+from golemcpp.golem import version_resolver
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
 
@@ -129,18 +131,12 @@ class Dependency(Configuration):
         if resolved is self.resolved:
             return self.resolved
 
-        if not resolved.revision:
-            raise RuntimeError(
-                "Bad version {} can't find any hash related".format(
-                    self.version))
-
         self.resolved = resolved
         # The cache key is built from the resolved commit, so anything resolved
         # before this point identified a different dependency: drop it.
         self.cached_resource = None
 
-        print("{}: {} -> {} ({})".format(self.name, self.version,
-                                         resolved.reference, resolved.revision))
+        version_resolver.report_resolution(self.name, self.version, resolved)
         return self.resolved
 
     def build(self, context, config):
@@ -184,6 +180,16 @@ class Dependency(Configuration):
         if Dependency.RESOLVED_MEMBER in o:
             self.resolved = ResolvedVersion.from_dict(
                 o[Dependency.RESOLVED_MEMBER])
+            # A resolution names the commit it landed on, and everything reading
+            # one downstream takes it for a commit: the cache root is named after
+            # it, and the fetch resets onto it without interpreting it. A name
+            # written here would reach git as a revision it reads its own way.
+            if self.resolved.revision and not Version.parse_git_hash(
+                    self.resolved.revision):
+                raise RuntimeError(
+                    "dependency '{}' records '{}' as its revision, which names "
+                    "no commit; write the version asked for as `version` "
+                    "instead".format(self.name, self.resolved.revision))
 
     @staticmethod
     def unserialize_from_json(o):

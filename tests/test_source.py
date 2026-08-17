@@ -1,12 +1,8 @@
-import hashlib
-import os
-import re
-
-from golemcpp.golem.source import make_revision_component
 from golemcpp.golem import locator as locator_module
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from golemcpp.golem.locator import Locator
+
 
 def test_for_repository_preserves_location_and_resolved_version():
     source = Source.for_repository(
@@ -53,55 +49,6 @@ def test_for_directory_is_directory_type():
     source = Source.for_directory('file:///tmp/mylib')
     assert source.type == 'directory'
     assert source.locator == Locator('file:///tmp/mylib')
-
-
-def test_make_revision_component_abbreviates_either_object_name_format():
-    # 40 hex is SHA-1, 64 is SHA-256. Git is migrating, and both name a commit.
-    assert make_revision_component('a' * 40) == 'aaaaaaaa'
-    assert make_revision_component('b' * 64) == 'bbbbbbbb'
-
-
-def test_make_revision_component_abbreviates_nothing_of_another_length():
-    # Neither is an object name, so neither may be silently cut down to one.
-    assert make_revision_component('c' * 39) == 'c' * 39 + '=' + \
-        hashlib.sha256(('c' * 39).encode('utf-8')).hexdigest()[:8]
-    assert make_revision_component('d' * 41).startswith('d' * 40 + '=')
-
-
-def test_a_revision_that_looks_like_an_abbreviation_cannot_alias_a_commit():
-    # A tag may be spelled like a short hash. It takes the other branch, so it
-    # never collides with the commit whose object name starts the same way.
-    assert make_revision_component('deadbeef') == 'deadbeef=2baf1f40'
-
-
-def test_a_namespaced_revision_stays_one_path_component():
-    component = make_revision_component('release/1.2.3')
-
-    assert component == 'release~1.2.3=88ded651'
-    assert '/' not in component and os.sep not in component
-
-
-def test_revisions_a_filesystem_would_confuse_stay_distinct():
-    # Each pair is one directory on some platform golem runs on -- NTFS and APFS
-    # fold case, Windows drops a trailing dot -- so the digest is what keeps them
-    # apart, and it is taken over the name as written.
-    assert make_revision_component('V1.0') == 'v1.0=35a6fd96'
-    assert make_revision_component('v1.0') == 'v1.0=fa8b919c'
-    assert make_revision_component('v1.0.') == 'v1.0.=db5f409d'
-    # And a name spelled with the substitute is not the name holding the original.
-    assert make_revision_component('release/1.2.3') != make_revision_component('release-1.2.3')
-
-
-def test_make_revision_component_is_always_a_usable_directory_name():
-    for revision in ['main', 'V1.0', 'release/1.2.3', 'feature:x', 'a b', '..',
-                     '...', 'café', 'x' * 200, 'a' * 40]:
-        component = make_revision_component(revision)
-
-        assert re.fullmatch(r'[0-9a-z._~-]*(=[0-9a-f]{8})?', component)
-        # Ends in the digest or in an object name, so never in something Windows
-        # would silently strip.
-        assert not component.endswith('.') and not component.endswith(' ')
-        assert component not in ('.', '..')
 
 
 def test_get_id_matches_existing_format():

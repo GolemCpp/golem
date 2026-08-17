@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass, field
 
 from golemcpp.golem import helpers
@@ -15,48 +14,6 @@ SOURCE_TYPE_DIRECTORY = 'directory'
 # Every kind a location may claim. A new kind (an archive, an SVN checkout) is one
 # entry here plus its branch in ResourceManager.populate.
 SOURCE_KINDS = (SOURCE_TYPE_GIT, SOURCE_TYPE_DIRECTORY)
-
-# What separates the major fields of a cache key: `<source id>+<revision>`.
-CACHE_KEY_SEPARATOR = '+'
-
-# 40 hex is a SHA-1 object name, 64 a SHA-256 one. Git is migrating to SHA-256 and
-# a repository names its objects in one format or the other, so both have to read
-# as an object name here.
-GIT_OBJECT_NAME = re.compile(r'^([0-9a-f]{40}|[0-9a-f]{64})$')
-
-# What a directory name may hold, on the strictest of the platforms golem runs on.
-# Lowercase only: NTFS and APFS are case-insensitive, so case cannot carry meaning
-# there the way it does in a git ref name. Anything else becomes
-# locator.SUBSTITUTE_MARKER, the same marker an id uses, so `release/1.2.3` reads
-# as `release~1.2.3` rather than as a ref that was named `release-1.2.3`.
-UNSAFE_IN_COMPONENT = re.compile(r'[^0-9a-z._-]')
-
-# How much of a revision is kept for reading. What identifies it is the digest
-# behind locator.DIGEST_SEPARATOR, the same convention an ambiguous id uses.
-REVISION_SLUG_LENGTH = 40
-
-
-def make_revision_component(revision):
-    '''
-    Makes a revision as one directory-name component.
-
-    It can be a hash: In which case it is abbreviated to 8 characters.
-    
-    It can be a reference: In which case it can be abbreviated if it is too long.
-    But it will also always be appended with a digest of it since the reference
-    is processed to be safe for any filesystem, which can be lossy.
-    '''
-    if not revision:
-        return ''
-
-    if GIT_OBJECT_NAME.match(revision):
-        return revision[:locator.DIGEST_LENGTH]
-
-    slug = UNSAFE_IN_COMPONENT.sub(locator.SUBSTITUTE_MARKER, revision.lower())
-
-    return '{}{}{}'.format(slug[:REVISION_SLUG_LENGTH], locator.DIGEST_SEPARATOR,
-                           locator.digest(revision))
-
 
 @dataclass(frozen=True)
 class Source:
