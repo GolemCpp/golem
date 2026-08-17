@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from waflib.TaskGen import feature, before_method
+from golemcpp.golem import advertisement_store
 from golemcpp.golem import network
 from golemcpp.golem.context import Context
 import sys
@@ -49,7 +50,12 @@ def resolve(context):
 
     # This is the command that fills the cache, so it is the one allowed to
     # reach a remote. Every other command reads what this one put there.
-    with network.allowed():
+    #
+    # What the remotes advertise is kept for exactly as long, and shared with the
+    # resolves this one spawns, so a repository two dependencies both need is
+    # read once.
+    with network.allowed(), advertisement_store.shared(
+            ctx.make_golem_path(advertisement_store.DIRECTORY_NAME)):
         ctx.environment(resolve_dependencies=True)
 
         # Disable targets as there is no task generator associated with this command for the moment
