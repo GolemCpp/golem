@@ -8,6 +8,7 @@ from golemcpp.golem import requested_source
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import source
+from golemcpp.golem import version_resolver
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
 
@@ -129,18 +130,12 @@ class Dependency(Configuration):
         if resolved is self.resolved:
             return self.resolved
 
-        if not resolved.revision:
-            raise RuntimeError(
-                "Bad version {} can't find any hash related".format(
-                    self.version))
-
         self.resolved = resolved
         # The cache key is built from the resolved commit, so anything resolved
         # before this point identified a different dependency: drop it.
         self.cached_resource = None
 
-        print("{}: {} -> {} ({})".format(self.name, self.version,
-                                         resolved.reference, resolved.revision))
+        version_resolver.report_resolution(self.name, self.version, resolved)
         return self.resolved
 
     def build(self, context, config):

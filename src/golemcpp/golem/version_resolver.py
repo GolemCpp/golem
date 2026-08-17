@@ -61,18 +61,24 @@ class VersionResolver:
     def resolve_requested(requested, resolved,
                           require_revision=False) -> ResolvedVersion:
         '''
-        Resolve the version of a `RequestedSource`, and hand back the resolution
-        already in hand when there is one.
+        Resolve the version of a `RequestedSource`, unless the resolution
+        given already answers.
 
-        What counts as already resolved depends on the caller. A kind keyed on
-        the commit needs the revision, therefore it asks for `require_revision`
-        and a resolution naming only a reference sends it to the remote.
+        With `require_revision`, a commit is mandatory: not finding one raises.
+
+        A directory is returned as given: it names no remote to ask.
         '''
         already = bool(resolved.revision) if require_revision else bool(resolved)
         if requested.type != source.SOURCE_TYPE_GIT or already:
             return resolved
 
-        return VersionResolver.resolve(requested)
+        resolved = VersionResolver.resolve(requested)
+        if require_revision and not resolved.revision:
+            raise RuntimeError(
+                "no commit of '{}' answers version '{}'".format(
+                    requested.locator, requested.version))
+
+        return resolved
 
     @staticmethod
     def resolve(requested) -> ResolvedVersion:
@@ -87,6 +93,7 @@ class VersionResolver:
         so only the last one is selected to follow what OpenSSL does.
 
         Third, if nothing matched keep the version as it stands, like a commit hash.
+        But an unresolved range raises an exception.
         '''
         url = str(requested.locator)
         version = requested.version
@@ -106,6 +113,10 @@ class VersionResolver:
                     "Can't find any hash related to found tag {}".format(
                         found_version))
             return ResolvedVersion(reference=found_version, revision=revision)
+
+        if VersionResolver.is_range(version):
+            raise RuntimeError(
+                "no tag of '{}' matches version range '{}'".format(url, version))
 
         return ResolvedVersion(reference=version, revision=version)
 
@@ -170,3 +181,9 @@ class VersionResolver:
             v_list.sort(reverse=True)
 
             return v_list[0]
+
+
+def report_resolution(name, version, resolved):
+    '''Say what a version resolved to, under the name the resource goes by.'''
+    print("{}: {} -> {} ({})".format(
+        name, version, resolved.reference, resolved.revision))

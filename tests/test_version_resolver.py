@@ -204,3 +204,34 @@ def test_a_resolution_naming_a_commit_is_answer_enough_either_way(monkeypatch):
     assert VersionResolver.resolve_requested(requested, resolved) is resolved
     assert VersionResolver.resolve_requested(
         requested, resolved, require_revision=True) is resolved
+
+
+def test_a_range_matching_no_tag_is_refused(monkeypatch):
+    # A ref the remote does not have is carried forward for git to fail on, but
+    # git cannot resolve a semver range at all, so nothing downstream could.
+    monkeypatch.setattr(
+        version_resolver.helpers, 'read_git', lambda args, cwd: '')
+
+    with pytest.raises(RuntimeError) as error:
+        VersionResolver.resolve(
+            RequestedSource.for_repository('https://host/r.git', '^99.0.0'))
+
+    assert "matches version range '^99.0.0'" in str(error.value)
+    assert 'https://host/r.git' in str(error.value)
+
+
+def test_asking_for_a_commit_and_getting_none_is_refused(monkeypatch):
+    # A repository with no tags, asked for no version: nothing names a commit,
+    # and a kind keyed on one cannot name a root without it.
+    monkeypatch.setattr(
+        version_resolver.helpers, 'read_git', lambda args, cwd: '')
+    requested = RequestedSource.for_repository('https://host/r.git', version='')
+
+    assert VersionResolver.resolve_requested(
+        requested, ResolvedVersion()) == ResolvedVersion()
+
+    with pytest.raises(RuntimeError) as error:
+        VersionResolver.resolve_requested(
+            requested, ResolvedVersion(), require_revision=True)
+
+    assert "no commit of 'https://host/r.git'" in str(error.value)

@@ -662,3 +662,15 @@ def test_a_heavy_dependency_is_the_one_resource_that_picks_its_fetch_mode(tmp_pa
     assert manager.fetch_mode_for(dep) == FetchMode.SHALLOW
     assert manager.fetch_mode_for(
         Dependency(name='small', repository='https://host/small.git')) == manager.fetch_mode
+
+
+def test_every_kind_reports_what_its_version_resolved_to(monkeypatch, capsys, resolving):
+    # A dependency has always said so. A cookbook or an overlay following a
+    # range moved just as silently, which is the same thing worth reading.
+    stub_git_probes(monkeypatch)
+
+    ResourceManager.resolve_version(make_cookbook())
+
+    reported = capsys.readouterr().out
+    assert 'main' in reported
+    assert STUB_HEAD in reported
