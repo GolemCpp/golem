@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -87,16 +88,18 @@ def test_prefers_option_then_environment_then_store(monkeypatch, tmp_path):
 def test_local_store_wins_over_global_store(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
+    global_overlays = absolute_path('global', 'overrides')
+    local_overlays = absolute_path('local', 'overrides')
     monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
     manager = settings.get_settings(project_dir=project_dir)
 
-    config_store.set_value('overlays.locations', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
+    config_store.set_value('overlays.locations', global_overlays, config_store.GLOBAL_SCOPE, project_dir)
     assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
-        ['file:///global/overrides']
+        [Path(global_overlays).as_uri()]
 
-    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value('overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
     assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
-        ['file:///local/overrides']
+        [Path(local_overlays).as_uri()]
 
 
 def test_reads_persisted_configure_options(monkeypatch, tmp_path):
@@ -252,16 +255,17 @@ def test_parse_value_refuses_a_bad_location_where_it_is_written(monkeypatch, tmp
 def test_a_manager_sees_a_value_written_after_it_was_built(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
+    local_overlays = absolute_path('local', 'overrides')
     monkeypatch.delenv('GOLEM_OVERLAYS_LOCATIONS', raising=False)
     manager = settings.get_settings(project_dir=project_dir)
 
     assert manager.get('GOLEM_OVERLAYS_LOCATIONS') == []
 
     config_store.set_value(
-        'overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+        'overlays.locations', local_overlays, config_store.LOCAL_SCOPE, project_dir)
 
     assert [source.location for source in manager.get('GOLEM_OVERLAYS_LOCATIONS')] == \
-        ['file:///local/overrides']
+        [Path(local_overlays).as_uri()]
 
 
 def test_legacy_names_keep_resolving(monkeypatch, tmp_path):
