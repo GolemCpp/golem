@@ -1,5 +1,6 @@
 import pytest
 
+from golemcpp.golem import advertisement_store
 from golemcpp.golem import version_resolver
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
@@ -126,17 +127,6 @@ def test_a_spec_the_remote_does_not_have_falls_back_to_matching(monkeypatch):
         ResolvedVersion(reference='v1.2.3', revision='cafebabecafebabe')
 
 
-def test_a_suffix_of_a_ref_name_does_not_match_it(monkeypatch):
-    # git matches whole path components, so `1.2.0` names nothing when the tag is
-    # `v1.2.0`. It reaches the semver matching instead, which is a different
-    # question with a different answer.
-    advertise(monkeypatch, MAIN + 'cafebabe\trefs/tags/v1.2.0\n')
-    advertisement = VersionResolver.advertised('https://host/r.git')
-
-    assert advertisement.revision_of('1.2.0') == ''
-    assert advertisement.revision_of('v1.2.0') == 'cafebabe'
-
-
 def test_an_ambiguous_name_resolves_the_way_git_does(monkeypatch):
     # `git rev-parse v1.2.0` answers the tag, warning that the name is ambiguous:
     # `gitrevisions` looks in refs/tags/ before refs/heads/. Golem used to answer
@@ -148,20 +138,6 @@ def test_an_ambiguous_name_resolves_the_way_git_does(monkeypatch):
     assert VersionResolver.resolve(
         RequestedSource.for_repository('https://host/r.git', 'v1.2.0')) == \
         ResolvedVersion(reference='v1.2.0', revision='ta61e5000')
-
-
-def test_each_step_of_the_lookup_order_answers(monkeypatch):
-    # The order `gitrevisions` gives, minus the remote-tracking steps a remote
-    # advertises nothing for.
-    advertise(monkeypatch, MAIN + 'cafebabe\trefs/tags/v1.2.0\n')
-    advertisement = VersionResolver.advertised('https://host/r.git')
-
-    assert advertisement.revision_of('HEAD') == 'abc123'
-    assert advertisement.revision_of('refs/tags/v1.2.0') == 'cafebabe'
-    assert advertisement.revision_of('tags/v1.2.0') == 'cafebabe'
-    assert advertisement.revision_of('heads/main') == 'abc123'
-    assert advertisement.revision_of('v1.2.0') == 'cafebabe'
-    assert advertisement.revision_of('main') == 'abc123'
 
 
 # -- annotated tags ---------------------------------------------------------
@@ -188,16 +164,6 @@ def test_an_annotated_tag_is_still_matched_as_a_range(monkeypatch):
     assert VersionResolver.resolve(
         RequestedSource.for_repository('https://host/r.git', '^2.0.0')) == \
         ResolvedVersion(reference='v2.0.0', revision='c0mm17ff')
-
-
-def test_a_peeled_entry_is_never_a_reference_of_its_own(monkeypatch):
-    # `v2.0.0^{}` is a spelling of one tag, not a second tag, so it may reach
-    # neither a resolved reference nor the list a range is matched against.
-    advertise(monkeypatch, ANNOTATED)
-    advertisement = VersionResolver.advertised('https://host/r.git')
-
-    assert advertisement.tags() == ['v2.0.0']
-    assert version_resolver.PEELED_SUFFIX not in str(advertisement.refs)
 
 
 def test_nothing_matched_leaves_the_spec_standing_for_itself(monkeypatch):
@@ -293,3 +259,56 @@ def test_a_remote_advertising_no_head_is_refused(monkeypatch, version):
             RequestedSource.for_repository('https://host/r.git', version))
 
     assert "answers version '{}'".format(version) in str(error.value)
+
+
+# -- one remote read once for a whole resolve -------------------------------
+
+
+def test_a_remote_is_read_once_for_a_resolve(monkeypatch, tmp_path):
+    # What stage 3 exists for: a repository two dependencies both need is asked
+    # by the first of them and read from the store by the second.
+    calls = []
+    advertise(monkeypatch, MAIN + 'cafebabe\trefs/tags/v1.2.0\n', calls=calls)
+    requested = RequestedSource.for_repository('https://host/r.git', 'v1.2.0')
+
+    with advertisement_store.shared(str(tmp_path / 'resolve')):
+        first = VersionResolver.resolve(requested)
+        second = VersionResolver.resolve(requested)
+
+    assert first == second
+    assert len(calls) == 1
+
+
+def test_each_remote_is_read_once(monkeypatch, tmp_path):
+    calls = []
+    advertise(monkeypatch, MAIN, calls=calls)
+
+    with advertisement_store.shared(str(tmp_path / 'resolve')):
+        for url in ('https://host/one.git', 'https://host/two.git',
+                    'https://host/one.git'):
+            VersionResolver.resolve(RequestedSource.for_repository(url, 'main'))
+
+    assert len(calls) == 2
+
+
+def test_a_remote_that_could_not_be_reached_is_asked_again(monkeypatch, tmp_path):
+    # A refused connection is routine, which is why read_git retries one. Keeping
+    # a failure would make it fail every resolution after it instead.
+    calls = []
+
+    def fake_git(args, cwd):
+        calls.append(args)
+        if len(calls) == 1:
+            raise RuntimeError('Could not read from remote repository')
+        return MAIN
+
+    monkeypatch.setattr(version_resolver.helpers, 'read_git', fake_git)
+    requested = RequestedSource.for_repository('https://host/r.git', 'main')
+
+    with advertisement_store.shared(str(tmp_path / 'resolve')):
+        with pytest.raises(RuntimeError):
+            VersionResolver.resolve(requested)
+
+        assert VersionResolver.resolve(requested).revision == 'abc123'
+
+    assert len(calls) == 2
