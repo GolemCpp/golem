@@ -48,7 +48,11 @@ def fetch_root(tmp_path):
     _root = str(tmp_path / 'r')
 
 
-def make_fetcher(policy=None, revision='main'):
+# What resolution settles on and hands to the policy: a commit, never a name.
+REVISION = '4c83605c369b88eea65e63b90a08c382138ae68d'
+
+
+def make_fetcher(policy=None, revision=REVISION):
     return GitFetcher(
         _root,
         Source.for_repository('https://host/r.git', ResolvedVersion(reference=revision, revision=revision)),
@@ -63,7 +67,7 @@ def test_the_default_policy_clones_and_tracks_the_branch(git_calls):
 
     assert git_calls == [
         ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
-        ['reset', '--hard', 'origin/main'],
+        ['reset', '--hard', REVISION],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
 
@@ -75,7 +79,7 @@ def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls):
         ['clean', '-ffxd'],
         ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
         ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
-        ['reset', '--hard', 'origin/main'],
+        ['reset', '--hard', REVISION],
         ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
         ['submodule', 'sync', '--recursive'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
@@ -225,60 +229,18 @@ def test_a_present_revision_is_reset_to_without_asking_for_it(git_calls):
 
 
 def reset_onto(git_calls):
-    '''What the reset landed on, which is what the revision resolved to.'''
+    '''What the reset landed on.'''
     return next(args[2] for args in git_calls if args[:2] == ['reset', '--hard'])
 
 
-def test_a_branch_is_reached_through_the_remote(git_calls):
-    # Never by its bare name: a cache clone carries a local branch of that name,
-    # left behind by the clone and never moved since, and git would read that one.
-    make_fetcher().populate()
-
-    assert reset_onto(git_calls) == 'origin/main'
-
-
-def test_a_tag_wins_over_a_branch_sharing_its_name(monkeypatch, git_calls):
-    # Named in full, which is what keeps git from calling it ambiguous and
-    # warning about the branch it did not pick.
+def test_the_revision_is_used_as_it_was_given(monkeypatch, git_calls):
+    # Resolution settled which commit this is, so the fetcher interprets nothing.
+    # A tag and a branch sharing the name are there to be ignored.
     stub_git_probes(monkeypatch, branches=('main',), tags=('main',))
 
-    make_fetcher().populate()
+    make_fetcher(revision=REVISION).populate()
 
-    assert reset_onto(git_calls) == 'refs/tags/main'
-
-
-def test_a_tag_is_reached_by_name(monkeypatch, git_calls):
-    stub_git_probes(monkeypatch, branches=(), tags=('v3.12.0',))
-
-    make_fetcher(revision='v3.12.0').populate()
-
-    assert reset_onto(git_calls) == 'refs/tags/v3.12.0'
-
-
-def test_a_commit_is_left_as_it_was_given(monkeypatch, git_calls):
-    # Neither a tag nor a branch answers for it, and a hash needs no help.
-    stub_git_probes(monkeypatch, branches=(), tags=())
-
-    make_fetcher(revision='cafebabe').populate()
-
-    assert reset_onto(git_calls) == 'cafebabe'
-
-
-def test_what_a_revision_names_is_read_once(monkeypatch, git_calls):
-    # A refresh asks before the reset and again for it, and both are the same
-    # question about the same root.
-    probes = []
-    original = helpers.try_git
-    monkeypatch.setattr(
-        helpers, 'try_git',
-        lambda params, cwd=None, **kwargs: probes.append(params) or original(params, cwd))
-
-    make_fetcher().refresh()
-
-    assert sum('refs/tags/main^{commit}' in params for params in probes) == 1
-
-
-# -- what the fetch reports back --------------------------------------------
+    assert reset_onto(git_calls) == REVISION
 
 
 def test_a_fetch_reports_the_commit_it_landed_on(git_calls):

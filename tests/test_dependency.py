@@ -222,3 +222,18 @@ def test_a_dependency_records_a_whole_resolution_untouched():
 
     assert dep.resolved == ResolvedVersion(reference='v3.12.0',
                                            revision='65ee6845')
+
+
+def test_a_recorded_revision_that_names_no_commit_is_refused():
+    # Everything downstream takes a revision for a commit: the cache root is
+    # named after it, and the fetch resets onto it without interpreting it. A
+    # branch written here would reach git as a revision it reads its own way.
+    with pytest.raises(RuntimeError) as error:
+        Dependency.unserialize_from_json({
+            'name': 'json',
+            'repository': 'https://host/json.git',
+            'resolved': {'reference': 'main', 'revision': 'main'},
+        })
+
+    assert 'names no commit' in str(error.value)
+    assert "'json'" in str(error.value)

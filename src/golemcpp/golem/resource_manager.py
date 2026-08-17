@@ -274,7 +274,8 @@ class ResourceManager:
         follows what was asked for (e.g. a branch, a version range), so it does
         need fetching on a refresh.
 
-        See GitFetcher.resolved_reset_revision for how the revision is interpreted.
+        The revision handed over is the commit the version resolved to, so a
+        fetcher never interprets a name.
         '''
         return FetchPolicy(
             fetch_mode=self.fetch_mode_for(item),

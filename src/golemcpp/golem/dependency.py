@@ -8,6 +8,7 @@ from golemcpp.golem import requested_source
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import source
+from golemcpp.golem.version import Version
 from golemcpp.golem import version_resolver
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
@@ -179,6 +180,16 @@ class Dependency(Configuration):
         if Dependency.RESOLVED_MEMBER in o:
             self.resolved = ResolvedVersion.from_dict(
                 o[Dependency.RESOLVED_MEMBER])
+            # A resolution names the commit it landed on, and everything reading
+            # one downstream takes it for a commit: the cache root is named after
+            # it, and the fetch resets onto it without interpreting it. A name
+            # written here would reach git as a revision it reads its own way.
+            if self.resolved.revision and not Version.parse_git_hash(
+                    self.resolved.revision):
+                raise RuntimeError(
+                    "dependency '{}' records '{}' as its revision, which names "
+                    "no commit; write the version asked for as `version` "
+                    "instead".format(self.name, self.resolved.revision))
 
     @staticmethod
     def unserialize_from_json(o):
