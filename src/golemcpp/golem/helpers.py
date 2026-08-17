@@ -20,6 +20,11 @@ GIT_OPTIONS = ['-c', 'advice.detachedHead=false']
 # nothing about the command, where a local git command failing means what it says.
 GIT_RETRY_DELAYS = (2, 5)
 
+# How many times to ask Windows again to remove a directory, a tenth of a second
+# apart. A file an indexer or a scanner is holding is let go of in moments; a
+# tree still standing after that is not going away on its own.
+REMOVE_TREE_ATTEMPTS = 50
+
 
 def print_obj(obj, depth=5, l=""):
     # fall back to repr
@@ -71,10 +76,27 @@ def remove_tree(path):
     elif os.path.islink(path):
         os.unlink(path)
     elif sys.platform.startswith('win32'):
-        from time import sleep
-        while os.path.exists(path):
-            os.system('rmdir /s /q {}'.format(subprocess.list2cmdline([path])))
-            sleep(0.1)
+        # rmdir removes a whole tree in one pass where shutil.rmtree unlinks every
+        # file from Python: on a build directory holding many small ones that is
+        # the difference between moments and minutes.
+        #
+        # Quoted here rather than through subprocess.list2cmdline, which spells an
+        # argument the way a program reads it back: cmd re-tokenizes its own
+        # command line and breaks on '=' as much as on a space, and a cache root
+        # is named after the reference it holds (r@host+main=0d6e4079).
+        command = 'rmdir /s /q "{}"'.format(path)
+        for _ in range(REMOVE_TREE_ATTEMPTS):
+            # Through the shell because rmdir is a cmd built-in: there is no
+            # executable to run. What an attempt has to say is worth reading only
+            # once they have all failed, and then it is said once, with the path.
+            attempt = subprocess.run(
+                command, shell=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            if not os.path.exists(path):
+                return
+            time.sleep(0.1)
+        raise RuntimeError('Cannot remove directory {}: {}'.format(
+            path, decode_output(attempt.stderr).strip()))
     else:
         shutil.rmtree(path)
 
