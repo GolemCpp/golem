@@ -3,7 +3,7 @@ import pytest
 from types import SimpleNamespace
 import json
 
-from golemcpp.golem import context as golem_context, helpers, qt_discovery
+from golemcpp.golem import context as golem_context, helpers, network, qt_discovery
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
     CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
@@ -857,3 +857,16 @@ def test_resolved_reference_prefers_hash_prefix():
     assert helpers.resolved_reference('3.11.3', '1234567890abcdef') == '12345678'
     # Falls back to the resolved version name when there is no hash.
     assert helpers.resolved_reference('3.11.3', '') == '3.11.3'
+
+
+def test_a_build_script_may_reach_a_remote():
+    # What a project runs for itself is not golem fetching a resource, so a
+    # script may use git the way it likes even during a build.
+    context = Context.__new__(Context)
+    observed = []
+
+    context.run_build_script(lambda ctx: observed.append(
+        (ctx, network.is_allowed())))
+
+    assert observed == [(context, True)]
+    assert network.is_allowed() is False

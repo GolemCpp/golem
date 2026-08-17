@@ -31,6 +31,7 @@ from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem import overrides
 from golemcpp.golem import resource_manager
 from golemcpp.golem import helpers
+from golemcpp.golem import network
 from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
@@ -2976,6 +2977,14 @@ class Context:
     def make_compile_commands_path(self, path):
         return os.path.join(self.get_compile_commands_path(), path)
 
+    def run_build_script(self, callback):
+        '''
+        A script the project declared for one of its targets. It is not golem
+        fetching a resource, so whatever it reaches is its own business.
+        '''
+        with network.allowed():
+            callback(self)
+
     def build_target(self, task, targets, config):
         build_target = self.build_target_gather_config(task=task,
                                                        targets=targets,
@@ -3087,7 +3096,7 @@ class Context:
 
         if build_target.config.scripts:
             for callback in build_target.config.scripts:
-                callback(self)
+                self.run_build_script(callback)
 
                 if self.is_windows():
                     continue

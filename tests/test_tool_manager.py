@@ -13,6 +13,7 @@ from golemcpp.golem import tool_registry
 from golemcpp.golem import resource_manifest
 from conftest import default_setting
 from conftest import make_cache_configuration
+from conftest import stub_git_probes
 
 
 @pytest.fixture(autouse=True)
@@ -29,12 +30,13 @@ def git_calls(monkeypatch):
     '''Every git invocation installing a tool makes, in order.'''
     calls = []
 
-    def run_git(args, cwd=None, stdout=None):
+    def run_git(args, cwd=None, quiet=False):
         calls.append(args)
         if args[0] == 'clone':
             os.makedirs(cwd, exist_ok=True)
 
     monkeypatch.setattr(helpers, 'run_git', run_git)
+    stub_git_probes(monkeypatch)
     return calls
 
 
@@ -288,6 +290,7 @@ def test_install_tool_fetches_through_the_shared_mechanism(monkeypatch, tmp_path
         ['clone', '--', tool_registry.TOOLS['cppfront'].repository, '.'],
         ['checkout', 'v0.8.1'],
         ['reset', '--hard', 'deadbeef'],
+        ['submodule', 'update', '--init', '--recursive'],
     ]
     assert (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
             / cache_configuration.SOURCE_DIRNAME).is_dir()
@@ -320,8 +323,12 @@ def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp
     # Refreshed in place, not re-cloned.
     assert git_calls == [
         ['clean', '-ffxd'],
-        ['fetch', 'origin'],
+        ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
+        ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
         ['reset', '--hard', 'deadbeef'],
+        ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
+        ['submodule', 'sync', '--recursive'],
+        ['submodule', 'update', '--init', '--recursive'],
     ]
     assert os.path.isfile(os.path.join(root, 'bin', 'cppfront'))
     # And the root stops claiming the version it used to hold.

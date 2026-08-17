@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from golemcpp.golem import network
+
 
 def print_obj(obj, depth=5, l=""):
     # fall back to repr
@@ -200,7 +202,27 @@ def does_git_command_need_nothing(args):
         return True
     return False
 
+def is_network_git_command(args):
+    '''
+    Git commands that reach the remote. `submodule update` clones a submodule
+    that is not there, while `submodule foreach` only runs in the ones already
+    cloned, so the two are not the same.
+
+    `submodule update --no-fetch` is told to work from the objects already here
+    and to fail rather than go looking, which is what a resource being refreshed
+    without consulting its remote needs.
+    '''
+    command = args[1]
+    if command == 'submodule':
+        return args[2:3] == ['update'] and '--no-fetch' not in args
+    return command in ['clone', 'fetch', 'pull', 'push', 'ls-remote']
+
 def validate_git_command(args, cwd):
+    if is_network_git_command(args=args) and not network.is_allowed():
+        raise RuntimeError(
+            "Cannot run \"{}\" from \"{}\": reaching a remote is a resolve step. "
+            "Run golem resolve first.".format(' '.join(args), cwd))
+
     if does_git_command_need_no_repository(args=args):
         if not is_not_git_repository(path=cwd):
             raise RuntimeError(
@@ -213,11 +235,17 @@ def validate_git_command(args, cwd):
             raise RuntimeError(
                 "Not a git repository: \"{}\" from \"{}\"".format(' '.join(args), cwd))
 
-def run_git(params, cwd, **kwargs):
+def run_git(params, cwd, quiet=False, **kwargs):
+    '''
+    `quiet` drops what the command has to say on stdout.
+    '''
     args = ['git'] + params
 
     validate_git_command(args=args, cwd=cwd)
-    
+
+    if quiet:
+        kwargs.setdefault('stdout', subprocess.DEVNULL)
+
     run_task(args=args, cwd=cwd, **kwargs)
 
 def check_git_output(params, cwd, **kwargs):
