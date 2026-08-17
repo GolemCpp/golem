@@ -29,7 +29,7 @@ from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.overlay_manager import get_overlay_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem import overrides
-from golemcpp.golem import resource_manager
+from golemcpp.golem import directory_fetcher
 from golemcpp.golem import helpers
 from golemcpp.golem import network
 from golemcpp.golem import settings
@@ -4127,7 +4127,7 @@ class Context:
         except Exception:
             pass
         if self.repository == '':
-            repository_origin = os.path.join(self.get_project_dir(), resource_manager.ORIGIN_FILENAME)
+            repository_origin = os.path.join(self.get_project_dir(), directory_fetcher.ORIGIN_FILENAME)
             if os.path.exists(repository_origin):
                 with open(repository_origin, 'r', encoding='utf-8') as f:
                     for line in f.readlines():

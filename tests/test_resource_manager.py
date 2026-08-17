@@ -8,10 +8,10 @@ from golemcpp.golem import resource_manifest
 from golemcpp.golem.cache_manager import get_cache_manager
 from golemcpp.golem.cookbook import Cookbook
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
-from golemcpp.golem.resource_manager import FetchPolicy
-from golemcpp.golem.resource_manager import FetchResult
+from golemcpp.golem.fetched import Fetched
+from golemcpp.golem.directory_fetcher import DirectoryFetcher
+from golemcpp.golem.git_fetcher import GitFetcher
 from golemcpp.golem.resource_manager import ResourceManager
-from golemcpp.golem.resource_manager import ORIGIN_FILENAME
 from golemcpp.golem.source import Source
 from conftest import make_cache_configuration
 from conftest import stub_git_probes
@@ -60,266 +60,45 @@ def test_every_kind_keeps_its_content_under_source():
             '{} fetches outside source/'.format(kind.__name__)
 
 
-# -- the git sequence a policy produces -------------------------------------
+# -- the kind decides what to fetch; a fetcher decides how ------------------
 
 
-def test_the_default_policy_clones_and_tracks_the_branch(git_calls):
+def test_a_repository_source_is_handed_to_a_git_fetcher():
+    manager = ResourceManager(cache_manager=None)
+
+    assert isinstance(
+        manager.fetcher_for('/cache/r', Source.for_repository('https://host/r.git')),
+        GitFetcher)
+
+
+def test_a_directory_source_is_handed_to_a_directory_fetcher(tmp_path):
+    manager = ResourceManager(cache_manager=None)
+
+    assert isinstance(
+        manager.fetcher_for('/cache/r', Source.for_directory(tmp_path.resolve().as_uri())),
+        DirectoryFetcher)
+
+
+def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy():
+    manager = ResourceManager(cache_manager=None)
     source = Source.for_repository('https://host/r.git', reference='main')
 
-    ResourceManager.clone_source('/cache/r', source, ResourceManager.policy_for(source))
+    fetcher = manager.fetcher_for('/cache/r', source)
 
-    assert git_calls == [
-        ['clone', '--', 'https://host/r.git', '.'],
-        ['reset', '--hard', 'origin/main'],
-        ['submodule', 'update', '--init', '--recursive'],
-    ]
+    assert fetcher.path == '/cache/r'
+    assert fetcher.source is source
+    assert fetcher.policy == manager.policy_for(source)
 
 
-def test_the_default_policy_refreshes_by_fetching_the_branch(git_calls):
+def test_populate_and_refresh_hand_back_what_the_fetch_left(monkeypatch, tmp_path):
+    # The manager keeps no opinion about the fetch beyond passing its result on.
+    manager = ResourceManager(cache_manager=None)
     source = Source.for_repository('https://host/r.git', reference='main')
-
-    ResourceManager.update_source('/cache/r', source, ResourceManager.policy_for(source))
-
-    assert git_calls == [
-        ['clean', '-ffxd'],
-        ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
-        ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
-        ['reset', '--hard', 'origin/main'],
-        ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
-        ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive'],
-    ]
-
-
-def test_a_checkout_lands_between_the_clone_and_the_reset(git_calls):
-    source = Source.for_repository('https://host/r.git')
-    policy = FetchPolicy(checkout='v3.12.0', reference='cafebabe')
-
-    ResourceManager.clone_source('/cache/r', source, policy)
-
-    assert git_calls == [
-        ['clone', '--', 'https://host/r.git', '.'],
-        ['checkout', 'v3.12.0'],
-        ['reset', '--hard', 'cafebabe'],
-        ['submodule', 'update', '--init', '--recursive'],
-    ]
-
-
-def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls):
-    source = Source.for_repository('https://host/r.git')
-    policy = FetchPolicy(shallow=True, checkout='v3.12.0', reference='cafebabe')
-
-    ResourceManager.clone_source('/cache/r', source, policy)
-
-    assert git_calls == [
-        ['init'],
-        ['remote', 'add', 'origin', 'https://host/r.git'],
-        ['fetch', '--depth=1', 'origin', 'cafebabe'],
-        ['reset', '--hard', 'FETCH_HEAD'],
-        ['submodule', 'update', '--init', '--recursive', '--depth=1'],
-    ]
-
-
-def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls):
-    # Every resource is cleaned and carries its submodules; a pin only says that
-    # a refresh has nothing to fetch and lands back on the commit it holds. That
-    # goes for the submodules too: --no-fetch is what keeps the whole refresh off
-    # the network, so it stays allowed outside a resolve.
-    source = Source.for_repository('https://host/r.git')
-    policy = FetchPolicy(reference='', fetch_remote=False)
-
-    ResourceManager.update_source('/cache/r', source, policy)
-
-    assert git_calls == [
-        ['clean', '-ffxd'],
-        ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
-        ['reset', '--hard'],
-        ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
-        ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive', '--no-fetch'],
-    ]
-    assert not any(helpers.is_network_git_command(['git'] + args) for args in git_calls)
-
-
-def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, git_calls):
-    # Most resources declare none, and a submodule command in a repository without
-    # them is a process spent to do nothing.
-    stub_git_probes(monkeypatch, has_submodules=False)
-    source = Source.for_repository('https://host/r.git', reference='main')
-
-    ResourceManager.clone_source('/cache/r', source, ResourceManager.policy_for(source))
-    ResourceManager.update_source('/cache/r', source, ResourceManager.policy_for(source))
-
-    assert not any(args[0] == 'submodule' for args in git_calls)
-
-
-def test_a_missing_reference_is_fetched_before_the_reset(monkeypatch, git_calls):
-    # The commit a resource names is not in this root -- a pin whose cache predates
-    # the resolve that produced it. Ask for exactly that commit rather than dying at
-    # the reset with git's own error.
-    holds = iter([1, 0])
-    monkeypatch.setattr(helpers, 'call_git', lambda args, cwd=None, **kwargs: next(holds))
-
-    ResourceManager.update_source(
-        '/cache/r', Source.for_repository('https://host/r.git'),
-        FetchPolicy(reference='cafebabe', fetch_remote=False))
-
-    assert git_calls.index(['fetch', 'origin', 'cafebabe']) < \
-        git_calls.index(['reset', '--hard', 'cafebabe'])
-
-
-def test_a_reference_that_never_arrives_is_refused(monkeypatch, git_calls):
-    # Still missing after asking for it: nothing to reset to, and the error says
-    # what to do rather than what git saw.
-    monkeypatch.setattr(helpers, 'call_git', lambda args, cwd=None, **kwargs: 1)
-
-    with pytest.raises(RuntimeError, match='Run golem resolve first'):
-        ResourceManager.update_source(
-            '/cache/r', Source.for_repository('https://host/r.git'),
-            FetchPolicy(reference='cafebabe', fetch_remote=False))
-
-
-def test_a_present_reference_is_reset_to_without_asking_for_it(git_calls):
-    ResourceManager.update_source(
-        '/cache/r', Source.for_repository('https://host/r.git'),
-        FetchPolicy(reference='cafebabe', fetch_remote=False))
-
-    assert ['fetch', 'origin', 'cafebabe'] not in git_calls
-
-
-def test_a_fetch_reports_the_commit_it_landed_on(git_calls):
-    # What the source names is a branch as often as a commit; what the root holds
-    # is always a commit, and that is what the manifest keeps.
-    source = Source.for_repository('https://host/r.git', reference='main')
-
-    cloned = ResourceManager.clone_source('/cache/r', source, ResourceManager.policy_for(source))
-    refreshed = ResourceManager.update_source('/cache/r', source, ResourceManager.policy_for(source))
-
-    assert cloned.head == STUB_HEAD
-    assert refreshed.head == STUB_HEAD
-
-
-def test_a_copied_directory_has_no_commit_to_report(tmp_path, git_calls):
-    origin = tmp_path / 'mylib'
-    origin.mkdir()
-
-    result = ResourceManager(cache_manager=None).populate(
-        str(tmp_path / 'cache' / 'mylib'), Source.for_directory(origin.resolve().as_uri()))
-
-    assert result.head == ''
-
-
-@pytest.fixture
-def quiet_calls(monkeypatch):
-    '''Every git invocation with what it asked of stdout.'''
-    calls = []
-    monkeypatch.setattr(
-        helpers, 'run_git',
-        lambda args, cwd=None, quiet=False: calls.append((args, quiet)))
-    stub_git_probes(monkeypatch)
-    return calls
-
-
-def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls):
-    # Moving the working tree around is not worth reading; a command that has a
-    # remote to wait on is.
-    source = Source.for_repository('https://host/r.git', reference='main')
-
-    ResourceManager.clone_source('/cache/r', source, ResourceManager.policy_for(source))
-    ResourceManager.update_source('/cache/r', source, ResourceManager.policy_for(source))
-
-    assert [args for args, quiet in quiet_calls if not quiet] == [
-        ['clone', '--', 'https://host/r.git', '.'],
-        ['submodule', 'update', '--init', '--recursive'],
-        ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
-        ['submodule', 'update', '--init', '--recursive'],
-    ]
-    assert all(helpers.is_network_git_command(['git'] + args)
-               for args, quiet in quiet_calls if not quiet)
-
-
-def test_a_shallow_clone_only_speaks_while_it_fetches(quiet_calls):
-    source = Source.for_repository('https://host/r.git')
-
-    ResourceManager.clone_source(
-        '/cache/r', source, FetchPolicy(shallow=True, reference='cafebabe'))
-
-    assert [args for args, quiet in quiet_calls if not quiet] == [
-        ['fetch', '--depth=1', 'origin', 'cafebabe'],
-        ['submodule', 'update', '--init', '--recursive', '--depth=1'],
-    ]
-
-
-# -- kind dispatch ----------------------------------------------------------
-
-
-def test_populate_copies_a_directory_source_and_records_its_origin(tmp_path, git_calls):
-    origin = tmp_path / 'mylib'
-    origin.mkdir()
-    (origin / 'marker.txt').write_text('copied\n', encoding='utf-8')
-    destination = tmp_path / 'cache' / 'mylib'
-
-    ResourceManager(cache_manager=None).populate(
-        str(destination), Source.for_directory(origin.resolve().as_uri()))
-
-    assert (destination / 'marker.txt').read_text(encoding='utf-8') == 'copied\n'
-    assert (destination / ORIGIN_FILENAME).read_text(encoding='utf-8') == \
-        origin.resolve().as_uri()
-    # A copied source has no remote to talk to.
-    assert git_calls == []
-
-
-def test_populate_clones_a_git_source(tmp_path, git_calls):
-    destination = tmp_path / 'cache' / 'r'
-
-    ResourceManager(cache_manager=None).populate(
-        str(destination), Source.for_repository('https://host/r.git', reference='main'))
-
-    assert git_calls == [
-        ['clone', '--', 'https://host/r.git', '.'],
-        ['reset', '--hard', 'origin/main'],
-        ['submodule', 'update', '--init', '--recursive'],
-    ]
-    assert destination.is_dir()
-
-
-def test_refresh_recopies_a_directory_source(tmp_path, git_calls):
-    origin = tmp_path / 'mylib'
-    origin.mkdir()
-    (origin / 'marker.txt').write_text('fresh\n', encoding='utf-8')
-    destination = tmp_path / 'cache' / 'mylib'
-    destination.mkdir(parents=True)
-    (destination / 'marker.txt').write_text('stale\n', encoding='utf-8')
-
-    ResourceManager(cache_manager=None).refresh_source(
-        str(destination), Source.for_directory(origin.resolve().as_uri()))
-
-    assert (destination / 'marker.txt').read_text(encoding='utf-8') == 'fresh\n'
-    assert git_calls == []
-
-
-# -- the local source is checked before anything touches it -----------------
-
-
-def test_a_missing_local_source_is_named(tmp_path):
-    source = Source.for_directory((tmp_path / 'absent').resolve().as_uri())
-
-    with pytest.raises(RuntimeError, match="Can't find local source directory"):
-        ResourceManager.validate_local_source(source)
-
-
-def test_a_local_source_that_is_a_file_is_named(tmp_path):
-    a_file = tmp_path / 'mylib'
-    a_file.write_text('not a directory', encoding='utf-8')
-    source = Source.for_directory(a_file.resolve().as_uri())
-
-    with pytest.raises(RuntimeError, match='not a directory'):
-        ResourceManager.validate_local_source(source)
-
-
-def test_a_remote_source_has_no_local_path_to_check():
-    assert ResourceManager.validate_local_source(
-        Source.for_repository('https://host/r.git')) is None
+    monkeypatch.setattr(GitFetcher, 'populate', lambda self: Fetched(head='c10ned'))
+    monkeypatch.setattr(GitFetcher, 'refresh', lambda self: Fetched(head='refre5hed'))
+
+    assert manager.populate('/cache/r', source) == Fetched(head='c10ned')
+    assert manager.refresh_source('/cache/r', source) == Fetched(head='refre5hed')
 
 
 # -- install: what happens around the fetch ---------------------------------
@@ -459,7 +238,7 @@ def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch
     manifest = resource_manifest.ResourceManifest.read_from_root(installed.path)
     assert manifest is not None
     # The manifest names what the fetch landed on, not just what was asked for.
-    assert FetchResult.from_manifest(manifest) == FetchResult(head=STUB_HEAD)
+    assert Fetched.from_manifest(manifest) == Fetched(head=STUB_HEAD)
 
 
 def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
@@ -470,15 +249,15 @@ def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
     manager = make_manager(tmp_path)
     cookbook = make_cookbook()
     cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
-    manager.cache_manager.write_manifest(cached, fetched=FetchResult(head='0ldc0mmit'))
+    manager.cache_manager.write_manifest(cached, fetched=Fetched(head='0ldc0mmit'))
     monkeypatch.setattr(
         helpers, 'check_git_output', lambda args, cwd=None, **kwargs: 'newc0mmit\n')
 
     manager.install(cookbook)
 
-    assert FetchResult.from_manifest(
+    assert Fetched.from_manifest(
         resource_manifest.ResourceManifest.read_from_root(cached.path)) == \
-        FetchResult(head='newc0mmit')
+        Fetched(head='newc0mmit')
 
 
 def test_install_refreshes_an_existing_resource_in_place(tmp_path, git_calls):

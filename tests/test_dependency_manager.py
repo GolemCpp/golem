@@ -167,7 +167,7 @@ def test_a_refresh_keeps_what_was_built_from_the_dependency(tmp_path):
     assert os.path.isdir(os.path.join(root, 'include'))
 
 
-def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
+def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch, tmp_path):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
     dep.resolved_version = 'v3.12.0'
     dep.resolved_hash = 'cafebabecafebabe'
@@ -176,9 +176,10 @@ def test_a_dependency_produces_the_expected_clone_sequence(monkeypatch):
         helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
     stub_git_probes(monkeypatch)
 
-    DependencyManager.clone_source(
-        '/cache/json/source', DependencyManager.source_for(dep),
-        DependencyManager.policy_for(dep))
+    # populate() creates the root it is given, so it has to be one the test owns.
+    source_root = str(tmp_path / 'json' / 'source')
+
+    DependencyManager(cache_manager=None).fetcher_for(source_root, dep).populate()
 
     assert calls == [
         ['clone', '--', 'https://example.com/json.git', '.'],
