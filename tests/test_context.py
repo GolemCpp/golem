@@ -305,7 +305,6 @@ def make_build_target_context(*, variant='release', no_defaults=False):
     context.is_windows = lambda: True
     context.is_linux = lambda: False
     context.is_darwin = lambda: False
-    context.is_android = lambda: False
     context.is_msvc_like = lambda: True
     context.is_x86 = lambda: False
     context.is_x64 = lambda: True

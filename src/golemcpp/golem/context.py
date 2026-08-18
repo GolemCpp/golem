@@ -572,10 +572,6 @@ class Context:
         return 'osx'
 
     @staticmethod
-    def os_android():
-        return 'android'
-
-    @staticmethod
     def is_windows():
         return sys.platform.startswith('win32')
 
@@ -591,14 +587,9 @@ class Context:
     def is_darwin():
         return sys.platform.startswith('darwin')
 
-    def is_android(self):
-        return False and self.has_android_ndk_path()
-
     def osname(self):
         osname = ''
-        if self.is_android():
-            osname = Context.os_android()
-        elif Context.is_windows():
+        if Context.is_windows():
             osname = Context.os_windows()
         elif Context.is_linux():
             osname = Context.os_linux()
@@ -779,8 +770,6 @@ class Context:
                 return 'iphoneos'
             else:
                 return 'macosx'
-        elif self.is_android():
-            return 'android'
         else:
             return str(platform.libc_ver()[0])
 
@@ -794,9 +783,6 @@ class Context:
                 return str(self.context.env.IPHONEOS_DEPLOYMENT_TARGET)
             else:
                 return str(platform.mac_ver()[0])
-        elif self.is_android():
-            # minSdkVersion (__ANDROID_API__)
-            raise RuntimeError("Not implemented yet")
         else:
             return str(platform.libc_ver()[1])
 
@@ -883,31 +869,6 @@ class Context:
                                action="store_true",
                                default=True,
                                help="Unicode Support")
-
-        context.add_option("--android-ndk",
-                           action="store",
-                           default='',
-                           help="Android NDK path")
-        context.add_option("--android-sdk",
-                           action="store",
-                           default='',
-                           help="Android SDK path")
-        context.add_option("--android-ndk-platform",
-                           action="store",
-                           default='',
-                           help="Android NDK platform version")
-        context.add_option("--android-sdk-platform",
-                           action="store",
-                           default='',
-                           help="Android SDK platform version")
-        context.add_option("--android-jdk",
-                           action="store",
-                           default='',
-                           help="JDK path to use when packaging Android app")
-        context.add_option("--android-arch",
-                           action="store",
-                           default='',
-                           help="Android target architecture")
 
         context.add_option("--keep-resolved-dependencies",
                            action="store_true",
@@ -1138,7 +1099,7 @@ class Context:
             # '/DLL'        # builds a DLL
             # '/TLBID:1'    # resource ID of the linker-generated type library
 
-        elif not self.is_android():
+        else:
             if self.is_x86():
                 flags['cflags'].append('-m32')
                 flags['cxxflags'].append('-m32')
@@ -1248,11 +1209,6 @@ class Context:
         # init default environment variables
         self.configure_init()
         self.configure_default()
-
-        # android specific flags
-        self.append_android_cxxflags()
-        self.append_android_linkflags()
-        self.append_android_ldflags()
 
         self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
@@ -2425,11 +2381,7 @@ class Context:
         if self.is_windows():
             version_short = None
 
-        target_type = None
-        if config.type_unique == 'program' and self.is_android():
-            target_type = 'library'
-        else:
-            target_type = config.type
+        target_type = config.type
 
         target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
         target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
@@ -3049,9 +3001,7 @@ class Context:
 
         build_fun = None
 
-        if task.type_unique == 'program' and self.is_android():
-            build_fun = self.context.shlib
-        elif task.type_unique == 'library':
+        if task.type_unique == 'library':
             if task.link:
                 if task.link_unique == 'shared':
                     build_fun = self.context.shlib
@@ -3676,404 +3626,9 @@ class Context:
                 'qtbase5-private-dev'
             ])
 
-    def make_android_ndk_path(self, path=None):
-        android_ndk_path = self.context.options.android_ndk
-
-        if not android_ndk_path:
-            android_ndk_path = helpers.get_environ('ANDROID_NDK_ROOT')
-
-        if android_ndk_path and path:
-            android_ndk_path = os.path.join(android_ndk_path, path)
-
-        if android_ndk_path:
-            return android_ndk_path
-
-        return ''
-
-    def has_android_ndk_path(self):
-        return self.make_android_ndk_path() != ''
-
-    def check_android_ndk_path(self):
-        path = self.make_android_ndk_path()
-        assert path != ''
-        assert os.path.exists(path)
-
-    def make_android_ndk_host(self):
-        return 'linux-x86_64'
-
-    def make_android_compiler_path(self):
-        default_arch = 'arm64_v8a'
-        default_compiler = 'clang++'
-
-        android_ndk_path = self.make_android_ndk_path()
-
-        anrdoid_current_host = self.make_android_ndk_host()
-        path_to_android_compiler_base = os.path.join(
-            'toolchains/llvm/prebuilt/', anrdoid_current_host, 'bin')
-
-        android_arch = self.make_android_arch()
-        android_ndk_platform = self.make_android_ndk_platform()
-
-        if android_arch == default_arch:
-            path_to_android_compiler = os.path.join(
-                path_to_android_compiler_base, default_compiler)
-        else:
-            path_to_android_compiler = os.path.join(
-                path_to_android_compiler_base, android_arch +
-                'linux-androideabi' + android_ndk_platform + '-clang++')
-
-        path_to_android_compiler = os.path.join(android_ndk_path,
-                                                path_to_android_compiler)
-
-        return path_to_android_compiler
-
-    def make_android_sdk_path(self):
-        android_sdk_path = self.context.options.android_sdk
-        if android_sdk_path:
-            return android_sdk_path
-
-        android_sdk_path = helpers.get_environ('ANDROID_SDK_ROOT')
-        if android_sdk_path:
-            return android_sdk_path
-
-        android_sdk_path = helpers.get_environ('ANDROID_HOME')
-        if android_sdk_path:
-            return android_sdk_path
-
-        return ''
-
-    def has_android_sdk_path(self):
-        return self.make_android_sdk_path() != ''
-
-    def check_android_sdk_path(self):
-        path = self.make_android_sdk_path()
-        assert path != ''
-        assert os.path.exists(path)
-
-    def make_android_jdk_path(self):
-        android_jdk_path = self.context.options.android_jdk
-        if android_jdk_path:
-            return android_jdk_path
-
-        android_jdk_path = helpers.get_environ('JAVA_HOME')
-        if android_jdk_path:
-            return android_jdk_path
-
-        return ''
-
-    def has_android_jdk_path(self):
-        return self.make_android_jdk_path() != ''
-
-    def check_android_jdk_path(self):
-        path = self.make_android_jdk_path()
-        assert path != ''
-        assert os.path.exists(path)
-
-    def make_android_ndk_platform(self):
-        android_ndk_platform = self.context.options.android_ndk_platform
-        if android_ndk_platform:
-            return android_ndk_platform
-
-        android_ndk_platform = helpers.get_environ('ANDROID_NDK_PLATFORM')
-        if android_ndk_platform:
-            return android_ndk_platform
-
-        return ''
-
-    def has_android_ndk_platform(self):
-        return self.make_android_ndk_platform() != ''
-
-    def check_android_ndk_platform(self):
-        android_ndk_platform = self.make_android_ndk_platform()
-        assert android_ndk_platform != ''
-        assert helpers.RepresentsInt(android_ndk_platform)
-
-    def make_android_sdk_platform(self):
-        android_sdk_platform = self.context.options.android_sdk_platform
-        if android_sdk_platform:
-            return android_sdk_platform
-
-        android_sdk_platform = helpers.get_environ('ANDROID_SDK_PLATFORM')
-        if android_sdk_platform:
-            return android_sdk_platform
-
-        return ''
-
-    def has_android_sdk_platform(self):
-        return self.make_android_sdk_platform() != ''
-
-    def check_android_sdk_platform(self):
-        android_sdk_platform = self.make_android_sdk_platform()
-        assert android_sdk_platform != ''
-        assert helpers.RepresentsInt(android_sdk_platform)
-
-    def make_android_sdk_build_tools_version(self):
-        return "28.0.3"
-
-    def make_android_arch(self):
-        android_arch = self.context.options.android_arch
-        if android_arch:
-            return android_arch
-
-        android_arch = helpers.get_environ('ANDROID_ARCH')
-        if android_arch:
-            return android_arch
-
-        return ''
-
-    def has_android_arch(self):
-        return self.make_android_arch() != ''
-
-    def check_android_arch(self):
-        android_arch = self.make_android_arch()
-        assert android_arch != ''
-
     def configure_compiler(self):
-        if self.is_android():
-            self.check_android_ndk_platform()
-            self.check_android_arch()
-            self.check_android_ndk_path()
-
-            path_to_android_compiler = self.make_android_compiler_path()
-            assert os.path.exists(path_to_android_compiler)
-            self.context.env.CXX = path_to_android_compiler
-
         if 'CXX' in os.environ and os.environ['CXX']:  # Pull in the compiler
             self.context.env.CXX = os.environ['CXX']  # override default
-
-    def make_android_toolchain_target(self):
-        return "aarch64-none-linux-android"
-
-    def make_android_toolchain_version(self):
-        return "4.9"
-
-    def make_android_toolchain_target_directory(self):
-        return "aarch64-linux-android-" + self.make_android_toolchain_version()
-
-    def make_android_toolchain_include_directory(self):
-        return "aarch64-linux-android"
-
-    def make_android_toolchain_path(self):
-
-        toolchain_target_arch_directory = self.make_android_toolchain_target_directory(
-        )
-        toolchain_host_directory = self.make_android_ndk_host()
-        toolchain_path = os.path.join("toolchains",
-                                      toolchain_target_arch_directory,
-                                      "prebuilt", toolchain_host_directory)
-
-        return self.make_android_ndk_path(toolchain_path)
-
-    def make_android_platform_arch_name(self):
-        return "arch-arm64"
-
-    def make_android_sysroot_path_for_linker(self):
-        return self.make_android_ndk_path(
-            os.path.join("platforms",
-                         "android-" + self.make_android_ndk_platform(),
-                         self.make_android_platform_arch_name()))
-
-    def append_android_cxxflags(self):
-        if not self.is_android():
-            return
-
-        flags = [
-            "-D__ANDROID_API__=" + self.make_android_ndk_platform(),
-            "-target",
-            self.make_android_toolchain_target(),
-            "-gcc-toolchain",
-            self.make_android_toolchain_path(),
-            "-DANDROID_HAS_WSTRING",
-            "--sysroot=" + self.make_android_ndk_path("sysroot"),
-            "-isystem",
-            self.make_android_ndk_path(
-                "sysroot/usr/include/" +
-                self.make_android_toolchain_include_directory()),
-            "-isystem",
-            self.make_android_ndk_path("sources/cxx-stl/llvm-libc++/include"),
-            "-isystem",
-            self.make_android_ndk_path("sources/android/support/include"),
-            "-isystem",
-            self.make_android_ndk_path(
-                "sources/cxx-stl/llvm-libc++abi/include"),
-            "-fstack-protector-strong",
-            "-DANDROID",
-        ]
-
-        if self.project.qt and os.path.exists(self.context.options.qtdir):
-            flags += [
-                "-I" + os.path.join(self.context.options.qtdir,
-                                    "mkspecs/android-clang")
-            ]
-
-        self.context.env.CXXFLAGS += flags
-        self.context.env.CFLAGS += flags
-
-    def append_android_linkflags(self):
-        if not self.is_android():
-            return
-
-        self.context.env.LINKFLAGS += [
-            "-D__ANDROID_API__=" + self.make_android_ndk_platform(), "-target",
-            self.make_android_toolchain_target(), "-gcc-toolchain",
-            self.make_android_toolchain_path(), "-Wl,--exclude-libs,libgcc.a",
-            "--sysroot=" + self.make_android_sysroot_path_for_linker()
-        ]
-
-    def make_android_arch_hyphens(self):
-        return self.make_android_arch().replace('_', '-')
-
-    def append_android_ldflags(self):
-        if not self.is_android():
-            return
-
-        android_libs_path = self.make_android_ndk_path(
-            "sources/cxx-stl/llvm-libc++/libs/" +
-            self.make_android_arch_hyphens())
-        self.context.env.LDFLAGS += [
-            "-L" + android_libs_path,
-            os.path.join(android_libs_path,
-                         "libc++.so." + self.make_android_ndk_platform()),
-        ]
-
-    def package_android(self, package_build_context):
-        targets = list()
-
-        self.check_android_sdk_path()
-        self.check_android_sdk_platform()
-        self.check_android_jdk_path()
-        assert self.context.options.qtdir != '' and os.path.exists(
-            self.context.options.qtdir)
-
-        print("Check package's targets")
-
-        depends = package_build_context.configuration.packages
-
-        assert len(targets) == 1
-
-        target_binaries = []
-        for target in targets:
-            target_binaries += self.make_artifacts_from_context(
-                package_build_context.configuration, target)
-
-        target_binary = None
-        for target in target_binaries:
-            if str(target).endswith('.so') or str(target).endswith(
-                    '.dll') or str(target).endswith('.dylib'):
-                target_binary = os.path.join(self.make_out_path(), target)
-        assert target_binary is not None
-
-        target_dependencies = []
-        for target in self.get_targets_to_process(
-                package_build_context.configuration.use):
-            for target_name in self.make_artifacts_from_context(
-                    package_build_context.configuration, target):
-                if str(target_name).endswith('.so') or str(
-                        target_name).endswith('.dll') or str(
-                            target_name).endswith('.dylib'):
-                    target_dependencies.append(
-                        os.path.join(self.make_out_path(), target_name))
-
-        for dep_name in package_build_context.configuration.deps:
-            for dep in self.project.deps:
-                if dep_name == dep.name:
-                    if str(dep_name).endswith('.so') or str(dep_name).endswith(
-                            '.dll') or str(dep_name).endswith('.dylib'):
-                        target_dependencies.append(
-                            os.path.join(
-                                self.make_out_path(),
-                                self.make_artifacts_from_context(
-                                    package_build_context.configuration, dep)))
-
-        # Don't run this script as root
-
-        print("Gather package metadata")
-        package_name = package_build_context.package.name
-        package_description = package_build_context.package.description
-
-        print("Clean-up")
-        package_directory = self.make_output_path('dist')
-        helpers.remove_tree(package_directory)
-
-        # Strip binaries, libraries, archives
-
-        print("Prepare package")
-        package_directory = helpers.make_directory(
-            os.path.join(package_directory, package_name))
-        bin_directory = helpers.make_directory(
-            package_directory,
-            os.path.join('libs', self.make_android_arch_hyphens()))
-
-        print("Copying " + str(self.make_out_path()) + " to " +
-              str(bin_directory))
-        helpers.copy_file(target_binary, bin_directory)
-        for target in target_dependencies:
-            helpers.copy_file(target, bin_directory)
-
-        android_package_file = self.make_build_path('android-package.json')
-        print("Create android package file" + str(android_package_file))
-
-        #target_binary = os.path.realpath(os.path.join(bin_directory, os.path.basename(target_binary)))
-        target_binary = os.path.realpath(target_binary)
-        extra_libs = []
-        for target in target_dependencies:
-            #extra_libs.append(os.path.realpath(os.path.join(bin_directory, os.path.basename(target))))
-            extra_libs.append(os.path.realpath(target))
-
-        qt_path = str(self.context.options.qtdir)
-        ndk_path = str(self.make_android_ndk_path())
-        sdk_path = str(self.make_android_sdk_path())
-
-        def remove_last_slash(string):
-            if string[-1] == '/':
-                string = string[:-1]
-            return string
-
-        qt_path = remove_last_slash(qt_path)
-        ndk_path = remove_last_slash(ndk_path)
-        sdk_path = remove_last_slash(sdk_path)
-
-        data = OrderedDict({
-            "description": package_description,  # One sentence description
-            "qt": qt_path,
-            "sdk": sdk_path,
-            "sdkBuildToolsRevision": self.
-            make_android_sdk_build_tools_version(),
-            "ndk": ndk_path,
-            "toolchain-prefix": "llvm",
-            "tool-prefix": "llvm",
-            "toolchain-version": self.make_android_toolchain_version(),
-            "ndk-host": self.make_android_ndk_host(),
-            "target-architecture": self.make_android_arch_hyphens(),
-            "android-extra-libs": ",".join(extra_libs),
-            "stdcpp-path": self.make_android_ndk_path(
-                "sources/cxx-stl/llvm-libc++/libs/" +
-                self.make_android_arch_hyphens() + "/libc++_shared.so"),
-            "useLLVM": True,
-            "application-binary": target_binary
-        })
-
-        qml_enabled = False
-        if qml_enabled:
-            qml_path = ""
-            qml_path = remove_last_slash(qml_path)
-            data["qml-root-path"] = qml_path
-
-        with open(android_package_file, 'w') as outfile:
-            json.dump(data, outfile, indent=4, sort_keys=True)
-
-        print("Build package")
-        command = [
-            os.path.join(self.context.options.qtdir, 'bin/androiddeployqt'),
-            '--input', android_package_file, '--output', package_directory,
-            '--android-platform',
-            'android-' + self.make_android_sdk_platform(), '--jdk',
-            self.make_android_jdk_path(), '--gradle'
-        ]
-
-        if self.is_release() and False:
-            command += ["--sign", "", "--storepass", "", "--keypass", ""]
-        helpers.run_task(command, cwd=self.get_output_path())
 
     def load_recipe(self):
         recipe_id = self.context.options.recipe
@@ -5716,10 +5271,7 @@ class Context:
 
         for package_build_context in packages_to_process:
             package_build_context.process_config()
-            if self.is_android():
-                self.package_android(
-                    package_build_context=package_build_context)
-            elif self.is_windows():
+            if self.is_windows():
                 package_msi(self=self,
                             package_build_context=package_build_context)
             elif self.is_darwin():

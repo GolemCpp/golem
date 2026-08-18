@@ -506,7 +506,7 @@ class Configuration(Condition):
             elif raw_entry in ['msvc', 'gcc', 'clang']:
                 condition.compiler.append(entry)
                 is_empty = False
-            elif raw_entry in ['windows', 'linux', 'osx', 'android']:
+            elif raw_entry in ['windows', 'linux', 'osx']:
                 condition.osystem.append(entry)
                 is_empty = False
             elif raw_entry in ['shared', 'static']:
