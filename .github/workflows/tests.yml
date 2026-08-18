@@ -1,0 +1,64 @@
+name: Tests
+
+# Reusable only: this file has no triggers of its own. It is the single
+# definition of "what testing means", called by ci.yml and python-publish.yml
+# so that the release gate and the pull request checks cannot drift apart.
+on:
+  workflow_call:
+    inputs:
+      integration:
+        description: Also run the example integration suite (slow).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    # macOS has never run this suite; keep it advisory until proven green.
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+      - name: Run unit tests
+        run: python -m pytest --ignore=tests/test_examples_integration.py
+
+  integration:
+    name: Integration tests
+    if: inputs.integration
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+      - name: Run non-Qt/non-package example integration subset
+        run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
