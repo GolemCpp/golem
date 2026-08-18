@@ -6,6 +6,9 @@
   </picture>
 </a>
 
+> **Branches:** `develop` is the default and integration branch; `main` tracks releases.
+> To use Golem, install from PyPI (see [How to install?](#how-to-install)) rather than cloning.
+
 ## Golem
 
 - [Golem](#golem)

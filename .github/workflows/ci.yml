@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop, 'release/**']
+    # 'labeled' lets a develop pull request opt into the integration suite
+    # after the fact by adding the run-integration label.
+    types: [opened, reopened, synchronize, labeled]
+  schedule:
+    # Nightly full suite on develop. Scheduled workflows only ever run from the
+    # default branch, which is develop.
+    - cron: '0 3 * * *'
+
+# Features get developed in feature/* branches. They get merged into develop
+# through a PR with unit tests required to pass at a minimum. Then develop gets
+# merged into main through a PR with unit tests and integration tests required
+# to pass.
+
+# PRs require the tests to pass and be up-to-date before merge, which avoids a
+# possible regression to be merged when two PRs have the same base before merge.
+# Therefore, this allows to avoid a push trigger.
+
+# Publishing happens in two situations:
+# 1. stable releases: when pushing a tag, requires on ALL the tests to pass.
+# 2. development releases: when pushing on develop, requires unit tests to pass.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+    with:
+      # Pull requests into develop get unit tests only unless they ask for more.
+      # Note the workflow still triggers for them: a job skipped by `if` reports
+      # as skipped, which branch protection accepts, whereas a workflow that
+      # never triggers leaves the pull request waiting for a status forever.
+      integration: >-
+        ${{ github.event_name == 'schedule'
+        || github.base_ref == 'main'
+        || startsWith(github.base_ref, 'release/')
+        || contains(github.event.pull_request.labels.*.name, 'run-integration') }}

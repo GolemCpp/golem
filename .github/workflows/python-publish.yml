@@ -1,88 +1,70 @@
 # https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+#
+# This filename is load-bearing: PyPI and TestPyPI bind trusted publishers to
+# the workflow filename plus environment name, so renaming it (or moving the
+# publish steps into a reusable workflow) breaks publishing until all four
+# publisher entries are reconfigured. Tests are delegated to tests.yml; the
+# upload steps stay here.
 
 name: Publish to PyPI and TestPyPI
 
-on: push
+on:
+  push:
+    branches: [develop]
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false # never cancel a run that may be mid-upload
+
 jobs:
-  test-golemcpp:
-    name: Test golemcpp
-    runs-on: ubuntu-26.04
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          submodules: true
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
-      - name: Install test dependencies
+      - name: Resolve version
+        id: resolve
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install --group dev
-      - name: Run pytest
-        run: python -m pytest --ignore=tests/test_examples_integration.py
+          set -euo pipefail
+          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            # Guard: refuse to build a tag whose commit declares a different
+            # version, so a mistagged commit fails before anything is uploaded.
+            tag="${GITHUB_REF#refs/tags/}"
+            python .github/scripts/set-version.py --check "$tag"
+            version="$tag"
+          else
+            # A UTC timestamp rather than github.run_number, which resets if the
+            # workflow file is ever renamed and would then collide with dev
+            # versions already on TestPyPI.
+            version="$(python .github/scripts/set-version.py --get).dev$(date -u +%Y%m%d%H%M)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building $version"
 
-  test-golemcpp-windows:
-    name: Test golemcpp (Windows)
-    runs-on: windows-2025-vs2026
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --group dev
-      - name: Run pytest
-        run: python -m pytest --ignore=tests/test_examples_integration.py
-
-  test-golemcpp-examples:
-    name: Test golemcpp examples
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --group dev
-      - name: Run non-Qt/non-package example integration subset
-        run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
-
-  test-golemcpp-examples-windows:
-    name: Test golemcpp examples (Windows)
-    runs-on: windows-2025-vs2026
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --group dev
-      - name: Run non-Qt/non-package example integration subset
-        run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
+  tests:
+    # Release tags are gated on the full suite; develop pushes on unit tests.
+    uses: ./.github/workflows/tests.yml
+    with:
+      integration: ${{ startsWith(github.ref, 'refs/tags/') }}
 
   build-golemcpp-waflib:
     name: Build golemcpp-waflib
     runs-on: ubuntu-latest
+    needs:
+      - version
+      - tests
     steps:
       - uses: actions/checkout@v6
         with:
@@ -91,6 +73,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
+      - name: Set version
+        run: python .github/scripts/set-version.py "${{ needs.version.outputs.version }}"
       - name: Build golemcpp-waflib
         run: |
           python -m pip install build
@@ -101,15 +85,13 @@ jobs:
         with:
           name: golemcpp-waflib-dists
           path: waflib/dist/
-          
+
   build-golemcpp:
     name: Build golemcpp
     runs-on: ubuntu-latest
     needs:
-      - test-golemcpp
-      - test-golemcpp-windows
-      - test-golemcpp-examples
-      - test-golemcpp-examples-windows
+      - version
+      - tests
     steps:
       - uses: actions/checkout@v6
         with:
@@ -118,6 +100,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
+      - name: Set version
+        run: python .github/scripts/set-version.py "${{ needs.version.outputs.version }}"
       - name: Build golemcpp
         run: |
           python -m pip install build
@@ -128,26 +112,9 @@ jobs:
           name: golemcpp-dists
           path: dist/
 
-  pypi-publish-golemcpp-waflib:
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
-    needs:
-      - build-golemcpp-waflib
-    permissions:
-      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
-    environment:
-      name: pypi
-      url: https://pypi.org/p/golemcpp-waflib
-    steps:
-      - name: Retrieve golemcpp-waflib
-        uses: actions/download-artifact@v6
-        with:
-          name: golemcpp-waflib-dists
-          path: waflib/dist/
-      - name: Publish golemcpp-waflib to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: waflib/dist/
+  # golemcpp pins golemcpp-waflib to an exact version, so waflib must reach the
+  # index first or golemcpp is briefly uninstallable. The publish jobs below
+  # keep that ordering on both indexes.
 
   testpypi-publish-golemcpp-waflib:
     runs-on: ubuntu-latest
@@ -171,28 +138,6 @@ jobs:
           packages-dir: waflib/dist/
           repository-url: https://test.pypi.org/legacy/
 
-  pypi-publish-golemcpp:
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
-    needs:
-      - pypi-publish-golemcpp-waflib
-      - build-golemcpp
-    permissions:
-      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
-    environment:
-      name: pypi
-      url: https://pypi.org/p/golemcpp
-    steps:
-      - name: Retrieve golemcpp
-        uses: actions/download-artifact@v6
-        with:
-          name: golemcpp-dists
-          path: dist/
-      - name: Publish golemcpp to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-
   testpypi-publish-golemcpp:
     runs-on: ubuntu-latest
     needs:
@@ -215,3 +160,46 @@ jobs:
           skip-existing: true
           packages-dir: dist/
           repository-url: https://test.pypi.org/legacy/
+
+  pypi-publish-golemcpp-waflib:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') # only publish to PyPI on tag pushes
+    needs:
+      - build-golemcpp-waflib
+    permissions:
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/golemcpp-waflib
+    steps:
+      - name: Retrieve golemcpp-waflib
+        uses: actions/download-artifact@v6
+        with:
+          name: golemcpp-waflib-dists
+          path: waflib/dist/
+      - name: Publish golemcpp-waflib to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: waflib/dist/
+
+  pypi-publish-golemcpp:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') # only publish to PyPI on tag pushes
+    needs:
+      - pypi-publish-golemcpp-waflib
+      - build-golemcpp
+    permissions:
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/golemcpp
+    steps:
+      - name: Retrieve golemcpp
+        uses: actions/download-artifact@v6
+        with:
+          name: golemcpp-dists
+          path: dist/
+      - name: Publish golemcpp to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
