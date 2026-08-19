@@ -488,6 +488,93 @@ def test_resolution_rejects_a_request_the_compiler_contradicts():
         context.resolve_target_arch()
 
 
+def make_gnu_context(*, arch, triple, builds=False):
+    '''
+    A configured context whose compiler reports `triple` and is not MSVC.
+
+    `builds` is what the compiler answers when asked to build with selecting
+    flags, which is the only way a multilib target can be confirmed.
+    '''
+    context = make_runtime_context(arch=arch)
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
+        triple, 'x86_64')
+    context.attempted = []
+    context.compiler_builds_with = lambda flags: (
+        context.attempted.append(flags) or builds)
+    return context
+
+
+@pytest.mark.parametrize('arch, expected', [
+    ('i686', 'x86'),
+    ('x86', 'x86'),
+    ('x86_64', 'x64'),
+    ('aarch64', 'arm64'),
+])
+def test_an_explicit_arch_narrows_the_msvc_search(arch, expected):
+    # configure() writes this into MSVC_TARGETS before context.load(), which
+    # is how a request reaches waf's msvc detection rather than only the
+    # flags. waf itself fails when no installation carries those tools.
+    context = make_runtime_context(arch=arch)
+
+    assert context.selecting_capability().msvc_target == expected
+
+
+def test_an_absent_arch_leaves_the_msvc_search_alone():
+    # Nothing was asked, so waf tries every platform it knows and reports what
+    # it found. Naming one here would turn an observation into an instruction.
+    context = make_runtime_context(arch='x86_64', requested=None)
+
+    assert context.selecting_capability().msvc_target == ''
+
+
+def test_a_multilib_compiler_reaches_a_target_its_triple_never_names():
+    # gcc reports the target it was configured for, not the only one it can
+    # build: `gcc -m32 -dumpmachine` still answers x86_64. Comparing triples
+    # alone would refuse every 32-bit build on a 64-bit host.
+    context = make_gnu_context(arch='i686', triple='x86_64-linux-gnu',
+                               builds=True)
+
+    context.resolve_target_arch()
+
+    assert context.get_arch() == 'i686'
+    assert context.attempted == [['-m32']]
+
+
+def test_a_multilib_target_the_compiler_cannot_actually_build_is_refused():
+    # The flag exists but the platform ships no 32-bit userland, so nothing
+    # links. Asking is what tells them apart.
+    context = make_gnu_context(arch='i686', triple='x86_64-linux-gnu',
+                               builds=False)
+
+    with pytest.raises(RuntimeError, match=r'-m32'):
+        context.resolve_target_arch()
+
+
+def test_a_target_no_flag_reaches_is_refused_without_asking():
+    # No -m flag turns an x86_64 compiler into an ARM one, and the capability
+    # table says so by carrying no flags at all. Nothing to try.
+    context = make_gnu_context(arch='aarch64', triple='x86_64-linux-gnu',
+                               builds=True)
+
+    with pytest.raises(RuntimeError, match=r"builds for 'x86_64'"):
+        context.resolve_target_arch()
+
+    assert context.attempted == []
+
+
+def test_a_ruled_out_family_is_not_a_multilib_question():
+    # The triple named no target, so there is nothing for a flag to reach
+    # from. -m64 must not be tried, nor claimed to have been.
+    context = make_gnu_context(arch='x86_64', triple='arm-linux-gnueabihf')
+
+    with pytest.raises(RuntimeError, match=r"'arm' family") as raised:
+        context.resolve_target_arch()
+
+    assert context.attempted == []
+    assert '-m64' not in str(raised.value)
+
+
 def test_a_request_supplies_the_isa_level_a_cross_triple_cannot():
     # arm-linux-gnueabihf on an x86_64 host: the compiler cannot say whether it
     # means armv6 or armv7, because only uname knows and uname is describing
@@ -525,11 +612,45 @@ def test_a_request_may_not_contradict_the_family_either(arch):
         context.resolve_target_arch()
 
 
+def test_a_silent_compiler_is_still_asked_to_build_where_a_flag_can_ask(
+        monkeypatch):
+    # It reported no target, but the request is one Golem has a flag for, so
+    # there is a check available and taking it on trust would be a choice.
+    warnings = []
+    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
+        message))
+    context = make_runtime_context(arch='i686')
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget()
+    context.attempted = []
+    context.compiler_builds_with = lambda flags: (
+        context.attempted.append(flags) or True)
+
+    context.resolve_target_arch()
+
+    assert context.get_arch() == 'i686'
+    assert context.attempted == [['-m32']]
+    # Confirmed rather than trusted, so there is nothing to warn about.
+    assert warnings == []
+
+
+def test_a_silent_compiler_that_cannot_build_the_request_is_an_error():
+    # Nothing supports the request: no target reported, and the one check
+    # available failed. Naming the artifact anyway would be a plain lie.
+    context = make_runtime_context(arch='i686')
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget()
+    context.compiler_builds_with = lambda flags: False
+
+    with pytest.raises(RuntimeError, match=r'no target of its own'):
+        context.resolve_target_arch()
+
+
 def test_a_compiler_that_answered_nothing_constrains_nothing(monkeypatch):
-    # A compiler Golem got no answer out of at all. Not MSVC, which is asked
-    # through DEST_CPU: waf's no_autodetect() skips that write, and a toolchain
-    # with no -dumpmachine exits nonzero. Either way the request is the only
-    # thing that knows, and there is nothing for it to contradict.
+    # An MSVC-like toolchain that reported nothing, which is waf's
+    # no_autodetect(): it returns before writing DEST_CPU. No flag can put the
+    # question to cl.exe either, so nothing checks the request and it is taken
+    # on trust. The other silent case is a toolchain with no -dumpmachine.
     warnings = []
     monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
         message))

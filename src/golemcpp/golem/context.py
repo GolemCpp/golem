@@ -3718,6 +3718,20 @@ class Context:
         return target_platform.CompilerTarget.from_triple(
             self.compiler_triple())
 
+    def compiler_builds_with(self, flags):
+        '''
+        Build a trivial program with `flags` and report whether that worked.
+
+        The one question a compiler answers about a target it was not
+        configured for. Multilib is why: the flag reaches a second target only
+        where the platform ships a userland for it, and nothing short of
+        linking says whether it does.
+        '''
+        return bool(self.context.check_cxx(
+            cxxflags=flags, linkflags=flags, mandatory=False,
+            msg='Checking whether the compiler builds with {}'.format(
+                ' '.join(flags))))
+
     def resolve_target_arch(self):
         '''
         Settle the target's identity now that a compiler exists, and record it.
@@ -3727,20 +3741,56 @@ class Context:
         asking again.
 
         A request --arch= that the chosen compiler will not honour is an error.
-        A request nothing could check is taken on trust, with a warning.
+        One that nothing could check is taken on trust, with a warning.
         '''
         requested = self.arch_request()
         target = self.compiler_target()
         resolved, refusal = target.settle(requested)
 
+        silent = not target.answered
+
+        # A triple names the target a compiler was *configured* for, not the
+        # only one it can reach: a multilib gcc says x86_64-linux-gnu and
+        # builds i686 given -m32. It reports that nowhere -- `gcc -m32
+        # -dumpmachine` still answers x86_64 -- so when Golem has flags for the
+        # request, only an attempt to build with them can give an honest
+        # answer. Only the x86 family carries any.
+        #
+        # A family or an ABI the compiler ruled out is settled and stays that
+        # way. Those name a different target, not one alongside the one it
+        # builds, and objects built for one ABI do not link with the other
+        # however well a trivial program compiles.
+        unsettled = (refusal is target_platform.Refusal.ARCH
+                     or (requested and silent))
+
+        attempted = []
+        verified = False
+        # MSVC takes no such flag, and its request already reached waf through
+        # MSVC_TARGETS before detection ran.
+        if unsettled and not self.is_msvc_like():
+            attempted = list(self.selecting_capability().gnu_flags)
+            if attempted:
+                verified = self.compiler_builds_with(attempted)
+                if verified:
+                    resolved, refusal = requested, None
+
+        build_failed = bool(attempted) and not verified
+        unverifiable = silent and not attempted
+
         if refusal:
             cxx = self.context.env.CXX
+            attempt = ''
+            if build_failed:
+                attempt = (" Building with {} was tried as well and produced "
+                           "nothing that links, so it has no multilib for that "
+                           "target either.".format(' '.join(attempted)))
             raise RuntimeError(
                 "Requested architecture '{}' but the selected compiler ({}) "
-                "{}.".format(
+                "{}.{}".format(
                     requested,
                     ' '.join(cxx) if isinstance(cxx, list) else cxx,
-                    refusal_phrase(refusal, target)))
+                    refusal_phrase(refusal, target),
+                    attempt))
 
         if not resolved:
             raise RuntimeError(
@@ -3749,9 +3799,19 @@ class Context:
                 "here would be a guess, and it would end up in the build slug "
                 "and in what the artifact advertises about itself.")
 
-        if not target.answered:
-            # Nothing checked this request, so it names the artifact on the
-            # user's word alone, and a wrong one is cached under a wrong name.
+        if silent and build_failed:
+            cxx = self.context.env.CXX
+            raise RuntimeError(
+                "Requested architecture '{}' but the selected compiler ({}) "
+                "did not build for it: {} produced nothing that links, and it "
+                "reported no target of its own to fall back on.".format(
+                    requested,
+                    ' '.join(cxx) if isinstance(cxx, list) else cxx,
+                    ' '.join(attempted)))
+
+        if unverifiable:
+            # The request names the artifact on the user's word alone, so a
+            # wrong one is cached under a wrong name.
             #
             # Rare, and not MSVC, which answers through DEST_CPU. Two sources:
             # NO_MSVC_DETECT, waf's escape hatch for an already-configured
