@@ -726,12 +726,24 @@ class Context:
     def arch_capability(self):
         return self.target().capability
 
-    def legacy_vs_arch(self):
-        # What MSBuild and CMake were being handed before the vocabulary swap,
-        # kept bug-for-bug so this change alters no behaviour. Neither tool
-        # accepts 'x86' -- the value is 'Win32' -- and fixing that is its own
-        # change, which replaces this with the capability's vs_platform.
-        return 'x64' if self.get_arch() == target_platform.ARCH_X86_64 else 'x86'
+    def vs_platform(self, arch=None):
+        '''
+        Visual Studio's name for the target, for MSBuild's /p:Platform and
+        CMake's -A.
+        '''
+        capability = (self.arch_capability() if arch is None else
+                      target_platform.arch_capability(arch))
+        vs_platform = capability.vs_platform
+        if not vs_platform:
+            raise RuntimeError(
+                "No Visual Studio platform for architecture '{}'. Visual "
+                "Studio builds for {}.".format(
+                    target_platform.normalize_arch(arch) if arch else
+                    self.get_arch(),
+                    ', '.join(arch for arch, capability in
+                              target_platform.ARCH_CAPABILITIES.items()
+                              if capability.vs_platform)))
+        return vs_platform
 
     def get_arch_for_linux(self, arch=None):
         capability = (self.target().capability
@@ -3332,7 +3344,7 @@ class Context:
         if configuration is None:
             configuration = 'Release' if self.is_release() else 'Debug'
         if platform is None:
-            platform = self.legacy_vs_arch()
+            platform = self.vs_platform()
         if toolset is None:
             toolset = self.get_current_msvc_toolset()
 
@@ -3503,10 +3515,8 @@ class Context:
         else:
             opt_link += 'ON'
 
-        opt_arch = ['-A', self.legacy_vs_arch()]
-
-        if not self.is_windows():
-            opt_arch = []
+        # -A is a Visual Studio generator option
+        opt_arch = ['-A', self.vs_platform(arch)] if self.is_windows() else []
 
         prefix_dir = os.path.join(build_path, 'install')
         if not os.path.exists(prefix_dir):

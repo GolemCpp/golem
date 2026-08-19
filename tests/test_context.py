@@ -322,6 +322,34 @@ def test_unknown_arch_keeps_an_identity_and_gains_no_flags():
     assert context.make_default_build_flags(variant='release')['linkflags'] == []
 
 
+@pytest.mark.parametrize('arch, expected', [
+    ('x86_64', 'x64'),
+    ('amd64', 'x64'),
+    # The whole point: neither MSBuild nor CMake accepts 'x86', which is what
+    # both were handed before.
+    ('i686', 'Win32'),
+    ('x86', 'Win32'),
+    ('aarch64', 'ARM64'),
+    ('arm64', 'ARM64'),
+])
+def test_vs_platform_uses_visual_studios_own_names(arch, expected):
+    assert make_runtime_context(arch=arch).vs_platform() == expected
+
+
+def test_vs_platform_takes_an_explicit_arch_over_the_target():
+    context = make_runtime_context(arch='x86_64')
+
+    assert context.vs_platform('i686') == 'Win32'
+
+
+@pytest.mark.parametrize('arch', ['i486', 'armv7-eabihf', 'sparc64'])
+def test_vs_platform_refuses_an_arch_visual_studio_cannot_build(arch):
+    context = make_runtime_context(arch=arch)
+
+    with pytest.raises(RuntimeError, match=r"No Visual Studio platform"):
+        context.vs_platform()
+
+
 def test_debian_arch_comes_from_the_capability_table():
     assert make_runtime_context(arch='x86_64').get_arch_for_linux() == 'amd64'
     assert make_runtime_context(arch='aarch64').get_arch_for_linux() == 'arm64'
