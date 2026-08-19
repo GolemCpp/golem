@@ -113,6 +113,12 @@ def normalize_osystem(name):
     return OS_ALIASES.get(cleaned, cleaned)
 
 
+def is_osystem_name(name):
+    '''Whether a bare word names an operating system. See is_arch_name.'''
+    cleaned = str(name).strip().lower()
+    return cleaned in CANONICAL_OSYSTEMS or cleaned in OS_ALIASES
+
+
 def host_osystem():
     '''
     The operating system Golem is running on.
@@ -229,6 +235,19 @@ def normalize_arch(name):
     if cleaned in ARCH_ALIASES:
         return ARCH_ALIASES[cleaned]
     return ARCH_FAMILY_DEFAULTS.get(cleaned, cleaned)
+
+
+def is_arch_name(name):
+    '''
+    Whether a bare word names an architecture.
+
+    For deciding which axis a condition like `x64` belongs to, which
+    normalizing cannot answer: it is total, so it hands `debug` back unchanged
+    as readily as it resolves `amd64`.
+    '''
+    cleaned = str(name).strip().lower()
+    return (cleaned in CANONICAL_ARCHS or cleaned in ARCH_ALIASES
+            or cleaned in ARCH_FAMILY_DEFAULTS)
 
 
 # --- Reading an identity off a compiler's triple -------------------------
