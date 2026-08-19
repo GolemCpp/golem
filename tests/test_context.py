@@ -222,7 +222,7 @@ def make_runtime_context(*,
     # target, which is the path under test. osname still is, because the target
     # takes its OS from the host and these cases are about Windows.
     context.osname = lambda: 'windows'
-    context.compiler_min = lambda: 'm'
+    context.compiler = lambda: 'msvc-19.44'
     context.is_msvc_like = lambda: True
     return context
 
@@ -261,10 +261,39 @@ def test_restore_options_env_upgrades_legacy_runtime_option():
     assert 'runtime_variant' in restored
 
 
-def test_build_path_on_windows_includes_runtime_variant_segment():
-    context = make_runtime_context(runtime_variant='release')
+def test_the_slug_carries_runtime_variant_on_every_platform():
+    # It used to appear on Windows alone. Dropping it elsewhere would let two
+    # artifacts built against different CRTs share a directory.
+    windows = make_runtime_context(runtime_variant='release')
+    assert windows.build_path() == 'windows~x86_64~msvc-19.44~sh~r~sh~d'
 
-    assert context.build_path() == 'w64mshrshd'
+    linux = make_runtime_context(runtime_variant='release')
+    linux.osname = lambda: 'linux'
+    linux.compiler = lambda: 'gcc-13.4.0'
+    assert linux.build_path() == 'linux~x86_64~gcc-13.4.0~sh~r~sh~d'
+
+
+def test_the_slug_names_the_architecture_rather_than_a_word_size():
+    # The Windows branch read '64' if x86_64 else '32', so aarch64 and i686
+    # produced one directory for two incompatible builds.
+    arm = make_runtime_context(arch='aarch64')
+    arm.compiler = lambda: 'msvc-19.44'
+    x86 = make_runtime_context(arch='i686')
+    x86.compiler = lambda: 'msvc-19.44'
+
+    assert arm.build_path() != x86.build_path()
+    assert 'aarch64' in arm.build_path()
+    assert 'i686' in x86.build_path()
+
+
+def test_a_dependency_gets_its_own_slug():
+    # Every field but the toolchain's may differ per dependency, which is what
+    # the dep argument threads through.
+    context = make_runtime_context(variant='debug')
+    dep = SimpleNamespace(link=['static'], runtime_link=['static'],
+                          runtime_variant=['release'], variant=['release'])
+
+    assert context.build_path(dep) == 'windows~x86_64~msvc-19.44~st~r~st~r'
 
 
 def test_configure_debug_keeps_debug_flags_with_release_runtime_variant():

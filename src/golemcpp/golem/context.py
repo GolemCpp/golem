@@ -36,6 +36,7 @@ from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import build_slug
 from golemcpp.golem import target_platform
 from golemcpp.golem import target_resolver
 from golemcpp.golem.target_platform import TargetPlatform
@@ -421,9 +422,6 @@ class Context:
                 raise RuntimeError("Not implemented yet")
         return None
 
-    def link_min(self, dep=None):
-        return self.link(dep)[:2]
-
     def is_static(self):
         return self.context.options.link == self.link_static()
 
@@ -451,12 +449,6 @@ class Context:
     def is_runtime_variant_release(self):
         return self.runtime_variant() == self.variant_release()
 
-    def runtime_link_min(self, dep=None):
-        return self.runtime_link(dep)[:2]
-
-    def runtime_variant_min(self, dep=None):
-        return self.runtime_variant(dep)[:1]
-
     @staticmethod
     def variant_debug():
         return 'debug'
@@ -465,8 +457,9 @@ class Context:
     def variant_release():
         return 'release'
 
-    def variant(self):
-        return self.context.options.variant
+    def variant(self, dep=None):
+        return self.context.options.variant if dep is None or not dep.variant else dep.variant[
+            0]
 
     def variant_suffix(self):
         variant = ''
@@ -547,15 +540,6 @@ class Context:
     def is_release(self):
         return self.context.options.variant == self.variant_release()
 
-    def variant_min(self, dep=None):
-        if dep and dep.variant:
-            v = dep.variant[0].lower()
-            if v in ['release', 'debug']:
-                return v[:1]
-            else:
-                return v
-        return self.context.options.variant[:1]
-
     @staticmethod
     def os_windows():
         return target_platform.OS_WINDOWS
@@ -609,9 +593,6 @@ class Context:
     def osname(self):
         return self.target().osystem
 
-    def osname_min(self):
-        return self.osname()[:3]
-
     def compiler(self):
         return self.context.env.CXX_NAME + '-' + '.'.join(
             self.context.env.CC_VERSION)
@@ -622,10 +603,6 @@ class Context:
     def compiler_version(self):
         return '.'.join(self.context.env.CC_VERSION)
 
-    def compiler_min(self):
-        return self.context.env.CXX_NAME[:1] + ''.join(
-            self.context.env.CC_VERSION)
-    
     def is_msvc_like(self):
         return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
     
@@ -3889,22 +3866,17 @@ class Context:
             self.version.force_version(self.context.options.force_version)
 
     def build_path(self, dep=None):
-        if self.is_windows():
-            return self.osname()[:1] + ('64' if self.get_arch(
-            ) == target_platform.ARCH_X86_64 else
-                                        '32') + self.compiler_min() + self.runtime_link_min(
-                dep) + self.runtime_variant_min(dep) + self.link_min(
-                dep) + self.variant_min(dep)
-        else:
-            return self.osname() + '-' + self.get_arch() + '-' + self.compiler(
-            ) + '-' + self.runtime_link_min(dep) + '-' + self.link_min(
-                dep) + '-' + self.variant_min(dep)
-
-    def build_path_build(self, dep=None):
-        if self.is_windows():
-            return self.build_path(dep) + 'b'
-        else:
-            return self.build_path(dep) + '-build'
+        return str(
+            build_slug.BuildSlug(osystem=self.osname(),
+                                 arch=self.get_arch(),
+                                 # CXX_NAME with CC_VERSION reads mismatched
+                                 # and is not: waf's C++ tools write
+                                 # CC_VERSION too, and compiler_cxx loads last.
+                                 compiler=self.compiler(),
+                                 runtime_link=self.runtime_link(dep),
+                                 runtime_variant=self.runtime_variant(dep),
+                                 link=self.link(dep),
+                                 variant=self.variant(dep)))
 
     def find_dependency(self, dep_name):
         found_dep = None
