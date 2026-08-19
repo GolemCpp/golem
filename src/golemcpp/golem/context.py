@@ -51,6 +51,23 @@ from golemcpp.golem.package_msi import package_msi
 from golemcpp.golem.package_dmg import package_dmg
 
 
+def refusal_phrase(refusal, target):
+    '''
+    Say what a compiler builds for instead, completing "the selected compiler".
+
+    Each refusal is about one of the compiler's own answers, so the phrase
+    names that answer and leaves the request to the sentence around it.
+    '''
+    if refusal is target_platform.Refusal.ARCH:
+        return "builds for '{}'".format(target.arch)
+
+    if refusal is target_platform.Refusal.FAMILY:
+        return "builds for the '{}' family".format(target.family)
+
+    return ("builds for the '{}' ABI, and objects built for one ABI do not "
+            "link with the other".format(target.abi))
+
+
 class Context:
     def __init__(self, context):
         self.context = context
@@ -583,8 +600,33 @@ class Context:
     def is_darwin():
         return sys.platform.startswith('darwin')
 
+    def arch_request(self):
+        '''
+        The architecture that was asked for, or '' when none was.
+
+        Distinct from the target: an absent request is not the same thing as a
+        request for the host, and only the request may emit selecting flags.
+        '''
+        return target_platform.normalize_arch(
+            getattr(self.context.options, 'arch', None))
+
     def target(self):
-        return TargetPlatform.make(arch=self.context.options.arch)
+        '''
+        What this build is for. Only available once a compiler has answered.
+
+        The alternative is to fall back to the request or the host, and both
+        are provisional values that would flow into a build slug and an
+        advertisement and be wrong there, silently.
+        '''
+        resolved = getattr(self.context.options, 'resolved_arch', None)
+        if not resolved:
+            raise RuntimeError(
+                "The target architecture is not resolved yet. It is settled "
+                "during configure, once the compiler has been asked what it "
+                "builds for. If this came from a stale build directory, "
+                "configure again.")
+        return TargetPlatform(osystem=target_platform.host_osystem(),
+                              arch=resolved)
 
     def osname(self):
         return self.target().osystem
@@ -716,15 +758,24 @@ class Context:
     def machine():
         return platform.machine()
 
-    @staticmethod
-    def osarch():
-        return target_platform.host_arch()
-
     def get_arch(self):
         return self.target().arch
 
     def arch_capability(self):
         return self.target().capability
+
+    def selecting_capability(self):
+        '''
+        The capability allowed to emit flags that *select* a target.
+
+        The target is what the build turned out to be; this is what was asked
+        for, and only a request may instruct a compiler.
+
+        Empty when nothing was asked. There is then nothing to select and no
+        flag to emit: whatever the compiler builds by default is the answer,
+        and it gets recorded rather than overridden.
+        '''
+        return target_platform.arch_capability(self.arch_request())
 
     def vcvars_arg(self):
         '''
@@ -820,7 +871,7 @@ class Context:
                            help="Library Linking (shared, static)")
         context.add_option("--arch",
                            action="store",
-                           default=target_platform.host_arch(),
+                           default=None,  # unset observes; see resolve_target_arch
                            help="Target Architecture")
 
         context.add_option("--major",
@@ -1024,7 +1075,7 @@ class Context:
         if not self.context.options.nounicode:
             flags['defines'].append('UNICODE')
 
-        capability = self.arch_capability()
+        capability = self.selecting_capability()
 
         if self.is_msvc_like():
             if capability.msvc_machine:
@@ -1534,7 +1585,12 @@ class Context:
             '--runtime-link={}'.format(self.runtime_link(dep)),
             '--runtime-variant={}'.format(self.runtime_variant(dep)),
             '--link={}'.format(self.link(dep)),
-            '--arch={}'.format(self.context.options.arch),
+            # The resolved identity, not the request: this build has already
+            # observed what its compiler produces, so the dependency is told
+            # rather than left to observe independently. It also means a child
+            # whose compiler disagrees fails instead of building something the
+            # parent cannot link.
+            '--arch={}'.format(self.get_arch()),
             '--variant={}'.format(self.context.options.variant if not dep.variant else dep.variant[0]),
             '--export={}'.format(dep_path),
             '--resolved-dependencies-directory={}'.format(build_path),
@@ -3590,8 +3646,9 @@ class Context:
         # ('x64', 'x86'). Normalizing on the way back in is what stops it
         # bypassing the canonical names, since nothing downstream parses arch
         # again.
-        if options.get('arch'):
-            options['arch'] = target_platform.normalize_arch(options['arch'])
+        for key in ('arch', 'resolved_arch'):
+            if options.get(key):
+                options[key] = target_platform.normalize_arch(options[key])
 
         if not self.context.options.targets:
             self.context.options.targets = options['targets']
@@ -3624,6 +3681,91 @@ class Context:
     def configure_compiler(self):
         if 'CXX' in os.environ and os.environ['CXX']:  # Pull in the compiler
             self.context.env.CXX = os.environ['CXX']  # override default
+
+    def compiler_triple(self):
+        '''
+        The target triple the compiler waf selected reports, or '' if it has none.
+
+        `-dumpmachine` is the portable form; `-print-multiarch` is empty outside
+        Debian. MSVC answers neither and is asked through DEST_CPU instead.
+        '''
+        if self.is_msvc_like():
+            return ''
+
+        cxx = self.context.env.CXX
+        if not cxx:
+            return ''
+
+        command = (list(cxx) if isinstance(cxx, list) else [cxx]) + ['-dumpmachine']
+        try:
+            return subprocess.check_output(
+                command, universal_newlines=True,
+                stderr=subprocess.DEVNULL).strip()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return ''
+
+    def compiler_target(self):
+        '''
+        Everything the compiler waf selected said about what it builds for.
+
+        MSVC is asked differently: waf's msvc detection records the target of the
+        installation it found in DEST_CPU.
+        '''
+        if self.is_msvc_like():
+            return target_platform.CompilerTarget.from_arch(
+                self.context.env.DEST_CPU)
+
+        return target_platform.CompilerTarget.from_triple(
+            self.compiler_triple())
+
+    def resolve_target_arch(self):
+        '''
+        Settle the target's identity now that a compiler exists, and record it.
+
+        Called once, after waf's compiler detection and before the options are
+        saved, because everything downstream reads them back rather than
+        asking again.
+
+        A request --arch= that the chosen compiler will not honour is an error.
+        A request nothing could check is taken on trust, with a warning.
+        '''
+        requested = self.arch_request()
+        target = self.compiler_target()
+        resolved, refusal = target.settle(requested)
+
+        if refusal:
+            cxx = self.context.env.CXX
+            raise RuntimeError(
+                "Requested architecture '{}' but the selected compiler ({}) "
+                "{}.".format(
+                    requested,
+                    ' '.join(cxx) if isinstance(cxx, list) else cxx,
+                    refusal_phrase(refusal, target)))
+
+        if not resolved:
+            raise RuntimeError(
+                "Cannot tell what architecture this build is for: the compiler "
+                "did not say, and none was asked for with --arch. Naming one "
+                "here would be a guess, and it would end up in the build slug "
+                "and in what the artifact advertises about itself.")
+
+        if not target.answered:
+            # Nothing checked this request, so it names the artifact on the
+            # user's word alone, and a wrong one is cached under a wrong name.
+            #
+            # Rare, and not MSVC, which answers through DEST_CPU. Two sources:
+            # NO_MSVC_DETECT, waf's escape hatch for an already-configured
+            # Developer Command Prompt, which returns before writing DEST_CPU;
+            # and a toolchain with no -dumpmachine, which is what waf's
+            # compiler_cxx selects on SunOS and AIX. Both leave an environment
+            # that is probably already correct and a user who was explicit, so
+            # this warns rather than refusing.
+            Logs.warn(
+                "Building for '{}' on request alone: the selected compiler "
+                "reported no target of its own, so nothing confirms it builds "
+                "for that architecture.".format(resolved))
+
+        self.context.options.resolved_arch = resolved
 
     def load_recipe(self):
         recipe_id = self.context.options.recipe
@@ -3840,10 +3982,13 @@ class Context:
         self.context.setenv('main')
         self.configure_compiler()
         if self.is_windows():
-            msvc_target = self.arch_capability().msvc_target
+            # Only an explicit request narrows waf's search. With none, waf
+            # tries every platform it knows and reports what it found.
+            msvc_target = self.selecting_capability().msvc_target
             if msvc_target:
                 self.context.env.MSVC_TARGETS = [msvc_target]
         self.context.load(features_to_load)
+        self.resolve_target_arch()
         self.save_options()
 
         if self.context.options.force_version:

@@ -25,7 +25,7 @@ Three ways a name can be many-to-one, and only the first is an alias:
   Apple says `arm64` where GNU says `aarch64`. Nothing is lost.
 - **Family names**, which are not targets at all. `x86` and `ia32` name the
   32-bit line rather than a member of it, so they resolve to a documented
-  default. That is a convenience, not an equivalence.
+  default. That is a convenience for a person typing one only.
 - **Sub-architectures**, which are *not* interchangeable and so are not
   collapsed. i486 adds `xadd` and `bswap`, i586 adds `cmpxchg8b`, i686 adds
   `cmov`; an i686 binary raises SIGILL on a 486, and a cross toolchain exists
@@ -41,6 +41,7 @@ that on its own and would need a separate merge step, the scenario is
 unsupported rather than reimplemented here.
 '''
 
+import enum
 import os
 import platform
 import re
@@ -144,6 +145,11 @@ ARCH_ARMV5_EABI = 'armv5-eabi'
 ARCH_ARMV6_EABIHF = 'armv6-eabihf'
 ARCH_ARMV7_EABI = 'armv7-eabi'
 ARCH_ARMV7_EABIHF = 'armv7-eabihf'
+# Android's armeabi-v7a, which is a third float ABI.
+# It carries its own name rather than borrowing `eabi` so that a canonical name
+# keeps fully determining ABI compatibility, without having to be read
+# alongside the operating system to be understood.
+ARCH_ARMV7_ANDROIDEABI = 'armv7-androideabi'
 ARCH_RISCV32_ILP32 = 'riscv32-ilp32'
 ARCH_RISCV64_LP64 = 'riscv64-lp64'
 ARCH_RISCV64_LP64D = 'riscv64-lp64d'
@@ -165,6 +171,7 @@ CANONICAL_ARCHS = (
     ARCH_ARMV6_EABIHF,
     ARCH_ARMV7_EABI,
     ARCH_ARMV7_EABIHF,
+    ARCH_ARMV7_ANDROIDEABI,
     ARCH_RISCV32_ILP32,
     ARCH_RISCV64_LP64,
     ARCH_RISCV64_LP64D,
@@ -226,15 +233,263 @@ def normalize_arch(name):
     return ARCH_FAMILY_DEFAULTS.get(cleaned, cleaned)
 
 
-def host_arch():
-    '''
-    The canonical architecture Golem is running on, as the machine reports it.
+# --- Reading an identity off a compiler's triple -------------------------
 
-    Deliberately no more than that. Where an architecture's identity includes an
-    ABI, uname cannot supply one, and the answer comes from the compiler that
-    ends up being used rather than from anything guessed here.
+
+# The ABI a triple's last field names. A multiarch tuple is a triple too, so
+# the same table serves `multiarch_abi` at the bottom of this file.
+#
+# The bare spellings are what a toolchain outside the glibc/musl world reports:
+# `arm-none-eabi-gcc -dumpmachine` says `arm-none-eabi`. Listing a spelling is
+# vocabulary and says nothing about whether the target can be built yet.
+ABI_BY_TRIPLE_SUFFIX = {
+    'gnueabihf': 'eabihf',
+    'musleabihf': 'eabihf',
+    'eabihf': 'eabihf',
+    'gnueabi': 'eabi',
+    'musleabi': 'eabi',
+    'eabi': 'eabi',
+    'androideabi': 'androideabi',
+}
+
+# Android writes the API level into the triple it is invoked with, e.g.
+# `armv7a-linux-androideabi21`. That is a real part of the target, but it is a
+# *different axis* from the ABI. The same shape as a macOS deployment target
+# or a _WIN32_WINNT floor. So it is removed before this lookup rather than
+# folded into an architecture's name.
+#
+# Not verified against a real NDK: it costs nothing if -dumpmachine turns out
+# to echo the triple back without the level.
+TRIPLE_SUFFIX_LEVEL = re.compile(r'\d+$')
+
+# Arch fields that name a *family* and are never a target on their own. `arm`
+# is the whole 32-bit line at once: a triple saying it has not said whether it
+# means armv5, armv6 or armv7, and no capability could be selected from it.
+FAMILY_ARCH_FIELDS = ('arm', )
+
+MACHINE_ISA_PATTERN = re.compile(r'^arm(v\d+)([a-z]*)$')
+
+
+def machine_isa(machine):
     '''
-    return normalize_arch(platform.machine())
+    The instruction set a uname machine string names, and any ABI it lets slip.
+
+    32-bit ARM is reported with a tail of letters that are not all the same kind
+    of thing. `armv7l` ends in byte order. `armv5tel` names two ISA extensions
+    before it. `armv7hl` slips in an `h` that says hard float outright, which is
+    the only one of them worth keeping.
+    '''
+    cleaned = str(machine).strip().lower()
+    match = MACHINE_ISA_PATTERN.match(cleaned)
+    if not match:
+        return cleaned, ''
+
+    version, extensions = match.groups()
+    if extensions.endswith(('l', 'b')):
+        extensions = extensions[:-1]
+    return 'arm' + version, 'eabihf' if extensions.endswith('h') else ''
+
+
+@dataclass(frozen=True)
+class Triple:
+    '''
+    A target triple, split into the fields Golem reads.
+
+    Four fields despite the name, `<arch>-<vendor>-<sys>-<abi>`: the
+    three-field form came first, the vendor was added later, and the name
+    stayed.
+
+    TODO: Only the two ends are named here, because three fields is the common
+    form and it is ambiguous. `x86_64-linux-gnu` leaves out the vendor,
+    `aarch64-apple-darwin` the ABI, `arm-none-eabi` the system, and telling
+    those apart needs tables of the vendors and systems that exist.
+    '''
+
+    fields: tuple = ()
+
+    @staticmethod
+    def parse(triple):
+        '''Split what a compiler reported into its fields.'''
+        fields = str(triple).strip().lower().split('-')
+        return Triple(fields=tuple(fields) if fields[0] else ())
+
+    @property
+    def arch(self):
+        '''
+        The triple's arch field, which is a position rather than a claim.
+
+        `arm` sits there as readily as `x86_64` does, so it may name a family
+        that is not a target at all.
+        '''
+        return self.fields[0] if self.fields else ''
+
+    @property
+    def suffix(self):
+        '''The last field, whichever of vendor, system and ABI it turned out to be.'''
+        return self.fields[-1] if self.fields else ''
+
+    def canonical_abi(self):
+        '''
+        Name the ABI in Golem's vocabulary, or '' where the suffix names none.
+
+        The two vocabularies differ, and the difference is the C library: a
+        triple says `gnueabihf` and `musleabihf` where Golem says `eabihf` for
+        both, because which libc was linked is not part of an architecture.
+
+        What is left keeps a coarse triple useful rather than merely unusable.
+        Cross-compiling to 32-bit ARM is the case that needs it: `arm-linux-
+        gnueabihf` cannot say whether it means armv6 or armv7, so a request has
+        to supply that, but it is emphatic about hard float and a request
+        claiming soft float against it is wrong.
+        '''
+        return ABI_BY_TRIPLE_SUFFIX.get(
+            TRIPLE_SUFFIX_LEVEL.sub('', self.suffix), '')
+
+    def canonical_arch(self, machine=None):
+        '''
+        Compose the canonical architecture this triple names, or '' for none.
+
+        Two sources, because neither is enough alone. `-dumpmachine` on an
+        armv7 toolchain answers `arm-linux-gnueabihf`: it settles the ABI,
+        which uname cannot report, and gives only `arm` for the ISA level,
+        which uname does. So the ABI comes from the triple and the ISA level
+        from the machine, which is the split `<isa>-<abi>` was spelled for.
+
+        Borrowing the ISA level from uname is only sound while the compiler
+        builds for the machine running it, therefore a cross toolchain, whose
+        triple describes one machine and uname another, gets nothing.
+
+        An architecture that is complete but simply not one of Golem's
+        canonical names passes through unchanged: `sparc64` is an identity,
+        `arm` is not.
+        '''
+        field = self.arch
+        if not field:
+            return ''
+
+        named = normalize_arch(field)
+        # A triple whose arch field is already a canonical name needs nothing
+        # else: x86_64, aarch64 and i686 carry no ABI to recover.
+        if named in CANONICAL_ARCHS:
+            return named
+
+        # What to say if the pieces do not come together: a name for a field
+        # that stands on its own, nothing for one that names a family.
+        incomplete = '' if field in FAMILY_ARCH_FIELDS else named
+
+        # The triple's own arch field wins where it carries an ISA level of its
+        # own (`armv7a-...`); otherwise only uname knows which one this is, and
+        # only when it is describing the machine being built for.
+        isa, _ = machine_isa(field)
+        if isa == field and field in FAMILY_ARCH_FIELDS:
+            isa, _ = machine_isa(
+                platform.machine() if machine is None else machine)
+            if not isa.startswith(field):
+                return incomplete
+
+        abi = self.canonical_abi()
+        if not abi:
+            return incomplete
+
+        resolved = normalize_arch('{}-{}'.format(isa, abi))
+        return resolved if resolved in CANONICAL_ARCHS else incomplete
+
+
+class Refusal(enum.Enum):
+    '''
+    Why a compiler will not build a requested architecture.
+
+    A discriminant and nothing more. The words belong to whoever is writing the
+    message, and the value each one is about is a field of `CompilerTarget`.
+    '''
+
+    # It named its target outright, and the request is a different target.
+    ARCH = enum.auto()
+    # It named a family, and the request belongs to another one.
+    FAMILY = enum.auto()
+    # It named an ABI, and the request wants the other. This is not a
+    # preference: objects built for one ABI do not link with objects built for
+    # the other, so there is no artifact that would satisfy both.
+    ABI = enum.auto()
+
+
+@dataclass(frozen=True)
+class CompilerTarget:
+    '''
+    What the selected compiler said about what it builds for.
+
+    Three fields because a compiler answers at three levels of precision and
+    every one of them is usable. `x86_64-linux-gnu` names a target outright.
+    `arm-linux-gnueabihf` names a family and an ABI but no ISA level, since
+    only uname has that and uname may be describing another machine. Empty is
+    a compiler that could not be got to answer at all, which is a state too.
+    '''
+
+    arch: str = ''
+    family: str = ''
+    abi: str = ''
+
+    @staticmethod
+    def from_triple(triple, machine=None):
+        parsed = Triple.parse(triple)
+        return CompilerTarget(arch=parsed.canonical_arch(machine),
+                              family=parsed.arch,
+                              abi=parsed.canonical_abi())
+
+    @property
+    def answered(self):
+        '''Whether the compiler said anything at all about what it builds for.'''
+        return bool(self.arch or self.family or self.abi)
+
+    @staticmethod
+    def from_arch(arch):
+        '''
+        For a compiler that reports its target without a triple.
+
+        MSVC is the case: waf records the target of the installation it found,
+        which is a whole answer rather than a partial one.
+        '''
+        return CompilerTarget(arch=normalize_arch(arch))
+
+    def refusal(self, arch):
+        '''
+        Say why this compiler will not build `arch`, or None if it will.
+
+        One rule read at whatever precision is available. A compiler that named
+        its target admits only that target. One that named a family and an ABI
+        admits anything in the family sharing the ABI, which is how a request
+        supplies an ISA level that a cross toolchain's triple could not.
+        '''
+        if self.arch:
+            return Refusal.ARCH if arch != self.arch else None
+
+        isa, carries_abi, abi = arch.rpartition('-')
+
+        if self.family and not (isa or abi).startswith(self.family):
+            return Refusal.FAMILY
+
+        if self.abi and (abi if carries_abi else '') != self.abi:
+            return Refusal.ABI
+
+        return None
+
+    def settle(self, requested):
+        '''
+        Reconcile what the compiler reported with what was requested.
+
+        Returns an architecture when the two are compatible
+        
+        Returns a refusal when they aren't compatible.
+        
+        There is no refusal if both are empty, because the request settles
+        what the compiler left open.
+        '''
+        if requested:
+            refusal = self.refusal(requested)
+            if refusal:
+                return '', refusal
+
+        return self.arch or requested, None
 
 
 @dataclass(frozen=True)
@@ -375,95 +630,25 @@ class TargetPlatform:
     '''
     What this build is for, as one value.
 
-    It defaults to the host, and for now it can differ from the host only where
-    the host's own compiler can be pointed somewhere else: a 32-bit build on a
-    64-bit toolchain, one of MSVC's cross modes. Reaching a target that needs a
-    *different* compiler is cross-compilation proper, and that waits until
-    choosing the toolchain is part of configuring the build.
-
-    Note this describes the target, not whether it happens to be reachable.
-    `unsupported_reason` is the part that knows what Golem can currently do, and
-    it is the part that will change as that grows.
+    Both halves are required, because there is no valid default. A target that
+    was never decided in the first place reaches a build slug and an advertisement,
+    where it becomes a claim about an artifact that may not be true.
     '''
 
     osystem: str
     arch: str
 
     def __post_init__(self):
-        # Normalizing here rather than in the factories below is what makes the
+        # Normalizing in the constructor rather than around it is what makes the
         # canonical form an invariant of the type: a target built any other way
         # cannot carry a spelling that would reach a build slug unnormalized,
         # which is the failure this whole model exists to remove.
         object.__setattr__(self, 'osystem', normalize_osystem(self.osystem))
         object.__setattr__(self, 'arch', normalize_arch(self.arch))
 
-    @staticmethod
-    def host():
-        return TargetPlatform(osystem=host_osystem(), arch=host_arch())
-
-    @staticmethod
-    def make(osystem=None, arch=None):
-        '''
-        A target from what was asked for, falling back to the host for whatever
-        was not.
-        '''
-        return TargetPlatform(
-            osystem=normalize_osystem(osystem) or host_osystem(),
-            arch=normalize_arch(arch) or host_arch())
-
     @property
     def capability(self):
         return arch_capability(self.arch)
-
-    def is_host(self):
-        return self == TargetPlatform.host()
-
-    def unsupported_reason(self):
-        '''
-        Why this target cannot be built, or None when it can.
-
-        Building for the host is always fine, whatever the host is. A native
-        compiler already targets its own machine.
-
-        Building for anything else is only possible where the compiler that is
-        actually going to run can be *told* to do it. E.g. `-m32` on a GNU
-        multilib toolchain, one of MSVC's cross modes on Windows. Where it
-        cannot, the request has to be refused rather than honoured silently.
-
-        Which is why this asks what the *host's* toolchain can select, not
-        whether any toolchain anywhere could. An aarch64 request on an x86_64
-        Linux host is refused even though MSVC has an arm64 mode, because it is
-        gcc that is about to run.
-
-        This is everything that can be known before a compiler has been chosen,
-        which is less than everything: the host's architecture is inferred here,
-        and only the compiler finally selected can confirm it.
-        '''
-        if self.osystem != host_osystem():
-            return (
-                "Cannot build for '{}' on '{}': cross-compiling to another "
-                "operating system is not supported yet".format(
-                    self.osystem, host_osystem()))
-
-        if self.arch == host_arch():
-            return None
-
-        capability = self.capability
-
-        if host_osystem() == OS_WINDOWS:
-            if not capability.msvc_target:
-                return (
-                    "Cannot build for '{}' on '{}': MSVC has no mode for that "
-                    "architecture".format(self.arch, host_arch()))
-            return None
-
-        if not capability.gnu_flags:
-            return (
-                "Cannot build for '{}' on '{}': there is no compiler flag that "
-                "selects it, so it would need a cross toolchain, which is not "
-                "supported yet".format(self.arch, host_arch()))
-
-        return None
 
 
 # --- Working out the host's ABI without a compiler ----------------------
@@ -472,27 +657,13 @@ class TargetPlatform:
 #
 # Eight of the canonical names carry an ABI and `platform.machine()` cannot
 # report one: nothing in `armv7l` says whether floats travel in registers. This
-# works it out from evidence the system already carries, using only a dictionary
+# answers the question with no compiler and no subprocess, using a dictionary
 # lookup and a stat, and it is right on every userland it was measured against.
 #
-# Instead of this heuristic, a compiler can be asked directly with `-dumpmachine`,
-# and the compiler is the thing that decides, so once one has been found there is
-# nothing left to infer. Keeping the heuristic costs nothing and answers the
-# question in the one situation where asking is not possible: before any compiler
-# exists.
-#
-# `machine_isa` will come back into use when the compiler is wired in, because
-# `-dumpmachine` reports `arm-linux-gnueabihf`, whose first field is `arm` rather
-# than `armv7`. The compiler settles the ABI; the ISA level still comes from
-# uname.
-
-# The ABI part of a multiarch tuple, e.g. 'arm-linux-gnueabihf'.
-ABI_BY_MULTIARCH_SUFFIX = {
-    'gnueabihf': 'eabihf',
-    'musleabihf': 'eabihf',
-    'gnueabi': 'eabi',
-    'musleabi': 'eabi',
-}
+# `Triple.canonical_arch` above does the same job by asking the compiler,
+# which is the thing that actually decides, so once one has been found there is
+# nothing left to infer. It borrows `machine_isa` and ABI_BY_TRIPLE_SUFFIX from
+# further up; what remains here is only the part that guesses.
 
 # A system's dynamic loader is named after the ABI its binaries use, so its
 # presence is direct evidence rather than an inference.
@@ -522,29 +693,6 @@ DEFAULT_ABI = {
     'mips64el': 'n64',
 }
 
-MACHINE_ISA_PATTERN = re.compile(r'^arm(v\d+)([a-z]*)$')
-
-
-def machine_isa(machine):
-    '''
-    The instruction set a uname machine string names, and any ABI it lets slip.
-
-    32-bit ARM is reported with a tail of letters that are not all the same kind
-    of thing. `armv7l` ends in byte order. `armv5tel` names two ISA extensions
-    before it. `armv7hl` slips in an `h` that says hard float outright, which is
-    the only one of them worth keeping.
-    '''
-    cleaned = str(machine).strip().lower()
-    match = MACHINE_ISA_PATTERN.match(cleaned)
-    if not match:
-        return cleaned, ''
-
-    version, extensions = match.groups()
-    if extensions.endswith(('l', 'b')):
-        extensions = extensions[:-1]
-    return 'arm' + version, 'eabihf' if extensions.endswith('h') else ''
-
-
 def multiarch_abi():
     '''The ABI named by the tuple Python itself was built against, if any.'''
     for name in ('MULTIARCH', 'HOST_GNU_TYPE'):
@@ -552,8 +700,8 @@ def multiarch_abi():
         if not tuple_name:
             continue
         suffix = str(tuple_name).rsplit('-', 1)[-1].lower()
-        if suffix in ABI_BY_MULTIARCH_SUFFIX:
-            return ABI_BY_MULTIARCH_SUFFIX[suffix]
+        if suffix in ABI_BY_TRIPLE_SUFFIX:
+            return ABI_BY_TRIPLE_SUFFIX[suffix]
     return ''
 
 
@@ -567,7 +715,7 @@ def loader_abi(isa):
 
 def probe_host_arch():
     '''
-    What `host_arch` would say if the ABI had to be inferred rather than asked.
+    Which architecture this machine is, ABI included, without asking anything.
 
     The whole heuristic in one place, so it stays exercised and stays honest.
     '''

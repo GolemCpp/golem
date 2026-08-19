@@ -47,7 +47,6 @@ def build(bld):
     waflib.Tools.c_preproc.go_absolute = True
     waflib.Tools.c_preproc.standard_includes = []
 
-    bld.options.arch = bld.options.arch.lower()
     bld.options.link = bld.options.link.lower()
     bld.options.variant = bld.options.variant.lower()
 

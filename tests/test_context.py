@@ -3,9 +3,12 @@ import pytest
 from types import SimpleNamespace
 import json
 
+from waflib import Logs
+
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
-from golemcpp.golem import context as golem_context, helpers, network, qt_discovery
+from golemcpp.golem import (context as golem_context, helpers, network,
+                            qt_discovery, target_platform)
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
     CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
@@ -50,7 +53,7 @@ def make_configure_context(project_qt=True, project_qtdir=''):
             runtime_variant=None,
             variant='debug',
             link='shared',
-            arch='x64',
+            arch=None,  # unset, as it now is unless asked for
             project_dir=os.getcwd(),
             compile_commands=False,
             vscode=False,
@@ -69,7 +72,9 @@ def make_configure_context(project_qt=True, project_qtdir=''):
     context.configure_compiler = lambda: None
     context.save_options = lambda: None
     context.is_windows = lambda: False
-    context.get_arch = lambda: 'x64'
+    # These tests stub the compiler load out entirely, so nothing can be asked
+    # for a triple; the answer stands in for one.
+    context.compiler_target = lambda: target_platform.CompilerTarget(arch='x86_64')
     return context
 
 
@@ -168,12 +173,24 @@ def test_configure_autodiscovers_qtdir_when_only_other_qt_major_root_is_set(monk
     assert context.context.options.qtdir == '/opt/Qt/5.15.2/gcc_64'
 
 
+UNSET = object()
+
+
 def make_runtime_context(*,
                          variant='debug',
                          runtime_link='shared',
                          runtime_variant=None,
                          link='shared',
-                         arch='x86_64'):
+                         arch='x86_64',
+                         requested=UNSET):
+    '''
+    A context for a build that has already been configured.
+
+    `arch` is the resolved identity, i.e. what the compiler turned out to build
+    for. `requested` is what was asked on the command line, which defaults to
+    the same thing; pass None for a build where nothing was asked, since that
+    is a different case and only a request may emit selecting flags.
+    '''
     context = Context.__new__(Context)
     # Both are set by Context.__init__, which building through __new__ skips.
     context.project = None
@@ -184,7 +201,8 @@ def make_runtime_context(*,
             runtime_link=runtime_link,
             runtime_variant=runtime_variant,
             link=link,
-            arch=arch,
+            arch=arch if requested is UNSET else requested,
+            resolved_arch=arch,
             nounicode=False,
             compile_commands=False,
             vscode=False,
@@ -197,6 +215,8 @@ def make_runtime_context(*,
             LINKFLAGS=[],
             ARFLAGS=[],
             ISYSTEMS=[],
+            DEST_CPU='',
+            CXX=['g++'],
         ),
     )
     context.is_windows = lambda: True
@@ -381,6 +401,223 @@ def test_vs_platform_refuses_an_arch_visual_studio_cannot_build(arch):
         context.vs_platform()
 
 
+def test_the_target_is_unavailable_until_a_compiler_has_answered():
+    context = make_runtime_context()
+    del context.context.options.resolved_arch
+
+    with pytest.raises(RuntimeError, match=r"not resolved yet"):
+        context.target()
+
+
+def test_selecting_flags_do_not_need_a_resolved_target():
+    # The one thing that runs before resolution is the MSVC_TARGETS write, and
+    # it asks what was *requested*, never what the build turned out to be. If
+    # this ever needed the target it would be reading a provisional value.
+    context = make_runtime_context(arch='i686')
+    del context.context.options.resolved_arch
+
+    assert context.selecting_capability().msvc_target == 'x86'
+
+
+def test_msvc_is_asked_what_it_targets_rather_than_assumed():
+    # A Visual Studio installation need not include tools for the machine it
+    # runs on, so the host is not an answer here. waf records the target of the
+    # installation it detected.
+    context = make_runtime_context()
+    context.context.env.DEST_CPU = 'arm64'
+
+    assert context.compiler_target().arch == 'aarch64'
+
+
+def test_resolution_refuses_to_name_an_architecture_nobody_established():
+    context = make_runtime_context(arch=None, requested=None)
+    context.compiler_target = lambda: target_platform.CompilerTarget()
+
+    with pytest.raises(RuntimeError, match=r"Cannot tell what architecture"):
+        context.resolve_target_arch()
+
+
+def test_an_absent_request_emits_no_selecting_flags():
+    # The identity is still x86_64 and still names the artifact; what is absent
+    # is any flag instructing the compiler, because nothing was asked for.
+    context = make_runtime_context(arch='x86_64', requested=None)
+    context.is_msvc_like = lambda: False
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert context.get_arch() == 'x86_64'
+    assert '-m64' not in flags['cxxflags']
+    assert '-m64' not in flags['linkflags']
+
+
+def test_an_explicit_request_emits_them():
+    context = make_runtime_context(arch='x86_64')
+    context.is_msvc_like = lambda: False
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert '-m64' in flags['cxxflags']
+    assert '-m64' in flags['linkflags']
+
+
+def test_resolution_takes_the_compilers_answer_when_nothing_was_asked():
+    context = make_runtime_context(arch=None)
+    context.compiler_target = lambda: target_platform.CompilerTarget(arch='armv7-eabihf')
+
+    context.resolve_target_arch()
+
+    assert context.get_arch() == 'armv7-eabihf'
+
+
+def test_resolution_accepts_a_request_the_compiler_agrees_with():
+    context = make_runtime_context(arch='amd64')
+    context.compiler_target = lambda: target_platform.CompilerTarget(arch='x86_64')
+
+    context.resolve_target_arch()
+
+    # Spelled 'amd64', resolved to the canonical name, and no disagreement.
+    assert context.get_arch() == 'x86_64'
+
+
+def test_resolution_rejects_a_request_the_compiler_contradicts():
+    context = make_runtime_context(arch='aarch64')
+    context.context.env.CXX = ['g++']
+    context.compiler_target = lambda: target_platform.CompilerTarget(arch='x86_64')
+
+    with pytest.raises(RuntimeError, match=r"Requested architecture 'aarch64'"):
+        context.resolve_target_arch()
+
+
+def test_a_request_supplies_the_isa_level_a_cross_triple_cannot():
+    # arm-linux-gnueabihf on an x86_64 host: the compiler cannot say whether it
+    # means armv6 or armv7, because only uname knows and uname is describing
+    # the host. The request is allowed to settle exactly that.
+    context = make_runtime_context(arch='armv7-eabihf')
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
+        'arm-linux-gnueabihf', 'x86_64')
+
+    context.resolve_target_arch()
+
+    assert context.get_arch() == 'armv7-eabihf'
+
+
+def test_a_request_may_not_contradict_the_abi_the_triple_did_report():
+    # The triple could not name a target but was emphatic about hard float.
+    # Accepting armv7-eabi here would cache an artifact that links with nothing.
+    context = make_runtime_context(arch='armv7-eabi')
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
+        'arm-linux-gnueabihf', 'x86_64')
+
+    with pytest.raises(RuntimeError, match=r"'eabihf' ABI"):
+        context.resolve_target_arch()
+
+
+@pytest.mark.parametrize('arch', ['aarch64', 'x86_64'])
+def test_a_request_may_not_contradict_the_family_either(arch):
+    context = make_runtime_context(arch=arch)
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
+        'arm-linux-gnueabihf', 'x86_64')
+
+    with pytest.raises(RuntimeError, match=r"'arm' family"):
+        context.resolve_target_arch()
+
+
+def test_a_compiler_that_answered_nothing_constrains_nothing(monkeypatch):
+    # A compiler Golem got no answer out of at all. Not MSVC, which is asked
+    # through DEST_CPU: waf's no_autodetect() skips that write, and a toolchain
+    # with no -dumpmachine exits nonzero. Either way the request is the only
+    # thing that knows, and there is nothing for it to contradict.
+    warnings = []
+    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
+        message))
+    context = make_runtime_context(arch='i686')
+    context.compiler_target = lambda: target_platform.CompilerTarget()
+
+    context.resolve_target_arch()
+
+    assert context.get_arch() == 'i686'
+    # Taken on trust, and said so: an unchecked request names the artifact, so
+    # a wrong one is cached under a wrong name rather than failing to build.
+    assert len(warnings) == 1
+    assert "'i686' on request alone" in warnings[0]
+
+
+def test_a_compiler_that_did_answer_is_not_second_guessed(monkeypatch):
+    # The warning is about nothing having checked the request, so a compiler
+    # that agreed must not produce it.
+    warnings = []
+    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
+        message))
+    context = make_runtime_context(arch='x86_64')
+    context.compiler_target = lambda: target_platform.CompilerTarget(
+        arch='x86_64')
+
+    context.resolve_target_arch()
+
+    assert warnings == []
+
+
+def test_a_coarse_answer_counts_as_an_answer(monkeypatch):
+    # The triple could not name a target, but it did rule things out, so the
+    # request was held to something and is not being taken on trust.
+    warnings = []
+    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
+        message))
+    context = make_runtime_context(arch='armv7-eabihf')
+    context.is_msvc_like = lambda: False
+    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
+        'arm-linux-gnueabihf', 'x86_64')
+
+    context.resolve_target_arch()
+
+    assert context.get_arch() == 'armv7-eabihf'
+    assert warnings == []
+
+
+def test_restore_normalizes_both_the_request_and_the_resolved_identity():
+    context = make_runtime_context()
+    context.context.env = SimpleNamespace(
+        OPTIONS=json.dumps({
+            'arch': 'x64',
+            'resolved_arch': 'amd64',
+            'targets': '',
+            'only_update_dependencies_regex': '',
+            'output_file': '',
+        }))
+    context.context.options.targets = ''
+    context.context.options.output_file = ''
+    context.context.options.only_update_dependencies_regex = ''
+
+    restored = context.restore_options_env(context.context.env)
+
+    assert restored['arch'] == 'x86_64'
+    assert restored['resolved_arch'] == 'x86_64'
+
+
+def test_an_env_with_no_resolved_identity_is_not_given_one():
+    # An env saved before resolution existed gets no invented value: reading
+    # the target raises and asks for a reconfigure, rather than a guessed
+    # architecture reaching a build slug.
+    context = make_runtime_context()
+    context.context.env = SimpleNamespace(
+        OPTIONS=json.dumps({
+            'arch': 'x64',
+            'targets': '',
+            'only_update_dependencies_regex': '',
+            'output_file': '',
+        }))
+    context.context.options.targets = ''
+    context.context.options.output_file = ''
+    context.context.options.only_update_dependencies_regex = ''
+
+    restored = context.restore_options_env(context.context.env)
+
+    assert 'resolved_arch' not in restored
+
+
 def test_debian_arch_comes_from_the_capability_table():
     assert make_runtime_context(arch='x86_64').get_arch_for_linux() == 'amd64'
     assert make_runtime_context(arch='aarch64').get_arch_for_linux() == 'arm64'
@@ -409,6 +646,8 @@ def make_build_target_context(*, variant='release', no_defaults=False):
             LINKFLAGS=['/env-link'],
             ARFLAGS=[],
             ISYSTEMS=[],
+            DEST_CPU='',
+            CXX=['g++'],
         ),
         root=SimpleNamespace(
             find_or_declare=lambda path: path,
