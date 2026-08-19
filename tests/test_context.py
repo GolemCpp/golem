@@ -336,6 +336,37 @@ def test_vs_platform_uses_visual_studios_own_names(arch, expected):
     assert make_runtime_context(arch=arch).vs_platform() == expected
 
 
+@pytest.mark.parametrize('arch, msvc_target, vcvars', [
+    # waf's all_msvc_platforms pairs these, and they differ for x86_64.
+    ('x86_64', 'x64', 'amd64'),
+    ('i686', 'x86', 'x86'),
+    ('aarch64', 'arm64', 'arm64'),
+])
+def test_the_two_msvc_vocabularies_stay_apart(arch, msvc_target, vcvars):
+    context = make_runtime_context(arch=arch)
+
+    assert context.arch_capability().msvc_target == msvc_target
+    assert context.vcvars_arg() == vcvars
+
+
+def test_vcvars_arg_refuses_an_arch_msvc_cannot_build():
+    context = make_runtime_context(arch='armv7-eabihf')
+
+    with pytest.raises(RuntimeError, match=r"No vcvarsall argument"):
+        context.vcvars_arg()
+
+
+def test_configure_default_leaves_msvc_targets_to_waf():
+    context = make_runtime_context(arch='x86_64')
+    context.context.env.MSVC_TARGETS = ['x64']
+
+    context.configure_default()
+
+    # The configure-time value survives: overwriting it here with the
+    # vcvarsall spelling is what used to leave waf a value it would not match.
+    assert context.context.env.MSVC_TARGETS == ['x64']
+
+
 def test_vs_platform_takes_an_explicit_arch_over_the_target():
     context = make_runtime_context(arch='x86_64')
 
@@ -810,7 +841,6 @@ def test_run_command_uses_subprocess_without_shell_on_windows(monkeypatch):
 
 def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch):
     context = make_runtime_context()
-    context.context.env = AttrDict(MSVC_TARGETS=['x64'])
     captured = {}
 
     monkeypatch.setattr(context, 'vswhere_get_installation_path', lambda: 'C:\\VS Path')
@@ -829,7 +859,8 @@ def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch
     assert captured['command'][:4] == ['cmd', '/d', '/s', '/c']
     assert captured['cwd'] == 'C:/tmp/project'
     assert captured['shell'] is False
-    assert captured['command'][4].startswith('call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64')
+    # amd64, not x64: vcvarsall takes the second member of waf's pair.
+    assert captured['command'][4].startswith('call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" amd64')
     assert '&& cl.exe /nologo' in captured['command'][4]
 
 

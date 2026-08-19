@@ -726,6 +726,17 @@ class Context:
     def arch_capability(self):
         return self.target().capability
 
+    def vcvars_arg(self):
+        '''
+        The argument vcvarsall.bat wants for this target.
+        '''
+        vcvars_arg = self.arch_capability().vcvars_arg
+        if not vcvars_arg:
+            raise RuntimeError(
+                "No vcvarsall argument for architecture '{}': it is not a "
+                "target MSVC builds for.".format(self.get_arch()))
+        return vcvars_arg
+
     def vs_platform(self, arch=None):
         '''
         Visual Studio's name for the target, for MSBuild's /p:Platform and
@@ -995,12 +1006,6 @@ class Context:
 
     def configure_default(self):
         if self.is_msvc_like():
-            # Still the vcvarsall spelling, still in MSVC_TARGETS. Separating
-            # the two vocabularies is its own change.
-            vcvars_arg = self.arch_capability().vcvars_arg
-            if vcvars_arg:
-                self.context.env.MSVC_TARGETS = [vcvars_arg]
-
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
         if self.is_darwin():
@@ -3262,7 +3267,7 @@ class Context:
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
         call_msvc = 'call ' + subprocess.list2cmdline(
-            [vcvars, self.context.env['MSVC_TARGETS'][0]])
+            [vcvars, self.vcvars_arg()])
         build_cmd = call_msvc + ' && ' + subprocess.list2cmdline(command)
         if subprocess.call(['cmd', '/d', '/s', '/c', build_cmd], cwd=cwd, shell=False):
             return 1
@@ -3717,8 +3722,7 @@ class Context:
         print(msvc_path)
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
-        call_msvc = 'call "' + vcvars + '" ' + \
-            self.context.env['MSVC_TARGETS'][0] + ' && '
+        call_msvc = 'call "' + vcvars + '" ' + self.vcvars_arg() + ' && '
         print(call_msvc)
         return call_msvc
 
