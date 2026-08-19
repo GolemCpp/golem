@@ -64,6 +64,7 @@ def make_configure_context(project_qt=True, project_qtdir=''):
         env=SimpleNamespace(CXX_NAME='msvc', DEST_CPU='x64'),
         setenv=lambda _: None,
         load=lambda _: None,
+        msg=lambda label, value: None,
     )
     context.version = SimpleNamespace(force_version=lambda _: None)
     context.make_cache_configuration = lambda: None

@@ -44,3 +44,7 @@ jobs:
         || github.base_ref == 'main'
         || startsWith(github.base_ref, 'release/')
         || contains(github.event.pull_request.labels.*.name, 'run-integration') }}
+      # Every leg is pinned to an image, so nothing notices a rotation until a
+      # pin is withdrawn. The canary runs on the -latest aliases to say what
+      # they point at now. Nightly is soon enough, and it gates nothing.
+      canary: ${{ github.event_name == 'schedule' }}

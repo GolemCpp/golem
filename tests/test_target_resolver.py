@@ -21,8 +21,10 @@ def make_resolver(*, arch=None, msvc=False, builds=False, dest_cpu=''):
     )
     resolver = TargetResolver(conf, msvc=msvc)
     resolver.attempted = []
+    resolver.reported = []
     conf.check_cxx = lambda **kw: (
         resolver.attempted.append(kw['cxxflags']) or builds)
+    conf.msg = lambda label, value: resolver.reported.append((label, value))
     return resolver
 
 
@@ -258,3 +260,28 @@ def test_a_coarse_answer_counts_as_an_answer(warnings):
 
     assert resolver.resolve() == 'armv7-eabihf'
     assert warnings == []
+
+
+# --- Saying what it settled on -------------------------------------------
+
+
+def test_the_settled_target_is_reported():
+    # The answer reaches the slug, the advertisement and every arch condition,
+    # so a build settling on the wrong one is wrong everywhere and visible
+    # nowhere. On a host nobody has run Golem on, this line is the diagnosis.
+    resolver = answering(make_resolver(),
+                         target_platform.CompilerTarget(arch='aarch64'))
+
+    resolver.resolve()
+
+    assert resolver.reported == [('Target architecture', 'aarch64')]
+
+
+def test_a_target_that_could_not_be_settled_is_not_reported():
+    resolver = answering(make_resolver(arch='x86_64'),
+                         target_platform.CompilerTarget(arch='aarch64'))
+
+    with pytest.raises(RuntimeError):
+        resolver.resolve()
+
+    assert resolver.reported == []

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import pytest
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_directory
 from golemcpp.golem import cppfront_tool
+from golemcpp.golem import target_platform
 from golemcpp.golem import tool_manager
 from golemcpp.golem.locator import Locator
 from conftest import make_cache_configuration
@@ -22,6 +24,13 @@ from conftest import make_cache_configuration
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / 'examples'
 PROJECT_VARIANTS = ('python', 'json')
+
+# The architecture every configure in this suite asks for. Empty means none is
+# asked for, which is the normal case: the compiler's own answer stands.
+REQUESTED_ARCH = os.environ.get('GOLEM_TEST_ARCH', '')
+
+# What configure reports having settled on, in waf's aligned message format.
+TARGET_LINE = re.compile(r'^Target architecture\s*:\s*(\S+)\s*$', re.MULTILINE)
 
 
 def get_examples_tmp_dir() -> Path:
@@ -192,6 +201,12 @@ def example_tmp_path() -> Iterator[Path]:
 
 
 def run_golem(project_dir: Path, cache_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    # One CI leg builds for a target the runner is not: 32-bit Windows on a
+    # 64-bit host. Threading --arch through here rather than through every
+    # call site keeps the suite one suite.
+    if REQUESTED_ARCH and args and args[0] == 'configure':
+        args = (*args, '--arch=' + REQUESTED_ARCH)
+
     result = subprocess.run(
         [sys.executable, '-m', 'golemcpp.golem', *args],
         cwd=project_dir,
@@ -236,6 +251,51 @@ def assert_package_artifact_exists(project_dir: Path) -> None:
         assert any(project_dir.joinpath('build').rglob('*.dmg'))
     elif sys.platform.startswith('win32'):
         assert any(project_dir.joinpath('build').rglob('*.msi'))
+
+
+# --- Settling the target -------------------------------------------------
+#
+# Settled, not resolved: resolving is what Golem does to a project's
+# dependencies, and these are about the architecture a build is for.
+#
+# The target is settled by the end of configure. Stopping here makes CI
+# runners affordable. A runner is the only place some of the model can be
+# exercised at all: the splice of a compiler's ABI with uname's ISA level
+# needs a real 32-bit ARM userland, and every other test of it feeds the
+# machine string in by hand.
+
+
+def configure_example(example_name: str, destination: Path, *args: str) -> str:
+    '''Configure an example, build nothing, and return the target it settled on.'''
+    require_cxx_compiler()
+
+    project_dir = prepare_example_project(example_name, destination)
+    result = run_golem(project_dir, destination / 'cache', 'configure',
+                       '--variant=release', *args)
+
+    reported = TARGET_LINE.search(result.stdout)
+    assert reported is not None, result.stdout
+    return reported.group(1)
+
+
+@pytest.mark.settle
+def test_configure_settles_a_target_this_host_can_be_asked_for(example_tmp_path):
+    # Self-validating, which is what lets it run on a host nobody has named:
+    # whatever the compiler was understood to say is handed straight back as a
+    # request, and settling refuses a request it disagrees with. A misread
+    # triple names something the same compiler then rejects.
+    settled = configure_example('hello', example_tmp_path)
+
+    assert target_platform.is_arch_name(settled)
+    assert configure_example('hello', example_tmp_path / 'again') == settled
+
+
+@pytest.mark.settle
+def test_configure_evaluates_conditions_that_name_a_target(example_tmp_path):
+    # A condition can name an architecture, an operating system or a compiler,
+    # and all three are answers only the chosen toolchain gives. Selecting
+    # tasks before finding it raised on every golemfile carrying a when().
+    assert configure_example('conditions', example_tmp_path)
 
 
 def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_path):

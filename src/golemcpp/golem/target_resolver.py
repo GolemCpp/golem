@@ -207,4 +207,7 @@ class TargetResolver:
                 "reported no target of its own, so nothing confirms it builds "
                 "for that architecture.".format(resolved))
 
+        # Log the resolved target architecture
+        self.conf.msg('Target architecture', resolved)
+
         return resolved
