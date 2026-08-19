@@ -86,6 +86,29 @@ def make_task_config(*, features=None, wfeatures=None, source=None):
     return config
 
 
+def test_configure_settles_the_target_before_it_selects_tasks():
+    # Selecting tasks evaluates conditions, and a condition can name an
+    # architecture, an operating system or a compiler. All three are answers
+    # only the chosen toolchain gives, so asking before finding it raised on
+    # every golemfile carrying a when() block.
+    context = make_configure_context()
+    seen = {}
+
+    def select():
+        seen['arch'] = context.context.options.resolved_arch
+        seen['compiler'] = context.context.env.CXX_NAME
+        return []
+
+    context.get_tasks_and_targets_to_process = select
+
+    context.configure()
+
+    assert seen['arch'] == 'x86_64'
+    # The compiler is known by then too, which it was not before: a
+    # when(compiler=...) block could never match at configure time.
+    assert seen['compiler'] == 'msvc'
+
+
 def test_configure_autodiscovers_qtdir_when_qt_is_enabled_and_other_sources_are_missing(monkeypatch):
     context = make_configure_context()
     context.get_tasks_and_targets_to_process = lambda: [(
