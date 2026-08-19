@@ -395,7 +395,7 @@ class Configuration(Condition):
             if not expected_runtime_variant:
                 expected_runtime_variant = context.runtime_variant()
             if not expected_osystem: expected_osystem = context.osname()
-            if not expected_arch: expected_arch = context.arch()
+            if not expected_arch: expected_arch = context.get_arch()
             if not expected_compiler:
                 expected_compiler = context.compiler_name()
             if not expected_distribution:

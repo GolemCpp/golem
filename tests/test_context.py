@@ -172,7 +172,8 @@ def make_runtime_context(*,
                          variant='debug',
                          runtime_link='shared',
                          runtime_variant=None,
-                         link='shared'):
+                         link='shared',
+                         arch='x86_64'):
     context = Context.__new__(Context)
     # Both are set by Context.__init__, which building through __new__ skips.
     context.project = None
@@ -183,7 +184,7 @@ def make_runtime_context(*,
             runtime_link=runtime_link,
             runtime_variant=runtime_variant,
             link=link,
-            arch='x64',
+            arch=arch,
             nounicode=False,
             compile_commands=False,
             vscode=False,
@@ -199,7 +200,9 @@ def make_runtime_context(*,
         ),
     )
     context.is_windows = lambda: True
-    context.get_arch = lambda: 'x64'
+    # get_arch is deliberately not stubbed: it reads options.arch through the
+    # target, which is the path under test. osname still is, because the target
+    # takes its OS from the host and these cases are about Windows.
     context.osname = lambda: 'windows'
     context.compiler_min = lambda: 'm'
     context.is_msvc_like = lambda: True
@@ -266,13 +269,15 @@ def test_make_default_build_flags_enables_utf8_for_msvc():
     assert '/utf-8' in flags['cxxflags']
 
 
-@pytest.mark.parametrize('arch, expected', [('x64', '-m64'), ('x86', '-m32')])
+@pytest.mark.parametrize('arch, expected', [('x86_64', '-m64'), ('i686', '-m32'),
+                                            ('amd64', '-m64'), ('x86', '-m32')])
 def test_gnu_word_size_flag_reaches_the_linker_too(arch, expected):
     # waf's link rule expands LINKFLAGS and never CXXFLAGS, so a word-size flag
     # given only to the compiler produces objects the link step cannot use.
-    context = make_runtime_context()
+    # The aliases are here too: how the flag was spelled must not change what
+    # is emitted.
+    context = make_runtime_context(arch=arch)
     context.is_msvc_like = lambda: False
-    context.get_arch = lambda: arch
 
     flags = context.make_default_build_flags(variant='release')
 
@@ -282,13 +287,45 @@ def test_gnu_word_size_flag_reaches_the_linker_too(arch, expected):
 
 
 def test_gnu_word_size_flag_is_omitted_for_an_arch_with_no_capability():
-    context = make_runtime_context()
+    context = make_runtime_context(arch='aarch64')
     context.is_msvc_like = lambda: False
-    context.get_arch = lambda: 'aarch64'
 
     flags = context.make_default_build_flags(variant='release')
 
     assert not [f for f in flags['linkflags'] if f.startswith('-m')]
+
+
+def test_msvc_machine_flag_comes_from_the_capability_table():
+    context = make_runtime_context(arch='i686')
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert '/MACHINE:X86' in flags['linkflags']
+    assert '/MACHINE:X86' in flags['arflags']
+
+
+def test_arch_aliases_resolve_to_one_canonical_name():
+    assert make_runtime_context(arch='amd64').get_arch() == 'x86_64'
+    assert make_runtime_context(arch='x64').get_arch() == 'x86_64'
+    assert make_runtime_context(arch='X86_64').get_arch() == 'x86_64'
+    assert make_runtime_context(arch='arm64').get_arch() == 'aarch64'
+    # A family name, not an alias: 'x86' names a family and resolves to its
+    # conventional member rather than being a spelling of it.
+    assert make_runtime_context(arch='x86').get_arch() == 'i686'
+
+
+def test_unknown_arch_keeps_an_identity_and_gains_no_flags():
+    context = make_runtime_context(arch='sparc64')
+    context.is_msvc_like = lambda: False
+
+    assert context.get_arch() == 'sparc64'
+    assert context.make_default_build_flags(variant='release')['linkflags'] == []
+
+
+def test_debian_arch_comes_from_the_capability_table():
+    assert make_runtime_context(arch='x86_64').get_arch_for_linux() == 'amd64'
+    assert make_runtime_context(arch='aarch64').get_arch_for_linux() == 'arm64'
+    assert make_runtime_context(arch='sparc64').get_arch_for_linux() is None
 
 
 def make_build_target_context(*, variant='release', no_defaults=False):
@@ -301,7 +338,7 @@ def make_build_target_context(*, variant='release', no_defaults=False):
             runtime_link='shared',
             runtime_variant='release',
             link='shared',
-            arch='x64',
+            arch='x86_64',
             compile_commands=False,
             vscode=False,
             clangd=False,
@@ -331,8 +368,6 @@ def make_build_target_context(*, variant='release', no_defaults=False):
     context.is_linux = lambda: False
     context.is_darwin = lambda: False
     context.is_msvc_like = lambda: True
-    context.is_x86 = lambda: False
-    context.is_x64 = lambda: True
     context.is_runtime_static = lambda: False
     context.is_runtime_shared = lambda: True
     context.is_runtime_variant_debug = lambda: False

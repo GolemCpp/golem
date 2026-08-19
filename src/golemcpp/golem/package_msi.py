@@ -230,8 +230,11 @@ def package_msi(self, package_build_context):
         print("Component: {}".format(path))
         path_id = '_' + hashlib.md5(path.encode('utf-8')).hexdigest()
         is_binary = os.path.splitext(file_path)[1] in ['.dll', '.exe']
+        # WiX's Win64 asks about pointer width, not about a specific ISA, so
+        # arm64 answers yes here just as x64 does.
+        is_64bit = self.arch_capability().msvc_machine in ('X64', 'ARM64')
         component = '<Component Id="{}" Guid="*" Win64="{}">\n'.format(
-            path_id, 'yes' if self.is_x64() else 'no')
+            path_id, 'yes' if is_64bit else 'no')
         component = '{}\t<File Source="{}" Id="{}" KeyPath="yes" Checksum="{}"/>\n'.format(
             component, file_path, path_id, 'yes' if is_binary else 'no')
         component = '{}</Component>'.format(component)

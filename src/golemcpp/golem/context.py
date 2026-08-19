@@ -36,6 +36,8 @@ from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import target_platform
+from golemcpp.golem.target_platform import TargetPlatform
 from golemcpp.golem import locator
 from golemcpp.golem.source import Source
 from golemcpp.golem.template import Template
@@ -454,12 +456,6 @@ class Context:
     def runtime_variant_min(self, dep=None):
         return self.runtime_variant(dep)[:1]
 
-    def arch(self):
-        return self.context.options.arch
-
-    def arch_min(self):
-        return self.arch()
-
     @staticmethod
     def variant_debug():
         return 'debug'
@@ -561,15 +557,15 @@ class Context:
 
     @staticmethod
     def os_windows():
-        return 'windows'
+        return target_platform.OS_WINDOWS
 
     @staticmethod
     def os_linux():
-        return 'linux'
+        return target_platform.OS_LINUX
 
     @staticmethod
     def os_osx():
-        return 'osx'
+        return target_platform.OS_MACOS
 
     @staticmethod
     def is_windows():
@@ -587,15 +583,11 @@ class Context:
     def is_darwin():
         return sys.platform.startswith('darwin')
 
+    def target(self):
+        return TargetPlatform.make(arch=self.context.options.arch)
+
     def osname(self):
-        osname = ''
-        if Context.is_windows():
-            osname = Context.os_windows()
-        elif Context.is_linux():
-            osname = Context.os_linux()
-        elif Context.is_darwin():
-            osname = Context.os_osx()
-        return osname
+        return self.target().osystem
 
     def osname_min(self):
         return self.osname()[:3]
@@ -725,36 +717,26 @@ class Context:
         return platform.machine()
 
     @staticmethod
-    def osarch_parser(arch):
-        machine2bits = {
-            'amd64': 'x64',
-            'x86_64': 'x64',
-            'x64': 'x64',
-            'x86_amd64': 'x64',
-            'i386': 'x86',
-            'i686': 'x86',
-            'x86': 'x86',
-            'amd64_x86': 'x86'
-        }
-        return machine2bits.get(arch.lower(), None)
-
-    @staticmethod
     def osarch():
-        return Context.osarch_parser(Context.machine())
+        return target_platform.host_arch()
 
     def get_arch(self):
-        return Context.osarch_parser(self.context.options.arch)
+        return self.target().arch
 
-    def is_x86(self):
-        return self.get_arch() == 'x86'
+    def arch_capability(self):
+        return self.target().capability
 
-    def is_x64(self):
-        return self.get_arch() == 'x64'
+    def legacy_vs_arch(self):
+        # What MSBuild and CMake were being handed before the vocabulary swap,
+        # kept bug-for-bug so this change alters no behaviour. Neither tool
+        # accepts 'x86' -- the value is 'Win32' -- and fixing that is its own
+        # change, which replaces this with the capability's vs_platform.
+        return 'x64' if self.get_arch() == target_platform.ARCH_X86_64 else 'x86'
 
     def get_arch_for_linux(self, arch=None):
-        machine2bits = {'x64': 'amd64', 'x86': 'i386'}
-        return machine2bits.get(
-            self.get_arch() if arch is None else arch.lower(), None)
+        capability = (self.target().capability
+                      if arch is None else target_platform.arch_capability(arch))
+        return capability.debian_arch or None
 
     def get_build_runtime(self):
         if self.context.env.MSVC_VERSION:
@@ -815,7 +797,7 @@ class Context:
                            help="Library Linking (shared, static)")
         context.add_option("--arch",
                            action="store",
-                           default=Context.osarch(),
+                           default=target_platform.host_arch(),
                            help="Target Architecture")
 
         context.add_option("--major",
@@ -1001,10 +983,11 @@ class Context:
 
     def configure_default(self):
         if self.is_msvc_like():
-            if self.is_x86():
-                self.context.env.MSVC_TARGETS = ['x86']
-            elif self.is_x64():
-                self.context.env.MSVC_TARGETS = ['amd64']
+            # Still the vcvarsall spelling, still in MSVC_TARGETS. Separating
+            # the two vocabularies is its own change.
+            vcvars_arg = self.arch_capability().vcvars_arg
+            if vcvars_arg:
+                self.context.env.MSVC_TARGETS = [vcvars_arg]
 
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
@@ -1024,13 +1007,13 @@ class Context:
         if not self.context.options.nounicode:
             flags['defines'].append('UNICODE')
 
+        capability = self.arch_capability()
+
         if self.is_msvc_like():
-            if self.is_x86():
-                flags['linkflags'].append('/MACHINE:X86')
-                flags['arflags'].append('/MACHINE:X86')
-            elif self.is_x64():
-                flags['linkflags'].append('/MACHINE:X64')
-                flags['arflags'].append('/MACHINE:X64')
+            if capability.msvc_machine:
+                machine_flag = '/MACHINE:' + capability.msvc_machine
+                flags['linkflags'].append(machine_flag)
+                flags['arflags'].append(machine_flag)
 
             default_flags = ['/DWIN32', '/D_WINDOWS', '/GR', '/EHsc']
             flags['cflags'] += default_flags
@@ -1096,13 +1079,7 @@ class Context:
             # '/TLBID:1'    # resource ID of the linker-generated type library
 
         else:
-            arch_flag = None
-            if self.is_x86():
-                arch_flag = '-m32'
-            elif self.is_x64():
-                arch_flag = '-m64'
-
-            if arch_flag:
+            for arch_flag in capability.gnu_flags:
                 flags['cflags'].append(arch_flag)
                 flags['cxxflags'].append(arch_flag)
                 flags['linkflags'].append(arch_flag)
@@ -3355,7 +3332,7 @@ class Context:
         if configuration is None:
             configuration = 'Release' if self.is_release() else 'Debug'
         if platform is None:
-            platform = self.get_arch()
+            platform = self.legacy_vs_arch()
         if toolset is None:
             toolset = self.get_current_msvc_toolset()
 
@@ -3526,11 +3503,7 @@ class Context:
         else:
             opt_link += 'ON'
 
-        opt_arch = ['-A']
-        if self.is_x64():
-            opt_arch.append('x64')
-        else:
-            opt_arch.append('x86')
+        opt_arch = ['-A', self.legacy_vs_arch()]
 
         if not self.is_windows():
             opt_arch = []
@@ -3597,6 +3570,13 @@ class Context:
             options['runtime_link'] = options['runtime']
         if 'runtime_variant' not in options:
             options['runtime_variant'] = None
+
+        # An env saved by an older version carries the word-size vocabulary
+        # ('x64', 'x86'). Normalizing on the way back in is what stops it
+        # bypassing the canonical names, since nothing downstream parses arch
+        # again.
+        if options.get('arch'):
+            options['arch'] = target_platform.normalize_arch(options['arch'])
 
         if not self.context.options.targets:
             self.context.options.targets = options['targets']
@@ -3846,9 +3826,9 @@ class Context:
         self.context.setenv('main')
         self.configure_compiler()
         if self.is_windows():
-            self.context.env.MSVC_TARGETS = [
-                'x86' if self.get_arch() == 'x86' else 'x64'
-            ]
+            msvc_target = self.arch_capability().msvc_target
+            if msvc_target:
+                self.context.env.MSVC_TARGETS = [msvc_target]
         self.context.load(features_to_load)
         self.save_options()
 
@@ -3858,11 +3838,12 @@ class Context:
     def build_path(self, dep=None):
         if self.is_windows():
             return self.osname()[:1] + ('64' if self.get_arch(
-            ) == 'x64' else '32') + self.compiler_min() + self.runtime_link_min(
+            ) == target_platform.ARCH_X86_64 else
+                                        '32') + self.compiler_min() + self.runtime_link_min(
                 dep) + self.runtime_variant_min(dep) + self.link_min(
                 dep) + self.variant_min(dep)
         else:
-            return self.osname() + '-' + self.arch_min() + '-' + self.compiler(
+            return self.osname() + '-' + self.get_arch() + '-' + self.compiler(
             ) + '-' + self.runtime_link_min(dep) + '-' + self.link_min(
                 dep) + '-' + self.variant_min(dep)
 
