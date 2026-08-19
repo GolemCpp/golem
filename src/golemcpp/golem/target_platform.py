@@ -260,10 +260,19 @@ ABI_BY_TRIPLE_SUFFIX = {
 # to echo the triple back without the level.
 TRIPLE_SUFFIX_LEVEL = re.compile(r'\d+$')
 
-# Arch fields that name a *family* and are never a target on their own. `arm`
-# is the whole 32-bit line at once: a triple saying it has not said whether it
-# means armv5, armv6 or armv7, and no capability could be selected from it.
-FAMILY_ARCH_FIELDS = ('arm', )
+# Arch fields that name a *family* and are never a target on their own, for
+# two different reasons.
+#
+# `arm` is the whole 32-bit line at once: a triple saying it has not said
+# whether it means armv5, armv6 or armv7, and no capability could be selected
+# from it. What it is missing is an ISA level, which uname can supply.
+#
+# The rest are missing an *ABI*, and their triples cannot supply one either:
+# `riscv64-linux-gnu` is the tuple for both lp64 and lp64d, and lp64 is soft
+# float, so the two do not link. Passing the bare name through would put a
+# target into a build slug that is not a target, and would refuse an explicit
+# --arch=riscv64-lp64d for disagreeing with its own compiler.
+FAMILY_ARCH_FIELDS = ('arm', 'mips64el', 'riscv32', 'riscv64')
 
 MACHINE_ISA_PATTERN = re.compile(r'^arm(v\d+)([a-z]*)$')
 

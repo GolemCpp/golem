@@ -372,11 +372,16 @@ def test_androids_float_abi_is_not_confused_with_the_other_two():
         target_platform.ARCH_ARMV7_ANDROIDEABI) is target_platform.NO_CAPABILITY
 
 
-def test_an_abi_the_machine_cannot_confirm_is_left_alone():
-    # riscv64's ABI lives in the loader, not the triple, so the triple alone
-    # cannot compose riscv64-lp64d and must not invent it.
-    assert target_platform.Triple.parse(
-        'riscv64-linux-gnu').canonical_arch('riscv64') == 'riscv64'
+@pytest.mark.parametrize('triple, machine', [
+    # riscv64-linux-gnu is the tuple for both lp64 and lp64d, and lp64 is soft
+    # float, so the two do not link. The arch field is a family exactly as
+    # `arm` is -- it is missing an ABI rather than an ISA level.
+    ('riscv64-linux-gnu', 'riscv64'),
+    ('mips64el-linux-gnuabi64', 'mips64el'),
+])
+def test_an_abi_the_triple_cannot_name_is_not_composed(triple, machine):
+    # Even on the machine it describes, since the machine does not know either.
+    assert target_platform.Triple.parse(triple).canonical_arch(machine) == ''
 
 
 @pytest.mark.parametrize('triple, arch, abi', [
@@ -431,6 +436,29 @@ def test_a_compiler_that_named_its_target_admits_only_that_target():
     assert NAMED.settle('x86_64') == ('x86_64', None)
     assert NAMED.settle('') == ('x86_64', None)
     assert NAMED.settle('aarch64') == ('', target_platform.Refusal.ARCH)
+
+
+RISCV = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
+                                                   'riscv64')
+
+
+def test_an_abi_the_triple_left_open_is_supplied_by_the_request():
+    # The same shape as 32-bit ARM, from the other direction: there the triple
+    # withheld the ISA level, here it withholds the ABI. Either way the
+    # compiler genuinely has not said, so the request settles exactly that.
+    assert RISCV.settle('riscv64-lp64d') == ('riscv64-lp64d', None)
+    assert RISCV.settle('riscv64-lp64') == ('riscv64-lp64', None)
+
+
+def test_a_family_that_named_no_abi_still_refuses_another_family():
+    assert RISCV.settle('x86_64') == ('', target_platform.Refusal.FAMILY)
+
+
+def test_a_family_on_its_own_settles_nothing():
+    # Nothing asked, and a triple that named only a family. Recording bare
+    # 'riscv64' would claim an ABI the artifact may not have, so there is
+    # nothing to record and the caller reports that.
+    assert RISCV.settle('') == ('', None)
 
 
 def test_a_coarse_answer_admits_what_it_did_not_rule_out():
