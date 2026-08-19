@@ -266,6 +266,31 @@ def test_make_default_build_flags_enables_utf8_for_msvc():
     assert '/utf-8' in flags['cxxflags']
 
 
+@pytest.mark.parametrize('arch, expected', [('x64', '-m64'), ('x86', '-m32')])
+def test_gnu_word_size_flag_reaches_the_linker_too(arch, expected):
+    # waf's link rule expands LINKFLAGS and never CXXFLAGS, so a word-size flag
+    # given only to the compiler produces objects the link step cannot use.
+    context = make_runtime_context()
+    context.is_msvc_like = lambda: False
+    context.get_arch = lambda: arch
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert expected in flags['cflags']
+    assert expected in flags['cxxflags']
+    assert expected in flags['linkflags']
+
+
+def test_gnu_word_size_flag_is_omitted_for_an_arch_with_no_capability():
+    context = make_runtime_context()
+    context.is_msvc_like = lambda: False
+    context.get_arch = lambda: 'aarch64'
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert not [f for f in flags['linkflags'] if f.startswith('-m')]
+
+
 def make_build_target_context(*, variant='release', no_defaults=False):
     context = Context.__new__(Context)
     context.project = SimpleNamespace(deps=[])

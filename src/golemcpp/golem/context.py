@@ -722,11 +722,7 @@ class Context:
 
     @staticmethod
     def machine():
-        if os.name == 'nt' and sys.version_info[:2] < (2, 7):
-            return os.environ.get("PROCESSOR_ARCHITEW6432",
-                                  os.environ.get('PROCESSOR_ARCHITECTURE', ''))
-        else:
-            return platform.machine()
+        return platform.machine()
 
     @staticmethod
     def osarch_parser(arch):
@@ -1100,12 +1096,16 @@ class Context:
             # '/TLBID:1'    # resource ID of the linker-generated type library
 
         else:
+            arch_flag = None
             if self.is_x86():
-                flags['cflags'].append('-m32')
-                flags['cxxflags'].append('-m32')
+                arch_flag = '-m32'
             elif self.is_x64():
-                flags['cflags'].append('-m64')
-                flags['cxxflags'].append('-m64')
+                arch_flag = '-m64'
+
+            if arch_flag:
+                flags['cflags'].append(arch_flag)
+                flags['cxxflags'].append(arch_flag)
+                flags['linkflags'].append(arch_flag)
 
         variant = self.variant() if variant is None else variant
 
