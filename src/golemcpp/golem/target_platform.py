@@ -42,11 +42,9 @@ unsupported rather than reimplemented here.
 '''
 
 import enum
-import os
 import platform
 import re
 import sys
-import sysconfig
 from dataclasses import dataclass
 
 
@@ -649,89 +647,3 @@ class TargetPlatform:
     @property
     def capability(self):
         return arch_capability(self.arch)
-
-
-# --- Working out the host's ABI without a compiler ----------------------
-#
-# None of this is called. It is kept on purpose.
-#
-# Eight of the canonical names carry an ABI and `platform.machine()` cannot
-# report one: nothing in `armv7l` says whether floats travel in registers. This
-# answers the question with no compiler and no subprocess, using a dictionary
-# lookup and a stat, and it is right on every userland it was measured against.
-#
-# `Triple.canonical_arch` above does the same job by asking the compiler,
-# which is the thing that actually decides, so once one has been found there is
-# nothing left to infer. It borrows `machine_isa` and ABI_BY_TRIPLE_SUFFIX from
-# further up; what remains here is only the part that guesses.
-
-# A system's dynamic loader is named after the ABI its binaries use, so its
-# presence is direct evidence rather than an inference.
-ARM_LOADERS = (
-    ('/lib/ld-linux-armhf.so.3', 'eabihf'),
-    ('/lib/ld-musl-armhf.so.1', 'eabihf'),
-    ('/lib/ld-linux.so.3', 'eabi'),
-    ('/lib/ld-musl-arm.so.1', 'eabi'),
-)
-
-ABI_BY_LOADER = {
-    'armv5': ARM_LOADERS,
-    'armv6': ARM_LOADERS,
-    'armv7': ARM_LOADERS,
-    # RISC-V puts the ABI in the loader's own name and leaves it out of the
-    # multiarch tuple, which is `riscv64-linux-gnu` either way — so here the
-    # loader is not a fallback, it is the only thing that knows.
-    'riscv64': (('/lib/ld-linux-riscv64-lp64d.so.1', 'lp64d'),
-                ('/lib/ld-linux-riscv64-lp64.so.1', 'lp64')),
-    'riscv32': (('/lib/ld-linux-riscv32-ilp32d.so.1', 'ilp32'),
-                ('/lib/ld-linux-riscv32-ilp32.so.1', 'ilp32')),
-}
-
-# Only these have to be worked out. An architecture whose uname string is
-# already canonical is left alone.
-DEFAULT_ABI = {
-    'mips64el': 'n64',
-}
-
-def multiarch_abi():
-    '''The ABI named by the tuple Python itself was built against, if any.'''
-    for name in ('MULTIARCH', 'HOST_GNU_TYPE'):
-        tuple_name = sysconfig.get_config_var(name)
-        if not tuple_name:
-            continue
-        suffix = str(tuple_name).rsplit('-', 1)[-1].lower()
-        if suffix in ABI_BY_TRIPLE_SUFFIX:
-            return ABI_BY_TRIPLE_SUFFIX[suffix]
-    return ''
-
-
-def loader_abi(isa):
-    '''The ABI of whichever dynamic loader this system actually has.'''
-    for path, abi in ABI_BY_LOADER.get(isa, ()):
-        if os.path.exists(path):
-            return abi
-    return ''
-
-
-def probe_host_arch():
-    '''
-    Which architecture this machine is, ABI included, without asking anything.
-
-    The whole heuristic in one place, so it stays exercised and stays honest.
-    '''
-    machine = platform.machine()
-    named = normalize_arch(machine)
-    # Knowing the name is the question, not knowing what to do with it: an
-    # architecture can be perfectly well named here and carry no capability,
-    # and gating on the capabilities would throw away an ABI just worked out.
-    if named in CANONICAL_ARCHS:
-        return named
-
-    isa, abi_from_machine = machine_isa(machine)
-    abi = (abi_from_machine or multiarch_abi() or loader_abi(isa)
-           or DEFAULT_ABI.get(isa, ''))
-    if not abi:
-        return named
-
-    resolved = normalize_arch('{}-{}'.format(isa, abi))
-    return resolved if resolved in CANONICAL_ARCHS else named

@@ -201,15 +201,6 @@ def test_an_operating_system_answers_to_the_names_people_use():
     assert target_platform.normalize_osystem('iphoneos') == 'ios'
 
 
-def arm_host(monkeypatch, machine, multiarch=None, loaders=()):
-    '''A machine reporting `machine`, with whatever ABI evidence is given.'''
-    monkeypatch.setattr(target_platform.platform, 'machine', lambda: machine)
-    monkeypatch.setattr(target_platform.sysconfig, 'get_config_var',
-                        lambda name: multiarch if name == 'MULTIARCH' else None)
-    monkeypatch.setattr(target_platform.os.path, 'exists',
-                        lambda path: path in loaders)
-
-
 def test_an_isa_is_read_out_of_a_uname_string():
     # The trailing letter is byte order, not architecture. Fedora's 'h' is hard
     # float and worth keeping.
@@ -217,55 +208,6 @@ def test_an_isa_is_read_out_of_a_uname_string():
     assert target_platform.machine_isa('armv6l') == ('armv6', '')
     assert target_platform.machine_isa('armv7hl') == ('armv7', 'eabihf')
     assert target_platform.machine_isa('x86_64') == ('x86_64', '')
-
-
-# Measured, not invented: each row was read off a real userland running under
-# QEMU, and the mappings they exercise were written from documentation. Keeping
-# the observed values is what tells the two apart later.
-#
-#   image                          machine   MULTIARCH               loader
-MEASURED_HOSTS = [
-    ('arm32v7/python:3', 'armv7l', 'arm-linux-gnueabihf',
-     '/lib/ld-linux-armhf.so.3', 'armv7-eabihf'),
-    # The arm/v5 platform, which QEMU reports as armv7l regardless of the
-    # image's baseline. It tests something better than armv5 as a result: the
-    # same uname string as the row above with a different ABI, which is the
-    # whole reason the two are worked out separately.
-    ('arm32v5/python:3', 'armv7l', 'arm-linux-gnueabi',
-     '/lib/ld-linux.so.3', 'armv7-eabi'),
-    ('arm32v7/python:3-alpine', 'armv7l', 'arm-linux-musleabihf',
-     '/lib/ld-musl-armhf.so.1', 'armv7-eabihf'),
-    # RISC-V leaves the ABI out of the tuple — it is `riscv64-linux-gnu` either
-    # way — and puts it in the loader's name instead.
-    ('riscv64/python:3', 'riscv64', 'riscv64-linux-gnu',
-     '/lib/ld-linux-riscv64-lp64d.so.1', 'riscv64-lp64d'),
-    # The same arm/v5 platform as above, but with QEMU_CPU=arm926 so the
-    # emulator stops claiming to be an ARMv7 part. This is what real armv5
-    # hardware reports, and it is the row that earns the extension-letter
-    # parsing: 'te' names ISA extensions and only the final 'l' is byte order.
-    ('arm32v5/python:3 (QEMU_CPU=arm926)', 'armv5tel', 'arm-linux-gnueabi',
-     '/lib/ld-linux.so.3', 'armv5-eabi'),
-    # QEMU_CPU=arm1176 is the Raspberry Pi 1 core.
-    ('arm32v6/alpine (QEMU_CPU=arm1176)', 'armv6l', 'arm-linux-musleabihf',
-     '/lib/ld-musl-armhf.so.1', 'armv6-eabihf'),
-]
-
-
-@pytest.mark.parametrize('image, machine, multiarch, loader, expected',
-                         MEASURED_HOSTS)
-def test_a_real_userland_resolves(monkeypatch, image, machine, multiarch,
-                                  loader, expected):
-    arm_host(monkeypatch, machine, multiarch=multiarch, loaders=(loader,))
-    assert target_platform.probe_host_arch() == expected, image
-
-
-def test_the_loader_alone_is_enough_where_the_tuple_says_nothing(monkeypatch):
-    # RISC-V is the case that proves the loader is not merely a fallback: its
-    # multiarch tuple carries no ABI at all, so nothing else could answer.
-    arm_host(monkeypatch, 'riscv64', multiarch='riscv64-linux-gnu',
-             loaders=('/lib/ld-linux-riscv64-lp64d.so.1',))
-    assert target_platform.multiarch_abi() == ''
-    assert target_platform.probe_host_arch() == 'riscv64-lp64d'
 
 
 def test_arm_extension_letters_are_not_mistaken_for_byte_order():
@@ -280,63 +222,6 @@ def test_armv5_lands_on_the_debian_port_that_matches_it():
     # Debian's armel port is armv5te, and armv5 predates VFP, so soft float is
     # the only ABI it has.
     assert target_platform.arch_capability('armv5-eabi').debian_arch == 'armel'
-
-
-def test_a_multiarch_tuple_settles_the_abi(monkeypatch):
-    # Debian-family Python knows what it was built against, and it costs nothing
-    # to ask.
-    arm_host(monkeypatch, 'armv7l', multiarch='arm-linux-gnueabihf')
-    assert target_platform.probe_host_arch() == 'armv7-eabihf'
-
-    arm_host(monkeypatch, 'armv7l', multiarch='arm-linux-gnueabi')
-    assert target_platform.probe_host_arch() == 'armv7-eabi'
-
-
-def test_the_dynamic_loader_settles_it_where_the_tuple_is_absent(monkeypatch):
-    # A system's loader is named for the ABI its binaries use, so its presence
-    # is evidence rather than inference.
-    arm_host(monkeypatch, 'armv6l', loaders=('/lib/ld-linux-armhf.so.3',))
-    assert target_platform.probe_host_arch() == 'armv6-eabihf'
-
-    arm_host(monkeypatch, 'armv7l', loaders=('/lib/ld-linux.so.3',))
-    assert target_platform.probe_host_arch() == 'armv7-eabi'
-
-
-def test_riscv_is_worked_out_the_same_way(monkeypatch):
-    arm_host(monkeypatch, 'riscv64',
-             loaders=('/lib/ld-linux-riscv64-lp64d.so.1',))
-    assert target_platform.probe_host_arch() == 'riscv64-lp64d'
-
-
-def test_an_abi_that_was_worked_out_is_not_thrown_away(monkeypatch):
-    # riscv64-lp64 is a name this module knows and has nothing to say about:
-    # no flags, no package name. That is no reason to discard it — the ABI was
-    # established, and dropping back to a bare 'riscv64' would put the machine
-    # under one identity while the same target asked for by name got another,
-    # which is the confusion the probing exists to end.
-    arm_host(monkeypatch, 'riscv64', multiarch='riscv64-linux-gnu',
-             loaders=('/lib/ld-linux-riscv64-lp64.so.1',))
-
-    assert target_platform.probe_host_arch() == 'riscv64-lp64'
-    assert 'riscv64-lp64' not in target_platform.ARCH_CAPABILITIES
-
-
-def test_a_machine_that_gives_up_nothing_keeps_its_own_name(monkeypatch):
-    # No tuple, no loader, no hint in the uname string. Falling back to the raw
-    # name is still a stable identity, which is all totality promises.
-    arm_host(monkeypatch, 'armv7l')
-    assert target_platform.probe_host_arch() == 'armv7l'
-
-
-def test_an_unambiguous_machine_is_never_probed(monkeypatch):
-    # x86_64 says everything about itself. Touching the filesystem to confirm it
-    # would be work done for nothing on every single build.
-    def fail(path):
-        raise AssertionError('probed the filesystem for an unambiguous host')
-
-    monkeypatch.setattr(target_platform.platform, 'machine', lambda: 'x86_64')
-    monkeypatch.setattr(target_platform.os.path, 'exists', fail)
-    assert target_platform.probe_host_arch() == 'x86_64'
 
 
 def test_a_target_must_be_told_both_halves():
