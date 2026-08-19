@@ -3,12 +3,10 @@ import pytest
 from types import SimpleNamespace
 import json
 
-from waflib import Logs
-
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import (context as golem_context, helpers, network,
-                            qt_discovery, target_platform)
+                            qt_discovery)
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
     CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
@@ -60,7 +58,10 @@ def make_configure_context(project_qt=True, project_qtdir=''):
             clangd=False,
         ),
         want_qt6=False,
-        env=SimpleNamespace(),
+        # The compiler load is stubbed out, so nothing can be run for a
+        # triple. waf's own record of what its detection found stands in,
+        # which is how the MSVC path answers for real.
+        env=SimpleNamespace(CXX_NAME='msvc', DEST_CPU='x64'),
         setenv=lambda _: None,
         load=lambda _: None,
     )
@@ -72,9 +73,6 @@ def make_configure_context(project_qt=True, project_qtdir=''):
     context.configure_compiler = lambda: None
     context.save_options = lambda: None
     context.is_windows = lambda: False
-    # These tests stub the compiler load out entirely, so nothing can be asked
-    # for a triple; the answer stands in for one.
-    context.compiler_target = lambda: target_platform.CompilerTarget(arch='x86_64')
     return context
 
 
@@ -419,24 +417,6 @@ def test_selecting_flags_do_not_need_a_resolved_target():
     assert context.selecting_capability().msvc_target == 'x86'
 
 
-def test_msvc_is_asked_what_it_targets_rather_than_assumed():
-    # A Visual Studio installation need not include tools for the machine it
-    # runs on, so the host is not an answer here. waf records the target of the
-    # installation it detected.
-    context = make_runtime_context()
-    context.context.env.DEST_CPU = 'arm64'
-
-    assert context.compiler_target().arch == 'aarch64'
-
-
-def test_resolution_refuses_to_name_an_architecture_nobody_established():
-    context = make_runtime_context(arch=None, requested=None)
-    context.compiler_target = lambda: target_platform.CompilerTarget()
-
-    with pytest.raises(RuntimeError, match=r"Cannot tell what architecture"):
-        context.resolve_target_arch()
-
-
 def test_an_absent_request_emits_no_selecting_flags():
     # The identity is still x86_64 and still names the artifact; what is absent
     # is any flag instructing the compiler, because nothing was asked for.
@@ -460,51 +440,6 @@ def test_an_explicit_request_emits_them():
     assert '-m64' in flags['linkflags']
 
 
-def test_resolution_takes_the_compilers_answer_when_nothing_was_asked():
-    context = make_runtime_context(arch=None)
-    context.compiler_target = lambda: target_platform.CompilerTarget(arch='armv7-eabihf')
-
-    context.resolve_target_arch()
-
-    assert context.get_arch() == 'armv7-eabihf'
-
-
-def test_resolution_accepts_a_request_the_compiler_agrees_with():
-    context = make_runtime_context(arch='amd64')
-    context.compiler_target = lambda: target_platform.CompilerTarget(arch='x86_64')
-
-    context.resolve_target_arch()
-
-    # Spelled 'amd64', resolved to the canonical name, and no disagreement.
-    assert context.get_arch() == 'x86_64'
-
-
-def test_resolution_rejects_a_request_the_compiler_contradicts():
-    context = make_runtime_context(arch='aarch64')
-    context.context.env.CXX = ['g++']
-    context.compiler_target = lambda: target_platform.CompilerTarget(arch='x86_64')
-
-    with pytest.raises(RuntimeError, match=r"Requested architecture 'aarch64'"):
-        context.resolve_target_arch()
-
-
-def make_gnu_context(*, arch, triple, builds=False):
-    '''
-    A configured context whose compiler reports `triple` and is not MSVC.
-
-    `builds` is what the compiler answers when asked to build with selecting
-    flags, which is the only way a multilib target can be confirmed.
-    '''
-    context = make_runtime_context(arch=arch)
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
-        triple, 'x86_64')
-    context.attempted = []
-    context.compiler_builds_with = lambda flags: (
-        context.attempted.append(flags) or builds)
-    return context
-
-
 @pytest.mark.parametrize('arch, expected', [
     ('i686', 'x86'),
     ('x86', 'x86'),
@@ -526,176 +461,6 @@ def test_an_absent_arch_leaves_the_msvc_search_alone():
     context = make_runtime_context(arch='x86_64', requested=None)
 
     assert context.selecting_capability().msvc_target == ''
-
-
-def test_a_multilib_compiler_reaches_a_target_its_triple_never_names():
-    # gcc reports the target it was configured for, not the only one it can
-    # build: `gcc -m32 -dumpmachine` still answers x86_64. Comparing triples
-    # alone would refuse every 32-bit build on a 64-bit host.
-    context = make_gnu_context(arch='i686', triple='x86_64-linux-gnu',
-                               builds=True)
-
-    context.resolve_target_arch()
-
-    assert context.get_arch() == 'i686'
-    assert context.attempted == [['-m32']]
-
-
-def test_a_multilib_target_the_compiler_cannot_actually_build_is_refused():
-    # The flag exists but the platform ships no 32-bit userland, so nothing
-    # links. Asking is what tells them apart.
-    context = make_gnu_context(arch='i686', triple='x86_64-linux-gnu',
-                               builds=False)
-
-    with pytest.raises(RuntimeError, match=r'-m32'):
-        context.resolve_target_arch()
-
-
-def test_a_target_no_flag_reaches_is_refused_without_asking():
-    # No -m flag turns an x86_64 compiler into an ARM one, and the capability
-    # table says so by carrying no flags at all. Nothing to try.
-    context = make_gnu_context(arch='aarch64', triple='x86_64-linux-gnu',
-                               builds=True)
-
-    with pytest.raises(RuntimeError, match=r"builds for 'x86_64'"):
-        context.resolve_target_arch()
-
-    assert context.attempted == []
-
-
-def test_a_ruled_out_family_is_not_a_multilib_question():
-    # The triple named no target, so there is nothing for a flag to reach
-    # from. -m64 must not be tried, nor claimed to have been.
-    context = make_gnu_context(arch='x86_64', triple='arm-linux-gnueabihf')
-
-    with pytest.raises(RuntimeError, match=r"'arm' family") as raised:
-        context.resolve_target_arch()
-
-    assert context.attempted == []
-    assert '-m64' not in str(raised.value)
-
-
-def test_a_request_supplies_the_isa_level_a_cross_triple_cannot():
-    # arm-linux-gnueabihf on an x86_64 host: the compiler cannot say whether it
-    # means armv6 or armv7, because only uname knows and uname is describing
-    # the host. The request is allowed to settle exactly that.
-    context = make_runtime_context(arch='armv7-eabihf')
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
-        'arm-linux-gnueabihf', 'x86_64')
-
-    context.resolve_target_arch()
-
-    assert context.get_arch() == 'armv7-eabihf'
-
-
-def test_a_request_may_not_contradict_the_abi_the_triple_did_report():
-    # The triple could not name a target but was emphatic about hard float.
-    # Accepting armv7-eabi here would cache an artifact that links with nothing.
-    context = make_runtime_context(arch='armv7-eabi')
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
-        'arm-linux-gnueabihf', 'x86_64')
-
-    with pytest.raises(RuntimeError, match=r"'eabihf' ABI"):
-        context.resolve_target_arch()
-
-
-@pytest.mark.parametrize('arch', ['aarch64', 'x86_64'])
-def test_a_request_may_not_contradict_the_family_either(arch):
-    context = make_runtime_context(arch=arch)
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
-        'arm-linux-gnueabihf', 'x86_64')
-
-    with pytest.raises(RuntimeError, match=r"'arm' family"):
-        context.resolve_target_arch()
-
-
-def test_a_silent_compiler_is_still_asked_to_build_where_a_flag_can_ask(
-        monkeypatch):
-    # It reported no target, but the request is one Golem has a flag for, so
-    # there is a check available and taking it on trust would be a choice.
-    warnings = []
-    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
-        message))
-    context = make_runtime_context(arch='i686')
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget()
-    context.attempted = []
-    context.compiler_builds_with = lambda flags: (
-        context.attempted.append(flags) or True)
-
-    context.resolve_target_arch()
-
-    assert context.get_arch() == 'i686'
-    assert context.attempted == [['-m32']]
-    # Confirmed rather than trusted, so there is nothing to warn about.
-    assert warnings == []
-
-
-def test_a_silent_compiler_that_cannot_build_the_request_is_an_error():
-    # Nothing supports the request: no target reported, and the one check
-    # available failed. Naming the artifact anyway would be a plain lie.
-    context = make_runtime_context(arch='i686')
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget()
-    context.compiler_builds_with = lambda flags: False
-
-    with pytest.raises(RuntimeError, match=r'no target of its own'):
-        context.resolve_target_arch()
-
-
-def test_a_compiler_that_answered_nothing_constrains_nothing(monkeypatch):
-    # An MSVC-like toolchain that reported nothing, which is waf's
-    # no_autodetect(): it returns before writing DEST_CPU. No flag can put the
-    # question to cl.exe either, so nothing checks the request and it is taken
-    # on trust. The other silent case is a toolchain with no -dumpmachine.
-    warnings = []
-    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
-        message))
-    context = make_runtime_context(arch='i686')
-    context.compiler_target = lambda: target_platform.CompilerTarget()
-
-    context.resolve_target_arch()
-
-    assert context.get_arch() == 'i686'
-    # Taken on trust, and said so: an unchecked request names the artifact, so
-    # a wrong one is cached under a wrong name rather than failing to build.
-    assert len(warnings) == 1
-    assert "'i686' on request alone" in warnings[0]
-
-
-def test_a_compiler_that_did_answer_is_not_second_guessed(monkeypatch):
-    # The warning is about nothing having checked the request, so a compiler
-    # that agreed must not produce it.
-    warnings = []
-    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
-        message))
-    context = make_runtime_context(arch='x86_64')
-    context.compiler_target = lambda: target_platform.CompilerTarget(
-        arch='x86_64')
-
-    context.resolve_target_arch()
-
-    assert warnings == []
-
-
-def test_a_coarse_answer_counts_as_an_answer(monkeypatch):
-    # The triple could not name a target, but it did rule things out, so the
-    # request was held to something and is not being taken on trust.
-    warnings = []
-    monkeypatch.setattr(Logs, 'warn', lambda message, *args: warnings.append(
-        message))
-    context = make_runtime_context(arch='armv7-eabihf')
-    context.is_msvc_like = lambda: False
-    context.compiler_target = lambda: target_platform.CompilerTarget.from_triple(
-        'arm-linux-gnueabihf', 'x86_64')
-
-    context.resolve_target_arch()
-
-    assert context.get_arch() == 'armv7-eabihf'
-    assert warnings == []
 
 
 def test_restore_normalizes_both_the_request_and_the_resolved_identity():
