@@ -737,15 +737,36 @@ class Context:
         '''
         The order waf tries Visual Studio's toolchains in.
 
-        A request narrows the order to that one toolchain, because an
-        architecture Visual Studio cannot supply is an error rather than
-        something to fall back from.
-
-        Otherwise the host's own toolchain goes first, and waf's order follows.
+        A request narrows it to the toolchains that build that architecture,
+        the one hosted on this machine first. Otherwise the host's own
+        toolchain goes first, and waf's order follows.
         '''
-        requested = self.selecting_capability().msvc_target
-        if requested:
-            return [requested]
+        host = target_platform.arch_capability(target_platform.host_arch())
+        requested = self.selecting_capability()
+
+        if requested.msvc_target:
+            # One target can be reached from several hosts.
+            # 
+            # x64 is built by `x64` natively and by `arm64_amd64` from an ARM64
+            # machine, and an ARM64 machine cannot run the first.
+            # 
+            # Therefore every name waf lists for this target is kept.
+            #
+            # The second element of waf's pairs is the target the toolchain
+            # builds for, so the list itself says which names reach here.
+            candidates = [name for name, vcvars in msvc.all_msvc_platforms
+                          if vcvars == requested.vcvars_arg]
+            
+            # waf spells a native toolchain with a bare name and a cross one as
+            # host_target, both halves in vcvarsall's vocabulary, which is what
+            # `vcvars_arg` already holds. So the pair needs no table of its own.
+            preferred = (requested.msvc_target
+                         if host.vcvars_arg == requested.vcvars_arg else
+                         '{}_{}'.format(host.vcvars_arg, requested.vcvars_arg))
+            
+            # Every candidate builds the requested architecture, therefore
+            # preferring one is not falling back from it.
+            return sorted(candidates, key=lambda name: name != preferred)
 
         # One Visual Studio installation ships several cross toolchains, and
         # waf's order is fixed and begins at x64. Therefore an ARM64 machine
@@ -753,11 +774,10 @@ class Context:
         # the host's own architecture, so the host is put first. Nothing is
         # dropped from the order, therefore it stays a preference and never a
         # filter.
-        native = target_platform.arch_capability(
-            target_platform.host_arch()).msvc_target
+        #
         # waf's list stays waf's, rather than being copied and left to rot.
         order = [name for name, _ in msvc.all_msvc_platforms]
-        return [native] + order if native else order
+        return [host.msvc_target] + order if host.msvc_target else order
 
     def vcvars_arg(self):
         '''

@@ -1200,12 +1200,51 @@ def test_a_build_script_may_reach_a_remote():
 # --- Which Visual Studio toolchain waf reaches for first -----------------
 
 
-def test_a_request_narrows_the_toolchain_search_to_one():
+def test_a_request_narrows_the_search_to_that_architecture(monkeypatch):
     # An architecture Visual Studio cannot supply is an error, not something
-    # to quietly fall back from.
+    # to quietly fall back from. Every name kept builds i686.
     context = make_runtime_context(arch='i686')
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'x86_64')
 
-    assert context.msvc_target_preference() == ['x86']
+    assert context.msvc_target_preference() == [
+        'amd64_x86', 'x86', 'arm64_x86']
+
+
+def test_a_request_prefers_the_toolchain_hosted_on_this_machine(monkeypatch):
+    # `arm64` is the ARM64-hosted toolchain and an x64 machine cannot run it.
+    # Narrowing to it alone would refuse a cross build that Visual Studio ships
+    # the tools for, so `amd64_arm64` leads.
+    context = make_runtime_context(arch='aarch64')
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'x86_64')
+
+    assert context.msvc_target_preference()[0] == 'amd64_arm64'
+
+
+def test_a_native_request_leads_with_wafs_bare_name(monkeypatch):
+    # waf spells a native toolchain without a host half, so there is no
+    # `amd64_amd64` to prefer over `x64`.
+    context = make_runtime_context(arch='x86_64')
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'x86_64')
+
+    assert context.msvc_target_preference()[0] == 'x64'
+
+
+def test_a_request_keeps_only_names_waf_lists_for_that_target():
+    # The pairs are waf's, so a name is never composed that its detection does
+    # not know how to run.
+    context = make_runtime_context(arch='aarch64')
+
+    assert set(context.msvc_target_preference()) <= set(
+        name for name, _ in msvc.all_msvc_platforms)
+
+
+def test_a_request_msvc_cannot_name_leaves_wafs_order_alone():
+    # i386 has no Visual Studio toolchain at all. Nothing is narrowed here and
+    # the compiler's own answer is what refuses the request later.
+    context = make_runtime_context(arch='i386')
+
+    assert set(name for name, _ in msvc.all_msvc_platforms) <= set(
+        context.msvc_target_preference())
 
 
 def test_with_no_request_the_host_toolchain_comes_first(monkeypatch):

@@ -292,6 +292,18 @@ def test_configure_settles_a_target_this_host_can_be_asked_for(example_tmp_path)
 
 
 @pytest.mark.configure
+@pytest.mark.skipif(not REQUESTED_ARCH, reason='no architecture was asked for')
+def test_configure_honours_the_architecture_it_was_asked_for(example_tmp_path):
+    # Only the legs that ask for something the runner is not: 32-bit Windows on
+    # a 64-bit host, and aarch64 from an x64 one. Settling refuses a request the
+    # compiler disagrees with, so a green configure is already most of the
+    # proof; this names what the leg is there to show.
+    settled = configure_example('hello', example_tmp_path)
+
+    assert settled == target_platform.normalize_arch(REQUESTED_ARCH)
+
+
+@pytest.mark.configure
 def test_configure_evaluates_conditions_that_name_a_target(example_tmp_path):
     # A condition can name an architecture, an operating system or a compiler,
     # and all three are answers only the chosen toolchain gives. Selecting

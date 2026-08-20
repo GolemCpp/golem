@@ -127,12 +127,19 @@ jobs:
           # else exercises that with an aarch64 host doing the indexing.
           - name: windows-arm64
             os: windows-11-arm
+          # The only leg asking for an architecture the runner is not. 
+          # E.g. `amd64_arm64`
+          - name: windows-x64-cross-arm64
+            os: windows-2025
+            arch: aarch64
           # macOS is deliberately absent: both its architectures are
           # unambiguous, with no ISA level to splice and no multilib, so the
           # unit and integration legs already cover everything a configure
           # would show.
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.advisory || false }}
+    env:
+      GOLEM_TEST_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
         with:
