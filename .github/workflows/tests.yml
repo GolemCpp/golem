@@ -3,11 +3,27 @@ name: Tests
 # Reusable only: this file has no triggers of its own. It is the single
 # definition of "what testing means", called by ci.yml and python-publish.yml
 # so that the release gate and the pull request checks cannot drift apart.
+#
+# Legs are named and images are pinned, and both are deliberate.
+#
+# The name is the interface. Branch protection speaks check names.
+#
+# A pin makes an image bump a pull request, and makes a red leg attributable
+# to the diff that caused it. The `canary` job below is what buys back the
+# early warning a pin gives up.
 on:
   workflow_call:
     inputs:
       integration:
         description: Also run the example integration suite (slow).
+        type: boolean
+        default: false
+      integration-emulated:
+        description: Also run the emulated integration legs (slow).
+        type: boolean
+        default: false
+      canary:
+        description: Also run the unit suite on the unpinned -latest aliases.
         type: boolean
         default: false
 
@@ -16,14 +32,22 @@ permissions:
 
 jobs:
   unit:
-    name: Unit tests
+    name: Unit tests (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - name: linux-x64
+            os: ubuntu-24.04
+          - name: windows-x64
+            os: windows-2025
+          # macos-26 is the arm64 image; x64 macOS is a separate one.
+          - name: macos-arm64
+            os: macos-26
+          - name: macos-x64
+            os: macos-26-intel
     runs-on: ${{ matrix.os }}
-    # macOS has never run this suite; keep it advisory until proven green.
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    continue-on-error: ${{ matrix.advisory || false }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,15 +63,123 @@ jobs:
       - name: Run unit tests
         run: python -m pytest --ignore=tests/test_examples_integration.py
 
+  canary:
+    name: Canary (${{ matrix.name }})
+    if: inputs.canary
+    # The cost of pinning is that a rotation is only discovered when the pin is
+    # withdrawn. This job is the early warning. It runs the unit suite on
+    # whatever the aliases point at, gates nothing ever, and goes red on the image
+    # the pinned legs would have moved to next.
+    #
+    # Nightly only
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-latest
+            os: ubuntu-latest
+          - name: windows-latest
+            os: windows-latest
+          - name: macos-latest
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+      - name: Report what the alias resolved to
+        run: python -c "import platform, sys; print(platform.platform(), platform.machine(), sys.version)"
+      - name: Run unit tests
+        run: python -m pytest --ignore=tests/test_examples_integration.py
+
+  configure:
+    name: Configure tests (${{ matrix.name }})
+    # There are three tiers: unit mocks everything, this runs the real command
+    # line and stops at configure, integration runs it all the way through.
+    #
+    # This is the only tier outside unit that runs on every pull request,
+    # therefore it is the only per-pull-request check that runs golem itself.
+    #
+    # What target a build is for is settled by the end of configure, so the
+    # architecture model is exercised here too against a real toolchain.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-24.04
+          - name: windows-x64
+            os: windows-2025
+          # Native aarch64, so a real -dumpmachine sits next to a real
+          # platform.machine() instead of a hand-written pair in a unit test.
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+          # The vcvarsall tables are indexed by the host architecture. Nothing
+          # else exercises that with an aarch64 host doing the indexing.
+          - name: windows-arm64
+            os: windows-11-arm
+          # macOS is deliberately absent: both its architectures are
+          # unambiguous, with no ISA level to splice and no multilib, so the
+          # unit and integration legs already cover everything a configure
+          # would show.
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.advisory || false }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+      - name: Run the command line no further than configure
+        run: python -m pytest tests/test_examples_integration.py -m configure
+
   integration:
-    name: Integration tests
+    name: Integration tests (${{ matrix.name }})
     if: inputs.integration
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # ubuntu-26.04 is required for C++ modules, which the modules example
+          # needs. Which is why the pin is here rather than on the job that gates
+          # every pull request.
+          - name: linux-x64
+            os: ubuntu-26.04
+          - name: windows-x64
+            os: windows-2025
+          - name: macos-arm64
+            os: macos-26
+          - name: macos-x64
+            os: macos-26-intel
+          - name: windows-x86
+            os: windows-2025
+            arch: x86
+          - name: linux-arm64
+            os: ubuntu-26.04-arm
+          # Visual Studio 2026, like windows-x64, so the two differ by
+          # architecture alone. The plain windows-11-arm image carries 2022,
+          # and cppfront's own source does not compile under it.
+          - name: windows-arm64
+            os: windows-11-vs2026-arm
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    continue-on-error: ${{ matrix.advisory || false }}
+    env:
+      GOLEM_TEST_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -62,3 +194,72 @@ jobs:
           python -m pip install --group dev
       - name: Run non-Qt/non-package example integration subset
         run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
+
+  integration-emulated:
+    name: Integration tests (linux-qemu, ${{ matrix.name }})
+    # Index syntax, not `inputs.integration-emulated`. A hyphen is legal in a
+    # property dereference but reads as subtraction.
+    if: inputs['integration-emulated']
+    # `Triple.canonical_arch` splices the compiler's ABI with uname's ISA level,
+    # and no runner can exercise that: `arm-linux-gnueabihf` beside `armv7l` is
+    # only a real pair on a real 32-bit ARM userland. Every other test of it
+    # feeds the machine string in by hand.
+    #
+    # Emulation costs about what the integration suite costs, so it runs on the
+    # same occasions rather than on every pull request.
+    #
+    # Keep this on x64. GitHub's arm64 hosts are Ampere/Cobalt class and do not
+    # implement AArch32 at EL0, so running it there would emulate the same
+    # containers with nothing gained.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: armhf
+            platform: linux/arm/v7
+            image: arm32v7/debian:trixie
+          - name: armel
+            platform: linux/arm/v5
+            image: arm32v5/debian:trixie
+            qemu_cpu: arm926
+          - name: riscv64
+            platform: linux/riscv64
+            image: riscv64/debian:trixie
+          # armv6 is absent for want of an image: Debian dropped it, and the
+          # Alpine one reports `armv6-alpine-linux-musleabihf` -- a triple that
+          # names its own ISA level, so it never reaches the splice this job
+          # exists to test.
+    runs-on: ubuntu-24.04
+    # The one leg still advisory, deliberately. python-publish.yml declares
+    # `needs: tests`, therefore promoting this would gate publishing a release
+    # on three emulated containers installing packages over the network. Its
+    # failure would hold up a release rather than ship a wrong binary.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: docker/setup-qemu-action@v3
+      - name: Build the dependency-free examples under emulation
+        env:
+          QEMU_CPU: ${{ matrix.qemu_cpu }}
+        run: |
+          # Forwarded only where a leg sets it: an empty QEMU_CPU is not the
+          # same as an unset one, and qemu refuses to start on ''.
+          docker run --rm --platform '${{ matrix.platform }}' \
+            ${QEMU_CPU:+-e QEMU_CPU} \
+            -v "$PWD:/src" -w /src '${{ matrix.image }}' \
+            /bin/sh -eu -c '
+              apt-get update -qq
+              apt-get install -y -qq g++ git python3 python3-venv >/dev/null
+              python3 -m venv /venv
+              /venv/bin/pip install -q --upgrade pip
+              /venv/bin/pip install -q --group dev
+              /venv/bin/python -m pytest tests/test_examples_integration.py -m configure
+              # Named rather than excluded. The x64 subset is `not qt and not
+              # package`, which still leaves cppfront, and that example clones
+              # cppfront and builds it: not cheap and not guaranteed to work.
+              /venv/bin/python -m pytest tests/test_examples_integration.py \
+                -k "hello or minimal or conditions"
+            '

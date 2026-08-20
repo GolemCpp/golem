@@ -3,9 +3,12 @@ import pytest
 from types import SimpleNamespace
 import json
 
+from waflib.Tools import msvc
+
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
-from golemcpp.golem import context as golem_context, helpers, network, qt_discovery
+from golemcpp.golem import (context as golem_context, helpers, network,
+                            qt_discovery, target_platform)
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
     CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
@@ -50,16 +53,20 @@ def make_configure_context(project_qt=True, project_qtdir=''):
             runtime_variant=None,
             variant='debug',
             link='shared',
-            arch='x64',
+            arch=None,  # unset, as it now is unless asked for
             project_dir=os.getcwd(),
             compile_commands=False,
             vscode=False,
             clangd=False,
         ),
         want_qt6=False,
-        env=SimpleNamespace(),
+        # The compiler load is stubbed out, so nothing can be run for a
+        # triple. waf's own record of what its detection found stands in,
+        # which is how the MSVC path answers for real.
+        env=SimpleNamespace(CXX_NAME='msvc', DEST_CPU='x64'),
         setenv=lambda _: None,
         load=lambda _: None,
+        msg=lambda label, value: None,
     )
     context.version = SimpleNamespace(force_version=lambda _: None)
     context.make_cache_configuration = lambda: None
@@ -69,7 +76,6 @@ def make_configure_context(project_qt=True, project_qtdir=''):
     context.configure_compiler = lambda: None
     context.save_options = lambda: None
     context.is_windows = lambda: False
-    context.get_arch = lambda: 'x64'
     return context
 
 
@@ -81,6 +87,29 @@ def make_task_config(*, features=None, wfeatures=None, source=None):
     )
     config.type = []
     return config
+
+
+def test_configure_settles_the_target_before_it_selects_tasks():
+    # Selecting tasks evaluates conditions, and a condition can name an
+    # architecture, an operating system or a compiler. All three are answers
+    # only the chosen toolchain gives, so asking before finding it raised on
+    # every golemfile carrying a when() block.
+    context = make_configure_context()
+    seen = {}
+
+    def select():
+        seen['arch'] = context.context.options.resolved_arch
+        seen['compiler'] = context.context.env.CXX_NAME
+        return []
+
+    context.get_tasks_and_targets_to_process = select
+
+    context.configure()
+
+    assert seen['arch'] == 'x86_64'
+    # The compiler is known by then too, which it was not before: a
+    # when(compiler=...) block could never match at configure time.
+    assert seen['compiler'] == 'msvc'
 
 
 def test_configure_autodiscovers_qtdir_when_qt_is_enabled_and_other_sources_are_missing(monkeypatch):
@@ -168,11 +197,24 @@ def test_configure_autodiscovers_qtdir_when_only_other_qt_major_root_is_set(monk
     assert context.context.options.qtdir == '/opt/Qt/5.15.2/gcc_64'
 
 
+UNSET = object()
+
+
 def make_runtime_context(*,
                          variant='debug',
                          runtime_link='shared',
                          runtime_variant=None,
-                         link='shared'):
+                         link='shared',
+                         arch='x86_64',
+                         requested=UNSET):
+    '''
+    A context for a build that has already been configured.
+
+    `arch` is the resolved identity, i.e. what the compiler turned out to build
+    for. `requested` is what was asked on the command line, which defaults to
+    the same thing; pass None for a build where nothing was asked, since that
+    is a different case and only a request may emit selecting flags.
+    '''
     context = Context.__new__(Context)
     # Both are set by Context.__init__, which building through __new__ skips.
     context.project = None
@@ -183,7 +225,8 @@ def make_runtime_context(*,
             runtime_link=runtime_link,
             runtime_variant=runtime_variant,
             link=link,
-            arch='x64',
+            arch=arch if requested is UNSET else requested,
+            resolved_arch=arch,
             nounicode=False,
             compile_commands=False,
             vscode=False,
@@ -196,12 +239,16 @@ def make_runtime_context(*,
             LINKFLAGS=[],
             ARFLAGS=[],
             ISYSTEMS=[],
+            DEST_CPU='',
+            CXX=['g++'],
         ),
     )
     context.is_windows = lambda: True
-    context.get_arch = lambda: 'x64'
+    # get_arch is deliberately not stubbed: it reads options.arch through the
+    # target, which is the path under test. osname still is, because the target
+    # takes its OS from the host and these cases are about Windows.
     context.osname = lambda: 'windows'
-    context.compiler_min = lambda: 'm'
+    context.compiler = lambda: 'msvc-19.44'
     context.is_msvc_like = lambda: True
     return context
 
@@ -240,10 +287,39 @@ def test_restore_options_env_upgrades_legacy_runtime_option():
     assert 'runtime_variant' in restored
 
 
-def test_build_path_on_windows_includes_runtime_variant_segment():
-    context = make_runtime_context(runtime_variant='release')
+def test_the_slug_carries_runtime_variant_on_every_platform():
+    # It used to appear on Windows alone. Dropping it elsewhere would let two
+    # artifacts built against different CRTs share a directory.
+    windows = make_runtime_context(runtime_variant='release')
+    assert windows.build_path() == 'windows~x86_64~msvc-19.44~sh~r~sh~d'
 
-    assert context.build_path() == 'w64mshrshd'
+    linux = make_runtime_context(runtime_variant='release')
+    linux.osname = lambda: 'linux'
+    linux.compiler = lambda: 'gcc-13.4.0'
+    assert linux.build_path() == 'linux~x86_64~gcc-13.4.0~sh~r~sh~d'
+
+
+def test_the_slug_names_the_architecture_rather_than_a_word_size():
+    # The Windows branch read '64' if x86_64 else '32', so aarch64 and i686
+    # produced one directory for two incompatible builds.
+    arm = make_runtime_context(arch='aarch64')
+    arm.compiler = lambda: 'msvc-19.44'
+    x86 = make_runtime_context(arch='i686')
+    x86.compiler = lambda: 'msvc-19.44'
+
+    assert arm.build_path() != x86.build_path()
+    assert 'aarch64' in arm.build_path()
+    assert 'i686' in x86.build_path()
+
+
+def test_a_dependency_gets_its_own_slug():
+    # Every field but the toolchain's may differ per dependency, which is what
+    # the dep argument threads through.
+    context = make_runtime_context(variant='debug')
+    dep = SimpleNamespace(link=['static'], runtime_link=['static'],
+                          runtime_variant=['release'], variant=['release'])
+
+    assert context.build_path(dep) == 'windows~x86_64~msvc-19.44~st~r~st~r'
 
 
 def test_configure_debug_keeps_debug_flags_with_release_runtime_variant():
@@ -266,6 +342,229 @@ def test_make_default_build_flags_enables_utf8_for_msvc():
     assert '/utf-8' in flags['cxxflags']
 
 
+@pytest.mark.parametrize('arch, expected', [('x86_64', '-m64'), ('i686', '-m32'),
+                                            ('amd64', '-m64'), ('x86', '-m32')])
+def test_gnu_word_size_flag_reaches_the_linker_too(arch, expected):
+    # waf's link rule expands LINKFLAGS and never CXXFLAGS, so a word-size flag
+    # given only to the compiler produces objects the link step cannot use.
+    # The aliases are here too: how the flag was spelled must not change what
+    # is emitted.
+    context = make_runtime_context(arch=arch)
+    context.is_msvc_like = lambda: False
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert expected in flags['cflags']
+    assert expected in flags['cxxflags']
+    assert expected in flags['linkflags']
+
+
+def test_gnu_word_size_flag_is_omitted_for_an_arch_with_no_capability():
+    context = make_runtime_context(arch='aarch64')
+    context.is_msvc_like = lambda: False
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert not [f for f in flags['linkflags'] if f.startswith('-m')]
+
+
+def test_msvc_machine_flag_comes_from_the_capability_table():
+    context = make_runtime_context(arch='i686')
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert '/MACHINE:X86' in flags['linkflags']
+    assert '/MACHINE:X86' in flags['arflags']
+
+
+def test_arch_aliases_resolve_to_one_canonical_name():
+    assert make_runtime_context(arch='amd64').get_arch() == 'x86_64'
+    assert make_runtime_context(arch='x64').get_arch() == 'x86_64'
+    assert make_runtime_context(arch='X86_64').get_arch() == 'x86_64'
+    assert make_runtime_context(arch='arm64').get_arch() == 'aarch64'
+    # A family name, not an alias: 'x86' names a family and resolves to its
+    # conventional member rather than being a spelling of it.
+    assert make_runtime_context(arch='x86').get_arch() == 'i686'
+
+
+def test_unknown_arch_keeps_an_identity_and_gains_no_flags():
+    context = make_runtime_context(arch='sparc64')
+    context.is_msvc_like = lambda: False
+
+    assert context.get_arch() == 'sparc64'
+    assert context.make_default_build_flags(variant='release')['linkflags'] == []
+
+
+@pytest.mark.parametrize('arch, expected', [
+    ('x86_64', 'x64'),
+    ('amd64', 'x64'),
+    # The whole point: neither MSBuild nor CMake accepts 'x86', which is what
+    # both were handed before.
+    ('i686', 'Win32'),
+    ('x86', 'Win32'),
+    ('aarch64', 'ARM64'),
+    ('arm64', 'ARM64'),
+])
+def test_vs_platform_uses_visual_studios_own_names(arch, expected):
+    assert make_runtime_context(arch=arch).vs_platform() == expected
+
+
+@pytest.mark.parametrize('arch, msvc_target, vcvars', [
+    # waf's all_msvc_platforms pairs these, and they differ for x86_64.
+    ('x86_64', 'x64', 'amd64'),
+    ('i686', 'x86', 'x86'),
+    ('aarch64', 'arm64', 'arm64'),
+])
+def test_the_two_msvc_vocabularies_stay_apart(arch, msvc_target, vcvars):
+    context = make_runtime_context(arch=arch)
+
+    assert context.arch_capability().msvc_target == msvc_target
+    assert context.vcvars_arg() == vcvars
+
+
+def test_vcvars_arg_refuses_an_arch_msvc_cannot_build():
+    context = make_runtime_context(arch='armv7-eabihf')
+
+    with pytest.raises(RuntimeError, match=r"No vcvarsall argument"):
+        context.vcvars_arg()
+
+
+def test_configure_default_leaves_msvc_targets_to_waf():
+    context = make_runtime_context(arch='x86_64')
+    context.context.env.MSVC_TARGETS = ['x64']
+
+    context.configure_default()
+
+    # The configure-time value survives: overwriting it here with the
+    # vcvarsall spelling is what used to leave waf a value it would not match.
+    assert context.context.env.MSVC_TARGETS == ['x64']
+
+
+def test_vs_platform_takes_an_explicit_arch_over_the_target():
+    context = make_runtime_context(arch='x86_64')
+
+    assert context.vs_platform('i686') == 'Win32'
+
+
+@pytest.mark.parametrize('arch', ['i486', 'armv7-eabihf', 'sparc64'])
+def test_vs_platform_refuses_an_arch_visual_studio_cannot_build(arch):
+    context = make_runtime_context(arch=arch)
+
+    with pytest.raises(RuntimeError, match=r"No Visual Studio platform"):
+        context.vs_platform()
+
+
+def test_the_target_is_unavailable_until_a_compiler_has_answered():
+    context = make_runtime_context()
+    del context.context.options.resolved_arch
+
+    with pytest.raises(RuntimeError, match=r"not resolved yet"):
+        context.target()
+
+
+def test_selecting_flags_do_not_need_a_resolved_target():
+    # The one thing that runs before resolution is the MSVC_TARGETS write, and
+    # it asks what was *requested*, never what the build turned out to be. If
+    # this ever needed the target it would be reading a provisional value.
+    context = make_runtime_context(arch='i686')
+    del context.context.options.resolved_arch
+
+    assert context.selecting_capability().msvc_target == 'x86'
+
+
+def test_an_absent_request_emits_no_selecting_flags():
+    # The identity is still x86_64 and still names the artifact; what is absent
+    # is any flag instructing the compiler, because nothing was asked for.
+    context = make_runtime_context(arch='x86_64', requested=None)
+    context.is_msvc_like = lambda: False
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert context.get_arch() == 'x86_64'
+    assert '-m64' not in flags['cxxflags']
+    assert '-m64' not in flags['linkflags']
+
+
+def test_an_explicit_request_emits_them():
+    context = make_runtime_context(arch='x86_64')
+    context.is_msvc_like = lambda: False
+
+    flags = context.make_default_build_flags(variant='release')
+
+    assert '-m64' in flags['cxxflags']
+    assert '-m64' in flags['linkflags']
+
+
+@pytest.mark.parametrize('arch, expected', [
+    ('i686', 'x86'),
+    ('x86', 'x86'),
+    ('x86_64', 'x64'),
+    ('aarch64', 'arm64'),
+])
+def test_an_explicit_arch_narrows_the_msvc_search(arch, expected):
+    # configure() writes this into MSVC_TARGETS before context.load(), which
+    # is how a request reaches waf's msvc detection rather than only the
+    # flags. waf itself fails when no installation carries those tools.
+    context = make_runtime_context(arch=arch)
+
+    assert context.selecting_capability().msvc_target == expected
+
+
+def test_an_absent_arch_leaves_the_msvc_search_alone():
+    # Nothing was asked, so waf tries every platform it knows and reports what
+    # it found. Naming one here would turn an observation into an instruction.
+    context = make_runtime_context(arch='x86_64', requested=None)
+
+    assert context.selecting_capability().msvc_target == ''
+
+
+def test_restore_normalizes_both_the_request_and_the_resolved_identity():
+    context = make_runtime_context()
+    context.context.env = SimpleNamespace(
+        OPTIONS=json.dumps({
+            'arch': 'x64',
+            'resolved_arch': 'amd64',
+            'targets': '',
+            'only_update_dependencies_regex': '',
+            'output_file': '',
+        }))
+    context.context.options.targets = ''
+    context.context.options.output_file = ''
+    context.context.options.only_update_dependencies_regex = ''
+
+    restored = context.restore_options_env(context.context.env)
+
+    assert restored['arch'] == 'x86_64'
+    assert restored['resolved_arch'] == 'x86_64'
+
+
+def test_an_env_with_no_resolved_identity_is_not_given_one():
+    # An env saved before resolution existed gets no invented value: reading
+    # the target raises and asks for a reconfigure, rather than a guessed
+    # architecture reaching a build slug.
+    context = make_runtime_context()
+    context.context.env = SimpleNamespace(
+        OPTIONS=json.dumps({
+            'arch': 'x64',
+            'targets': '',
+            'only_update_dependencies_regex': '',
+            'output_file': '',
+        }))
+    context.context.options.targets = ''
+    context.context.options.output_file = ''
+    context.context.options.only_update_dependencies_regex = ''
+
+    restored = context.restore_options_env(context.context.env)
+
+    assert 'resolved_arch' not in restored
+
+
+def test_debian_arch_comes_from_the_capability_table():
+    assert make_runtime_context(arch='x86_64').get_arch_for_linux() == 'amd64'
+    assert make_runtime_context(arch='aarch64').get_arch_for_linux() == 'arm64'
+    assert make_runtime_context(arch='sparc64').get_arch_for_linux() is None
+
+
 def make_build_target_context(*, variant='release', no_defaults=False):
     context = Context.__new__(Context)
     context.project = SimpleNamespace(deps=[])
@@ -276,7 +575,7 @@ def make_build_target_context(*, variant='release', no_defaults=False):
             runtime_link='shared',
             runtime_variant='release',
             link='shared',
-            arch='x64',
+            arch='x86_64',
             compile_commands=False,
             vscode=False,
             clangd=False,
@@ -288,6 +587,8 @@ def make_build_target_context(*, variant='release', no_defaults=False):
             LINKFLAGS=['/env-link'],
             ARFLAGS=[],
             ISYSTEMS=[],
+            DEST_CPU='',
+            CXX=['g++'],
         ),
         root=SimpleNamespace(
             find_or_declare=lambda path: path,
@@ -305,10 +606,7 @@ def make_build_target_context(*, variant='release', no_defaults=False):
     context.is_windows = lambda: True
     context.is_linux = lambda: False
     context.is_darwin = lambda: False
-    context.is_android = lambda: False
     context.is_msvc_like = lambda: True
-    context.is_x86 = lambda: False
-    context.is_x64 = lambda: True
     context.is_runtime_static = lambda: False
     context.is_runtime_shared = lambda: True
     context.is_runtime_variant_debug = lambda: False
@@ -723,7 +1021,6 @@ def test_run_command_uses_subprocess_without_shell_on_windows(monkeypatch):
 
 def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch):
     context = make_runtime_context()
-    context.context.env = AttrDict(MSVC_TARGETS=['x64'])
     captured = {}
 
     monkeypatch.setattr(context, 'vswhere_get_installation_path', lambda: 'C:\\VS Path')
@@ -742,7 +1039,8 @@ def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch
     assert captured['command'][:4] == ['cmd', '/d', '/s', '/c']
     assert captured['cwd'] == 'C:/tmp/project'
     assert captured['shell'] is False
-    assert captured['command'][4].startswith('call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64')
+    # amd64, not x64: vcvarsall takes the second member of waf's pair.
+    assert captured['command'][4].startswith('call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" amd64')
     assert '&& cl.exe /nologo' in captured['command'][4]
 
 
@@ -898,3 +1196,42 @@ def test_a_build_script_may_reach_a_remote():
 
     assert observed == [(context, True)]
     assert network.is_allowed() is False
+
+# --- Which Visual Studio toolchain waf reaches for first -----------------
+
+
+def test_a_request_narrows_the_toolchain_search_to_one():
+    # An architecture Visual Studio cannot supply is an error, not something
+    # to quietly fall back from.
+    context = make_runtime_context(arch='i686')
+
+    assert context.msvc_target_preference() == ['x86']
+
+
+def test_with_no_request_the_host_toolchain_comes_first(monkeypatch):
+    # One installation ships several cross toolchains, and waf's own order is
+    # fixed and begins at x64. An ARM64 machine with the x64 cross tools would
+    # otherwise build x86_64 and truthfully report it.
+    context = make_runtime_context(arch=None)
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'aarch64')
+
+    assert context.msvc_target_preference()[0] == 'arm64'
+
+
+def test_with_no_request_nothing_is_dropped_from_wafs_order(monkeypatch):
+    # A machine without its own toolchain installed still has to find one, so
+    # the host is a preference and never a filter.
+    context = make_runtime_context(arch=None)
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'aarch64')
+
+    preference = context.msvc_target_preference()
+
+    assert set(name for name, _ in msvc.all_msvc_platforms) <= set(preference)
+
+
+def test_a_host_with_no_toolchain_name_leaves_wafs_order_alone(monkeypatch):
+    context = make_runtime_context(arch=None)
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'riscv64-lp64d')
+
+    assert context.msvc_target_preference() == [
+        name for name, _ in msvc.all_msvc_platforms]

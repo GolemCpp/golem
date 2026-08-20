@@ -1,4 +1,7 @@
+from waflib import Logs
+
 from golemcpp.golem import helpers
+from golemcpp.golem import target_platform
 from golemcpp.golem.condition import Condition
 from golemcpp.golem.condition_expression import ConditionExpression
 from copy import deepcopy
@@ -395,7 +398,7 @@ class Configuration(Condition):
             if not expected_runtime_variant:
                 expected_runtime_variant = context.runtime_variant()
             if not expected_osystem: expected_osystem = context.osname()
-            if not expected_arch: expected_arch = context.arch()
+            if not expected_arch: expected_arch = context.get_arch()
             if not expected_compiler:
                 expected_compiler = context.compiler_name()
             if not expected_distribution:
@@ -497,8 +500,10 @@ class Configuration(Condition):
 
             if not raw_entry:
                 continue
-            elif raw_entry in ['x86', 'x64']:
-                condition.arch.append(raw_entry)
+            elif target_platform.is_arch_name(raw_entry):
+                # Through parse_entry rather than straight onto the list, so
+                # the vocabulary is known in one place.
+                condition.parse_entry('arch', entry)
                 is_empty = False
             elif raw_entry in ['debug', 'release']:
                 condition.variant.append(entry)
@@ -506,8 +511,8 @@ class Configuration(Condition):
             elif raw_entry in ['msvc', 'gcc', 'clang']:
                 condition.compiler.append(entry)
                 is_empty = False
-            elif raw_entry in ['windows', 'linux', 'osx', 'android']:
-                condition.osystem.append(entry)
+            elif target_platform.is_osystem_name(raw_entry):
+                condition.parse_entry('osystem', entry)
                 is_empty = False
             elif raw_entry in ['shared', 'static']:
                 condition.link.append(entry)
@@ -529,6 +534,17 @@ class Configuration(Condition):
             elif raw_entry in ['program', 'library']:
                 condition.type.append(entry)
                 is_empty = False
+            else:
+                # Silence here means a condition nobody can satisfy: the entry
+                # is dropped, and if it was the only one the whole block goes
+                # with it. Only keys beginning with '?' reach this loop, so an
+                # unrecognised word is always a mistake rather than a value
+                # meant for something else.
+                Logs.warn(
+                    "Unknown condition '{}', ignored. It names no "
+                    "architecture, operating system, compiler, variant, "
+                    "linkage, distribution, release or target type.".format(
+                        entry))
 
         configs = []
         if not is_empty:

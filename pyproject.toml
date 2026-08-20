@@ -38,8 +38,20 @@ Issues = "https://github.com/GolemCpp/golem/issues"
 [project.scripts]
 golem = "golemcpp.golem.main:main"
 
-[tool.pytest]
+# pytest reads [tool.pytest.ini_options], not [tool.pytest]. Under the shorter
+# name every setting below was silently ignored.
+[tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = [
     "tests",
+]
+markers = [
+    # Named for where it stops. These run the real command line against a real
+    # toolchain and go no further than configure, therefore they are cheap
+    # enough for an emulated or scarce runner, and they are the only tests
+    # outside the unit suite that run on every pull request.
+    #
+    # What target a build is for is settled by the end of configure, so this is
+    # also where the architecture model is exercised for real.
+    "configure: run the command line no further than configure",
 ]

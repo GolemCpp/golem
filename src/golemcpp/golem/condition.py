@@ -1,6 +1,44 @@
 from golemcpp.golem import helpers
+from golemcpp.golem import target_platform
 import json
 from golemcpp.golem.condition_expression import ConditionExpression
+
+# The two axes that have a canonical spelling of their own. A condition and a
+# build meet only as strings, so a recipe saying `x64` matches a context saying
+# `x86_64` exactly when they are made the same word here.
+VALUE_NORMALIZERS = {
+    'osystem': target_platform.normalize_osystem,
+    'arch': target_platform.normalize_arch,
+}
+
+# A value carrying any of this is an expression rather than a name, and is left
+# alone. No recipe writes one, and intersection() composes them out of values
+# normalized on the way in, so a composed expression is canonical already.
+EXPRESSION_CHARACTERS = '+()'
+
+
+def normalize_values(member, values):
+    '''
+    Spell a condition's values the way the context will report them.
+
+    Everything arrives here: a golemfile read, a condition restored from JSON,
+    and the shorthand parser in configuration.py. That is the point of doing it
+    in one place, since data written before this existed is normalized on the
+    way back in rather than needing a migration.
+    '''
+    normalize = VALUE_NORMALIZERS.get(member)
+    if not normalize:
+        return values
+
+    normalized = []
+    for value in values:
+        if not isinstance(value, str) or any(
+                character in value for character in EXPRESSION_CHARACTERS):
+            normalized.append(value)
+            continue
+        negation = '!' if value.startswith('!') else ''
+        normalized.append(negation + normalize(value[len(negation):]))
+    return normalized
 
 
 class Condition(object):
@@ -33,11 +71,12 @@ class Condition(object):
         # debug, release
         self.runtime_variant = helpers.parameter_to_list(runtime_variant)
 
-        # linux, windows, osx
-        self.osystem = helpers.parameter_to_list(osystem)
+        # Canonical operating system names, e.g. linux, windows, macos.
+        self.osystem = normalize_values('osystem',
+                                        helpers.parameter_to_list(osystem))
 
-        # x86, x64
-        self.arch = helpers.parameter_to_list(arch)
+        # Canonical architecture names, e.g. x86_64, i686, aarch64.
+        self.arch = normalize_values('arch', helpers.parameter_to_list(arch))
 
         # gcc, clang, msvc
         self.compiler = helpers.parameter_to_list(compiler)
@@ -143,10 +182,8 @@ class Condition(object):
                 raw_entry = 'runtime_link'
 
             if raw_entry in Condition.serialized_members():
-                if not isinstance(value, list):
-                    self.__dict__[raw_entry] += [value]
-                else:
-                    self.__dict__[raw_entry] += value
+                values = value if isinstance(value, list) else [value]
+                self.__dict__[raw_entry] += normalize_values(raw_entry, values)
                 self.__dict__[raw_entry] = helpers.filter_unique(
                     self.__dict__[raw_entry])
                 has_entry = True

@@ -18,6 +18,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from waflib import Logs, Task
+from waflib.Tools import msvc
 
 from golemcpp.golem.module import Module
 from golemcpp.golem.cache_configuration import get_cache_configuration
@@ -36,6 +37,10 @@ from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import build_slug
+from golemcpp.golem import target_platform
+from golemcpp.golem import target_resolver
+from golemcpp.golem.target_platform import TargetPlatform
 from golemcpp.golem import locator
 from golemcpp.golem.source import Source
 from golemcpp.golem.template import Template
@@ -418,9 +423,6 @@ class Context:
                 raise RuntimeError("Not implemented yet")
         return None
 
-    def link_min(self, dep=None):
-        return self.link(dep)[:2]
-
     def is_static(self):
         return self.context.options.link == self.link_static()
 
@@ -448,18 +450,6 @@ class Context:
     def is_runtime_variant_release(self):
         return self.runtime_variant() == self.variant_release()
 
-    def runtime_link_min(self, dep=None):
-        return self.runtime_link(dep)[:2]
-
-    def runtime_variant_min(self, dep=None):
-        return self.runtime_variant(dep)[:1]
-
-    def arch(self):
-        return self.context.options.arch
-
-    def arch_min(self):
-        return self.arch()
-
     @staticmethod
     def variant_debug():
         return 'debug'
@@ -468,8 +458,9 @@ class Context:
     def variant_release():
         return 'release'
 
-    def variant(self):
-        return self.context.options.variant
+    def variant(self, dep=None):
+        return self.context.options.variant if dep is None or not dep.variant else dep.variant[
+            0]
 
     def variant_suffix(self):
         variant = ''
@@ -550,30 +541,17 @@ class Context:
     def is_release(self):
         return self.context.options.variant == self.variant_release()
 
-    def variant_min(self, dep=None):
-        if dep and dep.variant:
-            v = dep.variant[0].lower()
-            if v in ['release', 'debug']:
-                return v[:1]
-            else:
-                return v
-        return self.context.options.variant[:1]
-
     @staticmethod
     def os_windows():
-        return 'windows'
+        return target_platform.OS_WINDOWS
 
     @staticmethod
     def os_linux():
-        return 'linux'
+        return target_platform.OS_LINUX
 
     @staticmethod
     def os_osx():
-        return 'osx'
-
-    @staticmethod
-    def os_android():
-        return 'android'
+        return target_platform.OS_MACOS
 
     @staticmethod
     def is_windows():
@@ -591,23 +569,30 @@ class Context:
     def is_darwin():
         return sys.platform.startswith('darwin')
 
-    def is_android(self):
-        return False and self.has_android_ndk_path()
+    def arch_request(self):
+        '''The architecture that was asked for, or '' when none was.'''
+        return target_resolver.arch_request(self.context.options)
+
+    def target(self):
+        '''
+        What this build is for. Only available once a compiler has answered.
+
+        The alternative is to fall back to the request or the host, and both
+        are provisional values that would flow into a build slug and an
+        advertisement and be wrong there, silently.
+        '''
+        resolved = getattr(self.context.options, 'resolved_arch', None)
+        if not resolved:
+            raise RuntimeError(
+                "The target architecture is not resolved yet. It is settled "
+                "during configure, once the compiler has been asked what it "
+                "builds for. If this came from a stale build directory, "
+                "configure again.")
+        return TargetPlatform(osystem=target_platform.host_osystem(),
+                              arch=resolved)
 
     def osname(self):
-        osname = ''
-        if self.is_android():
-            osname = Context.os_android()
-        elif Context.is_windows():
-            osname = Context.os_windows()
-        elif Context.is_linux():
-            osname = Context.os_linux()
-        elif Context.is_darwin():
-            osname = Context.os_osx()
-        return osname
-
-    def osname_min(self):
-        return self.osname()[:3]
+        return self.target().osystem
 
     def compiler(self):
         return self.context.env.CXX_NAME + '-' + '.'.join(
@@ -619,10 +604,6 @@ class Context:
     def compiler_version(self):
         return '.'.join(self.context.env.CC_VERSION)
 
-    def compiler_min(self):
-        return self.context.env.CXX_NAME[:1] + ''.join(
-            self.context.env.CC_VERSION)
-    
     def is_msvc_like(self):
         return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
     
@@ -731,43 +712,87 @@ class Context:
 
     @staticmethod
     def machine():
-        if os.name == 'nt' and sys.version_info[:2] < (2, 7):
-            return os.environ.get("PROCESSOR_ARCHITEW6432",
-                                  os.environ.get('PROCESSOR_ARCHITECTURE', ''))
-        else:
-            return platform.machine()
-
-    @staticmethod
-    def osarch_parser(arch):
-        machine2bits = {
-            'amd64': 'x64',
-            'x86_64': 'x64',
-            'x64': 'x64',
-            'x86_amd64': 'x64',
-            'i386': 'x86',
-            'i686': 'x86',
-            'x86': 'x86',
-            'amd64_x86': 'x86'
-        }
-        return machine2bits.get(arch.lower(), None)
-
-    @staticmethod
-    def osarch():
-        return Context.osarch_parser(Context.machine())
+        return platform.machine()
 
     def get_arch(self):
-        return Context.osarch_parser(self.context.options.arch)
+        return self.target().arch
 
-    def is_x86(self):
-        return self.get_arch() == 'x86'
+    def arch_capability(self):
+        return self.target().capability
 
-    def is_x64(self):
-        return self.get_arch() == 'x64'
+    def selecting_capability(self):
+        '''
+        The capability allowed to emit flags that *select* a target.
+
+        The target is what the build turned out to be; this is what was asked
+        for, and only a request may instruct a compiler.
+
+        Empty when nothing was asked. There is then nothing to select and no
+        flag to emit: whatever the compiler builds by default is the answer,
+        and it gets recorded rather than overridden.
+        '''
+        return target_platform.arch_capability(self.arch_request())
+
+    def msvc_target_preference(self):
+        '''
+        The order waf tries Visual Studio's toolchains in.
+
+        A request narrows the order to that one toolchain, because an
+        architecture Visual Studio cannot supply is an error rather than
+        something to fall back from.
+
+        Otherwise the host's own toolchain goes first, and waf's order follows.
+        '''
+        requested = self.selecting_capability().msvc_target
+        if requested:
+            return [requested]
+
+        # One Visual Studio installation ships several cross toolchains, and
+        # waf's order is fixed and begins at x64. Therefore an ARM64 machine
+        # with the x64 cross tools installed builds x64. A native build means
+        # the host's own architecture, so the host is put first. Nothing is
+        # dropped from the order, therefore it stays a preference and never a
+        # filter.
+        native = target_platform.arch_capability(
+            target_platform.host_arch()).msvc_target
+        # waf's list stays waf's, rather than being copied and left to rot.
+        order = [name for name, _ in msvc.all_msvc_platforms]
+        return [native] + order if native else order
+
+    def vcvars_arg(self):
+        '''
+        The argument vcvarsall.bat wants for this target.
+        '''
+        vcvars_arg = self.arch_capability().vcvars_arg
+        if not vcvars_arg:
+            raise RuntimeError(
+                "No vcvarsall argument for architecture '{}': it is not a "
+                "target MSVC builds for.".format(self.get_arch()))
+        return vcvars_arg
+
+    def vs_platform(self, arch=None):
+        '''
+        Visual Studio's name for the target, for MSBuild's /p:Platform and
+        CMake's -A.
+        '''
+        capability = (self.arch_capability() if arch is None else
+                      target_platform.arch_capability(arch))
+        vs_platform = capability.vs_platform
+        if not vs_platform:
+            raise RuntimeError(
+                "No Visual Studio platform for architecture '{}'. Visual "
+                "Studio builds for {}.".format(
+                    target_platform.normalize_arch(arch) if arch else
+                    self.get_arch(),
+                    ', '.join(arch for arch, capability in
+                              target_platform.ARCH_CAPABILITIES.items()
+                              if capability.vs_platform)))
+        return vs_platform
 
     def get_arch_for_linux(self, arch=None):
-        machine2bits = {'x64': 'amd64', 'x86': 'i386'}
-        return machine2bits.get(
-            self.get_arch() if arch is None else arch.lower(), None)
+        capability = (self.target().capability
+                      if arch is None else target_platform.arch_capability(arch))
+        return capability.debian_arch or None
 
     def get_build_runtime(self):
         if self.context.env.MSVC_VERSION:
@@ -779,8 +804,6 @@ class Context:
                 return 'iphoneos'
             else:
                 return 'macosx'
-        elif self.is_android():
-            return 'android'
         else:
             return str(platform.libc_ver()[0])
 
@@ -794,9 +817,6 @@ class Context:
                 return str(self.context.env.IPHONEOS_DEPLOYMENT_TARGET)
             else:
                 return str(platform.mac_ver()[0])
-        elif self.is_android():
-            # minSdkVersion (__ANDROID_API__)
-            raise RuntimeError("Not implemented yet")
         else:
             return str(platform.libc_ver()[1])
 
@@ -833,7 +853,7 @@ class Context:
                            help="Library Linking (shared, static)")
         context.add_option("--arch",
                            action="store",
-                           default=Context.osarch(),
+                           default=None,  # unset observes; see resolve_target_arch
                            help="Target Architecture")
 
         context.add_option("--major",
@@ -883,31 +903,6 @@ class Context:
                                action="store_true",
                                default=True,
                                help="Unicode Support")
-
-        context.add_option("--android-ndk",
-                           action="store",
-                           default='',
-                           help="Android NDK path")
-        context.add_option("--android-sdk",
-                           action="store",
-                           default='',
-                           help="Android SDK path")
-        context.add_option("--android-ndk-platform",
-                           action="store",
-                           default='',
-                           help="Android NDK platform version")
-        context.add_option("--android-sdk-platform",
-                           action="store",
-                           default='',
-                           help="Android SDK platform version")
-        context.add_option("--android-jdk",
-                           action="store",
-                           default='',
-                           help="JDK path to use when packaging Android app")
-        context.add_option("--android-arch",
-                           action="store",
-                           default='',
-                           help="Android target architecture")
 
         context.add_option("--keep-resolved-dependencies",
                            action="store_true",
@@ -1044,11 +1039,6 @@ class Context:
 
     def configure_default(self):
         if self.is_msvc_like():
-            if self.is_x86():
-                self.context.env.MSVC_TARGETS = ['x86']
-            elif self.is_x64():
-                self.context.env.MSVC_TARGETS = ['amd64']
-
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
         if self.is_darwin():
@@ -1067,13 +1057,13 @@ class Context:
         if not self.context.options.nounicode:
             flags['defines'].append('UNICODE')
 
+        capability = self.selecting_capability()
+
         if self.is_msvc_like():
-            if self.is_x86():
-                flags['linkflags'].append('/MACHINE:X86')
-                flags['arflags'].append('/MACHINE:X86')
-            elif self.is_x64():
-                flags['linkflags'].append('/MACHINE:X64')
-                flags['arflags'].append('/MACHINE:X64')
+            if capability.msvc_machine:
+                machine_flag = '/MACHINE:' + capability.msvc_machine
+                flags['linkflags'].append(machine_flag)
+                flags['arflags'].append(machine_flag)
 
             default_flags = ['/DWIN32', '/D_WINDOWS', '/GR', '/EHsc']
             flags['cflags'] += default_flags
@@ -1138,13 +1128,11 @@ class Context:
             # '/DLL'        # builds a DLL
             # '/TLBID:1'    # resource ID of the linker-generated type library
 
-        elif not self.is_android():
-            if self.is_x86():
-                flags['cflags'].append('-m32')
-                flags['cxxflags'].append('-m32')
-            elif self.is_x64():
-                flags['cflags'].append('-m64')
-                flags['cxxflags'].append('-m64')
+        else:
+            for arch_flag in capability.gnu_flags:
+                flags['cflags'].append(arch_flag)
+                flags['cxxflags'].append(arch_flag)
+                flags['linkflags'].append(arch_flag)
 
         variant = self.variant() if variant is None else variant
 
@@ -1248,11 +1236,6 @@ class Context:
         # init default environment variables
         self.configure_init()
         self.configure_default()
-
-        # android specific flags
-        self.append_android_cxxflags()
-        self.append_android_linkflags()
-        self.append_android_ldflags()
 
         self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
@@ -1584,7 +1567,12 @@ class Context:
             '--runtime-link={}'.format(self.runtime_link(dep)),
             '--runtime-variant={}'.format(self.runtime_variant(dep)),
             '--link={}'.format(self.link(dep)),
-            '--arch={}'.format(self.context.options.arch),
+            # The resolved identity, not the request: this build has already
+            # observed what its compiler produces, so the dependency is told
+            # rather than left to observe independently. It also means a child
+            # whose compiler disagrees fails instead of building something the
+            # parent cannot link.
+            '--arch={}'.format(self.get_arch()),
             '--variant={}'.format(self.context.options.variant if not dep.variant else dep.variant[0]),
             '--export={}'.format(dep_path),
             '--resolved-dependencies-directory={}'.format(build_path),
@@ -2425,11 +2413,7 @@ class Context:
         if self.is_windows():
             version_short = None
 
-        target_type = None
-        if config.type_unique == 'program' and self.is_android():
-            target_type = 'library'
-        else:
-            target_type = config.type
+        target_type = config.type
 
         target_cxxflags = config.program_cxxflags if target_type == 'program' else config.library_cxxflags
         target_linkflags = config.program_linkflags if target_type == 'program' else config.library_linkflags
@@ -3049,9 +3033,7 @@ class Context:
 
         build_fun = None
 
-        if task.type_unique == 'program' and self.is_android():
-            build_fun = self.context.shlib
-        elif task.type_unique == 'library':
+        if task.type_unique == 'library':
             if task.link:
                 if task.link_unique == 'shared':
                     build_fun = self.context.shlib
@@ -3323,7 +3305,7 @@ class Context:
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
         call_msvc = 'call ' + subprocess.list2cmdline(
-            [vcvars, self.context.env['MSVC_TARGETS'][0]])
+            [vcvars, self.vcvars_arg()])
         build_cmd = call_msvc + ' && ' + subprocess.list2cmdline(command)
         if subprocess.call(['cmd', '/d', '/s', '/c', build_cmd], cwd=cwd, shell=False):
             return 1
@@ -3405,7 +3387,7 @@ class Context:
         if configuration is None:
             configuration = 'Release' if self.is_release() else 'Debug'
         if platform is None:
-            platform = self.get_arch()
+            platform = self.vs_platform()
         if toolset is None:
             toolset = self.get_current_msvc_toolset()
 
@@ -3576,14 +3558,8 @@ class Context:
         else:
             opt_link += 'ON'
 
-        opt_arch = ['-A']
-        if self.is_x64():
-            opt_arch.append('x64')
-        else:
-            opt_arch.append('x86')
-
-        if not self.is_windows():
-            opt_arch = []
+        # -A is a Visual Studio generator option
+        opt_arch = ['-A', self.vs_platform(arch)] if self.is_windows() else []
 
         prefix_dir = os.path.join(build_path, 'install')
         if not os.path.exists(prefix_dir):
@@ -3648,6 +3624,14 @@ class Context:
         if 'runtime_variant' not in options:
             options['runtime_variant'] = None
 
+        # An env saved by an older version carries the word-size vocabulary
+        # ('x64', 'x86'). Normalizing on the way back in is what stops it
+        # bypassing the canonical names, since nothing downstream parses arch
+        # again.
+        for key in ('arch', 'resolved_arch'):
+            if options.get(key):
+                options[key] = target_platform.normalize_arch(options[key])
+
         if not self.context.options.targets:
             self.context.options.targets = options['targets']
         else:
@@ -3676,404 +3660,9 @@ class Context:
                 'qtbase5-private-dev'
             ])
 
-    def make_android_ndk_path(self, path=None):
-        android_ndk_path = self.context.options.android_ndk
-
-        if not android_ndk_path:
-            android_ndk_path = helpers.get_environ('ANDROID_NDK_ROOT')
-
-        if android_ndk_path and path:
-            android_ndk_path = os.path.join(android_ndk_path, path)
-
-        if android_ndk_path:
-            return android_ndk_path
-
-        return ''
-
-    def has_android_ndk_path(self):
-        return self.make_android_ndk_path() != ''
-
-    def check_android_ndk_path(self):
-        path = self.make_android_ndk_path()
-        assert path != ''
-        assert os.path.exists(path)
-
-    def make_android_ndk_host(self):
-        return 'linux-x86_64'
-
-    def make_android_compiler_path(self):
-        default_arch = 'arm64_v8a'
-        default_compiler = 'clang++'
-
-        android_ndk_path = self.make_android_ndk_path()
-
-        anrdoid_current_host = self.make_android_ndk_host()
-        path_to_android_compiler_base = os.path.join(
-            'toolchains/llvm/prebuilt/', anrdoid_current_host, 'bin')
-
-        android_arch = self.make_android_arch()
-        android_ndk_platform = self.make_android_ndk_platform()
-
-        if android_arch == default_arch:
-            path_to_android_compiler = os.path.join(
-                path_to_android_compiler_base, default_compiler)
-        else:
-            path_to_android_compiler = os.path.join(
-                path_to_android_compiler_base, android_arch +
-                'linux-androideabi' + android_ndk_platform + '-clang++')
-
-        path_to_android_compiler = os.path.join(android_ndk_path,
-                                                path_to_android_compiler)
-
-        return path_to_android_compiler
-
-    def make_android_sdk_path(self):
-        android_sdk_path = self.context.options.android_sdk
-        if android_sdk_path:
-            return android_sdk_path
-
-        android_sdk_path = helpers.get_environ('ANDROID_SDK_ROOT')
-        if android_sdk_path:
-            return android_sdk_path
-
-        android_sdk_path = helpers.get_environ('ANDROID_HOME')
-        if android_sdk_path:
-            return android_sdk_path
-
-        return ''
-
-    def has_android_sdk_path(self):
-        return self.make_android_sdk_path() != ''
-
-    def check_android_sdk_path(self):
-        path = self.make_android_sdk_path()
-        assert path != ''
-        assert os.path.exists(path)
-
-    def make_android_jdk_path(self):
-        android_jdk_path = self.context.options.android_jdk
-        if android_jdk_path:
-            return android_jdk_path
-
-        android_jdk_path = helpers.get_environ('JAVA_HOME')
-        if android_jdk_path:
-            return android_jdk_path
-
-        return ''
-
-    def has_android_jdk_path(self):
-        return self.make_android_jdk_path() != ''
-
-    def check_android_jdk_path(self):
-        path = self.make_android_jdk_path()
-        assert path != ''
-        assert os.path.exists(path)
-
-    def make_android_ndk_platform(self):
-        android_ndk_platform = self.context.options.android_ndk_platform
-        if android_ndk_platform:
-            return android_ndk_platform
-
-        android_ndk_platform = helpers.get_environ('ANDROID_NDK_PLATFORM')
-        if android_ndk_platform:
-            return android_ndk_platform
-
-        return ''
-
-    def has_android_ndk_platform(self):
-        return self.make_android_ndk_platform() != ''
-
-    def check_android_ndk_platform(self):
-        android_ndk_platform = self.make_android_ndk_platform()
-        assert android_ndk_platform != ''
-        assert helpers.RepresentsInt(android_ndk_platform)
-
-    def make_android_sdk_platform(self):
-        android_sdk_platform = self.context.options.android_sdk_platform
-        if android_sdk_platform:
-            return android_sdk_platform
-
-        android_sdk_platform = helpers.get_environ('ANDROID_SDK_PLATFORM')
-        if android_sdk_platform:
-            return android_sdk_platform
-
-        return ''
-
-    def has_android_sdk_platform(self):
-        return self.make_android_sdk_platform() != ''
-
-    def check_android_sdk_platform(self):
-        android_sdk_platform = self.make_android_sdk_platform()
-        assert android_sdk_platform != ''
-        assert helpers.RepresentsInt(android_sdk_platform)
-
-    def make_android_sdk_build_tools_version(self):
-        return "28.0.3"
-
-    def make_android_arch(self):
-        android_arch = self.context.options.android_arch
-        if android_arch:
-            return android_arch
-
-        android_arch = helpers.get_environ('ANDROID_ARCH')
-        if android_arch:
-            return android_arch
-
-        return ''
-
-    def has_android_arch(self):
-        return self.make_android_arch() != ''
-
-    def check_android_arch(self):
-        android_arch = self.make_android_arch()
-        assert android_arch != ''
-
     def configure_compiler(self):
-        if self.is_android():
-            self.check_android_ndk_platform()
-            self.check_android_arch()
-            self.check_android_ndk_path()
-
-            path_to_android_compiler = self.make_android_compiler_path()
-            assert os.path.exists(path_to_android_compiler)
-            self.context.env.CXX = path_to_android_compiler
-
         if 'CXX' in os.environ and os.environ['CXX']:  # Pull in the compiler
             self.context.env.CXX = os.environ['CXX']  # override default
-
-    def make_android_toolchain_target(self):
-        return "aarch64-none-linux-android"
-
-    def make_android_toolchain_version(self):
-        return "4.9"
-
-    def make_android_toolchain_target_directory(self):
-        return "aarch64-linux-android-" + self.make_android_toolchain_version()
-
-    def make_android_toolchain_include_directory(self):
-        return "aarch64-linux-android"
-
-    def make_android_toolchain_path(self):
-
-        toolchain_target_arch_directory = self.make_android_toolchain_target_directory(
-        )
-        toolchain_host_directory = self.make_android_ndk_host()
-        toolchain_path = os.path.join("toolchains",
-                                      toolchain_target_arch_directory,
-                                      "prebuilt", toolchain_host_directory)
-
-        return self.make_android_ndk_path(toolchain_path)
-
-    def make_android_platform_arch_name(self):
-        return "arch-arm64"
-
-    def make_android_sysroot_path_for_linker(self):
-        return self.make_android_ndk_path(
-            os.path.join("platforms",
-                         "android-" + self.make_android_ndk_platform(),
-                         self.make_android_platform_arch_name()))
-
-    def append_android_cxxflags(self):
-        if not self.is_android():
-            return
-
-        flags = [
-            "-D__ANDROID_API__=" + self.make_android_ndk_platform(),
-            "-target",
-            self.make_android_toolchain_target(),
-            "-gcc-toolchain",
-            self.make_android_toolchain_path(),
-            "-DANDROID_HAS_WSTRING",
-            "--sysroot=" + self.make_android_ndk_path("sysroot"),
-            "-isystem",
-            self.make_android_ndk_path(
-                "sysroot/usr/include/" +
-                self.make_android_toolchain_include_directory()),
-            "-isystem",
-            self.make_android_ndk_path("sources/cxx-stl/llvm-libc++/include"),
-            "-isystem",
-            self.make_android_ndk_path("sources/android/support/include"),
-            "-isystem",
-            self.make_android_ndk_path(
-                "sources/cxx-stl/llvm-libc++abi/include"),
-            "-fstack-protector-strong",
-            "-DANDROID",
-        ]
-
-        if self.project.qt and os.path.exists(self.context.options.qtdir):
-            flags += [
-                "-I" + os.path.join(self.context.options.qtdir,
-                                    "mkspecs/android-clang")
-            ]
-
-        self.context.env.CXXFLAGS += flags
-        self.context.env.CFLAGS += flags
-
-    def append_android_linkflags(self):
-        if not self.is_android():
-            return
-
-        self.context.env.LINKFLAGS += [
-            "-D__ANDROID_API__=" + self.make_android_ndk_platform(), "-target",
-            self.make_android_toolchain_target(), "-gcc-toolchain",
-            self.make_android_toolchain_path(), "-Wl,--exclude-libs,libgcc.a",
-            "--sysroot=" + self.make_android_sysroot_path_for_linker()
-        ]
-
-    def make_android_arch_hyphens(self):
-        return self.make_android_arch().replace('_', '-')
-
-    def append_android_ldflags(self):
-        if not self.is_android():
-            return
-
-        android_libs_path = self.make_android_ndk_path(
-            "sources/cxx-stl/llvm-libc++/libs/" +
-            self.make_android_arch_hyphens())
-        self.context.env.LDFLAGS += [
-            "-L" + android_libs_path,
-            os.path.join(android_libs_path,
-                         "libc++.so." + self.make_android_ndk_platform()),
-        ]
-
-    def package_android(self, package_build_context):
-        targets = list()
-
-        self.check_android_sdk_path()
-        self.check_android_sdk_platform()
-        self.check_android_jdk_path()
-        assert self.context.options.qtdir != '' and os.path.exists(
-            self.context.options.qtdir)
-
-        print("Check package's targets")
-
-        depends = package_build_context.configuration.packages
-
-        assert len(targets) == 1
-
-        target_binaries = []
-        for target in targets:
-            target_binaries += self.make_artifacts_from_context(
-                package_build_context.configuration, target)
-
-        target_binary = None
-        for target in target_binaries:
-            if str(target).endswith('.so') or str(target).endswith(
-                    '.dll') or str(target).endswith('.dylib'):
-                target_binary = os.path.join(self.make_out_path(), target)
-        assert target_binary is not None
-
-        target_dependencies = []
-        for target in self.get_targets_to_process(
-                package_build_context.configuration.use):
-            for target_name in self.make_artifacts_from_context(
-                    package_build_context.configuration, target):
-                if str(target_name).endswith('.so') or str(
-                        target_name).endswith('.dll') or str(
-                            target_name).endswith('.dylib'):
-                    target_dependencies.append(
-                        os.path.join(self.make_out_path(), target_name))
-
-        for dep_name in package_build_context.configuration.deps:
-            for dep in self.project.deps:
-                if dep_name == dep.name:
-                    if str(dep_name).endswith('.so') or str(dep_name).endswith(
-                            '.dll') or str(dep_name).endswith('.dylib'):
-                        target_dependencies.append(
-                            os.path.join(
-                                self.make_out_path(),
-                                self.make_artifacts_from_context(
-                                    package_build_context.configuration, dep)))
-
-        # Don't run this script as root
-
-        print("Gather package metadata")
-        package_name = package_build_context.package.name
-        package_description = package_build_context.package.description
-
-        print("Clean-up")
-        package_directory = self.make_output_path('dist')
-        helpers.remove_tree(package_directory)
-
-        # Strip binaries, libraries, archives
-
-        print("Prepare package")
-        package_directory = helpers.make_directory(
-            os.path.join(package_directory, package_name))
-        bin_directory = helpers.make_directory(
-            package_directory,
-            os.path.join('libs', self.make_android_arch_hyphens()))
-
-        print("Copying " + str(self.make_out_path()) + " to " +
-              str(bin_directory))
-        helpers.copy_file(target_binary, bin_directory)
-        for target in target_dependencies:
-            helpers.copy_file(target, bin_directory)
-
-        android_package_file = self.make_build_path('android-package.json')
-        print("Create android package file" + str(android_package_file))
-
-        #target_binary = os.path.realpath(os.path.join(bin_directory, os.path.basename(target_binary)))
-        target_binary = os.path.realpath(target_binary)
-        extra_libs = []
-        for target in target_dependencies:
-            #extra_libs.append(os.path.realpath(os.path.join(bin_directory, os.path.basename(target))))
-            extra_libs.append(os.path.realpath(target))
-
-        qt_path = str(self.context.options.qtdir)
-        ndk_path = str(self.make_android_ndk_path())
-        sdk_path = str(self.make_android_sdk_path())
-
-        def remove_last_slash(string):
-            if string[-1] == '/':
-                string = string[:-1]
-            return string
-
-        qt_path = remove_last_slash(qt_path)
-        ndk_path = remove_last_slash(ndk_path)
-        sdk_path = remove_last_slash(sdk_path)
-
-        data = OrderedDict({
-            "description": package_description,  # One sentence description
-            "qt": qt_path,
-            "sdk": sdk_path,
-            "sdkBuildToolsRevision": self.
-            make_android_sdk_build_tools_version(),
-            "ndk": ndk_path,
-            "toolchain-prefix": "llvm",
-            "tool-prefix": "llvm",
-            "toolchain-version": self.make_android_toolchain_version(),
-            "ndk-host": self.make_android_ndk_host(),
-            "target-architecture": self.make_android_arch_hyphens(),
-            "android-extra-libs": ",".join(extra_libs),
-            "stdcpp-path": self.make_android_ndk_path(
-                "sources/cxx-stl/llvm-libc++/libs/" +
-                self.make_android_arch_hyphens() + "/libc++_shared.so"),
-            "useLLVM": True,
-            "application-binary": target_binary
-        })
-
-        qml_enabled = False
-        if qml_enabled:
-            qml_path = ""
-            qml_path = remove_last_slash(qml_path)
-            data["qml-root-path"] = qml_path
-
-        with open(android_package_file, 'w') as outfile:
-            json.dump(data, outfile, indent=4, sort_keys=True)
-
-        print("Build package")
-        command = [
-            os.path.join(self.context.options.qtdir, 'bin/androiddeployqt'),
-            '--input', android_package_file, '--output', package_directory,
-            '--android-platform',
-            'android-' + self.make_android_sdk_platform(), '--jdk',
-            self.make_android_jdk_path(), '--gradle'
-        ]
-
-        if self.is_release() and False:
-            command += ["--sign", "", "--storepass", "", "--keypass", ""]
-        helpers.run_task(command, cwd=self.get_output_path())
 
     def load_recipe(self):
         recipe_id = self.context.options.recipe
@@ -4172,8 +3761,7 @@ class Context:
         print(msvc_path)
 
         vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
-        call_msvc = 'call "' + vcvars + '" ' + \
-            self.context.env['MSVC_TARGETS'][0] + ' && '
+        call_msvc = 'call "' + vcvars + '" ' + self.vcvars_arg() + ' && '
         print(call_msvc)
         return call_msvc
 
@@ -4246,6 +3834,21 @@ class Context:
         self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
 
+        # The compiler comes first because everything after it may ask what
+        # this build is for.
+        # 
+        # A condition can name an architecture, an operating system or a
+        # compiler, and all three are answers only the chosen toolchain gives,
+        # so selecting tasks before finding it would match them against a
+        # target nobody had settled yet.
+        self.context.setenv('main')
+        self.configure_compiler()
+        if self.is_windows():
+            self.context.env.MSVC_TARGETS = self.msvc_target_preference()
+        self.context.load(['compiler_c', 'compiler_cxx'])
+        self.context.options.resolved_arch = target_resolver.TargetResolver(
+            self.context, msvc=self.is_msvc_like()).resolve()
+
         tasks_and_targets = self.get_tasks_and_targets_to_process()
 
         is_qt6_used = False
@@ -4256,8 +3859,8 @@ class Context:
             if (self.is_qt6_used(config=task)):
                 is_qt6_used = True
 
-        # features list
-        features_to_load = ['compiler_c', 'compiler_cxx']
+        # features list, beyond the compiler loaded above
+        features_to_load = []
 
         # compile_commands.json generated by Waf
         if self.context.options.compile_commands or self.context.options.vscode or self.context.options.clangd:
@@ -4288,34 +3891,25 @@ class Context:
             self.autodiscover_cppfront()
             features_to_load.append('cppfront')
         
-        self.context.setenv('main')
-        self.configure_compiler()
-        if self.is_windows():
-            self.context.env.MSVC_TARGETS = [
-                'x86' if self.get_arch() == 'x86' else 'x64'
-            ]
-        self.context.load(features_to_load)
+        if features_to_load:
+            self.context.load(features_to_load)
         self.save_options()
 
         if self.context.options.force_version:
             self.version.force_version(self.context.options.force_version)
 
     def build_path(self, dep=None):
-        if self.is_windows():
-            return self.osname()[:1] + ('64' if self.get_arch(
-            ) == 'x64' else '32') + self.compiler_min() + self.runtime_link_min(
-                dep) + self.runtime_variant_min(dep) + self.link_min(
-                dep) + self.variant_min(dep)
-        else:
-            return self.osname() + '-' + self.arch_min() + '-' + self.compiler(
-            ) + '-' + self.runtime_link_min(dep) + '-' + self.link_min(
-                dep) + '-' + self.variant_min(dep)
-
-    def build_path_build(self, dep=None):
-        if self.is_windows():
-            return self.build_path(dep) + 'b'
-        else:
-            return self.build_path(dep) + '-build'
+        return str(
+            build_slug.BuildSlug(osystem=self.osname(),
+                                 arch=self.get_arch(),
+                                 # CXX_NAME with CC_VERSION reads mismatched
+                                 # and is not: waf's C++ tools write
+                                 # CC_VERSION too, and compiler_cxx loads last.
+                                 compiler=self.compiler(),
+                                 runtime_link=self.runtime_link(dep),
+                                 runtime_variant=self.runtime_variant(dep),
+                                 link=self.link(dep),
+                                 variant=self.variant(dep)))
 
     def find_dependency(self, dep_name):
         found_dep = None
@@ -5716,10 +5310,7 @@ class Context:
 
         for package_build_context in packages_to_process:
             package_build_context.process_config()
-            if self.is_android():
-                self.package_android(
-                    package_build_context=package_build_context)
-            elif self.is_windows():
+            if self.is_windows():
                 package_msi(self=self,
                             package_build_context=package_build_context)
             elif self.is_darwin():

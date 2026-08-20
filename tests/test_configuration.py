@@ -1,6 +1,7 @@
 import pytest
 from types import SimpleNamespace
 
+from golemcpp.golem import configuration
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition import Condition
 from golemcpp.golem.context import Context
@@ -91,7 +92,7 @@ def test_configuration_merge_matches_runtime_link_and_runtime_variant():
         runtime_link=lambda: 'shared',
         runtime_variant=lambda: 'release',
         osname=lambda: 'windows',
-        arch=lambda: 'x64',
+        get_arch=lambda: 'x86_64',
         compiler_name=lambda: 'msvc',
         distribution=lambda: None,
         release=lambda: None,
@@ -111,7 +112,7 @@ def test_configuration_merge_rejects_non_matching_runtime_variant():
         runtime_link=lambda: 'shared',
         runtime_variant=lambda: 'debug',
         osname=lambda: 'windows',
-        arch=lambda: 'x64',
+        get_arch=lambda: 'x86_64',
         compiler_name=lambda: 'msvc',
         distribution=lambda: None,
         release=lambda: None,
@@ -149,7 +150,7 @@ def test_configuration_merge_copy_keeps_no_defaults_when_any_match_enables_it():
         runtime_link=lambda: 'shared',
         runtime_variant=lambda: 'debug',
         osname=lambda: 'linux',
-        arch=lambda: 'x64',
+        get_arch=lambda: 'x86_64',
         compiler_name=lambda: 'gcc',
         distribution=lambda: None,
         release=lambda: None,
@@ -205,3 +206,131 @@ def test_strip_language_standard_flags_removes_existing_standard_flags():
 def test_make_cxx_standard_flag_rejects_unsupported_msvc_standard():
     with pytest.raises(RuntimeError, match=r"Unsupported C\+\+ standard"):
         Context.make_cxx_standard_flag('12', 'msvc')
+
+# --- The condition vocabulary ------------------------------------------
+
+
+def make_matching_context(*, osname, arch):
+    return SimpleNamespace(
+        variant=lambda: 'debug',
+        link=lambda: 'shared',
+        runtime_link=lambda: 'shared',
+        runtime_variant=lambda: 'debug',
+        osname=lambda: osname,
+        get_arch=lambda: arch,
+        compiler_name=lambda: 'gcc',
+        distribution=lambda: None,
+        release=lambda: None,
+    )
+
+
+@pytest.mark.parametrize('written, canonical', [
+    ('x64', 'x86_64'),
+    ('amd64', 'x86_64'),
+    ('arm64', 'aarch64'),
+    ('x86', 'i686'),
+])
+def test_an_architecture_condition_is_stored_canonically(written, canonical):
+    # A condition and a build meet only as strings, so a recipe saying x64 has
+    # to become the word the context reports or it silently stops matching.
+    assert Condition(arch=[written]).arch == [canonical]
+
+
+@pytest.mark.parametrize('written, canonical', [
+    ('osx', 'macos'),
+    ('darwin', 'macos'),
+    ('Windows', 'windows'),
+])
+def test_an_operating_system_condition_is_stored_canonically(written,
+                                                             canonical):
+    assert Condition(osystem=[written]).osystem == [canonical]
+
+
+def test_the_keyword_form_normalizes_too():
+    # when(arch=...) reaches parse_entry rather than the constructor, and it
+    # is the form every recipe actually uses.
+    condition = Condition()
+    condition.parse_entry('arch', 'x64')
+    condition.parse_entry('osystem', 'osx')
+
+    assert condition.arch == ['x86_64']
+    assert condition.osystem == ['macos']
+
+
+def test_a_condition_written_before_the_rename_still_matches():
+    # Restoring from JSON goes through parse_entry as well, so a cookbook or
+    # artifact recorded with the old spelling is normalized on the way in
+    # instead of needing a migration.
+    condition = Condition.unserialize_from_json({
+        'arch': ['x64'],
+        'osystem': 'osx',
+    })
+
+    assert condition.arch == ['x86_64']
+    assert condition.osystem == ['macos']
+
+
+def test_a_serialized_configuration_normalizes_on_the_way_back_in():
+    # Configuration.read_json delegates to Condition's before its own, so a
+    # cookbook or artifact recorded with the old spelling needs no migration.
+    config = Configuration.unserialize_from_json({
+        'arch': ['x64'],
+        'osystem': ['osx'],
+        'defines': ['D'],
+    })
+
+    assert config.arch == ['x86_64']
+    assert config.osystem == ['macos']
+
+
+def test_an_old_spelling_still_selects_a_configuration():
+    # The whole point, end to end: an unmigrated recipe against a context that
+    # now reports the canonical names.
+    context = make_matching_context(osname='macos', arch='x86_64')
+    override = Configuration(osystem=['osx'], arch=['x64'],
+                             defines=['LEGACY_SPELLING'])
+
+    merged = Configuration().merge_copy(context=context, configs=[override])
+
+    assert 'LEGACY_SPELLING' in merged.defines
+
+
+@pytest.mark.parametrize('key, arch, osystem', [
+    ('?x64', ['x86_64'], []),
+    ('?aarch64', ['aarch64'], []),
+    ('?arm64+linux', ['aarch64'], ['linux']),
+    ('?osx', [], ['macos']),
+])
+def test_the_shorthand_form_reads_the_whole_vocabulary(key, arch, osystem):
+    # It used to know four words: x86, x64, windows, linux and osx. Anything
+    # else fell through and the condition quietly did nothing.
+    config = Configuration().parse_special_entry(key, {})[0]
+
+    assert config.arch == arch
+    assert config.osystem == osystem
+
+
+def test_a_negated_architecture_stays_negated():
+    # arch was the only axis of nine appending the modifier-stripped word, so
+    # '?!x64' recorded 'x64' and matched exactly what it excluded.
+    config = Configuration().parse_special_entry('?!x64', {})[0]
+
+    assert config.arch == ['!x86_64']
+
+
+def test_an_unknown_condition_is_reported_rather_than_dropped(monkeypatch):
+    # Silence here means a condition nobody can satisfy, and if it is the only
+    # entry the whole block goes with it.
+    warnings = []
+    monkeypatch.setattr(configuration.Logs, 'warn',
+                        lambda message, *args: warnings.append(message))
+
+    assert Configuration().parse_special_entry('?sparc99', {}) == []
+    assert len(warnings) == 1
+    assert 'sparc99' in warnings[0]
+
+
+def test_an_expression_is_left_for_the_evaluator():
+    # Normalizing a whole value would mangle it. No recipe writes one, and
+    # intersection() composes them out of values normalized on the way in.
+    assert Condition(arch=['(x64+arm64)']).arch == ['(x64+arm64)']

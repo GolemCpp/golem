@@ -54,10 +54,13 @@ jobs:
           echo "Building $version"
 
   tests:
-    # Release tags are gated on the full suite; develop pushes on unit tests.
+    # A version tag runs unit, configure, integration and
+    # integration-emulated. A push to develop runs unit and configure,
+    # which take no switch.
     uses: ./.github/workflows/tests.yml
     with:
       integration: ${{ startsWith(github.ref, 'refs/tags/') }}
+      integration-emulated: ${{ startsWith(github.ref, 'refs/tags/') }}
 
   build-golemcpp-waflib:
     name: Build golemcpp-waflib
