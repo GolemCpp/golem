@@ -8,6 +8,7 @@ from enum import Enum
 
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import command_version
+from golemcpp.golem.source import Source
 
 
 # Filename of the descriptor dropped at the root of every cached resource. It is
@@ -53,6 +54,20 @@ _SUBDIR_TO_KIND = {subdir: kind for kind, subdir in _KIND_TO_SUBDIR.items()}
 _NAME_TO_KIND = {kind.value: kind for kind in ResourceKind}
 
 
+def names_a_source(data: dict) -> bool:
+    '''
+    Does a manifest's source say where its resource came from?
+    '''
+    source = data.get('source')
+    if not isinstance(source, dict):
+        return False
+
+    try:
+        return bool(Source.from_dict(source).locator)
+    except ValueError:
+        return False
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -95,6 +110,10 @@ class ResourceManifest:
 
     @classmethod
     def read(cls, path: str):
+        '''
+        Read the manifest at path, or None when there is none of a shape this
+        Golem knows, which is what makes a resource unidentified.
+        '''
         if not os.path.isfile(path):
             return None
 
@@ -110,6 +129,10 @@ class ResourceManifest:
         # A manifest naming a kind Golem does not have counts as unidentified.
         kind = data.get('kind')
         if not isinstance(kind, str) or ResourceKind.from_name(kind) is None:
+            return None
+
+        # So does one that cannot say where its resource came from.
+        if not names_a_source(data):
             return None
 
         return cls(

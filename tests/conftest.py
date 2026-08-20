@@ -114,6 +114,17 @@ def default_setting(name):
     return get_settings().get_default(name)
 
 
+def make_source(locator='https://github.com/golemcpp/example.git',
+                reference='v1.0.0', revision=STUB_HEAD, source_type='git'):
+    '''
+    The source a seeded manifest records. A manifest naming no locator identifies
+    nothing, so a resource seeded with one needs a locator a Locator accepts.
+    '''
+    return {'type': source_type,
+            'locator': locator,
+            'resolved': {'reference': reference, 'revision': revision}}
+
+
 def make_cache_configuration(*locations,
                              resolution_policy=default_setting('GOLEM_CACHE_RESOLUTION_POLICY'),
                              minimization_enabled=default_setting('GOLEM_CACHE_MINIMIZATION_ENABLED'),

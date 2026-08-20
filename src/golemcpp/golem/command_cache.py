@@ -11,7 +11,26 @@ from golemcpp.golem.cache_configuration import get_cache_configuration
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem import cache_manager
 from golemcpp.golem import helpers
+from golemcpp.golem import locator
+from golemcpp.golem import resource_manager
+from golemcpp.golem import source
 from golemcpp.golem.source import Source
+
+
+# The widest a cache key prints in the listing before its middle is cut out. A
+# key naming a dependency ("<name>@<host>+<revision>") fits, where one made from
+# a deep local path would push every column after it off screen.
+KEY_WIDTH = 44
+
+# What stands in for the part of a value the listing had to leave out, and for a
+# column a resource has nothing to say in.
+ELLIPSIS = '...'
+NOTHING = '-'
+
+# The listing columns holding a size and an age (see resource_cells). Both are
+# compared down the column instead of read across the line, therefore they are
+# the two that align right.
+RIGHT_ALIGNED_COLUMNS = (4, 5)
 
 
 def build_cache_parser() -> ArgumentParser:
@@ -78,8 +97,108 @@ def humanize_age(value: str) -> str:
 def resource_label(resource: cache_manager.CachedResource) -> str:
     if resource.manifest is None:
         return str(resource.cache_key)
-    source = Source.from_manifest(resource.manifest)
-    return source.label or str(resource.cache_key)
+    return Source.from_manifest(resource.manifest).label or str(resource.cache_key)
+
+
+def shorten(text: str, width: int) -> str:
+    '''Cut the middle out of text so that it fits width, keeping both ends.'''
+    if len(text) <= width:
+        return text
+    kept = width - len(ELLIPSIS)
+    head = kept - kept // 2
+    return text[:head] + ELLIPSIS + text[len(text) - kept // 2:]
+
+
+def short_revision(revision: str) -> str:
+    '''
+    Abbreviate a commit to the first characters that identify it, the way a cache
+    key names one. A revision naming no commit is left as it is.
+    '''
+    if resource_manager.GIT_OBJECT_NAME.match(revision):
+        return revision[:locator.DIGEST_LENGTH]
+    return revision
+
+
+def resource_version(resource) -> str:
+    '''
+    Make the cell saying which version of its source a resource holds: the
+    reference it resolved to, and the commit under that reference when the two
+    differ.
+    '''
+    if not resource.is_identified:
+        return 'unidentified'
+
+    resolved = Source.from_manifest(resource.manifest).resolved
+    parts = [resolved.reference]
+    revision = short_revision(resolved.revision)
+    if revision and revision != short_revision(resolved.reference):
+        parts.append(revision)
+
+    return ' '.join(part for part in parts if part) or NOTHING
+
+
+def resource_origin(resource) -> str:
+    '''
+    Make the cell saying how a resource was obtained: the mode a repository was
+    fetched with, or that it was copied from a directory, which has no history to
+    obtain part of.
+    '''
+    if not resource.is_identified:
+        return NOTHING
+    if Source.from_manifest(resource.manifest).type == source.SOURCE_TYPE_DIRECTORY:
+        return source.SOURCE_TYPE_DIRECTORY
+
+    mode = resource.fetched.mode
+    return mode.value if mode else NOTHING
+
+
+def resource_flags(resource) -> str:
+    '''Say what is worth knowing about a root beyond what it holds.'''
+    if resource.is_identified and not resource.is_installed:
+        # A root carrying a manifest and no source directory is an install that
+        # never finished.
+        return 'incomplete'
+    return ''
+
+
+def resource_cells(resource) -> tuple:
+    '''Make the columns of one listing line, in the order they are printed.'''
+    return (resource.kind,
+            shorten(str(resource.cache_key), KEY_WIDTH),
+            resource_version(resource),
+            resource_origin(resource),
+            helpers.format_size(resource.size_bytes),
+            humanize_age(resource.last_used_at),
+            resource_flags(resource))
+
+
+def column_widths(rows) -> list:
+    '''Measure how wide every column has to be for the rows sharing a listing.'''
+    return [max(len(row[column]) for row in rows) for column in range(len(rows[0]))]
+
+
+def resource_details(resource) -> list:
+    '''
+    Make the (label, value) pairs `--long` adds under a resource. Every resource
+    shows the same ones, so an entry saying nothing about itself is visibly that.
+    '''
+    origin = Source.from_manifest(resource.manifest)
+    resolved = origin.resolved
+    fetched = resource.fetched
+    manifest = resource.manifest
+    # A copied directory is not fetched at all, therefore it has neither.
+    left_behind = (fetched.head, fetched.mode.value if fetched.mode else '')
+
+    return [
+        ('source', '{} {}'.format(origin.type, origin.locator) if origin.locator else NOTHING),
+        ('version', ' '.join(part for part in (resolved.reference, resolved.revision)
+                             if part) or NOTHING),
+        ('fetched', ', '.join(part for part in left_behind if part) or NOTHING),
+        ('created', humanize_age(resource.created_at)),
+        ('manifest', 'version {}, golem {}'.format(
+            manifest.version, manifest.golem_version or '?') if manifest else NOTHING),
+        ('path', resource.path),
+    ]
 
 
 @dataclass
@@ -111,7 +230,8 @@ class CacheCommandHandler:
         print('                         cookbook, overlay)')
         print('  --cache=<path>         Restrict to a single cache location')
         print('  --regex                Treat the remove pattern as a regular expression')
-        print('  --long, -l             Show created/last-used/manifest-version details')
+        print('  --long, -l             Show the source, version, timestamps and path')
+        print('                         of every listed resource')
         print('  --json                 Emit machine-readable JSON')
         print('  --dry-run              Show the selection without deleting anything')
         print('  --yes, -y              Do not prompt for confirmation before deleting')
@@ -149,6 +269,12 @@ class CacheCommandHandler:
             resources = cache_manager.CacheManager.filter_kind(
                 resources, self.options.kind)
 
+        # Most recently used first: a cache is read to see what is live in it,
+        # and cleaned of what nothing has touched in months. An unidentified
+        # resource has no timestamp, therefore it sorts last, under its own name.
+        resources = sorted(resources, key=lambda resource: resource.cache_key)
+        resources.sort(key=lambda resource: resource.last_used_at, reverse=True)
+
         return resources
 
     # -- list -------------------------------------------------------------
@@ -164,14 +290,33 @@ class CacheCommandHandler:
             print('No cached resources found.')
             return 0
 
+        # Widths are taken over every resource listed, so the caches line up with
+        # each other and not only within their own group.
+        widths = column_widths([resource_cells(resource) for resource in resources])
+
+        groups = list(self._group_by_cache(resources))
         print('Cached resources:')
-        for location, group in self._group_by_cache(resources):
-            read_only = any(resource.is_read_only for resource in group)
+        for location, group in groups:
             print('')
-            print('{}{}:'.format(location, ' (read-only)' if read_only else ''))
+            print(self._cache_header(location, group))
             for resource in group:
-                self._print_resource(resource)
+                self._print_resource(resource, widths)
+
+        if len(groups) > 1:
+            print('')
+            print('Total: {}'.format(self._totals(resources)))
         return 0
+
+    @staticmethod
+    def _totals(resources) -> str:
+        return '{} resource(s), {}'.format(
+            len(resources),
+            helpers.format_size(sum(resource.size_bytes for resource in resources)))
+
+    def _cache_header(self, location, group) -> str:
+        read_only = any(resource.is_read_only for resource in group)
+        return '{}{}: {}'.format(
+            location, ' (read-only)' if read_only else '', self._totals(group))
 
     def _group_by_cache(self, resources):
         '''
@@ -200,7 +345,9 @@ class CacheCommandHandler:
             'kind': resource.kind,
             'cache_key': resource.cache_key,
             'source': resource.source,
+            'fetched': resource.fetched.to_dict(),
             'identified': resource.is_identified,
+            'installed': resource.is_installed,
             'manifest_version': resource.manifest_version,
             'cache_root': resource.cache_root,
             'read_only': resource.is_read_only,
@@ -210,20 +357,20 @@ class CacheCommandHandler:
             'path': resource.path,
         }
 
-    def _print_resource(self, resource) -> None:
-        label = resource_label(resource)
-        marker = ' (unidentified)' if not resource.is_identified else ''
-        print('  [{}] {}{}'.format(resource.kind, label, marker))
-        # The path is always shown (the cache location is the group header above).
-        print('    size: {}  path: {}'.format(
-            helpers.format_size(resource.size_bytes),
-            resource.path))
-        if self.options.long:
-            print('    created: {}  last used: {}'.format(
-                humanize_age(resource.created_at),
-                humanize_age(resource.last_used_at)))
-            print('    manifest version: {}'.format(
-                resource.manifest_version if resource.manifest_version is not None else '-'))
+    def _print_resource(self, resource, widths) -> None:
+        cells = resource_cells(resource)
+        aligned = [cell.rjust(width) if column in RIGHT_ALIGNED_COLUMNS else cell.ljust(width)
+                   for column, (cell, width) in enumerate(zip(cells, widths))]
+        print('  {}'.format('  '.join(aligned).rstrip()))
+
+        if not self.options.long:
+            return
+
+        details = resource_details(resource)
+        label_width = max(len(label) for label, _ in details)
+        for label, value in details:
+            print('      {}  {}'.format(label.ljust(label_width), value))
+        print('')
 
     # -- caches -----------------------------------------------------------
 
