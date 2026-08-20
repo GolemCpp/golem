@@ -485,3 +485,39 @@ def test_nothing_established_is_not_a_disagreement():
     # And with no request either there is simply nothing to go on, which the
     # caller reports rather than this deciding for it.
     assert SILENT.settle('') == ('', None)
+
+
+# --- What an incomplete answer still leaves open --------------------------
+
+
+@pytest.mark.parametrize('triple, machine, expected', [
+    # A triple that named a target admits that target and nothing else.
+    ('x86_64-linux-gnu', 'x86_64', ('x86_64',)),
+    # riscv64's triple is the same one for every ABI in the family, and uname
+    # says `riscv64` too, so neither source narrows it. Both survive.
+    ('riscv64-linux-gnu', 'riscv64', ('riscv64-lp64', 'riscv64-lp64d')),
+    # The ABI was reported even though the ISA level was not, so the soft-float
+    # members are already out.
+    ('arm-linux-gnueabihf', 'x86_64', ('armv6-eabihf', 'armv7-eabihf')),
+    ('arm-linux-gnueabi', 'x86_64', ('armv5-eabi', 'armv7-eabi')),
+])
+def test_an_answer_lists_the_targets_it_leaves_open(triple, machine, expected):
+    target = target_platform.CompilerTarget.from_triple(triple, machine)
+
+    assert target.admitted == expected
+
+
+def test_what_is_left_open_is_exactly_what_would_be_accepted():
+    # The list exists to be printed in a message telling someone what to ask
+    # for, so it has to be the same rule that would then accept the answer.
+    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
+                                                        'riscv64')
+
+    for arch in target.admitted:
+        assert target.settle(arch) == (arch, None)
+
+
+def test_a_compiler_that_said_nothing_leaves_everything_open():
+    target = target_platform.CompilerTarget()
+
+    assert target.admitted == target_platform.CANONICAL_ARCHS

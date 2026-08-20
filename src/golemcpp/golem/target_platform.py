@@ -499,6 +499,17 @@ class CompilerTarget:
 
         return None
 
+    @property
+    def admitted(self):
+        '''
+        The canonical names this answer still leaves open.
+
+        Each one is checked with `refusal`. Therefore a message offering these
+        as choices cannot disagree with what `settle` goes on to accept.
+        '''
+        return tuple(arch for arch in CANONICAL_ARCHS
+                     if not self.refusal(arch))
+
     def settle(self, requested):
         '''
         Reconcile what the compiler reported with what was requested.

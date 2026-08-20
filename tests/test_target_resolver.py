@@ -285,3 +285,41 @@ def test_a_target_that_could_not_be_settled_is_not_reported():
         resolver.resolve()
 
     assert resolver.reported == []
+
+
+def test_a_family_with_no_abi_says_which_targets_would_do():
+    # riscv64 is the case: `riscv64-linux-gnu` covers lp64 and lp64d, uname
+    # says `riscv64` as well, and neither has an ABI to give. The compiler did
+    # answer, so saying it did not would be wrong -- and it would leave a user
+    # on a native host with nothing to act on.
+    resolver = answering(
+        make_resolver(),
+        target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
+                                                   'riscv64'))
+
+    with pytest.raises(RuntimeError) as raised:
+        resolver.resolve()
+
+    message = str(raised.value)
+    assert 'which riscv64 it builds for' in message
+    assert 'riscv64-lp64, riscv64-lp64d' in message
+    assert 'did not say' not in message
+    # The reasoning is a comment's job. A message that says 'family', 'triple'
+    # or 'ABI' is describing Golem to someone who wants to build something.
+    assert not any(word in message for word in ('family', 'triple', 'ABI'))
+
+
+def test_a_compiler_that_truly_said_nothing_still_says_so():
+    resolver = answering(make_resolver(), target_platform.CompilerTarget())
+
+    with pytest.raises(RuntimeError, match=r'the compiler did not say'):
+        resolver.resolve()
+
+
+def test_a_family_settled_by_a_request_is_not_an_error():
+    resolver = answering(
+        make_resolver(arch='riscv64-lp64d'),
+        target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
+                                                   'riscv64'))
+
+    assert resolver.resolve() == 'riscv64-lp64d'

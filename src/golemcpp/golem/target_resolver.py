@@ -166,6 +166,12 @@ class TargetResolver:
         build_failed = bool(attempted) and not verified
         unverifiable = silent and not attempted
 
+        unnamed = not resolved
+        # It answered, but only down to a family. `riscv64-linux-gnu` is the
+        # tuple for lp64 and lp64d alike, and uname says `riscv64` too, so
+        # neither source has an ABI to give.
+        only_a_family = unnamed and bool(target.family)
+
         if refusal:
             attempt = ''
             if build_failed:
@@ -177,7 +183,16 @@ class TargetResolver:
                 "{}.{}".format(requested, self.compiler_command(),
                                refusal_phrase(refusal, target), attempt))
 
-        if not resolved:
+        if only_a_family:
+            # Saying the compiler did not say would be wrong here, and would
+            # leave a user on a native host with nothing to act on.
+            raise RuntimeError(
+                "The selected compiler ({}) does not say which {} it builds "
+                "for, and the choices are not interchangeable. Name one with "
+                "--arch: {}.".format(self.compiler_command(), target.family,
+                                     ', '.join(target.admitted)))
+
+        if unnamed:
             raise RuntimeError(
                 "Cannot tell what architecture this build is for: the compiler "
                 "did not say, and none was asked for with --arch. Naming one "
