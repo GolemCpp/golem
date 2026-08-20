@@ -18,8 +18,8 @@ on:
         description: Also run the example integration suite (slow).
         type: boolean
         default: false
-      emulated:
-        description: Also run the emulated target-settling legs (slow).
+      integration-emulated:
+        description: Also run the emulated integration legs (slow).
         type: boolean
         default: false
       canary:
@@ -149,16 +149,67 @@ jobs:
       - name: Configure examples without building them
         run: python -m pytest tests/test_examples_integration.py -m settle
 
-  settle-emulated:
-    name: Target settling (linux-qemu, ${{ matrix.name }})
-    if: inputs.emulated
-    # Emulation legs are long to run, so they are run along the integration
-    # tests, under the same conditions.
-    #
-    # Triple.canonical_arch splices the compiler's ABI with uname's ISA level,
+  integration:
+    name: Integration tests (${{ matrix.name }})
+    if: inputs.integration
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-26.04 is required for C++ modules, which the modules example
+          # needs. Which is why the pin is here rather than on the job that gates
+          # every pull request.
+          - name: linux-x64
+            os: ubuntu-26.04
+          - name: windows-x64
+            os: windows-2025
+          - name: macos-arm64
+            os: macos-26
+            advisory: true
+          - name: macos-x64
+            os: macos-26-intel
+            advisory: true
+          - name: windows-x86
+            os: windows-2025
+            arch: x86
+            advisory: true
+          - name: linux-arm64
+            os: ubuntu-26.04-arm
+            advisory: true
+          - name: windows-arm64
+            os: windows-11-arm
+            advisory: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.advisory || false }}
+    env:
+      GOLEM_TEST_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+      - name: Run non-Qt/non-package example integration subset
+        run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
+
+  integration-emulated:
+    name: Integration tests (linux-qemu, ${{ matrix.name }})
+    # Index syntax, not `inputs.integration-emulated`. A hyphen is legal in a
+    # property dereference but reads as subtraction.
+    if: inputs['integration-emulated']
+    # `Triple.canonical_arch` splices the compiler's ABI with uname's ISA level,
     # and no runner can exercise that: `arm-linux-gnueabihf` beside `armv7l` is
     # only a real pair on a real 32-bit ARM userland. Every other test of it
     # feeds the machine string in by hand.
+    #
+    # Emulation costs about what the integration suite costs, so it runs on the
+    # same occasions rather than on every pull request.
     #
     # Keep this on x64. GitHub's arm64 hosts are Ampere/Cobalt class and do not
     # implement AArch32 at EL0, so running it there would emulate the same
@@ -189,7 +240,7 @@ jobs:
           persist-credentials: false
           submodules: true
       - uses: docker/setup-qemu-action@v3
-      - name: Configure under emulation
+      - name: Build the dependency-free examples under emulation
         env:
           QEMU_CPU: ${{ matrix.qemu_cpu }}
         run: |
@@ -205,47 +256,9 @@ jobs:
               /venv/bin/pip install -q --upgrade pip
               /venv/bin/pip install -q --group dev
               /venv/bin/python -m pytest tests/test_examples_integration.py -m settle
+              # Named rather than excluded. The x64 subset is `not qt and not
+              # package`, which still leaves cppfront, and that example clones
+              # cppfront and builds it: not cheap and not guaranteed to work.
+              /venv/bin/python -m pytest tests/test_examples_integration.py \
+                -k "hello or minimal or conditions"
             '
-
-  integration:
-    name: Integration tests (${{ matrix.name }})
-    if: inputs.integration
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # ubuntu-26.04 is required for C++ modules, which the modules example
-          # needs. Which is why the pin is here rather than on the job that gates
-          # every pull request.
-          - name: linux-x64
-            os: ubuntu-26.04
-          - name: windows-x64
-            os: windows-2025
-          - name: macos-arm64
-            os: macos-26
-            advisory: true
-          - name: macos-x64
-            os: macos-26-intel
-            advisory: true
-          - name: windows-x86
-            os: windows-2025
-            arch: x86
-            advisory: true
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.advisory || false }}
-    env:
-      GOLEM_TEST_ARCH: ${{ matrix.arch }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          submodules: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --group dev
-      - name: Run non-Qt/non-package example integration subset
-        run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
