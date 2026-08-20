@@ -494,8 +494,9 @@ def test_nothing_established_is_not_a_disagreement():
     # A triple that named a target admits that target and nothing else.
     ('x86_64-linux-gnu', 'x86_64', ('x86_64',)),
     # riscv64's triple is the same one for every ABI in the family, and uname
-    # says `riscv64` too, so neither source narrows it. Both survive.
-    ('riscv64-linux-gnu', 'riscv64', ('riscv64-lp64', 'riscv64-lp64d')),
+    # says `riscv64` too, so neither source narrows it. All three survive.
+    ('riscv64-linux-gnu', 'riscv64',
+     ('riscv64-lp64', 'riscv64-lp64f', 'riscv64-lp64d')),
     # The ABI was reported even though the ISA level was not, so the soft-float
     # members are already out.
     ('arm-linux-gnueabihf', 'x86_64', ('armv6-eabihf', 'armv7-eabihf')),
@@ -521,3 +522,66 @@ def test_a_compiler_that_said_nothing_leaves_everything_open():
     target = target_platform.CompilerTarget()
 
     assert target.admitted == target_platform.CANONICAL_ARCHS
+
+
+# --- Reading an identity off a compiler's own macros ----------------------
+
+
+@pytest.mark.parametrize('macros, expected', [
+    ({'__riscv_xlen': '64', '__riscv_float_abi_double': '1'},
+     'riscv64-lp64d'),
+    ({'__riscv_xlen': '64', '__riscv_float_abi_single': '1'},
+     'riscv64-lp64f'),
+    ({'__riscv_xlen': '64', '__riscv_float_abi_soft': '1'}, 'riscv64-lp64'),
+    ({'__riscv_xlen': '32', '__riscv_float_abi_double': '1'},
+     'riscv32-ilp32d'),
+    ({'__riscv_xlen': '32', '__riscv_float_abi_soft': '1'}, 'riscv32-ilp32'),
+])
+def test_a_compiler_names_the_abi_its_triple_could_not(macros, expected):
+    assert target_platform.macro_arch(macros) == expected
+
+
+@pytest.mark.parametrize('macros', [
+    {},
+    # Not RISC-V at all. Its identity came off the triple already.
+    {'__x86_64__': '1'},
+    # The width without the float ABI is still not a target.
+    {'__riscv_xlen': '64'},
+    {'__riscv_xlen': '128', '__riscv_float_abi_double': '1'},
+])
+def test_macros_that_name_no_architecture_name_none(macros):
+    assert target_platform.macro_arch(macros) == ''
+
+
+def test_every_abi_a_compiler_can_report_has_a_canonical_name():
+    # A name macro_arch can produce but the vocabulary does not carry would go
+    # into a build slug without ever being listed as a choice.
+    for xlen in ('32', '64'):
+        for macro in target_platform.RISCV_FLOAT_ABI_MACROS:
+            named = target_platform.macro_arch(
+                {'__riscv_xlen': xlen, macro: '1'})
+
+            assert named in target_platform.CANONICAL_ARCHS
+
+
+def test_a_second_source_completes_an_answer_that_named_no_target():
+    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
+                                                        'riscv64')
+
+    assert target.completed_by('riscv64-lp64d').arch == 'riscv64-lp64d'
+
+
+def test_a_second_source_never_overrides_an_answer_that_did():
+    target = target_platform.CompilerTarget(arch='x86_64')
+
+    assert target.completed_by('aarch64') is target
+
+
+def test_a_second_source_contradicting_the_triple_is_dropped():
+    # The triple ruled the family out, so an arch from anywhere else is not a
+    # refinement of it. Keeping the triple's answer leaves the request to
+    # settle it, rather than trusting the newer source.
+    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
+                                                        'riscv64')
+
+    assert target.completed_by('armv7-eabihf') is target

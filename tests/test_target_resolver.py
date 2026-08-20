@@ -302,7 +302,7 @@ def test_a_family_with_no_abi_says_which_targets_would_do():
 
     message = str(raised.value)
     assert 'which riscv64 it builds for' in message
-    assert 'riscv64-lp64, riscv64-lp64d' in message
+    assert 'riscv64-lp64, riscv64-lp64f, riscv64-lp64d' in message
     assert 'did not say' not in message
     # The reasoning is a comment's job. A message that says 'family', 'triple'
     # or 'ABI' is describing Golem to someone who wants to build something.
@@ -323,3 +323,64 @@ def test_a_family_settled_by_a_request_is_not_an_error():
                                                    'riscv64'))
 
     assert resolver.resolve() == 'riscv64-lp64d'
+
+
+# --- Asking the compiler what its triple left out ------------------------
+
+
+def asking(resolver, triple, macros):
+    resolver.compiler_triple = lambda: triple
+    resolver.asked = []
+    resolver.compiler_macros = lambda: resolver.asked.append(True) or macros
+    return resolver
+
+
+def test_a_triple_that_named_no_target_is_completed_from_the_macros():
+    # riscv64-linux-gnu covers every RISC-V ABI and uname says riscv64 too, so
+    # the compiler's own macros are the only source left.
+    resolver = asking(make_resolver(), 'riscv64-linux-gnu',
+                      {'__riscv_xlen': '64', '__riscv_float_abi_double': '1'})
+
+    assert resolver.resolve() == 'riscv64-lp64d'
+
+
+def test_a_triple_that_named_a_target_is_not_asked_again():
+    # Every configure would pay for the extra process, and the answer is
+    # already there.
+    resolver = asking(make_resolver(), 'x86_64-linux-gnu', {})
+
+    assert resolver.resolve() == 'x86_64'
+    assert resolver.asked == []
+
+
+def test_a_compiler_with_no_triple_at_all_is_not_asked_either():
+    # The macros are asked for what a triple left out. A compiler that said
+    # nothing left nothing out, so there is no second guess at the whole
+    # answer here.
+    resolver = asking(make_resolver(), '', {})
+
+    assert resolver.compiler_target() == target_platform.CompilerTarget()
+    assert resolver.asked == []
+
+
+def test_a_family_the_macros_cannot_complete_is_still_an_error():
+    resolver = asking(make_resolver(), 'riscv64-linux-gnu', {})
+
+    with pytest.raises(RuntimeError, match=r'which riscv64 it builds for'):
+        resolver.resolve()
+
+    assert resolver.asked == [True]
+
+
+def test_msvc_is_never_asked_for_macros():
+    # It takes no -dM -E, and DEST_CPU is already a whole answer.
+    resolver = make_resolver(msvc=True, dest_cpu='x64')
+
+    assert resolver.compiler_macros() == {}
+
+
+def test_a_compiler_that_is_not_there_is_not_asked_for_macros():
+    resolver = make_resolver()
+    resolver.conf.env.CXX = []
+
+    assert resolver.compiler_macros() == {}

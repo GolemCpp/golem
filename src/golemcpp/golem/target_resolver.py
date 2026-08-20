@@ -17,6 +17,7 @@ questions and turns the answers into one of four outcomes.
   would be a guess and it would end up in a build slug.
 '''
 
+import os
 import subprocess
 
 from waflib import Logs
@@ -87,6 +88,33 @@ class TargetResolver:
         except (OSError, ValueError, subprocess.SubprocessError):
             return ''
 
+    def compiler_macros(self):
+        '''
+        Every macro the compiler predefines, as names to values.
+
+        `-dumpmachine` reports the target a compiler was configured for. Its
+        macros report the target it is building for, which is the finer answer
+        wherever one triple covers several ABIs.
+        '''
+        cxx = self.conf.env.CXX
+        if self.msvc or not cxx:
+            return {}
+
+        command = (list(cxx) if isinstance(cxx, list) else [cxx]) + [
+            '-dM', '-E', '-x', 'c++', os.devnull]
+        try:
+            output = subprocess.check_output(
+                command, universal_newlines=True, stderr=subprocess.DEVNULL)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return {}
+
+        macros = {}
+        for line in output.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) >= 2 and parts[0] == '#define':
+                macros[parts[1]] = parts[2] if len(parts) > 2 else ''
+        return macros
+
     def compiler_target(self):
         '''
         Everything the compiler waf selected said about what it builds for.
@@ -98,8 +126,15 @@ class TargetResolver:
             return target_platform.CompilerTarget.from_arch(
                 self.conf.env.DEST_CPU)
 
-        return target_platform.CompilerTarget.from_triple(
+        target = target_platform.CompilerTarget.from_triple(
             self.compiler_triple())
+        if target.arch or not target.family:
+            return target
+
+        # The triple named a family and stopped there. Asking costs a second
+        # process, therefore it runs only where the first answer came up short.
+        return target.completed_by(
+            target_platform.macro_arch(self.compiler_macros()))
 
     def compiler_builds_with(self, flags):
         '''

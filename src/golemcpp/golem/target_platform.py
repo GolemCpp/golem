@@ -45,7 +45,7 @@ import enum
 import platform
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 # --- Operating system ---------------------------------------------------
@@ -155,7 +155,10 @@ ARCH_ARMV7_EABIHF = 'armv7-eabihf'
 # alongside the operating system to be understood.
 ARCH_ARMV7_ANDROIDEABI = 'armv7-androideabi'
 ARCH_RISCV32_ILP32 = 'riscv32-ilp32'
+ARCH_RISCV32_ILP32F = 'riscv32-ilp32f'
+ARCH_RISCV32_ILP32D = 'riscv32-ilp32d'
 ARCH_RISCV64_LP64 = 'riscv64-lp64'
+ARCH_RISCV64_LP64F = 'riscv64-lp64f'
 ARCH_RISCV64_LP64D = 'riscv64-lp64d'
 ARCH_PPC64LE = 'ppc64le'
 ARCH_S390X = 's390x'
@@ -177,7 +180,10 @@ CANONICAL_ARCHS = (
     ARCH_ARMV7_EABIHF,
     ARCH_ARMV7_ANDROIDEABI,
     ARCH_RISCV32_ILP32,
+    ARCH_RISCV32_ILP32F,
+    ARCH_RISCV32_ILP32D,
     ARCH_RISCV64_LP64,
+    ARCH_RISCV64_LP64F,
     ARCH_RISCV64_LP64D,
     ARCH_PPC64LE,
     ARCH_S390X,
@@ -191,7 +197,8 @@ CANONICAL_ARCHS = (
 # the host, and what a person types after `--arch`.
 #
 # Note what is absent. There is no `riscv64` here, because the bare name does
-# not say which floating-point ABI is meant and the two do not link together.
+# not say which floating-point ABI is meant and the variants do not link
+# together.
 # There is no `armhf` or `armel` either: those are Debian *port* names, and they
 # belong in the packaging direction only.
 ARCH_ALIASES = {
@@ -510,6 +517,18 @@ class CompilerTarget:
         return tuple(arch for arch in CANONICAL_ARCHS
                      if not self.refusal(arch))
 
+    def completed_by(self, arch):
+        '''
+        The same answer with `arch` filled in, where this one named no target.
+
+        A second source may only add precision. An answer that already named a
+        target keeps it, and one this compiler has already ruled out is
+        dropped, therefore the triple stays the authority.
+        '''
+        if self.arch or not arch or self.refusal(arch):
+            return self
+        return replace(self, arch=arch)
+
     def settle(self, requested):
         '''
         Reconcile what the compiler reported with what was requested.
@@ -527,6 +546,42 @@ class CompilerTarget:
                 return '', refusal
 
         return self.arch or requested, None
+
+
+# --- Reading an identity off a compiler's own macros ---------------------
+
+
+# What a compiler predefines about the RISC-V target it is building for.
+# The letter each one stands for is the tail of the ABI name: rv64 passing
+# floats in registers is lp64d, passing none is lp64.
+RISCV_FLOAT_ABI_MACROS = {
+    '__riscv_float_abi_double': 'd',
+    '__riscv_float_abi_single': 'f',
+    '__riscv_float_abi_soft': '',
+}
+
+
+def macro_arch(macros):
+    """
+    The architecture a compiler's predefined macros name, or '' for none.
+
+    A triple cannot always carry one. `riscv64-linux-gnu` is the tuple for
+    every RISC-V ABI, and uname says `riscv64` as well, therefore neither
+    source can say which is meant. The compiler itself always can.
+
+    Only RISC-V is read here so far. A compiler defines the same kind of macro
+    for the ISA level 32-bit ARM leaves out (`__ARM_ARCH`).
+    """
+    xlen = macros.get('__riscv_xlen')
+    if xlen not in ('32', '64'):
+        return ''
+
+    for macro, tail in RISCV_FLOAT_ABI_MACROS.items():
+        if macro in macros:
+            base = 'ilp32' if xlen == '32' else 'lp64'
+            return 'riscv{}-{}{}'.format(xlen, base, tail)
+
+    return ''
 
 
 @dataclass(frozen=True)
