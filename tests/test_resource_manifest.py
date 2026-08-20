@@ -92,6 +92,19 @@ def test_read_invalid_manifest_returns_none(tmp_path):
     assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
 
 
+def test_read_manifest_of_an_unknown_kind_returns_none(tmp_path):
+    # A kind an earlier Golem version wrote and this one no longer has. Nothing
+    # can be done with such a resource, so it reads as no manifest at all.
+    manifest_file = tmp_path / resource_manifest.MANIFEST_FILENAME
+    manifest_file.write_text(
+        json.dumps({'kind': 'recipes-repository', 'cache_key': 'recipes@h+main'}),
+        encoding='utf-8')
+    assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
+
+    assert resource_manifest.ResourceKind.from_name('dependency') == resource_manifest.ResourceKind.DEPENDENCY
+    assert resource_manifest.ResourceKind.from_name('overrides-repository') is None
+
+
 def test_touch_last_used_updates_timestamp(tmp_path):
     root = tmp_path / 'resource'
     root.mkdir()
