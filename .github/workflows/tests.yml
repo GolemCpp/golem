@@ -44,12 +44,9 @@ jobs:
           # macos-26 is the arm64 image; x64 macOS is a separate one.
           - name: macos-arm64
             os: macos-26
-            advisory: true
           - name: macos-x64
             os: macos-26-intel
-            advisory: true
     runs-on: ${{ matrix.os }}
-    # A leg starts advisory and is promoted on its own first green run.
     continue-on-error: ${{ matrix.advisory || false }}
     steps:
       - uses: actions/checkout@v6
@@ -122,12 +119,10 @@ jobs:
           # platform.machine() instead of a hand-written pair in a unit test.
           - name: linux-arm64
             os: ubuntu-24.04-arm
-            advisory: true
           # The vcvarsall tables are indexed by the host architecture. Nothing
           # else exercises that with an aarch64 host doing the indexing.
           - name: windows-arm64
             os: windows-11-arm
-            advisory: true
           # macOS is deliberately absent: both its architectures are
           # unambiguous, with no ISA level to splice and no multilib, so the
           # unit and integration legs already cover everything a configure
@@ -165,23 +160,18 @@ jobs:
             os: windows-2025
           - name: macos-arm64
             os: macos-26
-            advisory: true
           - name: macos-x64
             os: macos-26-intel
-            advisory: true
           - name: windows-x86
             os: windows-2025
             arch: x86
-            advisory: true
           - name: linux-arm64
             os: ubuntu-26.04-arm
-            advisory: true
           # Visual Studio 2026, like windows-x64, so the two differ by
           # architecture alone. The plain windows-11-arm image carries 2022,
           # and cppfront's own source does not compile under it.
           - name: windows-arm64
             os: windows-11-vs2026-arm
-            advisory: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.advisory || false }}
     env:
@@ -236,6 +226,10 @@ jobs:
           # names its own ISA level, so it never reaches the splice this job
           # exists to test.
     runs-on: ubuntu-24.04
+    # The one leg still advisory, deliberately. python-publish.yml declares
+    # `needs: tests`, therefore promoting this would gate publishing a release
+    # on three emulated containers installing packages over the network. Its
+    # failure would hold up a release rather than ship a wrong binary.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
