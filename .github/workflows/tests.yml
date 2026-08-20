@@ -161,14 +161,14 @@ jobs:
         include:
           - name: armhf
             platform: linux/arm/v7
-            image: arm32v7/debian:bookworm
+            image: arm32v7/debian:trixie
           - name: armel
             platform: linux/arm/v5
-            image: arm32v5/debian:bookworm
+            image: arm32v5/debian:trixie
             qemu_cpu: arm926
           - name: riscv64
             platform: linux/riscv64
-            image: riscv64/debian:unstable
+            image: riscv64/debian:trixie
           # armv6 is absent for want of an image: Debian dropped it, and the
           # Alpine one reports `armv6-alpine-linux-musleabihf` -- a triple that
           # names its own ISA level, so it never reaches the splice this job
@@ -192,9 +192,11 @@ jobs:
             -v "$PWD:/src" -w /src '${{ matrix.image }}' \
             /bin/sh -eu -c '
               apt-get update -qq
-              apt-get install -y -qq g++ git python3 python3-pip >/dev/null
-              python3 -m pip install --break-system-packages -q pytest node-semver
-              python3 -m pytest tests/test_examples_integration.py -m settle
+              apt-get install -y -qq g++ git python3 python3-venv >/dev/null
+              python3 -m venv /venv
+              /venv/bin/pip install -q --upgrade pip
+              /venv/bin/pip install -q --group dev
+              /venv/bin/python -m pytest tests/test_examples_integration.py -m settle
             '
 
   integration:
