@@ -1,4 +1,9 @@
 import os
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
+
+import pytest
 
 from conftest import make_source
 from golemcpp.golem import cache_configuration
@@ -7,8 +12,14 @@ from golemcpp.golem import command_cache
 from golemcpp.golem import helpers
 
 
+def days_ago(days) -> str:
+    '''The timestamp a resource last used that long ago carries.'''
+    return (datetime.now(timezone.utc) - timedelta(days=days)).replace(
+        microsecond=0).isoformat()
+
+
 def seed_resource(cache_root, subdir, name, *, kind=None, source=None, size=64,
-                  fetched=None, cache_key=None):
+                  fetched=None, cache_key=None, last_used=None):
     resource_root = os.path.join(cache_root, subdir, name)
     # Under the root the way an installed resource holds it, so a seeded resource
     # is not reported as an install that never finished.
@@ -23,6 +34,10 @@ def seed_resource(cache_root, subdir, name, *, kind=None, source=None, size=64,
             cache_key=cache_key or name,
             source=source or make_source(),
             fetched=fetched)
+    if last_used is not None:
+        manifest = resource_manifest.ResourceManifest.read_from_root(resource_root)
+        manifest.last_used_at = last_used
+        manifest.write_to_root(resource_root)
     return resource_root
 
 
@@ -115,13 +130,10 @@ def test_list_flags_an_install_that_never_finished(capsys, tmp_path):
 
 
 def test_list_shows_the_most_recently_used_first(capsys, tmp_path):
-    for name, last_used in (('old@h+abc', '2020-01-01T00:00:00+00:00'),
-                            ('recent@h+abc', '2030-01-01T00:00:00+00:00')):
-        root = seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, name,
-                             kind=resource_manifest.ResourceKind.DEPENDENCY)
-        manifest = resource_manifest.ResourceManifest.read_from_root(root)
-        manifest.last_used_at = last_used
-        manifest.write_to_root(root)
+    for name, last_used in (('old@h+abc', days_ago(400)),
+                            ('recent@h+abc', days_ago(1))):
+        seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, name,
+                      kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=last_used)
     # An unidentified resource has no timestamp at all.
     seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'mystery@h+abc')
 
@@ -233,9 +245,97 @@ def test_unidentified_lists_and_removes(monkeypatch, capsys, tmp_path):
     assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 
 
+def test_a_duration_is_read_the_way_an_age_is_printed():
+    assert command_cache.parse_duration('45s') == timedelta(seconds=45)
+    # `m` is minutes, as it is in the age the listing prints.
+    assert command_cache.parse_duration('30m') == timedelta(minutes=30)
+    assert command_cache.parse_duration('6h') == timedelta(hours=6)
+    assert command_cache.parse_duration('90d') == timedelta(days=90)
+    assert command_cache.parse_duration('2w') == timedelta(weeks=2)
+
+    for written_wrong in ('30', '', 'd', '30y', '-1d', '1.5d', '30 d', 'yesterday'):
+        with pytest.raises(ValueError):
+            command_cache.parse_duration(written_wrong)
+
+
+def test_a_duration_written_wrong_is_an_error(capsys, tmp_path):
+    assert run(tmp_path, 'list', '--older-than=30') == 1
+    assert "'30' is not a duration" in capsys.readouterr().out
+
+
+def test_older_than_selects_on_when_a_resource_was_last_used(capsys, tmp_path):
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'fresh@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(3))
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'stale@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(120))
+
+    assert run(tmp_path, 'list', '--older-than=90d') == 0
+    out = capsys.readouterr().out
+    assert 'stale@h+abc' in out
+    assert 'fresh@h+abc' not in out
+
+
+def test_older_than_never_selects_an_undated_resource(capsys, tmp_path):
+    # Nothing identifies it, so nothing says how old it is: `cache unidentified`
+    # is what clears those.
+    seed_resource(str(tmp_path), cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'stale@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(120))
+
+    assert run(tmp_path, 'list', '--older-than=1d') == 0
+    out = capsys.readouterr().out
+    assert 'stale@h+abc' in out
+    assert 'mystery@host+main' not in out
+
+
+def test_purge_older_than_leaves_the_rest_alone(capsys, tmp_path):
+    fresh = seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'fresh@h+abc',
+                          kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(1))
+    stale = seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'stale@h+abc',
+                          kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(200))
+
+    assert run(tmp_path, 'purge', '--older-than=30d', '--yes') == 0
+    assert 'Removed 1 resource(s)' in capsys.readouterr().out
+    assert not os.path.exists(stale)
+    assert os.path.exists(fresh)
+
+
+def test_remove_older_than_narrows_the_pattern(capsys, tmp_path):
+    old_json = seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+old',
+                             kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(200))
+    new_json = seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+new',
+                             kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(1))
+    old_fmt = seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'fmt@h+old',
+                            kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(200))
+
+    assert run(tmp_path, 'remove', 'json', '--older-than=30d', '--yes') == 0
+    assert not os.path.exists(old_json)
+    assert os.path.exists(new_json)
+    assert os.path.exists(old_fmt)
+
+
+def test_the_purge_prompt_says_whether_it_takes_everything(monkeypatch, capsys, tmp_path):
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'stale@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY, last_used=days_ago(200))
+
+    prompts = []
+    monkeypatch.setattr(helpers, 'confirm',
+                        lambda prompt, assume_yes=False: prompts.append(prompt) or False)
+
+    assert run(tmp_path, 'purge') == 0
+    assert run(tmp_path, 'purge', '--older-than=30d') == 0
+    assert prompts == ['Purge ALL resource(s) from the caches?',
+                       'Purge these resource(s) from the caches?']
+
+
 def test_remove_requires_pattern(capsys, tmp_path):
     assert run(tmp_path, 'remove') == 1
     assert 'remove requires a path or regex pattern' in capsys.readouterr().out
+
+
+def test_remove_by_age_alone_points_at_purge(capsys, tmp_path):
+    assert run(tmp_path, 'remove', '--older-than=90d') == 1
+    assert 'golem cache purge --older-than=90d' in capsys.readouterr().out
 
 
 def test_remove_with_yes_deletes_match(capsys, tmp_path):

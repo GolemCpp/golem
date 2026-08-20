@@ -1,10 +1,12 @@
 import json
 import os
+import re
 from argparse import ArgumentParser
 from argparse import Namespace
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 
 from golemcpp.golem.cache_configuration import get_cache_configuration
@@ -32,6 +34,12 @@ NOTHING = '-'
 # the two that align right.
 RIGHT_ALIGNED_COLUMNS = (4, 5)
 
+# How a duration is written, and how long each unit lasts. These are the units
+# humanize_age prints, so an age read off the listing ("9d ago") is a duration
+# `--older-than` accepts. Therefore `m` is minutes here as it is there.
+DURATION = re.compile(r'^(\d+)([smhdw])$')
+DURATION_UNITS = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800}
+
 
 def build_cache_parser() -> ArgumentParser:
     parser = ArgumentParser(
@@ -46,6 +54,7 @@ def build_cache_parser() -> ArgumentParser:
     parser.add_argument('--cache-directory', dest='cache_directory', default='')
     parser.add_argument('--cache', dest='cache', default='')
     parser.add_argument('--kind', dest='kind', default='')
+    parser.add_argument('--older-than', dest='older_than', default='')
     parser.add_argument('--regex', action='store_true', dest='regex')
     parser.add_argument('--long', '-l', action='store_true', dest='long')
     parser.add_argument('--json', action='store_true', dest='as_json')
@@ -71,6 +80,29 @@ def _parse_iso(value: str):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def parse_duration(text: str) -> timedelta:
+    '''
+    Read a duration written the way an age is printed ("30d", "6h"). Raises
+    ValueError on anything else.
+    '''
+    match = DURATION.match(text.strip().lower())
+    if match is None:
+        raise ValueError(
+            "'{}' is not a duration: write a number and one of the units "
+            "{} (for example 30d)".format(text, ', '.join(DURATION_UNITS)))
+
+    return timedelta(seconds=int(match.group(1)) * DURATION_UNITS[match.group(2)])
+
+
+def is_older_than(resource, cutoff) -> bool:
+    '''
+    Was a resource last used before cutoff? A resource nothing identifies carries
+    no timestamp, so nothing can say how old it is and it is never older.
+    '''
+    last_used = _parse_iso(resource.last_used_at)
+    return last_used is not None and last_used < cutoff
 
 
 def humanize_age(value: str) -> str:
@@ -209,13 +241,16 @@ class CacheCommandHandler:
 
     @staticmethod
     def print_help() -> None:
-        print('Usage: golem cache list [--kind=<kind>] [--cache=<path>] [--long] [--json]')
+        print('Usage: golem cache list [<selection>] [--long] [--json]')
         print('       golem cache caches [--json]')
-        print('       golem cache size [--kind=<kind>] [--cache=<path>]')
-        print('       golem cache remove <path-or-regex> [--regex] [--dry-run] [--yes]')
-        print('       golem cache purge [--kind=<kind>] [--cache=<path>] [--dry-run] [--yes]')
+        print('       golem cache size [<selection>]')
+        print('       golem cache remove <path-or-regex> [--regex] [<selection>] [--dry-run] [--yes]')
+        print('       golem cache purge [<selection>] [--dry-run] [--yes]')
         print('       golem cache unidentified [--remove] [--dry-run] [--yes]')
         print('Manage resources stored in the caches the project is configured to use.')
+        print('')
+        print('A <selection> narrows what a subcommand works on:')
+        print('  [--kind=<kind>] [--cache=<path>] [--older-than=<age>]')
         print('')
         print('Subcommands:')
         print('  list           List cached resources across every configured cache')
@@ -229,6 +264,9 @@ class CacheCommandHandler:
         print('  --kind=<kind>          Filter by resource kind (dependency, tool,')
         print('                         cookbook, overlay)')
         print('  --cache=<path>         Restrict to a single cache location')
+        print('  --older-than=<age>     Keep only the resources last used longer ago than')
+        print('                         <age>, written as a number and a unit among')
+        print('                         s, m, h, d, w (for example 90d)')
         print('  --regex                Treat the remove pattern as a regular expression')
         print('  --long, -l             Show the source, version, timestamps and path')
         print('                         of every listed resource')
@@ -247,6 +285,19 @@ class CacheCommandHandler:
             cache_configuration = get_cache_configuration(settings)
             self._manager = cache_manager.get_cache_manager(cache_configuration)
         return self._manager
+
+    def _older_than_cutoff(self):
+        '''
+        The moment a resource has to have been used before to be selected, or
+        None when nothing narrows the selection by age.
+        '''
+        if not self.options.older_than:
+            return None
+        return datetime.now(timezone.utc) - parse_duration(self.options.older_than)
+
+    def _is_narrowed(self) -> bool:
+        '''Does anything select less than every resource in every cache?'''
+        return any((self.options.kind, self.options.cache, self.options.older_than))
 
     def _cache_filter(self):
         if not self.options.cache:
@@ -268,6 +319,11 @@ class CacheCommandHandler:
         if self.options.kind:
             resources = cache_manager.CacheManager.filter_kind(
                 resources, self.options.kind)
+
+        cutoff = self._older_than_cutoff()
+        if cutoff is not None:
+            resources = [resource for resource in resources
+                         if is_older_than(resource, cutoff)]
 
         # Most recently used first: a cache is read to see what is live in it,
         # and cleaned of what nothing has touched in months. An unidentified
@@ -472,6 +528,10 @@ class CacheCommandHandler:
     def handle_remove(self) -> int:
         if not self.options.pattern:
             print('ERROR: remove requires a path or regex pattern')
+            if self.options.older_than:
+                # Age alone selects nothing here: that is what purging does.
+                print('Selecting by age alone is "golem cache purge --older-than={}".'.format(
+                    self.options.older_than))
             self.print_help()
             return 1
 
@@ -486,9 +546,12 @@ class CacheCommandHandler:
 
     def handle_purge(self) -> int:
         resources = self._scanned_resources()
+        # Purging takes everything unless something narrows it, and the prompt
+        # says which of the two is about to happen.
         return self._delete_with_confirmation(
             resources,
-            "Purge ALL selected resource(s) from the caches?")
+            'Purge {} resource(s) from the caches?'.format(
+                'these' if self._is_narrowed() else 'ALL'))
 
     # -- unidentified -----------------------------------------------------
 
@@ -531,6 +594,14 @@ class CacheCommandHandler:
         if handler is None:
             print('ERROR: unsupported cache command: {}'.format(' '.join(args)))
             self.print_help()
+            return 1
+
+        # Read before anything scans a cache, so a duration written wrong is said
+        # so straight away rather than after walking every location.
+        try:
+            self._older_than_cutoff()
+        except ValueError as error:
+            print('ERROR: {}'.format(error))
             return 1
 
         return handler()
