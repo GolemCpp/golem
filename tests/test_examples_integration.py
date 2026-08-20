@@ -479,10 +479,21 @@ def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(exa
     project_dir = copy_example_project('modules', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'
 
-    run_golem(project_dir, cache_dir, 'configure', '--variant=debug')
-    run_golem(project_dir, cache_dir, 'resolve')
-    run_golem(project_dir, cache_dir, 'dependencies')
-    run_golem(project_dir, cache_dir, 'build')
+    try:
+        run_golem(project_dir, cache_dir, 'configure', '--variant=debug')
+        run_golem(project_dir, cache_dir, 'resolve')
+        run_golem(project_dir, cache_dir, 'dependencies')
+        run_golem(project_dir, cache_dir, 'build')
+    except AssertionError as failure:
+        # `import std;` needs the standard library to ship a module of its own,
+        # which is a metadata file beside it.
+        #
+        # Matched on the symptom rather than on a list of toolchains, so that
+        # any other way of failing stays a failure, and so that a toolchain
+        # gaining the module needs no edit here.
+        if 'std modules metadata file not found' not in str(failure):
+            raise
+        pytest.xfail('This toolchain ships no std module for import std')
 
     binary = program_path(project_dir, 'hello-modules-debug')
     assert binary.exists()
