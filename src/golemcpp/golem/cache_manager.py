@@ -59,6 +59,16 @@ class CachedResource:
         return self.manifest is not None
 
     @property
+    def is_installed(self) -> bool:
+        '''
+        Does the root hold the fetched source?
+
+        A resource is installed once the source directory is under its root,
+        where exists() asks whether the root directory itself is there.
+        '''
+        return os.path.isdir(self.source_path)
+
+    @property
     def kind(self) -> str:
         if self.manifest is not None:
             return self.manifest.kind
@@ -68,6 +78,11 @@ class CachedResource:
     @property
     def source(self) -> dict:
         return self.manifest.source if self.manifest else {}
+
+    @property
+    def fetched(self) -> Fetched:
+        '''What the manifest says the fetch left in this root.'''
+        return Fetched.from_manifest(self.manifest)
 
     @property
     def created_at(self) -> str:

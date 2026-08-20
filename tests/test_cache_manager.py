@@ -11,7 +11,7 @@ from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
-from conftest import make_cache_configuration
+from conftest import make_cache_configuration, make_source
 from golemcpp.golem.locator import Locator
 
 
@@ -25,7 +25,7 @@ def make_resource(cache_root, subdir, name, *, manifest_kind=None, source=None, 
             resource_root=resource_root,
             kind=manifest_kind,
             cache_key=name,
-            source=source or {})
+            source=source or make_source())
     return resource_root
 
 
@@ -37,8 +37,7 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
     make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
-                  source={'type': 'git', 'locator': 'u',
-                          'resolved': {'reference': 'v3.12.0', 'revision': 'cafebabe'}})
+                  source=make_source(reference='v3.12.0'))
     make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')  # no manifest
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
@@ -82,7 +81,7 @@ def test_filter_kind(tmp_path):
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
     make_resource(root, cache_configuration.TOOLS_SUBDIR, 'cppfront',
                   manifest_kind=resource_manifest.ResourceKind.TOOL,
-                  source={'type': 'git', 'locator': 'u', 'reference': 'v0.8.1'})
+                  source=make_source(reference='v0.8.1'))
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     resources = manager.scan()
@@ -159,7 +158,7 @@ def test_scan_identifies_top_level_entries_via_manifest(tmp_path):
         resource_root=resource_root,
         kind=resource_manifest.ResourceKind.DEPENDENCY,
         cache_key='json@com.github.nlohmann+abc',
-        source={})
+        source=make_source())
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     resources = manager.scan()

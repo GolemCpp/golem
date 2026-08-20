@@ -317,11 +317,10 @@ class ResourceManager:
         '''
         Does the root hold the fetched source?
 
-        A resource is installed once the source directory is under its root.
         CachedResource.exists() asks whether the root directory itself is there,
         which is what resolution matches a resource to.
         '''
-        return os.path.isdir(cached_resource.source_path)
+        return cached_resource.is_installed
 
     @staticmethod
     def may_migrate(cached_resource) -> bool:
