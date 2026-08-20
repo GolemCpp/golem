@@ -221,6 +221,38 @@ def test_unidentified_lists_and_removes_legacy_flat_entry(monkeypatch, capsys, t
     assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
 
 
+def test_list_reports_a_legacy_kind_as_unidentified(capsys, tmp_path):
+    # A manifest left by an earlier Golem version naming a kind this one does not
+    # have. Its name is not one the listing may report, therefore the resource is
+    # unidentified and its kind unknown.
+    seed_resource(str(tmp_path), '', 'a30a9ffd',
+                  kind='recipes-repository',
+                  source={'type': 'git',
+                          'locator': 'https://github.com/golemcpp/recipes.git',
+                          'resolved': {'reference': 'main', 'revision': 'cafebabe'}})
+
+    assert run(tmp_path, 'list') == 0
+    out = capsys.readouterr().out
+    assert 'recipes-repository' not in out
+    assert '[unknown] a30a9ffd (unidentified)' in out
+
+
+def test_unidentified_lists_and_removes_a_legacy_kind(monkeypatch, capsys, tmp_path):
+    seed_resource(str(tmp_path), '', 'a30a9ffd', kind='recipes-repository')
+    seed_resource(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+                  kind=resource_manifest.ResourceKind.DEPENDENCY)
+
+    assert run(tmp_path, 'unidentified') == 0
+    out = capsys.readouterr().out
+    assert 'a30a9ffd' in out
+    assert 'json@h+abc' not in out
+
+    monkeypatch.setattr(helpers, 'confirm', lambda prompt, assume_yes=False: True)
+    assert run(tmp_path, 'unidentified', '--remove') == 0
+    assert not os.path.exists(os.path.join(str(tmp_path), 'a30a9ffd'))
+    assert os.path.exists(os.path.join(str(tmp_path), cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc'))
+
+
 def test_purge_removes_legacy_flat_entry(capsys, tmp_path):
     seed_resource(str(tmp_path), '', 'mylogger@fsys.home+-')
 

@@ -35,6 +35,11 @@ class ResourceKind(Enum):
     def from_subdir(cls, subdir: str):
         return _SUBDIR_TO_KIND.get(subdir)
 
+    @classmethod
+    def from_name(cls, name: str):
+        '''The kind that name spells, or None when it names no kind.'''
+        return _NAME_TO_KIND.get(name)
+
 
 _KIND_TO_SUBDIR = {
     ResourceKind.DEPENDENCY: cache_configuration.DEPENDENCIES_SUBDIR,
@@ -44,6 +49,8 @@ _KIND_TO_SUBDIR = {
 }
 
 _SUBDIR_TO_KIND = {subdir: kind for kind, subdir in _KIND_TO_SUBDIR.items()}
+
+_NAME_TO_KIND = {kind.value: kind for kind in ResourceKind}
 
 
 def utc_now() -> str:
@@ -97,11 +104,16 @@ class ResourceManifest:
         except (ValueError, OSError):
             return None
 
-        if not isinstance(data, dict) or 'kind' not in data:
+        if not isinstance(data, dict):
+            return None
+
+        # A manifest naming a kind Golem does not have counts as unidentified.
+        kind = data.get('kind')
+        if not isinstance(kind, str) or ResourceKind.from_name(kind) is None:
             return None
 
         return cls(
-            kind=data.get('kind', ''),
+            kind=kind,
             cache_key=data.get('cache_key', ''),
             source=data.get('source', {}),
             fetched=data.get('fetched', {}),
