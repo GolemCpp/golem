@@ -176,8 +176,11 @@ jobs:
           - name: linux-arm64
             os: ubuntu-26.04-arm
             advisory: true
+          # Visual Studio 2026, like windows-x64, so the two differ by
+          # architecture alone. The plain windows-11-arm image carries 2022,
+          # and cppfront's own source does not compile under it.
           - name: windows-arm64
-            os: windows-11-arm
+            os: windows-11-vs2026-arm
             advisory: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.advisory || false }}

@@ -18,6 +18,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from waflib import Logs, Task
+from waflib.Tools import msvc
 
 from golemcpp.golem.module import Module
 from golemcpp.golem.cache_configuration import get_cache_configuration
@@ -731,6 +732,32 @@ class Context:
         and it gets recorded rather than overridden.
         '''
         return target_platform.arch_capability(self.arch_request())
+
+    def msvc_target_preference(self):
+        '''
+        The order waf tries Visual Studio's toolchains in.
+
+        A request narrows the order to that one toolchain, because an
+        architecture Visual Studio cannot supply is an error rather than
+        something to fall back from.
+
+        Otherwise the host's own toolchain goes first, and waf's order follows.
+        '''
+        requested = self.selecting_capability().msvc_target
+        if requested:
+            return [requested]
+
+        # One Visual Studio installation ships several cross toolchains, and
+        # waf's order is fixed and begins at x64. Therefore an ARM64 machine
+        # with the x64 cross tools installed builds x64. A native build means
+        # the host's own architecture, so the host is put first. Nothing is
+        # dropped from the order, therefore it stays a preference and never a
+        # filter.
+        native = target_platform.arch_capability(
+            target_platform.host_arch()).msvc_target
+        # waf's list stays waf's, rather than being copied and left to rot.
+        order = [name for name, _ in msvc.all_msvc_platforms]
+        return [native] + order if native else order
 
     def vcvars_arg(self):
         '''
@@ -3817,11 +3844,7 @@ class Context:
         self.context.setenv('main')
         self.configure_compiler()
         if self.is_windows():
-            # Only an explicit request narrows waf's search. With none, waf
-            # tries every platform it knows and reports what it found.
-            msvc_target = self.selecting_capability().msvc_target
-            if msvc_target:
-                self.context.env.MSVC_TARGETS = [msvc_target]
+            self.context.env.MSVC_TARGETS = self.msvc_target_preference()
         self.context.load(['compiler_c', 'compiler_cxx'])
         self.context.options.resolved_arch = target_resolver.TargetResolver(
             self.context, msvc=self.is_msvc_like()).resolve()

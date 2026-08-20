@@ -3,10 +3,12 @@ import pytest
 from types import SimpleNamespace
 import json
 
+from waflib.Tools import msvc
+
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import (context as golem_context, helpers, network,
-                            qt_discovery)
+                            qt_discovery, target_platform)
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
     CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
@@ -1194,3 +1196,42 @@ def test_a_build_script_may_reach_a_remote():
 
     assert observed == [(context, True)]
     assert network.is_allowed() is False
+
+# --- Which Visual Studio toolchain waf reaches for first -----------------
+
+
+def test_a_request_narrows_the_toolchain_search_to_one():
+    # An architecture Visual Studio cannot supply is an error, not something
+    # to quietly fall back from.
+    context = make_runtime_context(arch='i686')
+
+    assert context.msvc_target_preference() == ['x86']
+
+
+def test_with_no_request_the_host_toolchain_comes_first(monkeypatch):
+    # One installation ships several cross toolchains, and waf's own order is
+    # fixed and begins at x64. An ARM64 machine with the x64 cross tools would
+    # otherwise build x86_64 and truthfully report it.
+    context = make_runtime_context(arch=None)
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'aarch64')
+
+    assert context.msvc_target_preference()[0] == 'arm64'
+
+
+def test_with_no_request_nothing_is_dropped_from_wafs_order(monkeypatch):
+    # A machine without its own toolchain installed still has to find one, so
+    # the host is a preference and never a filter.
+    context = make_runtime_context(arch=None)
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'aarch64')
+
+    preference = context.msvc_target_preference()
+
+    assert set(name for name, _ in msvc.all_msvc_platforms) <= set(preference)
+
+
+def test_a_host_with_no_toolchain_name_leaves_wafs_order_alone(monkeypatch):
+    context = make_runtime_context(arch=None)
+    monkeypatch.setattr(target_platform, 'host_arch', lambda: 'riscv64-lp64d')
+
+    assert context.msvc_target_preference() == [
+        name for name, _ in msvc.all_msvc_platforms]

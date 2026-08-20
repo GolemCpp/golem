@@ -119,6 +119,17 @@ def is_osystem_name(name):
     return cleaned in CANONICAL_OSYSTEMS or cleaned in OS_ALIASES
 
 
+def host_arch():
+    '''
+    The architecture Golem is running on.
+    
+    This helps to answers the question: which toolchain to reach for first where
+    several are installed and nothing was asked for, since that is what a native
+    build means.
+    '''
+    return normalize_arch(platform.machine())
+
+
 def host_osystem():
     '''
     The operating system Golem is running on.
