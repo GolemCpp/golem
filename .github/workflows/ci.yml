@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main, develop, 'release/**']
-    # 'labeled' lets a develop pull request opt into the integration suite
-    # after the fact by adding the run-integration label.
+    # 'labeled' lets a develop pull request opt into a slow suite after the
+    # fact, by adding run-integration or run-emulated.
     types: [opened, reopened, synchronize, labeled]
   schedule:
     # Nightly full suite on develop. Scheduled workflows only ever run from the
@@ -44,6 +44,13 @@ jobs:
         || github.base_ref == 'main'
         || startsWith(github.base_ref, 'release/')
         || contains(github.event.pull_request.labels.*.name, 'run-integration') }}
+      # Emulation is slow to run, so it runs when integration tests run. It keeps
+      # its own input and its own label.
+      emulated: >-
+        ${{ github.event_name == 'schedule'
+        || github.base_ref == 'main'
+        || startsWith(github.base_ref, 'release/')
+        || contains(github.event.pull_request.labels.*.name, 'run-emulated') }}
       # Every leg is pinned to an image, so nothing notices a rotation until a
       # pin is withdrawn. The canary runs on the -latest aliases to say what
       # they point at now. Nightly is soon enough, and it gates nothing.

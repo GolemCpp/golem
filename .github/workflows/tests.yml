@@ -18,6 +18,10 @@ on:
         description: Also run the example integration suite (slow).
         type: boolean
         default: false
+      emulated:
+        description: Also run the emulated target-settling legs (slow).
+        type: boolean
+        default: false
       canary:
         description: Also run the unit suite on the unpinned -latest aliases.
         type: boolean
@@ -147,6 +151,10 @@ jobs:
 
   settle-emulated:
     name: Target settling (linux-qemu, ${{ matrix.name }})
+    if: inputs.emulated
+    # Emulation legs are long to run, so they are run along the integration
+    # tests, under the same conditions.
+    #
     # Triple.canonical_arch splices the compiler's ABI with uname's ISA level,
     # and no runner can exercise that: `arm-linux-gnueabihf` beside `armv7l` is
     # only a real pair on a real 32-bit ARM userland. Every other test of it
