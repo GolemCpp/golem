@@ -14,35 +14,36 @@ on:
 # tests.yml defines the jobs. This file only decides which of them run.
 #
 #   unit                  the unit tests
-#   settle                checks what architecture a build is for
+#   configure             runs the command line, stopping at configure
 #   integration           builds and runs the examples
 #   integration-emulated  builds and runs the examples under qemu
 #   canary                the unit tests on the unpinned -latest images
 #
 # What runs when:
 #
-#   pull request into develop            unit, settle
+#   pull request into develop            unit, configure
 #     with label run-integration           + integration
 #     with label run-integration-emulated  + integration-emulated
 #
-#   pull request into main or release/** unit, settle, integration,
+#   pull request into main or release/** unit, configure, integration,
 #                                        integration-emulated
 #
-#   nightly, on develop                  unit, settle, integration,
+#   nightly, on develop                  unit, configure, integration,
 #                                        integration-emulated, canary
 #
 # python-publish.yml calls tests.yml too, on a push:
 #
-#   push to develop                      unit, settle
+#   push to develop                      unit, configure
 #                                        -> development release to TestPyPI
 #
-#   push a version tag                   unit, settle, integration,
+#   push a version tag                   unit, configure, integration,
 #                                        integration-emulated
 #                                        -> stable release to PyPI and TestPyPI
 #
-# unit and settle take no switch, so they run on every call. Features are
+# unit and configure take no switch, so they run on every call. Features are
 # developed in feature/* branches and merged into develop, where unit and
-# settle are the gate; the slow suites run on the way to main and nightly.
+# configure are the gate; the slow suites run on the way to main and
+# nightly.
 #
 # A pull request must be up to date with its base before merge, so a
 # regression cannot enter through two pull requests that share an older base.

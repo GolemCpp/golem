@@ -46,11 +46,12 @@ testpaths = [
     "tests",
 ]
 markers = [
-    # `settle` rather than `resolve`: resolving is what Golem does to a
-    # project's dependencies, and a target is settled instead. These configure
-    # an example and stop, which is all it takes -- what a build is for is
-    # settled by the end of configure -- and stopping there is what makes an
-    # emulated or scarce runner affordable. See the CI legs named
-    # `Target settling`.
-    "settle: configure an example to see what target it settles on",
+    # Named for where it stops. These run the real command line against a real
+    # toolchain and go no further than configure, therefore they are cheap
+    # enough for an emulated or scarce runner, and they are the only tests
+    # outside the unit suite that run on every pull request.
+    #
+    # What target a build is for is settled by the end of configure, so this is
+    # also where the architecture model is exercised for real.
+    "configure: run the command line no further than configure",
 ]

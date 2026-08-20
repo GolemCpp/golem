@@ -253,16 +253,17 @@ def assert_package_artifact_exists(project_dir: Path) -> None:
         assert any(project_dir.joinpath('build').rglob('*.msi'))
 
 
-# --- Settling the target -------------------------------------------------
+# --- No further than configure -------------------------------------------
 #
-# Settled, not resolved: resolving is what Golem does to a project's
-# dependencies, and these are about the architecture a build is for.
+# These run the real command line and stop at configure. They are the only
+# tests outside the unit suite that run on every pull request, so they are
+# what stands between a broken `golem configure` and a green develop.
 #
-# The target is settled by the end of configure. Stopping here makes CI
-# runners affordable. A runner is the only place some of the model can be
-# exercised at all: the splice of a compiler's ABI with uname's ISA level
-# needs a real 32-bit ARM userland, and every other test of it feeds the
-# machine string in by hand.
+# The target is settled by the end of configure, so the architecture model is
+# exercised here too. Stopping here makes CI runners affordable. A runner is
+# the only place some of the model can be exercised at all: the splice of a
+# compiler's ABI with uname's ISA level needs a real 32-bit ARM userland, and
+# every other test of it feeds the machine string in by hand.
 
 
 def configure_example(example_name: str, destination: Path, *args: str) -> str:
@@ -278,7 +279,7 @@ def configure_example(example_name: str, destination: Path, *args: str) -> str:
     return reported.group(1)
 
 
-@pytest.mark.settle
+@pytest.mark.configure
 def test_configure_settles_a_target_this_host_can_be_asked_for(example_tmp_path):
     # Self-validating, which is what lets it run on a host nobody has named:
     # whatever the compiler was understood to say is handed straight back as a
@@ -290,7 +291,7 @@ def test_configure_settles_a_target_this_host_can_be_asked_for(example_tmp_path)
     assert configure_example('hello', example_tmp_path / 'again') == settled
 
 
-@pytest.mark.settle
+@pytest.mark.configure
 def test_configure_evaluates_conditions_that_name_a_target(example_tmp_path):
     # A condition can name an architecture, an operating system or a compiler,
     # and all three are answers only the chosen toolchain gives. Selecting
@@ -338,6 +339,7 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     assert source.locator == Locator(cppfront_tool.CPPFRONT_REPOSITORY)
 
 
+@pytest.mark.configure
 def test_tools_list_available_mentions_supported_tools(example_tmp_path):
     project_dir = example_tmp_path / 'project'
     project_dir.mkdir()
