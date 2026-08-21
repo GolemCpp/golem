@@ -21,8 +21,8 @@ class Source:
     Where a resource comes from, once resolving has said which version of it.
 
     A RequestedSource is what a configuration spells, a Source is what resolving
-    one produces. Only this one can name a commit, and only this one identifies
-    anything in a cache.
+    one produces. Only this one can name a commit, and only this one has an
+    identity in a cache.
     '''
 
     # `locator` is where the source is, settled. `resolved` is which version of

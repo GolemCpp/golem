@@ -7,7 +7,7 @@ two things at once, and both are needed:
 - The reference it landed on, which is what gets reported back and read by a
   person.
 
-- The revision that reference points at, which is what identifies the content.
+- The revision that reference points at, which is the content's identity.
 
 A branch keeps its name while moving from one commit to the next, so neither
 stands in for the other.

@@ -9,7 +9,7 @@ in `cache_manager.CacheManager`. A manager turns its kind's object into a
 CacheManager it holds.
 
 Two declarations say what a kind is: the `ResourceKind` naming the subdir its
-roots go under, and the `Pinning` naming what identifies one there. The cache
+roots go under, and the `Pinning` naming what one takes its identity from. The cache
 key and whether a refresh consults the remote both follow from the `Pinning`.
 Therefore a manager with nothing else to say is those two lines and no more.
 
@@ -30,8 +30,8 @@ from enum import Enum
 
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import fetcher
-from golemcpp.golem import locator
 from golemcpp.golem import network
+from golemcpp.golem import safe_part
 from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.source import SOURCE_TYPE_GIT
@@ -45,38 +45,43 @@ CACHE_KEY_SEPARATOR = '+'
 # as an object name here.
 GIT_OBJECT_NAME = re.compile(r'^([0-9a-f]{40}|[0-9a-f]{64})$')
 
-# What a directory name may hold, on the strictest of the platforms golem runs on.
-# Lowercase only: NTFS and APFS are case-insensitive, so case cannot carry meaning
-# there the way it does in a git ref name. Anything else becomes
-# locator.SUBSTITUTE_MARKER, the same marker an id uses, so `release/1.2.3` reads
-# as `release~1.2.3` rather than as a ref that was named `release-1.2.3`.
-UNSAFE_IN_COMPONENT = re.compile(r'[^0-9a-z._-]')
-
-# How much of a revision is kept for reading. What identifies it is the digest
-# behind locator.DIGEST_SEPARATOR, the same convention an ambiguous id uses.
-REVISION_SLUG_LENGTH = 40
+# How much of an object name is kept for a reader. Git's floor: its default
+# `core.abbrev` is `auto`, which starts here and grows with the object count.
+ABBREVIATED_OBJECT_NAME_LENGTH = 7
 
 
-def make_revision_component(revision):
+def short_revision(revision: str) -> str:
     '''
-    Makes a revision as one directory-name component.
+    Abbreviate a commit to the first characters that identify it, the way a cache
+    key names one. A revision naming no commit is left as it is.
+    '''
+    if GIT_OBJECT_NAME.match(revision):
+        return revision[:ABBREVIATED_OBJECT_NAME_LENGTH]
+    return revision
 
-    It can be a hash: In which case it is abbreviated to 8 characters.
 
-    It can be a reference: In which case it can be abbreviated if it is too long.
-    But it will also always be appended with a digest of it since the reference
-    is processed to be safe for any filesystem, which can be lossy.
+def make_revision_part(revision):
+    '''
+    Make a revision as one part of a cache key.
+
+    A commit is abbreviated and nothing else. It is not digested, because the
+    revisions of one repository cached side by side are few enough that a prefix
+    tells them apart — not because an abbreviation identifies a commit, which
+    only the whole object name does.
+
+    A reference is spelled safely and always digested, since both spelling it and
+    cutting it are lossy.
     '''
     if not revision:
         return ''
 
     if GIT_OBJECT_NAME.match(revision):
-        return revision[:locator.DIGEST_LENGTH]
+        return short_revision(revision)
 
-    slug = UNSAFE_IN_COMPONENT.sub(locator.SUBSTITUTE_MARKER, revision.lower())
+    spelled, _ = safe_part.spell(revision, safe_part.UNSAFE_IN_STANDALONE)
 
-    return '{}{}{}'.format(slug[:REVISION_SLUG_LENGTH], locator.DIGEST_SEPARATOR,
-                           locator.digest(revision))
+    return safe_part.with_digest(
+        spelled[:safe_part.READABLE_LENGTH], of=revision)
 
 
 class Pinning(Enum):
@@ -121,9 +126,9 @@ class ResourceManager:
     # has none, because it is the shared plumbing and not a kind.
     kind = None
 
-    # What identifies one of its roots. The request by default, so a root
-    # follows what was asked for as that moves. A kind that needs something else
-    # says so.
+    # What one of its roots takes its identity from. The request by default, so
+    # a root follows what was asked for as that moves. A kind that needs
+    # something else says so.
     pinning = Pinning.REQUEST
 
     def __init__(self, cache_manager):
@@ -227,7 +232,7 @@ class ResourceManager:
             return item.name
 
         requested = item.requested()
-        component = make_revision_component(
+        component = make_revision_part(
             item.resolved.revision
             if cls.pinning is Pinning.REVISION else requested.version)
 

@@ -2,7 +2,6 @@ import os
 import io
 import re
 import sys
-import hashlib
 import glob
 import json
 import fnmatch
@@ -33,6 +32,7 @@ from golemcpp.golem import overrides
 from golemcpp.golem import directory_fetcher
 from golemcpp.golem import helpers
 from golemcpp.golem import network
+from golemcpp.golem import safe_part
 from golemcpp.golem import settings
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
@@ -298,10 +298,6 @@ class Context:
 
     def make_project_path(self, path):
         return os.path.join(self.get_project_dir(), str(Path(path)))
-
-    @staticmethod
-    def hash_identifier(flags):
-        return hashlib.md5(''.join(flags)).hexdigest()[:8]
 
     def make_base_path(self, path, prefix_path = ''):
         base_path = self.context.root
@@ -2132,7 +2128,7 @@ class Context:
         for dependency in dependencies:
             string += json.dumps(Dependency.serialize_to_json(dependency),
                                  sort_keys=True)
-        return hashlib.sha1(string.encode('utf-8')).hexdigest()[:8]
+        return safe_part.digest(string)
 
     def make_binary_foldername(self, dependencies=None):
         foldername = 'bin'

@@ -13,7 +13,6 @@ from golemcpp.golem.cache_configuration import get_cache_configuration
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem import cache_manager
 from golemcpp.golem import helpers
-from golemcpp.golem import locator
 from golemcpp.golem import resource_manager
 from golemcpp.golem import source
 from golemcpp.golem.source import Source
@@ -141,16 +140,6 @@ def shorten(text: str, width: int) -> str:
     return text[:head] + ELLIPSIS + text[len(text) - kept // 2:]
 
 
-def short_revision(revision: str) -> str:
-    '''
-    Abbreviate a commit to the first characters that identify it, the way a cache
-    key names one. A revision naming no commit is left as it is.
-    '''
-    if resource_manager.GIT_OBJECT_NAME.match(revision):
-        return revision[:locator.DIGEST_LENGTH]
-    return revision
-
-
 def resource_version(resource) -> str:
     '''
     Make the cell saying which version of its source a resource holds: the
@@ -162,8 +151,8 @@ def resource_version(resource) -> str:
 
     resolved = Source.from_manifest(resource.manifest).resolved
     parts = [resolved.reference]
-    revision = short_revision(resolved.revision)
-    if revision and revision != short_revision(resolved.reference):
+    revision = resource_manager.short_revision(resolved.revision)
+    if revision and revision != resource_manager.short_revision(resolved.reference):
         parts.append(revision)
 
     return ' '.join(part for part in parts if part) or NOTHING

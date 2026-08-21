@@ -22,7 +22,7 @@ from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.requested_source import detect_kind
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
-from golemcpp.golem.resource_manager import make_revision_component
+from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.dependency_manager import DependencyManager
 from conftest import absolute_path, make_cache_configuration
 
@@ -1174,7 +1174,7 @@ def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
 
 def test_a_dependency_source_prefers_the_commit_whole():
     # Whole, not abbreviated: git is handed this as it is, and cutting it down to
-    # fit a directory name is resource_manager.make_revision_component's job.
+    # fit a directory name is resource_manager.make_revision_part's job.
     dep = Dependency(repository='https://host/json.git')
     dep.resolved = ResolvedVersion(reference='3.11.3', revision='1234567890abcdef')
     assert ResourceManager.source_for(dep).resolved.revision == '1234567890abcdef'
@@ -1182,7 +1182,7 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # Keyed on the commit, which is what the kind's Pinning names -- not the
     # Source's rule.
     assert DependencyManager.cache_key_for(dep).endswith(
-        '+' + make_revision_component('1234567890abcdef'))
+        '+' + make_revision_part('1234567890abcdef'))
 
 
 def test_a_build_script_may_reach_a_remote():

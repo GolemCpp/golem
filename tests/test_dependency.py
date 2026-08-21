@@ -9,11 +9,11 @@ from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.resource_manager import CACHE_KEY_SEPARATOR
-from golemcpp.golem.resource_manager import make_revision_component
+from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.version_resolver import VersionResolver
 
 
-# A full object name, so make_revision_component abbreviates it the way it
+# A full object name, so make_revision_part abbreviates it the way it
 # abbreviates a real one.
 STUB_REVISION = '65ee68451d8eb2b5f3a30b410476ab83deb3289b'
 
@@ -210,7 +210,7 @@ def test_a_recorded_revision_alone_is_a_resolution(monkeypatch):
 
     assert dep.resolve() == ResolvedVersion(revision=STUB_REVISION)
     assert DependencyManager.cache_key_for(dep).endswith(
-        CACHE_KEY_SEPARATOR + make_revision_component(STUB_REVISION))
+        CACHE_KEY_SEPARATOR + make_revision_part(STUB_REVISION))
 
 
 def test_a_dependency_records_a_whole_resolution_untouched():
