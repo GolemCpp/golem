@@ -299,10 +299,6 @@ class Context:
     def make_project_path(self, path):
         return os.path.join(self.get_project_dir(), str(Path(path)))
 
-    @staticmethod
-    def hash_identifier(flags):
-        return hashlib.md5(''.join(flags)).hexdigest()[:8]
-
     def make_base_path(self, path, prefix_path = ''):
         base_path = self.context.root
         if len(prefix_path) == 0:
