@@ -1,4 +1,3 @@
-import hashlib
 import os
 import re
 from dataclasses import dataclass, replace
@@ -8,6 +7,7 @@ from golemcpp.golem import cache_configuration
 from golemcpp.golem import cache_lock
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import helpers
+from golemcpp.golem import safe_part
 from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.resource_manifest import ResourceManifest
 from golemcpp.golem.source import Source
@@ -233,11 +233,11 @@ class CacheManager:
         '''
         Short flat directory name for a minimized resource.
         
-        Hashing "<subdir>/<cache_key>" keeps names unique across resource kinds once 
+        Hashing "<subdir>/<cache_key>" keeps names unique across resource kinds once
         the per-kind subdirectory is dropped.
         '''
-        digest = hashlib.sha256('{}/{}'.format(resource.subdir, resource.cache_key).encode('utf-8')).hexdigest()
-        return digest[:length]
+        return safe_part.digest(
+            '{}/{}'.format(resource.subdir, resource.cache_key), length)
 
     def _find_matching_caches(self, identifier, is_read_only, with_regex):
         found_caches = []

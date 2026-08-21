@@ -32,6 +32,7 @@ from golemcpp.golem import cache_configuration
 from golemcpp.golem import fetcher
 from golemcpp.golem import locator
 from golemcpp.golem import network
+from golemcpp.golem import safe_part
 from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.source import SOURCE_TYPE_GIT
@@ -52,10 +53,6 @@ GIT_OBJECT_NAME = re.compile(r'^([0-9a-f]{40}|[0-9a-f]{64})$')
 # as `release~1.2.3` rather than as a ref that was named `release-1.2.3`.
 UNSAFE_IN_COMPONENT = re.compile(r'[^0-9a-z._-]')
 
-# How much of a revision is kept for reading. Past that, its identity is the
-# digest behind locator.DIGEST_SEPARATOR, the same convention an ambiguous id
-# uses.
-REVISION_SLUG_LENGTH = 40
 
 
 def make_revision_component(revision):
@@ -72,12 +69,12 @@ def make_revision_component(revision):
         return ''
 
     if GIT_OBJECT_NAME.match(revision):
-        return revision[:locator.DIGEST_LENGTH]
+        return revision[:safe_part.DIGEST_LENGTH]
 
     slug = UNSAFE_IN_COMPONENT.sub(locator.SUBSTITUTE_MARKER, revision.lower())
 
-    return '{}{}{}'.format(slug[:REVISION_SLUG_LENGTH], locator.DIGEST_SEPARATOR,
-                           locator.digest(revision))
+    return safe_part.with_digest(
+        slug[:safe_part.READABLE_LENGTH], of=revision)
 
 
 class Pinning(Enum):

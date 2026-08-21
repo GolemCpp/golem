@@ -15,6 +15,7 @@ from golemcpp.golem import cache_manager
 from golemcpp.golem import helpers
 from golemcpp.golem import locator
 from golemcpp.golem import resource_manager
+from golemcpp.golem import safe_part
 from golemcpp.golem import source
 from golemcpp.golem.source import Source
 
@@ -147,7 +148,7 @@ def short_revision(revision: str) -> str:
     key names one. A revision naming no commit is left as it is.
     '''
     if resource_manager.GIT_OBJECT_NAME.match(revision):
-        return revision[:locator.DIGEST_LENGTH]
+        return revision[:safe_part.DIGEST_LENGTH]
     return revision
 
 

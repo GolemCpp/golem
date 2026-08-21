@@ -17,7 +17,6 @@ know about. So golem recognises the one case it has to act on, a bare path, and
 passes the rest along.
 '''
 
-import hashlib
 import os
 import re
 import sys
@@ -26,6 +25,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from golemcpp.golem import helpers
+from golemcpp.golem import safe_part
 
 
 # What separates a scheme from the rest of a URL. A locator holding one names
@@ -96,16 +96,6 @@ VERBATIM_IN_ID_NAME = re.compile(r'^[A-Za-z0-9._-]+$')
 # it is what makes the boundary between the host and the path recoverable.
 # Otherwise, left free `https://a.b/c/d` and `https://c.a.b/d` are both `d@b.a.c`.
 FORGE_PATH_SEGMENTS = 2
-
-# Binds a lossy spelling to the digest that identifies it. Outside every safe set
-# above, so it can never appear in the half it delimits.
-DIGEST_SEPARATOR = '='
-DIGEST_LENGTH = 8
-
-
-def digest(value):
-    '''What tells two values apart once spelling them safely has lost the difference.'''
-    return hashlib.sha256(value.encode('utf-8')).hexdigest()[:DIGEST_LENGTH]
 
 # The host half of an id for a locator that names no host git can see.
 NO_HOST = '_no_host_'
@@ -254,9 +244,11 @@ def opaque_id(value):
     '''
     transport = TRANSPORT_HELPER.match(value).group('transport')
 
-    return '{}@{}{}{}'.format(
-        UNSAFE_IN_ID_NAME.sub(SUBSTITUTE_MARKER, transport).lower(),
-        NO_HOST, DIGEST_SEPARATOR, digest(value))
+    return safe_part.with_digest(
+        '{}@{}'.format(
+            UNSAFE_IN_ID_NAME.sub(SUBSTITUTE_MARKER, transport).lower(),
+            NO_HOST),
+        of=value)
 
 
 def as_url(value):
@@ -404,7 +396,7 @@ def generate_id(value):
 
     # Digested over the normalized form, so every spelling of one repository
     # still lands on one id.
-    return readable + DIGEST_SEPARATOR + digest(url)
+    return safe_part.with_digest(readable, of=url)
 
 
 @dataclass(frozen=True)

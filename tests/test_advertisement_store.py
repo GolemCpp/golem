@@ -3,6 +3,7 @@ import os
 import pytest
 
 from golemcpp.golem import advertisement_store
+from golemcpp.golem import safe_part
 
 
 LISTING = 'ref: refs/heads/main\tHEAD\nabc123\tHEAD\nabc123\trefs/heads/main\n'
@@ -116,7 +117,7 @@ def test_a_long_id_is_shortened_to_a_file_name(tmp_path):
 
         kept = os.listdir(str(tmp_path / 'resolve'))
         assert len(kept) == 1
-        assert len(kept[0]) <= advertisement_store.NAME_LENGTH + 16
+        assert len(kept[0]) <= safe_part.READABLE_LENGTH + 16
         assert advertisement_store.read(deep + '/mylib') == LISTING
 
 

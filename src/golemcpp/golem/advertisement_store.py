@@ -25,6 +25,7 @@ import os
 
 from golemcpp.golem import helpers
 from golemcpp.golem import locator
+from golemcpp.golem import safe_part
 
 
 # Where a resolve keeps them, under the build directory.
@@ -35,12 +36,6 @@ DIRECTORY_NAME = 'resolve'
 # rather than worked out again: a nested resolve is handed a build directory of
 # its own and would name a directory nobody else writes to.
 DIRECTORY_VARIABLE = 'GOLEM_RESOLVE_DIRECTORY'
-
-# How much of an identity is kept for reading. One spells a local repository out
-# of its whole path, which has no bound, where a file name does. Past that, the
-# digest behind locator.DIGEST_SEPARATOR is what tells two apart, the same
-# convention resource_manager.make_revision_component uses for a revision.
-NAME_LENGTH = 40
 
 
 @contextlib.contextmanager
@@ -97,8 +92,9 @@ def path_for(url) -> str:
     if not name:
         return ''
 
-    if len(name) > NAME_LENGTH:
-        name = name[:NAME_LENGTH] + locator.DIGEST_SEPARATOR + locator.digest(name)
+    if len(name) > safe_part.READABLE_LENGTH:
+        name = safe_part.with_digest(
+            name[:safe_part.READABLE_LENGTH], of=name)
 
     return os.path.join(directory, name)
 

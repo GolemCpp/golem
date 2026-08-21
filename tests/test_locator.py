@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from golemcpp.golem.locator import (DIGEST_SEPARATOR, NO_HOST, Locator,
-                                    generate_id, is_bare_path)
+from golemcpp.golem import safe_part
+from golemcpp.golem.locator import NO_HOST, Locator, generate_id, is_bare_path
 
 
 # -- what counts as a path, which is git's question to answer ---------------
@@ -207,7 +207,7 @@ def test_a_port_golem_cannot_read_is_gits_to_refuse_not_golems():
     malformed = 'ssh://host.example.com:notaport/org/repo.git'
 
     assert generate_id(malformed).startswith('repo@com.example.host.org')
-    assert DIGEST_SEPARATOR in generate_id(malformed)
+    assert safe_part.DIGEST_SEPARATOR in generate_id(malformed)
     assert Locator(malformed).get_id() == generate_id(malformed)
 
 
@@ -404,8 +404,8 @@ def test_the_no_host_marker_never_stands_without_a_digest(value):
     generated = generate_id(value)
     host_half = generated.partition('@')[2]
 
-    assert host_half.split(DIGEST_SEPARATOR)[0] == NO_HOST
-    assert DIGEST_SEPARATOR in generated
+    assert host_half.split(safe_part.DIGEST_SEPARATOR)[0] == NO_HOST
+    assert safe_part.DIGEST_SEPARATOR in generated
 
 
 @pytest.mark.parametrize('one,other', [
