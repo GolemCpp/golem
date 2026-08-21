@@ -69,7 +69,13 @@ def spell(value, charset):
 
 
 def digest(value, length=DIGEST_LENGTH):
-    '''What tells two values apart once spelling them safely has lost the difference.'''
+    '''
+    What tells two values apart when their readable halves cannot.
+
+    Either because spelling them safely lost the difference, which is what
+    `with_digest` binds back, or because the value has no readable form worth
+    keeping and the digest stands in for the whole of it.
+    '''
     return hashlib.sha256(value.encode('utf-8')).hexdigest()[:length]
 
 

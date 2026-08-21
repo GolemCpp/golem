@@ -296,14 +296,28 @@ SPDLOG = ('spdlog', 'https://github.com/gabime/spdlog.git', '1.12.0')
 
 
 @pytest.mark.parametrize('dependencies, slug', [
-    ([], 'da39a3ee'),
-    ([JSON], '5214c986'),
-    ([JSON, SPDLOG], 'f4d5f384'),
+    ([], 'e3b0c442'),
+    ([JSON], '2d1c519b'),
+    ([JSON, SPDLOG], '6c475ef9'),
     # Order is part of the slug: the strings are concatenated, not sorted.
-    ([SPDLOG, JSON], '1710cca8'),
+    ([SPDLOG, JSON], '73adb607'),
 ])
 def test_make_dependencies_slug_names(dependencies, slug):
     context = Context.__new__(Context)
 
     assert context.make_dependencies_slug(
         [make_dependency(*each) for each in dependencies]) == slug
+
+
+def test_make_dependencies_slug_reads_how_a_dependency_is_built():
+    # The slug names a build, so what a dependency is built as belongs in it.
+    # Two lists differing only in linkage are two builds, and `bin-<slug>` has to
+    # hold them apart.
+    context = Context.__new__(Context)
+    shared = Dependency(name='json', repository=JSON[1], version=JSON[2],
+                        link='shared')
+    static = Dependency(name='json', repository=JSON[1], version=JSON[2],
+                        link='static')
+
+    assert (context.make_dependencies_slug([shared])
+            != context.make_dependencies_slug([static]))
