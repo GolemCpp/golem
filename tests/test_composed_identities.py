@@ -20,6 +20,11 @@ someone thought to write down. And every identity is a name a filesystem takes.
 A case belongs here even when another module already exercises it for its own
 reasons: `test_locator.py` keeps the arguments, this keeps the index.
 
+An input has to mean the same thing wherever the suite runs. A bare POSIX path
+does not: `os.path.abspath` resolves it against the current drive on Windows.
+Spell those as `file://` URLs, which never reach `abspath`. The same rules out
+a UNC path, which is a relative name on Linux and a share on Windows.
+
 The corpus leans on non-ASCII. Every policy here agrees on ASCII, therefore a
 difference between them shows only outside it. A character that reads as an ASCII
 neighbour is a named constant written as an escape, because pasting one hides
@@ -28,6 +33,7 @@ what it is there for.
 
 import os
 import re
+from pathlib import Path
 
 import pytest
 
@@ -179,10 +185,7 @@ LOCATOR_IDENTITIES = [
     ('r@~~1.o=7a8f4037', ['https://[::1]/o/r.git']),
 
     # A local locator has no host to reverse, so its path stands in for one.
-    ('mylib@fsys.srv.git', [
-        'file:///srv/git/mylib.git',
-        '/srv/git/mylib.git',
-    ]),
+    ('mylib@fsys.srv.git', ['file:///srv/git/mylib.git']),
     ('mylib@fsys.tmp', ['file:///tmp/mylib']),
     ('my~lib@fsys.tmp=b3d4d31e', ['file:///tmp/my lib']),
     # `fsys` is not reserved on a remote host, so a real one carries a digest.
@@ -221,15 +224,28 @@ def test_a_locator_identity_is_a_usable_name(identity):
     assert_is_a_usable_name(identity)
 
 
+def test_a_bare_path_composes_the_identity_of_the_file_url_it_becomes():
+    # A path is made absolute and spelled as a `file://` URL, so the two reach
+    # one identity. Asserted against what `os` makes of the path rather than
+    # against a golden: an absolute POSIX path picks up the current drive on
+    # Windows, so it is not the same locator there.
+    bare = os.path.join(os.sep, 'srv', 'git', 'mylib.git')
+
+    assert generate_id(bare) == generate_id(Path(os.path.abspath(bare)).as_uri())
+
+
 def test_generate_id_strips_git_without_asking_who_reads_the_path():
+    # Spelled as `file://` URLs so no drive letter joins on Windows, where a
+    # bare POSIX path picks one up and digests over it.
+    #
     # As a suffix, `.git` names a bare repository by convention. On a filesystem
     # `/a/b/c.git` and `/a/b/c` are two directory entries, so meeting is wrong
     # and this assertion is meant to flip.
-    assert generate_id('/a/b/c.git') == generate_id('/a/b/c')
+    assert generate_id('file:///a/b/c.git') == generate_id('file:///a/b/c')
 
     # As a whole segment it is the git directory of the worktree above it, so
     # these two name one repository and meeting is right.
-    assert generate_id('/a/b/c/.git') == generate_id('/a/b/c')
+    assert generate_id('file:///a/b/c/.git') == generate_id('file:///a/b/c')
 
 
 def test_generate_id_collapses_scp_onto_https_on_a_forge():
