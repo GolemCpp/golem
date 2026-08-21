@@ -156,8 +156,12 @@ LOCATOR_IDENTITIES = [
     ('x@com.github.org', ['https://github.com/org/x.git']),
     ('x.git@com.github.org', ['https://github.com/org/x.GIT']),
     # A segment that is only the suffix strips to nothing and the level drops to
-    # the owner, which names the repository `<path>/.git` belongs to.
+    # the owner, which names the repository `<path>/.git` belongs to. So these
+    # two are one repository wearing two identities, and are meant to meet: what
+    # holds them apart is the digest the second carries for missing the forge
+    # shape by a segment.
     ('org@com.github', ['https://github.com/org/.git']),
+    ('org@com.github=7c22aaa7', ['https://github.com/org']),
 
     # Substituted before the case is folded: the Kelvin sign becomes the marker
     # rather than the 'k' it lowercases to.
