@@ -36,7 +36,7 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import generate_id
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind
-from golemcpp.golem.resource_manager import make_revision_component
+from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.source import Source
 from conftest import make_cache_configuration
 
@@ -183,13 +183,13 @@ def test_generate_id_collapses_scp_onto_https_on_a_forge():
             != generate_id('ssh://host.xz/repo.git'))
 
 
-# -- resource_manager.make_revision_component -------------------------------
+# -- resource_manager.make_revision_part -------------------------------
 
 
 @pytest.mark.parametrize('revision, spelled', [
     # An object name is abbreviated and nothing else: it identifies itself.
-    ('a' * 40, 'aaaaaaaa'),
-    ('b' * 64, 'bbbbbbbb'),
+    ('a' * 40, 'aaaaaaa'),
+    ('b' * 64, 'bbbbbbb'),
 
     # Everything else is a reference, always digested, because the spelling is
     # lossy and the slug is cut at 40.
@@ -202,24 +202,26 @@ def test_generate_id_collapses_scp_onto_https_on_a_forge():
     ('Straße', 'stra~e=58a3778c'),
     ('x' * 200, 'x' * 40 + '=aa20c23e'),
 
-    # Case is folded before the substitution here, the opposite of generate_id:
-    # the Kelvin sign becomes a plain 'k' and the dotted I keeps its 'i'. Only
-    # the unconditional digest keeps these off their ASCII neighbours.
-    (KELVIN + 'elvin', 'kelvin=4a274a98'),
+    # Substituted before the case is folded, as generate_id does: the Kelvin sign
+    # and the dotted I become the marker rather than the ASCII letters they
+    # lowercase to, so the readable halves already differ.
+    (KELVIN + 'elvin', '~elvin=4a274a98'),
     ('kelvin', 'kelvin=03105d50'),
-    (DOTTED_I + 'stanbul', 'i~stanbul=24ec8f72'),
+    (DOTTED_I + 'stanbul', '~stanbul=24ec8f72'),
 ])
-def test_make_revision_component_spells(revision, spelled):
-    assert make_revision_component(revision) == spelled
+def test_make_revision_part_spells(revision, spelled):
+    assert make_revision_part(revision) == spelled
 
 
-def test_make_revision_component_folds_before_substituting():
-    # The readable halves collide and only the digest separates them. The
-    # migration changes the order, so the first assertion is meant to flip.
-    kelvin = make_revision_component(KELVIN + 'elvin')
-    ascii_k = make_revision_component('kelvin')
+def test_make_revision_part_substitutes_before_folding():
+    # The Kelvin sign becomes the marker rather than the ASCII 'k' it lowercases
+    # to, so the readable halves differ and the digest is no longer the only
+    # thing holding the two apart.
+    kelvin = make_revision_part(KELVIN + 'elvin')
+    ascii_k = make_revision_part('kelvin')
 
-    assert kelvin.split('=')[0] == ascii_k.split('=')[0] == 'kelvin'
+    assert kelvin.split('=')[0] == '~elvin'
+    assert ascii_k.split('=')[0] == 'kelvin'
     assert kelvin != ascii_k
 
 

@@ -82,7 +82,7 @@ def test_list_reports_resources(capsys, tmp_path):
 
     # One line per resource: what it is, which one, which version of it, how it
     # was obtained, how big it is and how long ago it was used.
-    assert 'dependency  json@com.github.nlohmann+abc  v3.12.0 cafebabe  blobless' in out
+    assert 'dependency  json@com.github.nlohmann+abc  v3.12.0 cafebab  blobless' in out
     assert '1 resource(s),' in out
 
 
@@ -97,8 +97,8 @@ def test_list_tells_the_versions_of_one_dependency_apart(capsys, tmp_path):
 
     assert run(tmp_path, 'list') == 0
     out = capsys.readouterr().out
-    assert 'main 9cca280a' in out
-    assert 'main 65ee6845' in out
+    assert 'main 9cca280' in out
+    assert 'main 65ee684' in out
 
 
 def test_list_says_how_a_resource_was_obtained(capsys, tmp_path):
@@ -115,8 +115,8 @@ def test_list_says_how_a_resource_was_obtained(capsys, tmp_path):
 
     # A copied directory has no version and no history to obtain part of; a
     # repository says how much of it was fetched.
-    assert 'overlay-a@fsys.tmp+  -                directory' in out
-    assert 'heavy@h+abc          v1.0.0 cafebabe  shallow' in out
+    assert 'overlay-a@fsys.tmp+  -               directory' in out
+    assert 'heavy@h+abc          v1.0.0 cafebab  shallow' in out
 
 
 def test_list_flags_an_install_that_never_finished(capsys, tmp_path):

@@ -26,7 +26,7 @@ from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.overlay_manager import OverlayManager
 from golemcpp.golem.resource_manager import Pinning
 from golemcpp.golem.tool_manager import ToolManager
-from golemcpp.golem.resource_manager import make_revision_component
+from golemcpp.golem.resource_manager import make_revision_part
 from conftest import make_cache_configuration
 from conftest import stub_git_probes
 from conftest import STUB_HEAD
@@ -591,7 +591,7 @@ def test_an_object_name_in_a_key_abbreviates_the_way_git_does():
 
     # No digest to disambiguate: an object name already identifies itself, and a
     # component without one is by construction a commit.
-    assert DependencyManager.cache_key_for(dep) == 'json@com.github.nlohmann+65ee6845'
+    assert DependencyManager.cache_key_for(dep) == 'json@com.github.nlohmann+65ee684'
 
 
 def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():
@@ -606,9 +606,9 @@ def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():
     dep.resolved = resolved
 
     assert CookbookManager.cache_key_for(cookbook).endswith(
-        make_revision_component('v3.12.0'))
+        make_revision_part('v3.12.0'))
     assert DependencyManager.cache_key_for(dep).endswith(
-        make_revision_component('cafebabe'))
+        make_revision_part('cafebabe'))
     assert ToolManager.cache_key_for(
         ToolManager.get_tool('cppfront', version='v0.8.1')) == 'cppfront'
 
@@ -640,7 +640,7 @@ def test_a_request_keyed_root_is_named_the_same_resolved_or_not(tmp_path):
 
     assert CookbookManager.cache_key_for(cookbook) == unresolved
     # And it is the request that names it, not what the request resolved to.
-    assert unresolved.endswith('+' + make_revision_component('^1.2.0'))
+    assert unresolved.endswith('+' + make_revision_part('^1.2.0'))
 
 
 def test_only_a_commit_keyed_kind_skips_the_remote_on_a_refresh(tmp_path):
@@ -683,30 +683,30 @@ def test_every_kind_reports_what_its_version_resolved_to(monkeypatch, capsys, re
 
 
 
-def test_make_revision_component_abbreviates_either_object_name_format():
+def test_make_revision_part_abbreviates_either_object_name_format():
     # 40 hex is SHA-1, 64 is SHA-256. Git is migrating, and both name a commit.
-    assert make_revision_component('a' * 40) == 'aaaaaaaa'
-    assert make_revision_component('b' * 64) == 'bbbbbbbb'
+    assert make_revision_part('a' * 40) == 'aaaaaaa'
+    assert make_revision_part('b' * 64) == 'bbbbbbb'
 
 
 
-def test_make_revision_component_abbreviates_nothing_of_another_length():
+def test_make_revision_part_abbreviates_nothing_of_another_length():
     # Neither is an object name, so neither may be silently cut down to one.
-    assert make_revision_component('c' * 39) == 'c' * 39 + '=' + \
+    assert make_revision_part('c' * 39) == 'c' * 39 + '=' + \
         hashlib.sha256(('c' * 39).encode('utf-8')).hexdigest()[:8]
-    assert make_revision_component('d' * 41).startswith('d' * 40 + '=')
+    assert make_revision_part('d' * 41).startswith('d' * 40 + '=')
 
 
 
 def test_a_revision_that_looks_like_an_abbreviation_cannot_alias_a_commit():
     # A tag may be spelled like a short hash. It takes the other branch, so it
     # never collides with the commit whose object name starts the same way.
-    assert make_revision_component('deadbeef') == 'deadbeef=2baf1f40'
+    assert make_revision_part('deadbeef') == 'deadbeef=2baf1f40'
 
 
 
 def test_a_namespaced_revision_stays_one_path_component():
-    component = make_revision_component('release/1.2.3')
+    component = make_revision_part('release/1.2.3')
 
     assert component == 'release~1.2.3=88ded651'
     assert '/' not in component and os.sep not in component
@@ -717,18 +717,18 @@ def test_revisions_a_filesystem_would_confuse_stay_distinct():
     # Each pair is one directory on some platform golem runs on -- NTFS and APFS
     # fold case, Windows drops a trailing dot -- so the digest is what keeps them
     # apart, and it is taken over the name as written.
-    assert make_revision_component('V1.0') == 'v1.0=35a6fd96'
-    assert make_revision_component('v1.0') == 'v1.0=fa8b919c'
-    assert make_revision_component('v1.0.') == 'v1.0.=db5f409d'
+    assert make_revision_part('V1.0') == 'v1.0=35a6fd96'
+    assert make_revision_part('v1.0') == 'v1.0=fa8b919c'
+    assert make_revision_part('v1.0.') == 'v1.0.=db5f409d'
     # And a name spelled with the substitute is not the name holding the original.
-    assert make_revision_component('release/1.2.3') != make_revision_component('release-1.2.3')
+    assert make_revision_part('release/1.2.3') != make_revision_part('release-1.2.3')
 
 
 
-def test_make_revision_component_is_always_a_usable_directory_name():
+def test_make_revision_part_is_always_a_usable_directory_name():
     for revision in ['main', 'V1.0', 'release/1.2.3', 'feature:x', 'a b', '..',
                      '...', 'café', 'x' * 200, 'a' * 40]:
-        component = make_revision_component(revision)
+        component = make_revision_part(revision)
 
         assert re.fullmatch(r'[0-9a-z._~-]*(=[0-9a-f]{8})?', component)
         # Ends in the digest or in an object name, so never in something Windows

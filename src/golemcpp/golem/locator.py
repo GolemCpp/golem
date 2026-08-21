@@ -342,7 +342,7 @@ def generate_id(value):
     looked up by `Context.load_recipe`.
 
     Spelling a locator safely is lossy, so any other shape is followed by a
-    digest of the whole thing, the way `make_revision_component` does for a
+    digest of the whole thing, the way `make_revision_part` does for a
     revision.
 
     Takes a raw string rather than a Locator, since callers reach it with a git
