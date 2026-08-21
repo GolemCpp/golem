@@ -8,7 +8,7 @@ which may be a semver spec matching no tag that exists yet.
 
 That is what separates this from a Source: a RequestedSource is what a
 configuration spells, a Source is what resolving one produces. Only the second
-can name a commit, and only the second identifies anything in a cache.
+can name a commit, and only the second has an identity in a cache.
 '''
 
 import os
@@ -212,7 +212,7 @@ class RequestedSource:
         return cls(locator=locator, version=version, type=kind)
 
     def get_id(self):
-        '''What identifies the source itself, whatever version is asked of it.'''
+        '''Make the identity of the source itself, whatever version is asked of it.'''
         return self.locator.get_id()
 
     def resolved_at(self, resolved) -> Source:

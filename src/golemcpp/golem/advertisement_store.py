@@ -36,10 +36,10 @@ DIRECTORY_NAME = 'resolve'
 # its own and would name a directory nobody else writes to.
 DIRECTORY_VARIABLE = 'GOLEM_RESOLVE_DIRECTORY'
 
-# How much of an id is kept for reading. An id spells a local repository out of
-# its whole path, which has no bound, where a file name does. What identifies it
-# past this is the digest behind locator.DIGEST_SEPARATOR, the same convention
-# resource_manager.make_revision_component uses for a revision.
+# How much of an identity is kept for reading. One spells a local repository out
+# of its whole path, which has no bound, where a file name does. Past that, the
+# digest behind locator.DIGEST_SEPARATOR is what tells two apart, the same
+# convention resource_manager.make_revision_component uses for a revision.
 NAME_LENGTH = 40
 
 

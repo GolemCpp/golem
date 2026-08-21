@@ -9,7 +9,7 @@ in `cache_manager.CacheManager`. A manager turns its kind's object into a
 CacheManager it holds.
 
 Two declarations say what a kind is: the `ResourceKind` naming the subdir its
-roots go under, and the `Pinning` naming what identifies one there. The cache
+roots go under, and the `Pinning` naming what one takes its identity from. The cache
 key and whether a refresh consults the remote both follow from the `Pinning`.
 Therefore a manager with nothing else to say is those two lines and no more.
 
@@ -52,8 +52,9 @@ GIT_OBJECT_NAME = re.compile(r'^([0-9a-f]{40}|[0-9a-f]{64})$')
 # as `release~1.2.3` rather than as a ref that was named `release-1.2.3`.
 UNSAFE_IN_COMPONENT = re.compile(r'[^0-9a-z._-]')
 
-# How much of a revision is kept for reading. What identifies it is the digest
-# behind locator.DIGEST_SEPARATOR, the same convention an ambiguous id uses.
+# How much of a revision is kept for reading. Past that, its identity is the
+# digest behind locator.DIGEST_SEPARATOR, the same convention an ambiguous id
+# uses.
 REVISION_SLUG_LENGTH = 40
 
 
@@ -121,9 +122,9 @@ class ResourceManager:
     # has none, because it is the shared plumbing and not a kind.
     kind = None
 
-    # What identifies one of its roots. The request by default, so a root
-    # follows what was asked for as that moves. A kind that needs something else
-    # says so.
+    # What one of its roots takes its identity from. The request by default, so
+    # a root follows what was asked for as that moves. A kind that needs
+    # something else says so.
     pinning = Pinning.REQUEST
 
     def __init__(self, cache_manager):

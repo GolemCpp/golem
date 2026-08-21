@@ -188,7 +188,7 @@ def without_git_suffix(segments):
 
 def names_one_repository(url):
     '''
-    Whether the id built from a locator identifies it on its own.
+    Whether a locator's identity stands on its own, without a digest.
 
     Two things have to hold:
 
@@ -250,7 +250,7 @@ def is_opaque(value):
 
 def opaque_id(value):
     '''
-    What identifies a locator nothing can read a hierarchy out of.
+    Make the identity of a locator nothing can read a hierarchy out of.
     '''
     transport = TRANSPORT_HELPER.match(value).group('transport')
 
@@ -341,15 +341,16 @@ def as_url(value):
 
 def generate_id(value):
     '''
-    What identifies the source a locator names, whatever version is asked of it.
+    Make the identity of the source a locator names, whatever version is asked
+    of it.
 
-    Its output is a published contract for the shape a forge uses. It is the
+    The output is a published contract for the shape a forge uses. It is the
     recipe directory name in the cookbook, e.g. `json@com.github.nlohmann`,
     looked up by `Context.load_recipe`.
 
     Spelling a locator safely is lossy, so any other shape is followed by a
-    digest of the whole thing, similarly to what `make_revision_component` does
-    for a revision.
+    digest of the whole thing, the way `make_revision_component` does for a
+    revision.
 
     Takes a raw string rather than a Locator, since callers reach it with a git
     remote URL read straight out of a repository.
