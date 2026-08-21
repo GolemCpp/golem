@@ -15,7 +15,12 @@ digests always, and an advertisement digests only what it had to cut.
 '''
 
 import hashlib
+import re
 
+
+# What a character outside a safe set becomes.
+# Read a `~` as "something outside the safe set was here, possibly a `~`".
+SUBSTITUTE_MARKER = '~'
 
 # Binds a lossy spelling to the digest that tells it apart. Outside every safe
 # set, so it can never appear in the half it delimits.
@@ -29,6 +34,38 @@ DIGEST_LENGTH = 8
 # How much of a value is kept for reading, before the digest takes over. Not how
 # long a part is: a digested one runs to this plus the separator plus the digest.
 READABLE_LENGTH = 40
+
+# What a part joined to its neighbours with a `.` may not hold: a `.`, or
+# `group.subgroup` and `group/subgroup` spell the same.
+UNSAFE_IN_DOT_JOINED = re.compile(r'[^0-9a-zA-Z_-]')
+
+# What a part nothing is joined onto may hold, which is the same plus a `.`: a
+# repository is called socket.io, and a reference v1.0.0.
+#
+# Deliberately defined as an independant regex from the one above, but they have to
+# agree with each other. Appending the dot to the set above would have not been
+# accepted as a valid regex. E.g. _-. is invalid.
+UNSAFE_IN_STANDALONE = re.compile(r'[^0-9a-zA-Z._-]')
+
+# The marker and the separator have to be unspellable, or a substituted `~` reads
+# as one that was really there and a `=` appears in the half it delimits.
+for _charset in (UNSAFE_IN_DOT_JOINED, UNSAFE_IN_STANDALONE):
+    assert _charset.match(SUBSTITUTE_MARKER), 'the marker has to be unsafe'
+    assert _charset.match(DIGEST_SEPARATOR), 'the separator has to be unsafe'
+
+
+def spell(value, charset):
+    '''
+    Spell a value safely, and say whether saying it that way lost anything.
+
+    Substitutes before folding case so that, for example, a U+212A KELVIN SIGN
+    doesn't turn into a plain `k` and reports no loss.
+
+    Case folding itself is not a loss. NTFS and APFS are case-insensitive, so
+    case cannot carry meaning in a directory name anyway.
+    '''
+    spelled = charset.sub(SUBSTITUTE_MARKER, value).lower()
+    return spelled, spelled != value.lower()
 
 
 def digest(value, length=DIGEST_LENGTH):

@@ -49,7 +49,7 @@ GIT_OBJECT_NAME = re.compile(r'^([0-9a-f]{40}|[0-9a-f]{64})$')
 # What a directory name may hold, on the strictest of the platforms golem runs on.
 # Lowercase only: NTFS and APFS are case-insensitive, so case cannot carry meaning
 # there the way it does in a git ref name. Anything else becomes
-# locator.SUBSTITUTE_MARKER, the same marker an id uses, so `release/1.2.3` reads
+# safe_part.SUBSTITUTE_MARKER, the same marker an id uses, so `release/1.2.3` reads
 # as `release~1.2.3` rather than as a ref that was named `release-1.2.3`.
 UNSAFE_IN_COMPONENT = re.compile(r'[^0-9a-z._-]')
 
@@ -71,7 +71,7 @@ def make_revision_component(revision):
     if GIT_OBJECT_NAME.match(revision):
         return revision[:safe_part.DIGEST_LENGTH]
 
-    slug = UNSAFE_IN_COMPONENT.sub(locator.SUBSTITUTE_MARKER, revision.lower())
+    slug = UNSAFE_IN_COMPONENT.sub(safe_part.SUBSTITUTE_MARKER, revision.lower())
 
     return safe_part.with_digest(
         slug[:safe_part.READABLE_LENGTH], of=revision)

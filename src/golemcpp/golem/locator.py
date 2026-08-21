@@ -77,21 +77,6 @@ DEFAULT_PORTS = {
     'ftps': 990,
 }
 
-# What a character outside the safe sets becomes.
-# Read a `~` as "something outside the safe set was here, possibly a `~`".
-SUBSTITUTE_MARKER = '~'
-
-# What survives into an id. Anything else is substituted rather than dropped.
-UNSAFE_IN_ID = re.compile(r'[^0-9a-zA-Z_-]')
-
-# The same, for the repository name, which may also hold a `.`.
-UNSAFE_IN_ID_NAME = re.compile(r'[^0-9a-zA-Z._-]')
-
-# Exact complements of the two filters above, so that "verbatim" means precisely
-# "nothing was substituted" and the predicate cannot claim otherwise.
-VERBATIM_IN_ID = re.compile(r'^[A-Za-z0-9_-]+$')
-VERBATIM_IN_ID_NAME = re.compile(r'^[A-Za-z0-9._-]+$')
-
 # How many path segments a forge locator names: an owner and a repository. Fixing
 # it is what makes the boundary between the host and the path recoverable.
 # Otherwise, left free `https://a.b/c/d` and `https://c.a.b/d` are both `d@b.a.c`.
@@ -157,16 +142,34 @@ def without_drive_colon(segments):
     return [match.group('letter')] + segments[1:]
 
 
-def names_verbatim(components):
+def spell_parts(parts):
     '''
-    Whether every component survives the filter with only its case changed.
+    Spell every part of an identity, and say whether spelling lost anything.
 
-    The last one is the repository name, which may hold a `.`; the rest may not.
+    The last part is the repository name. Nothing is joined onto it, so it may
+    hold a `.`; the others are joined with one, so a `.` there would read as a
+    join. No parts at all counts as lossy, since nothing is left to identify.
     '''
-    if not components:
-        return False
-    return (all(VERBATIM_IN_ID.match(part) for part in components[:-1])
-            and bool(VERBATIM_IN_ID_NAME.match(components[-1])))
+    if not parts:
+        return [], True
+
+    spelled = []
+    lossy = False
+
+    for part in parts[:-1]:
+        text, part_lossy = safe_part.spell(part, safe_part.UNSAFE_IN_DOT_JOINED)
+        spelled.append(text)
+        lossy = lossy or part_lossy
+
+    text, part_lossy = safe_part.spell(parts[-1], safe_part.UNSAFE_IN_STANDALONE)
+    spelled.append(text)
+
+    return spelled, lossy or part_lossy
+
+
+def spells_losslessly(parts):
+    '''Does spelling every part leave what told each one from another?'''
+    return not spell_parts(parts)[1]
 
 
 def without_git_suffix(segments):
@@ -182,8 +185,8 @@ def names_one_repository(url):
 
     Two things have to hold:
 
-    1. Every component has to survive UNSAFE_IN_ID intact but for its case, or
-    `socket.io` and `socketio` come out as one name.
+    1. Every part has to be spelled without loss, or `socket.io` and `socketio`
+    come out as one name.
 
     2. The boundary between the host and the path has to be recoverable, which
     is what a fixed segment count fixes.
@@ -209,7 +212,7 @@ def names_one_repository(url):
     if url.startswith(FILE_SCHEME + URL_SCHEME_SEPARATOR):
         # The marker is the whole head here, so the boundary needs no fixing and
         # a local path may be any depth.
-        return not hostname and names_verbatim(segments)
+        return not hostname and spells_losslessly(segments)
 
     labels = hostname.split('.') if hostname else []
     if len(labels) < 2 or labels[-1] == FILESYSTEM_HOST:
@@ -219,7 +222,7 @@ def names_one_repository(url):
     if len(segments) != FORGE_PATH_SEGMENTS:
         return False
 
-    return names_verbatim(labels + segments)
+    return spells_losslessly(labels + segments)
 
 
 def is_opaque(value):
@@ -244,11 +247,9 @@ def opaque_id(value):
     '''
     transport = TRANSPORT_HELPER.match(value).group('transport')
 
-    return safe_part.with_digest(
-        '{}@{}'.format(
-            UNSAFE_IN_ID_NAME.sub(SUBSTITUTE_MARKER, transport).lower(),
-            NO_HOST),
-        of=value)
+    spelled, _ = safe_part.spell(transport, safe_part.UNSAFE_IN_STANDALONE)
+
+    return safe_part.with_digest('{}@{}'.format(spelled, NO_HOST), of=value)
 
 
 def as_url(value):
@@ -383,11 +384,7 @@ def generate_id(value):
             "locator '{}' names no repository: nothing in it survives as a "
             "name".format(value))
 
-    # The last part is the repository name, which is allowed the extra character.
-    components = [UNSAFE_IN_ID.sub(SUBSTITUTE_MARKER, part).lower()
-                  for part in parts[:-1]]
-    components.append(
-        UNSAFE_IN_ID_NAME.sub(SUBSTITUTE_MARKER, parts[-1]).lower())
+    components, _ = spell_parts(parts)
 
     readable = '{}@{}'.format(components[-1], '.'.join(components[:-1]) or NO_HOST)
 

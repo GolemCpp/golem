@@ -99,9 +99,9 @@ DOTTED_I = '\u0130'
     ('https://github.com/org/x.git', 'x@com.github.org'),
     ('https://github.com/org/x.GIT', 'x.git@com.github.org'),
     # A segment that is only the suffix strips to nothing and the level drops to
-    # the owner, which names the repository `<path>/.git` belongs to. The digest
-    # then keeps it off that owner's own id.
-    ('https://github.com/org/.git', 'org@com.github=7735e1ce'),
+    # the owner, which names the repository `<path>/.git` belongs to. In such a
+    # case, the owner is the repository.
+    ('https://github.com/org/.git', 'org@com.github'),
 
     # Substituted before the case is folded: the Kelvin sign becomes the marker
     # rather than the 'k' it lowercases to.
@@ -146,12 +146,14 @@ def test_generate_id_keeps_two_repositories_apart(one, other):
 
 
 def test_generate_id_strips_git_without_asking_who_reads_the_path():
-    # As a suffix, `.git` names a bare repository by convention, but on a
-    # filesystem `/a/b/c.git` and `/a/b/c` are two directory entries. As a whole
-    # segment it is the git directory of the worktree above it, so `/a/b/c/.git`
-    # and `/a/b/c` are one repository. Both assertions are meant to flip.
+    # As a suffix, `.git` names a bare repository by convention. On a filesystem
+    # `/a/b/c.git` and `/a/b/c` are two directory entries, so meeting is wrong
+    # and this assertion is meant to flip.
     assert generate_id('/a/b/c.git') == generate_id('/a/b/c')
-    assert generate_id('/a/b/c/.git') != generate_id('/a/b/c')
+
+    # As a whole segment it is the git directory of the worktree above it, so
+    # these two name one repository and meeting is right.
+    assert generate_id('/a/b/c/.git') == generate_id('/a/b/c')
 
 
 def test_generate_id_folds_case_everywhere_except_the_git_suffix():
