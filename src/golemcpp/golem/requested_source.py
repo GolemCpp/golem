@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from golemcpp.golem import locator as locator_module
+from golemcpp.golem import safe_part
 from golemcpp.golem import source
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
@@ -25,8 +26,9 @@ from golemcpp.golem.source import Source
 # A configured location may spell its kind: `<kind>+<locator>`.
 KIND_SEPARATOR = '+'
 
-# A configured location may name the version to obtain: `<locator>#<version>`.
-VERSION_SEPARATOR = '#'
+# A configured location may name the version to obtain: `<locator>#<version>`,
+# the same separator a cache key uses between an identity and its version.
+VERSION_SEPARATOR = safe_part.VERSION_SEPARATOR
 
 # A leading bare word followed by the separator claims a kind. Kept narrow so a
 # real locator never matches: a URL has `:` after its scheme, a path has none.

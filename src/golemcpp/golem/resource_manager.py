@@ -37,9 +37,6 @@ from golemcpp.golem.resource import Resource
 from golemcpp.golem.source import SOURCE_TYPE_GIT
 
 
-# What separates the major fields of a cache key: `<source id>+<revision>`.
-CACHE_KEY_SEPARATOR = '+'
-
 # 40 hex is a SHA-1 object name, 64 a SHA-256 one. Git is migrating to SHA-256 and
 # a repository names its objects in one format or the other, so both have to read
 # as an object name here.
@@ -223,8 +220,8 @@ class ResourceManager:
 
             cppfront                                    pinned on the name
             mylib@fsys.tmp                              a source with no version
-            recipes@com.github.golemcpp+main=0d6e4079   pinned on the request
-            json@com.github.nlohmann+65ee6845           pinned on the commit
+            recipes@com.github.golemcpp#main=0d6e4079   pinned on the request
+            json@com.github.nlohmann#65ee6845           pinned on the commit
         '''
         if cls.pinning is Pinning.NAME:
             # Verbatim, and without asking for anything else. The name is
@@ -240,7 +237,7 @@ class ResourceManager:
         if not component:
             return requested.get_id()
 
-        return requested.get_id() + CACHE_KEY_SEPARATOR + component
+        return requested.get_id() + safe_part.VERSION_SEPARATOR + component
 
     @staticmethod
     def source_path(root):
