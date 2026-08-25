@@ -7,6 +7,7 @@ from waflib.Tools import msvc
 
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem import safe_part
 from golemcpp.golem import (context as golem_context, helpers, network,
                             qt_discovery, target_platform)
 from golemcpp.golem.settings import get_settings
@@ -1182,7 +1183,7 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # Keyed on the commit, which is what the kind's Pinning names -- not the
     # Source's rule.
     assert DependencyManager.cache_key_for(dep).endswith(
-        '+' + make_revision_part('1234567890abcdef'))
+        safe_part.VERSION_SEPARATOR + make_revision_part('1234567890abcdef'))
 
 
 def test_a_build_script_may_reach_a_remote():

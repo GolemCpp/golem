@@ -26,6 +26,10 @@ SUBSTITUTE_MARKER = '~'
 # set, so it can never appear in the half it delimits.
 DIGEST_SEPARATOR = '='
 
+# Separates an identity from the version asked of it. A location spells it
+# `<locator>#<version>` and a cache key `<id>#<version>`.
+VERSION_SEPARATOR = '#'
+
 # How much of a digest is kept. Thirty-two bits reads thin on its own, but a
 # digest only ever separates values whose readable halves already match, so the
 # space it works in is one readable half rather than the whole cache.
@@ -47,11 +51,13 @@ UNSAFE_IN_DOT_JOINED = re.compile(r'[^0-9a-zA-Z_-]')
 # accepted as a valid regex. E.g. _-. is invalid.
 UNSAFE_IN_STANDALONE = re.compile(r'[^0-9a-zA-Z._-]')
 
-# The marker and the separator have to be unspellable, or a substituted `~` reads
-# as one that was really there and a `=` appears in the half it delimits.
+# The marker and the separators have to be unspellable, or a substituted `~` reads
+# as one that was really there, a `=` appears in the half it delimits, and a `#`
+# in an identity reads as the version behind it.
 for _charset in (UNSAFE_IN_DOT_JOINED, UNSAFE_IN_STANDALONE):
     assert _charset.match(SUBSTITUTE_MARKER), 'the marker has to be unsafe'
-    assert _charset.match(DIGEST_SEPARATOR), 'the separator has to be unsafe'
+    assert _charset.match(DIGEST_SEPARATOR), 'the digest separator has to be unsafe'
+    assert _charset.match(VERSION_SEPARATOR), 'the version separator has to be unsafe'
 
 
 def spell(value, charset):

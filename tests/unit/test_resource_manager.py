@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from golemcpp.golem.requested_source import RequestedSource
+from golemcpp.golem import safe_part
 from golemcpp.golem import cache_directory
 from golemcpp.golem import helpers
 from golemcpp.golem import network
@@ -571,7 +572,7 @@ def test_a_cache_key_is_the_source_id_and_the_version_it_is_keyed_on():
         'https://github.com/GolemCpp/recipes.git', version='main'))
 
     assert CookbookManager.cache_key_for(cookbook) == \
-        'recipes@com.github.golemcpp+main=0d6e4079'
+        'recipes@com.github.golemcpp#main=0d6e4079'
 
 
 def test_a_source_with_no_version_is_keyed_by_the_repository_alone():
@@ -591,7 +592,7 @@ def test_an_object_name_in_a_key_abbreviates_the_way_git_does():
 
     # No digest to disambiguate: an object name already identifies itself, and a
     # component without one is by construction a commit.
-    assert DependencyManager.cache_key_for(dep) == 'json@com.github.nlohmann+65ee684'
+    assert DependencyManager.cache_key_for(dep) == 'json@com.github.nlohmann#65ee684'
 
 
 def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():
@@ -640,7 +641,7 @@ def test_a_request_keyed_root_is_named_the_same_resolved_or_not(tmp_path):
 
     assert CookbookManager.cache_key_for(cookbook) == unresolved
     # And it is the request that names it, not what the request resolved to.
-    assert unresolved.endswith('+' + make_revision_part('^1.2.0'))
+    assert unresolved.endswith(safe_part.VERSION_SEPARATOR + make_revision_part('^1.2.0'))
 
 
 def test_only_a_commit_keyed_kind_skips_the_remote_on_a_refresh(tmp_path):

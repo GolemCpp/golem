@@ -8,7 +8,7 @@ from golemcpp.golem.dependency_manager import DependencyManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import Locator
-from golemcpp.golem.resource_manager import CACHE_KEY_SEPARATOR
+from golemcpp.golem import safe_part
 from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.version_resolver import VersionResolver
 
@@ -210,7 +210,7 @@ def test_a_recorded_revision_alone_is_a_resolution(monkeypatch):
 
     assert dep.resolve() == ResolvedVersion(revision=STUB_REVISION)
     assert DependencyManager.cache_key_for(dep).endswith(
-        CACHE_KEY_SEPARATOR + make_revision_part(STUB_REVISION))
+        safe_part.VERSION_SEPARATOR + make_revision_part(STUB_REVISION))
 
 
 def test_a_dependency_records_a_whole_resolution_untouched():

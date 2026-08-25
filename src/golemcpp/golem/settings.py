@@ -73,7 +73,11 @@ SETTINGS = (
         env_name='GOLEM_CACHE_MINIMIZATION_ENABLED',
         option_name='cache_minimization_enabled',
         description='Store cached resources under short hashed flat paths to avoid long-path '
-                    'limits (e.g. Windows CL.exe). on/off, default on.',
+                    'limits (e.g. Windows CL.exe). Turning it off names a resource root '
+                    'after its cache key, which holds the # separating an identity from its '
+                    'version. A recipe may drive a build system of its own, passing it that '
+                    'root, but make and pkg-config read a # in a path as the start of a '
+                    'comment. on/off, default on.',
         value_type=SettingType.BOOL,
         default=True,
     ),
