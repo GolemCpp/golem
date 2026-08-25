@@ -200,7 +200,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --group dev
       - name: Run non-Qt/non-package example integration subset
-        run: python -m pytest tests/integration -k "not qt and not package"
+        run: python -m pytest tests/integration -m "not qt and not packaging"
 
   integration-emulated:
     name: Integration tests (linux-qemu, ${{ matrix.name }})
@@ -264,9 +264,10 @@ jobs:
               /venv/bin/pip install -q --upgrade pip
               /venv/bin/pip install -q --group dev
               /venv/bin/python -m pytest tests/integration -m configure
-              # Named rather than excluded. The x64 subset is `not qt and not
-              # package`, which still leaves cppfront, and that example clones
-              # cppfront and builds it: not cheap and not guaranteed to work.
+              # Named rather than excluded. The x64 subset is `-m "not qt and
+              # not packaging"`, which still leaves cppfront, and that example
+              # clones cppfront and builds it: not cheap and not guaranteed to
+              # work under emulation.
               /venv/bin/python -m pytest tests/integration \
                 -k "hello or minimal or conditions"
             '

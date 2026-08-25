@@ -54,4 +54,13 @@ markers = [
     # What target a build is for is settled by the end of configure, so this is
     # also where the architecture model is exercised for real.
     "configure: run the command line no further than configure",
+    # Named for what the runner has to provide. A leg that cannot provide it
+    # deselects the mark rather than naming the tests, which is what `-k` used
+    # to do: a substring match says nothing at the test, so a test added later
+    # is dropped from a leg with nothing to show for it.
+    #
+    # The `require_` guard in tests/host.py stays. It skips on a machine that
+    # lacks the tool; the mark keeps a leg from starting the test at all.
+    "qt: needs a Qt 6 installation",
+    "packaging: needs the platform's packaging tool",
 ]
