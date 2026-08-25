@@ -23,7 +23,6 @@ from example_project import REQUESTED_ARCH
 from example_project import TARGET_LINE
 from host import require_cxx_compiler
 from host import require_git_remote_access
-from host import require_long_paths
 from host import require_packaging_tool
 from host import require_qt_dir
 from support import make_cache_configuration
@@ -248,7 +247,6 @@ def test_conditions_example_builds_and_uses_platform_specific_sources(example_tm
 
 def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path):
     require_cxx_compiler()
-    require_long_paths()
 
     project_dir = copy_example_project('advanced', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'
@@ -279,7 +277,6 @@ def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path
 
 def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(example_tmp_path):
     require_cxx_compiler()
-    require_long_paths()
 
     project_dir = copy_example_project('modules', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'

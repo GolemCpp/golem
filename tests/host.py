@@ -48,11 +48,6 @@ def require_cxx_compiler() -> None:
     pytest.skip('No C++ compiler available for example integration tests')
 
 
-def require_long_paths() -> None:
-    if sys.platform.startswith('win32'):
-        pytest.skip('This test is not supported on Windows due to the too long path lengths of the generated build files')
-
-
 @lru_cache(maxsize=None)
 def can_access_git_remote(repository: str) -> bool:
     result = subprocess.run(
