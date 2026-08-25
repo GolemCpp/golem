@@ -77,7 +77,9 @@
 ## Editing Rules
 
 - Avoid editing [waflib](waflib) unless the task is explicitly about the vendored Waf subtree.
-- Cover a change with tests in `tests/unit/test_<module>.py`, next to the ones already there.
+- Cover a change with tests in `tests/unit/test_<module>.py`, next to the ones already there. `test_<name>.py` is a promise that `<name>.py` exists, and where the test sits says which tree to find it in: `tests/unit` for [src/golemcpp/golem](src/golemcpp/golem), [tests/unit/waflib](tests/unit/waflib) for the vendored Waf, [tests/unit/tests](tests/unit/tests) for the suite's own modules.
+- A test no module owns goes in [tests/unit/no_module](tests/unit/no_module): a behaviour several modules decide together ([test_resolving_a_cache_directory.py](tests/unit/no_module/test_resolving_a_cache_directory.py)), an index of cases ([test_composed_identities.py](tests/unit/no_module/test_composed_identities.py)), a subject that is not Python ([test_the_launcher_scripts.py](tests/unit/no_module/test_the_launcher_scripts.py)). Name those for what they establish, since there is no module to name them after.
+- [test_the_suite_layout.py](tests/unit/no_module/test_the_suite_layout.py) checks all of it, so a module renamed in `src` leaves a test that fails rather than a filename that quietly lies. It also refuses two test files sharing a basename, which pytest reports as an import mismatch without naming either one.
 - For behavior that only appears in a real build, validate from a consuming project such as those in [examples](examples) rather than touching vendored code.
 - Run the fast test loop before handing work back, and say which failures pre-date the change instead of silently fixing or hiding them.
 
