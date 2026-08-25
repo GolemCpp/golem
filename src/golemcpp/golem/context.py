@@ -959,7 +959,9 @@ class Context:
         context.add_option("--recipe",
                            action="store",
                            default='',
-                           help="Identifier to lookup a recipe")
+                           help="Identity to look a recipe up by, as "
+                                "@NAME[@OWNER[@HOST[@ROOTING]]]; defaults to "
+                                "the identity of the project's own remote")
 
         context.add_option("--no-cookbooks-fetch",
                            action="store_true",
@@ -1367,33 +1369,37 @@ class Context:
         path = self.get_dep_location(dep) if base is None else base
         return os.path.join(path, self.build_path(dep))
 
-    def make_dep_artifact_filename(self,
-                                   dep,
-                                   target_name=None,
-                                   source_location=None):
+    def make_dep_artifact_subpath(self,
+                                  dep,
+                                  target_name=None,
+                                  source_location=None):
+        '''
+        Where a dependency's configuration sits under `conf`, as a path.
 
-        name = []
+        One component per name, because the three are constrained differently.
 
-        if target_name:
-            name.append(target_name)
-
-        name.append(dep.name)
-
+        The dependency names the directory its targets sit in, and the file
+        beside that directory is the dependency taken as a whole.
+        '''
         if source_location is None:
             source_location = self.load_git_remote_origin_url()
 
-        config_filename = "{}@{}.json".format(
-            '@'.join(name), locator.generate_id(source_location))
+        parts = [locator.generate_id(source_location), dep.name]
 
-        return config_filename
+        if target_name:
+            parts.append(target_name)
+
+        parts[-1] += '.json'
+
+        return os.path.join(*parts)
 
     def get_dep_artifact_json(self, dep, target_name=None):
         path = os.path.join(self.get_dep_build_location(dep), 'conf')
         return os.path.join(
             path,
-            self.make_dep_artifact_filename(dep=dep,
-                                            target_name=target_name,
-                                            source_location=dep.get_source_location()))
+            self.make_dep_artifact_subpath(dep=dep,
+                                           target_name=target_name,
+                                           source_location=dep.get_source_location()))
 
     def get_dep_artifact_json_list(self, dep):
         if dep.targets:
@@ -3724,9 +3730,16 @@ class Context:
                 found_recipe_dir = directory
 
         if not found_recipe_dir:
+            # Naming the identity and the cookbooks searched, because the
+            # project carries no golemfile of its own and a message about a
+            # missing one sends the reader to the wrong repository entirely.
+            searched = '\n'.join(
+                '  {}'.format(cached.source_path) for cached in cached_cookbooks)
             raise RuntimeError(
-                "ERROR: no project file found ('golemfile.json' or 'golemfile.py')"
-            )
+                "ERROR: no recipe '{}' and no project file "
+                "('golemfile.json' or 'golemfile.py').\nSearched {} "
+                "cookbook(s):\n{}".format(
+                    recipe_id, len(cached_cookbooks), searched or '  (none)'))
 
         self.load_project(found_recipe_dir)
 
@@ -4781,10 +4794,13 @@ class Context:
                                   old_out_path=out_path,
                                   new_out_path=export_path_lib)
 
-        config_filename = self.make_dep_artifact_filename(
+        config_subpath = self.make_dep_artifact_subpath(
             task, target, self.load_git_remote_origin_url())
 
-        outpath_target = os.path.join(export_path_conf, config_filename)
+        outpath_target = os.path.join(export_path_conf, config_subpath)
+
+        helpers.make_directory(os.path.dirname(outpath_target))
+
         TargetConfigurationFile.save_file(path=outpath_target,
                                           project=self.project,
                                           configuration=config,

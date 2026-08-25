@@ -21,7 +21,7 @@ from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.requested_source import detect_kind
-from golemcpp.golem.locator import Locator
+from golemcpp.golem.locator import Locator, generate_id
 from golemcpp.golem.source import Source
 from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.dependency_manager import DependencyManager
@@ -321,6 +321,60 @@ def test_a_dependency_gets_its_own_slug():
                           runtime_variant=['release'], variant=['release'])
 
     assert context.build_path(dep) == 'windows~x86_64~msvc-19.44~st~r~st~r'
+
+
+# The remote a project is exported under, which names the `conf` subtree its
+# configuration files sit in. Its id is read rather than written out, so the
+# shape of an id is not restated here.
+EXPORTED_FROM = 'https://github.com/nlohmann/json.git'
+
+
+def make_artifact_context(remote=''):
+    '''A context answering only what an artifact subpath is composed of.'''
+    context = Context.__new__(Context)
+    context.load_git_remote_origin_url = lambda: remote
+    return context
+
+
+def test_a_target_artifact_sits_under_the_dependency_it_belongs_to():
+    # `resolve_recursively` writes one file for the task with no target named,
+    # then one per target of that task, so the dependency contains its targets.
+    # The file beside the directory is the dependency taken as a whole.
+    context = make_artifact_context()
+    dep = SimpleNamespace(name='json')
+    identity = generate_id(EXPORTED_FROM)
+
+    whole = context.make_dep_artifact_subpath(
+        dep, source_location=EXPORTED_FROM)
+    one_target = context.make_dep_artifact_subpath(
+        dep, target_name='parser', source_location=EXPORTED_FROM)
+
+    assert whole == os.path.join(identity, 'json.json')
+    assert one_target == os.path.join(identity, 'json', 'parser.json')
+
+
+def test_a_name_holding_an_at_sign_stays_in_its_own_component():
+    # The filename used to be `<target>@<dep>@<id>.json`, which nothing could
+    # read back: an id holds `@` as structure, and both names are golemfile
+    # input. One component each leaves nothing to read back.
+    context = make_artifact_context()
+    dep = SimpleNamespace(name='a@b')
+
+    subpath = context.make_dep_artifact_subpath(
+        dep, target_name='c@d', source_location=EXPORTED_FROM)
+
+    assert subpath == os.path.join(generate_id(EXPORTED_FROM), 'a@b', 'c@d.json')
+
+
+def test_an_artifact_subpath_falls_back_to_the_project_it_is_written_from():
+    # The writer names the project being exported and the reader names the
+    # dependency's own source. They meet because those are the same project.
+    context = make_artifact_context(remote=EXPORTED_FROM)
+    dep = SimpleNamespace(name='json')
+
+    assert (context.make_dep_artifact_subpath(dep)
+            == context.make_dep_artifact_subpath(
+                dep, source_location=EXPORTED_FROM))
 
 
 def test_configure_debug_keeps_debug_flags_with_release_runtime_variant():

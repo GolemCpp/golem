@@ -25,7 +25,6 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from golemcpp.golem import helpers
-from golemcpp.golem import safe_part
 
 
 # What separates a scheme from the rest of a URL. A locator holding one names
@@ -77,17 +76,6 @@ DEFAULT_PORTS = {
     'ftps': 990,
 }
 
-# How many path segments a forge locator names: an owner and a repository. Fixing
-# it is what makes the boundary between the host and the path recoverable.
-# Otherwise, left free `https://a.b/c/d` and `https://c.a.b/d` are both `d@b.a.c`.
-FORGE_PATH_SEGMENTS = 2
-
-# The host half of an id for a locator that names no host git can see.
-NO_HOST = '_no_host_'
-
-# The host half of an id for a local locator, whose path stands in for a host.
-FILESYSTEM_HOST = 'fsys'
-
 
 def parse_url(value):
     '''
@@ -125,106 +113,6 @@ def url_components(parsed):
             [unquote(segment) for segment in parsed.path.split('/') if segment])
 
 
-def without_drive_colon(segments):
-    '''
-    The segments with a leading Windows drive spelled by its letter alone.
-
-    Readable half only. What tells `C:/proj/mylib` from the ordinary POSIX path
-    `/c/proj/mylib` is the digest. See `names_one_repository` for the details.
-    '''
-    if not segments:
-        return segments
-
-    match = DRIVE_SEGMENT.match(segments[0])
-    if not match:
-        return segments
-
-    return [match.group('letter')] + segments[1:]
-
-
-def spell_parts(parts):
-    '''
-    Spell every part of an identity, and say whether spelling lost anything.
-
-    The last part is the repository name. Nothing is joined onto it, so it may
-    hold a `.`; the others are joined with one, so a `.` there would read as a
-    join. No parts at all counts as lossy, since nothing is left to identify.
-    '''
-    if not parts:
-        return [], True
-
-    spelled = []
-    lossy = False
-
-    for part in parts[:-1]:
-        text, part_lossy = safe_part.spell(part, safe_part.UNSAFE_IN_DOT_JOINED)
-        spelled.append(text)
-        lossy = lossy or part_lossy
-
-    text, part_lossy = safe_part.spell(parts[-1], safe_part.UNSAFE_IN_STANDALONE)
-    spelled.append(text)
-
-    return spelled, lossy or part_lossy
-
-
-def spells_losslessly(parts):
-    '''Does spelling every part leave what told each one from another?'''
-    return not spell_parts(parts)[1]
-
-
-def without_git_suffix(segments):
-    '''The segments with `.git` off the last one: `repo` and `repo.git` are one.'''
-    if segments and segments[-1].endswith('.git'):
-        return segments[:-1] + [segments[-1][:-4]]
-    return segments
-
-
-def names_one_repository(url):
-    '''
-    Whether a locator's identity stands on its own, without a digest.
-
-    Two things have to hold:
-
-    1. Every part has to be spelled without loss, or `socket.io` and `socketio`
-    come out as one name.
-
-    2. The boundary between the host and the path has to be recoverable, which
-    is what a fixed segment count fixes.
-
-    The shape that satisfies both is the one a forge uses `<host>/<owner>/<repository>`.
-    Anything else is named the same way and told apart by a digest.
-    '''
-    parsed = parse_url(url)
-    hostname, segments = url_components(parsed)
-    segments = without_git_suffix(segments)
-
-    try:
-        port = parsed.port
-    except ValueError:
-        # A port urlparse cannot read is git's to complain about, not golem's to
-        # refuse over. Unconfirmed is not the forge shape, so it digests.
-        return False
-
-    if port and port != DEFAULT_PORTS.get(parsed.scheme):
-        # Two ports on one host are two servers, and an id cannot say so.
-        return False
-
-    if url.startswith(FILE_SCHEME + URL_SCHEME_SEPARATOR):
-        # The marker is the whole head here, so the boundary needs no fixing and
-        # a local path may be any depth.
-        return not hostname and spells_losslessly(segments)
-
-    labels = hostname.split('.') if hostname else []
-    if len(labels) < 2 or labels[-1] == FILESYSTEM_HOST:
-        # A single-label host leaves too little to tell a host from a path, and
-        # one ending in the marker would read as a local locator.
-        return False
-    if len(segments) != FORGE_PATH_SEGMENTS:
-        return False
-
-    return spells_losslessly(labels + segments)
-
-
 def is_opaque(value):
     '''
     Whether a locator holds no hierarchy golem is able to read.
@@ -239,17 +127,6 @@ def is_opaque(value):
     '''
     match = TRANSPORT_HELPER.match(value)
     return bool(match) and URL_SCHEME_SEPARATOR not in match.group('address')
-
-
-def opaque_id(value):
-    '''
-    Make the identity of a locator nothing can read a hierarchy out of.
-    '''
-    transport = TRANSPORT_HELPER.match(value).group('transport')
-
-    spelled, _ = safe_part.spell(transport, safe_part.UNSAFE_IN_STANDALONE)
-
-    return safe_part.with_digest('{}@{}'.format(spelled, NO_HOST), of=value)
 
 
 def as_url(value):
@@ -334,66 +211,17 @@ def as_url(value):
 
 def generate_id(value):
     '''
-    Make the identity of the source a locator names, whatever version is asked
-    of it.
+    The identity of the source a locator names, spelled.
 
-    The output is a published contract for the shape a forge uses. It is the
-    recipe directory name in the cookbook, e.g. `json@com.github.nlohmann`,
-    looked up by `Context.load_recipe`.
-
-    Spelling a locator safely is lossy, so any other shape is followed by a
-    digest of the whole thing, the way `make_revision_part` does for a
-    revision.
-
-    Takes a raw string rather than a Locator, since callers reach it with a git
-    remote URL read straight out of a repository.
+    A thin reading of `SourceId`, kept here because every caller reaches it with
+    a locator rather than with an identity. `source_id.SourceId.from_locator`
+    is what to use when the fields themselves are wanted.
     '''
-    if not value:
-        return ''
+    # Imported here rather than at the top: source_id reads a locator, so the
+    # two modules would otherwise import each other.
+    from golemcpp.golem.source_id import SourceId
 
-    if is_opaque(value):
-        # Answered before as_url, so nothing tries to read a URL out of a value
-        # that is not one.
-        return opaque_id(value)
-
-    url = as_url(value)
-    hostname, segments = url_components(parse_url(url))
-
-    if not hostname and not segments:
-        raise ValueError(
-            "locator '{}' names no repository: a scheme on its own identifies "
-            "nothing".format(value))
-
-    segments = without_git_suffix(segments)
-
-    if url.startswith(FILE_SCHEME + URL_SCHEME_SEPARATOR):
-        # A local locator has no host to reverse, so its path stands in for one
-        # behind a marker: `file:///tmp/mylib` is `mylib@fsys.tmp`.
-        head = [FILESYSTEM_HOST] + (hostname.split('.') if hostname else [])
-        # Every spelling of a Windows path converges on a `file://` URL, so the
-        # drive is trimmed here rather than in as_url, which a path already
-        # normalized on Windows never reaches.
-        segments = without_drive_colon(segments)
-    else:
-        head = list(reversed(hostname.split('.'))) if hostname else []
-
-    parts = [component for component in head + segments if component]
-
-    if not parts:
-        raise ValueError(
-            "locator '{}' names no repository: nothing in it survives as a "
-            "name".format(value))
-
-    components, _ = spell_parts(parts)
-
-    readable = '{}@{}'.format(components[-1], '.'.join(components[:-1]) or NO_HOST)
-
-    if names_one_repository(url):
-        return readable
-
-    # Digested over the normalized form, so every spelling of one repository
-    # still lands on one id.
-    return safe_part.with_digest(readable, of=url)
+    return str(SourceId.from_locator(value))
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,7 @@ from golemcpp.golem import locator as locator_module
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from golemcpp.golem.locator import Locator
+from golemcpp.golem.source_id import SourceId
 
 
 def test_for_repository_preserves_location_and_resolved_version():
@@ -27,8 +28,11 @@ def test_generate_id_accepts_local_path_under_non_ascii_parent(tmp_path):
 
     source_id = locator_module.generate_id(str(recipes_dir))
 
-    assert source_id.startswith('recipes@fsys.')
+    assert source_id.startswith('@recipes@')
     assert 'project' in source_id
+    # Read the host back rather than matching the end of the spelling: a
+    # Windows path is rooted at a drive, so a rooting field follows the host.
+    assert SourceId.parse(source_id).host == '_local_'
 
 
 def test_generate_id_uses_hash_for_local_path_uniqueness(tmp_path):
@@ -41,8 +45,8 @@ def test_generate_id_uses_hash_for_local_path_uniqueness(tmp_path):
     source_id_two = locator_module.generate_id(str(parent_two))
 
     assert source_id_one != source_id_two
-    assert source_id_one.startswith('recipes@fsys.')
-    assert source_id_two.startswith('recipes@fsys.')
+    assert source_id_one.startswith('@recipes@')
+    assert source_id_two.startswith('@recipes@')
 
 
 def test_for_directory_is_directory_type():
@@ -54,7 +58,7 @@ def test_for_directory_is_directory_type():
 def test_get_id_matches_existing_format():
     source = Source.for_repository('https://github.com/GolemCpp/recipes.git')
 
-    assert source.locator.get_id() == 'recipes@com.github.golemcpp'
+    assert source.locator.get_id() == '@recipes@golemcpp@github.com'
 
 
 # -- Source as a resource identity (recorded in a manifest) -----------------

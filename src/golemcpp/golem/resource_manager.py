@@ -218,10 +218,10 @@ class ResourceManager:
         the directory holding it. The kind's pinning decides its shape (see
         Pinning).
 
-            cppfront                                    pinned on the name
-            mylib@fsys.tmp                              a source with no version
-            recipes@com.github.golemcpp#main=0d6e4079   pinned on the request
-            json@com.github.nlohmann#65ee6845           pinned on the commit
+            cppfront                                       pinned on the name
+            @mylib@tmp@_local_                             no version to name
+            @recipes@golemcpp@github.com#main=0d6e4079     pinned on the request
+            @json@nlohmann@github.com#65ee684              pinned on the commit
         '''
         if cls.pinning is Pinning.NAME:
             # Verbatim, and without asking for anything else. The name is

@@ -30,7 +30,7 @@ def test_every_spelling_of_one_repository_reads_one_file(tmp_path):
     # They already share one cache root, so they share one advertisement.
     with advertisement_store.shared(str(tmp_path / 'resolve')):
         advertisement_store.write('https://github.com/nlohmann/json.git', LISTING)
-        assert advertisement_store.read('git@github.com:nlohmann/json') == LISTING
+        assert advertisement_store.read('https://github.com/nlohmann/json') == LISTING
 
 
 def test_two_repositories_are_kept_apart(tmp_path):

@@ -310,8 +310,8 @@ def test_an_scp_style_remote_keeps_its_spelling_and_takes_a_version(tmp_path):
     assert requested.type == 'git'
     assert requested.locator == Locator('git@github.com:nlohmann/json.git')
     assert requested.version == 'v3.12.0'
-    # And it identifies the same repository as every other spelling of it.
-    assert requested.get_id() == 'json@com.github.nlohmann'
+    # And its identity says where that path hangs from.
+    assert requested.get_id() == '@json@nlohmann@github.com@scp.git'
 
 
 def test_a_transport_helper_passes_through_untouched(tmp_path):

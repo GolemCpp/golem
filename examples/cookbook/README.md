@@ -18,8 +18,11 @@ dependency's repository, which is how a lookup finds it:
 
 | repository | recipe directory |
 | --- | --- |
-| `https://github.com/nlohmann/json.git` | `json@com.github.nlohmann` |
-| `https://github.com/microsoft/GSL.git` | `gsl@com.github.microsoft` |
+| `https://github.com/nlohmann/json.git` | `@json@nlohmann@github.com` |
+| `https://github.com/microsoft/GSL.git` | `@gsl@microsoft@github.com` |
+
+The leading `@` is what tells a recipe from the rest of a cookbook, this
+`README.md` included.
 
 ## Editing a recipe
 
