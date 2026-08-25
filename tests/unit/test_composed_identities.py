@@ -48,7 +48,7 @@ from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.source import Source
-from conftest import make_cache_configuration
+from support import make_cache_configuration
 
 
 # KELVIN SIGN, whose lowercase is an ASCII 'k'. Substituting before folding turns

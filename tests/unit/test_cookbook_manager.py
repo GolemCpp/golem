@@ -11,8 +11,8 @@ from golemcpp.golem.cookbook_manager import (
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
 from golemcpp.golem.source import Source
 from golemcpp.golem.resolved_version import ResolvedVersion
-from conftest import STUB_HEAD
-from conftest import make_cache_configuration
+from support import STUB_HEAD
+from support import make_cache_configuration
 
 
 def make_manager(tmp_path):

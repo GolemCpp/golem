@@ -24,7 +24,7 @@ from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
 from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.dependency_manager import DependencyManager
-from conftest import absolute_path, make_cache_configuration
+from support import absolute_path, make_cache_configuration
 
 
 class AttrDict(dict):

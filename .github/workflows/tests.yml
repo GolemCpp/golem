@@ -61,7 +61,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --group dev
       - name: Run unit tests
-        run: python -m pytest --ignore=tests/test_examples_integration.py
+        run: python -m pytest tests/unit
 
   canary:
     name: Canary (${{ matrix.name }})
@@ -99,7 +99,7 @@ jobs:
       - name: Report what the alias resolved to
         run: python -c "import platform, sys; print(platform.platform(), platform.machine(), sys.version)"
       - name: Run unit tests
-        run: python -m pytest --ignore=tests/test_examples_integration.py
+        run: python -m pytest tests/unit
 
   configure:
     name: Configure tests (${{ matrix.name }})
@@ -153,7 +153,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --group dev
       - name: Run the command line no further than configure
-        run: python -m pytest tests/test_examples_integration.py -m configure
+        run: python -m pytest tests/integration -m configure
 
   integration:
     name: Integration tests (${{ matrix.name }})
@@ -200,7 +200,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --group dev
       - name: Run non-Qt/non-package example integration subset
-        run: python -m pytest tests/test_examples_integration.py -k "not qt and not package"
+        run: python -m pytest tests/integration -k "not qt and not package"
 
   integration-emulated:
     name: Integration tests (linux-qemu, ${{ matrix.name }})
@@ -263,10 +263,10 @@ jobs:
               python3 -m venv /venv
               /venv/bin/pip install -q --upgrade pip
               /venv/bin/pip install -q --group dev
-              /venv/bin/python -m pytest tests/test_examples_integration.py -m configure
+              /venv/bin/python -m pytest tests/integration -m configure
               # Named rather than excluded. The x64 subset is `not qt and not
               # package`, which still leaves cppfront, and that example clones
               # cppfront and builds it: not cheap and not guaranteed to work.
-              /venv/bin/python -m pytest tests/test_examples_integration.py \
+              /venv/bin/python -m pytest tests/integration \
                 -k "hello or minimal or conditions"
             '

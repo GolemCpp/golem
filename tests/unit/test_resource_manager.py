@@ -27,9 +27,9 @@ from golemcpp.golem.overlay_manager import OverlayManager
 from golemcpp.golem.resource_manager import Pinning
 from golemcpp.golem.tool_manager import ToolManager
 from golemcpp.golem.resource_manager import make_revision_part
-from conftest import make_cache_configuration
-from conftest import stub_git_probes
-from conftest import STUB_HEAD
+from support import make_cache_configuration
+from support import stub_git_probes
+from support import STUB_HEAD
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from conftest import absolute_path
+from support import absolute_path
 from golemcpp.golem import cache_directory
 from golemcpp.golem.setting_descriptor import SettingProcessingContext
 

@@ -18,10 +18,10 @@ from golemcpp.golem import cppfront_tool
 from golemcpp.golem import target_platform
 from golemcpp.golem import tool_manager
 from golemcpp.golem.locator import Locator
-from conftest import make_cache_configuration
+from support import make_cache_configuration
+from support import ROOT as REPO_ROOT
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / 'examples'
 PROJECT_VARIANTS = ('python', 'json')
 

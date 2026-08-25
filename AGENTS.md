@@ -21,9 +21,10 @@
 
 - Requirements are Python 3.10+ and Git. This repo depends on the Waf submodule, so assume a recursive clone is required.
 - Development dependencies (pytest, `node-semver`) install with `pip install --group dev`.
-- Tests run with `python -m pytest`. [tests/conftest.py](tests/conftest.py) puts `src/` and `waflib/waf` on `sys.path`, so no install step is needed.
-  - Fast loop: `python -m pytest tests -q --ignore=tests/test_examples_integration.py`.
-  - [tests/test_examples_integration.py](tests/test_examples_integration.py) builds the projects under [examples](examples); it needs a C++ compiler and network access and skips itself otherwise. CI runs the `-k "not qt and not package"` subset on Linux and Windows, see [.github/workflows/examples-integration.yml](.github/workflows/examples-integration.yml).
+- Tests run with `python -m pytest`. [tests/conftest.py](tests/conftest.py) puts `src/` and `waflib/waf` on `sys.path`, so no install step is needed; [tests/support.py](tests/support.py) holds what a test builds its inputs with.
+- The suite is split by tier, and every CI leg selects a directory rather than excluding a file. A new test belongs to the tier that can afford to run it.
+  - [tests/unit](tests/unit) mocks everything. Fast loop: `python -m pytest tests/unit -q`.
+  - [tests/integration](tests/integration) runs the real command line against the projects under [examples](examples); it needs a C++ compiler and network access and skips itself otherwise. Every pull request runs `-m configure`, which stops at configure; the full `-k "not qt and not package"` subset runs nightly and on the way to `main`. See [.github/workflows/tests.yml](.github/workflows/tests.yml).
 - Run the CLI from a checkout with the repo launcher [golem](golem) on `PATH`, or with `PYTHONPATH=src:waflib/waf python -m golemcpp.golem`.
 - Packaging automation uses `python -m build` in this repo and in [waflib](waflib). See [.github/workflows/python-publish.yml](.github/workflows/python-publish.yml).
 
@@ -48,12 +49,12 @@
 - Long paths break real builds on Windows. Cache path minimization exists because compilers such as CL.exe fail past the limit (see the `cache.minimization.*` settings in [settings.py](src/golemcpp/golem/settings.py)). Keep cached layouts short, and do not add nesting under a resource root without weighing it.
 - Encoding: pass `encoding='utf-8'` to every `open()` for files Golem owns (manifests, config stores, generated project files), because the platform default is not UTF-8 everywhere. Decode subprocess output through `helpers.decode_output`, which falls back to the console encoding and then to UTF-8 with replacement instead of raising.
 - Subprocesses: build argument lists and run them with `shell=False` through `helpers.run_task`/`run_git`, so quoting is never hand-rolled per platform. Anything shelling out to a Windows built-in (`rmdir /s /q` in `helpers.remove_tree`) has to quote through `subprocess.list2cmdline`.
-- Cover platform-specific behavior with a test that fakes the platform rather than one that only passes on the host: patch the module's `sys.platform` as [tests/test_config_store.py](tests/test_config_store.py) does, or stub `is_windows` as [tests/test_qt_discovery.py](tests/test_qt_discovery.py) does.
+- Cover platform-specific behavior with a test that fakes the platform rather than one that only passes on the host: patch the module's `sys.platform` as [tests/unit/test_config_store.py](tests/unit/test_config_store.py) does, or stub `is_windows` as [tests/unit/test_qt_discovery.py](tests/unit/test_qt_discovery.py) does.
 
 ## Editing Rules
 
 - Avoid editing [waflib](waflib) unless the task is explicitly about the vendored Waf subtree.
-- Cover a change with tests in `tests/test_<module>.py`, next to the ones already there.
+- Cover a change with tests in `tests/unit/test_<module>.py`, next to the ones already there.
 - For behavior that only appears in a real build, validate from a consuming project such as those in [examples](examples) rather than touching vendored code.
 - Run the fast test loop before handing work back, and say which failures pre-date the change instead of silently fixing or hiding them.
 

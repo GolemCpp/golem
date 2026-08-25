@@ -11,7 +11,7 @@ from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind, ResourceManifest
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
-from conftest import make_cache_configuration, make_source
+from support import make_cache_configuration, make_source
 from golemcpp.golem.locator import Locator
 
 

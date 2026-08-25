@@ -12,9 +12,9 @@ from golemcpp.golem import tool
 from golemcpp.golem import tool_manager
 from golemcpp.golem import tool_registry
 from golemcpp.golem import resource_manifest
-from conftest import default_setting
-from conftest import make_cache_configuration
-from conftest import stub_git_probes
+from support import default_setting
+from support import make_cache_configuration
+from support import stub_git_probes
 from golemcpp.golem.locator import Locator
 
 

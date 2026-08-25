@@ -7,8 +7,8 @@ from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.git_fetcher import GitFetcher
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
-from conftest import stub_git_probes
-from conftest import STUB_HEAD
+from support import stub_git_probes
+from support import STUB_HEAD
 
 
 @pytest.fixture

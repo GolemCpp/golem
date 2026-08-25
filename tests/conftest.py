@@ -1,4 +1,12 @@
-import os
+'''
+What has to happen before any test module is imported.
+
+Golem is not installed when the suite runs, so `src` and the vendored waflib go on
+`sys.path` here, at the one place pytest is guaranteed to reach first.
+
+Everything a test calls to build its inputs lives in `support.py`.
+'''
+
 import sys
 from pathlib import Path
 
@@ -14,16 +22,7 @@ if str(WAFLIB_SRC) not in sys.path:
 
 import pytest  # noqa: E402
 
-from golemcpp.golem import helpers  # noqa: E402
 from golemcpp.golem import network  # noqa: E402
-from golemcpp.golem.cache_configuration import CacheConfiguration  # noqa: E402
-from golemcpp.golem.fetch_policy import FetchMode  # noqa: E402
-from golemcpp.golem.git_fetcher import GitFetcher  # noqa: E402
-from golemcpp.golem.settings import get_settings  # noqa: E402
-
-
-# The commit a stubbed fetch reports having landed on.
-STUB_HEAD = 'cafebabecafebabecafebabecafebabecafebabe'
 
 
 @pytest.fixture
@@ -35,113 +34,3 @@ def resolving():
     '''
     with network.allowed():
         yield
-
-
-def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_revision=True,
-                    has_submodules=True, mode=FetchMode.BLOBLESS,
-                    branches=('main',), tags=()):
-    '''
-    What the fetch reads about a repository, stubbed for a test that drives the
-    mechanism without one: HEAD reads back as a commit, the resource declares
-    submodules, the root looks like it was fetched the way `mode` says, and the
-    refs are the ones `branches` and `tags` name. None of these go through
-    `run_git`, so none of them shows up in a recorded command sequence.
-
-    `holds_revision=False` is a repository holding nothing that was asked for,
-    whatever its refs would otherwise say.
-    '''
-    # What a root answers about its own shape, which is how a fetch tells what it
-    # is refreshing rather than what a fresh one would be asked for.
-    shape = {
-        '--is-shallow-repository': mode == FetchMode.SHALLOW,
-        'remote.origin.promisor': mode == FetchMode.BLOBLESS,
-    }
-
-    def advertisement():
-        '''
-        What the remote publishes, in the shape `ls-remote --symref` answers with.
-        The first branch is the one HEAD points at, since that is what a
-        repository with one branch means.
-        '''
-        lines = []
-        if branches:
-            lines.append('ref: refs/heads/{}\tHEAD'.format(branches[0]))
-        lines.append('{}\tHEAD'.format(head))
-        lines += ['{}\trefs/heads/{}'.format(head, branch) for branch in branches]
-        lines += ['{}\trefs/tags/{}'.format(head, tag) for tag in tags]
-        return '\n'.join(lines) + '\n'
-
-    def read_git(params, cwd=None, **kwargs):
-        for question, answer in shape.items():
-            if question in params:
-                return ('true' if answer else 'false') + '\n'
-        if params[0] == 'ls-remote':
-            return advertisement()
-        return head + '\n'
-
-    def try_git(params, cwd=None, **kwargs):
-        if params[:3] != ['rev-parse', '--verify', '--quiet']:
-            # Housekeeping, where nothing is made of the answer.
-            return True
-        if not holds_revision:
-            return False
-
-        # What the probe order asks for, one ref at a time. Anything else is a
-        # commit, which a repository asked about its own revision holds.
-        wanted = params[3].removesuffix('^{commit}')
-        if wanted.startswith('refs/tags/'):
-            return wanted[len('refs/tags/'):] in tags
-        if wanted.startswith('refs/remotes/origin/'):
-            return wanted[len('refs/remotes/origin/'):] in branches
-        return True
-
-    monkeypatch.setattr(helpers, 'try_git', try_git)
-    monkeypatch.setattr(helpers, 'read_git', read_git)
-    monkeypatch.setattr(GitFetcher, 'has_submodules', lambda self: has_submodules)
-
-
-def absolute_path(*parts):
-    '''
-    An absolute path on every platform. A leading separator is enough on POSIX,
-    but Windows also needs a drive: os.path.isabs('/opt/cache') is False there,
-    so such a path would still be resolved against the current directory.
-    '''
-    return os.path.join(os.path.abspath(os.sep), *parts)
-
-
-def default_setting(name):
-    '''The built-in default of a setting, processed as a resolved value is.'''
-    return get_settings().get_default(name)
-
-
-def make_source(locator='https://github.com/golemcpp/example.git',
-                reference='v1.0.0', revision=STUB_HEAD, source_type='git'):
-    '''
-    The source a seeded manifest records. A manifest naming no locator identifies
-    nothing, so a resource seeded with one needs a locator a Locator accepts.
-    '''
-    return {'type': source_type,
-            'locator': locator,
-            'resolved': {'reference': reference, 'revision': revision}}
-
-
-def make_cache_configuration(*locations,
-                             resolution_policy=default_setting('GOLEM_CACHE_RESOLUTION_POLICY'),
-                             minimization_enabled=default_setting('GOLEM_CACHE_MINIMIZATION_ENABLED'),
-                             minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'),
-                             fetch_mode=default_setting('GOLEM_GIT_FETCH_MODE'),
-                             fetch_jobs=1):
-    '''
-    A CacheConfiguration for a test that only cares about one of its settings.
-    The constructor requires them all, so the built-in defaults are filled here.
-
-    `fetch_jobs` is the exception: its default counts the processors, and a
-    recorded command sequence must not read differently on another machine.
-    '''
-    return CacheConfiguration(
-        locations=locations,
-        resolution_policy=resolution_policy,
-        minimization_enabled=minimization_enabled,
-        minimization_length=minimization_length,
-        fetch_mode=fetch_mode,
-        fetch_jobs=fetch_jobs)
