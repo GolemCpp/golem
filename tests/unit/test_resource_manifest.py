@@ -17,7 +17,7 @@ def test_resource_kind_subdir_mapping():
 
 
 def test_write_and_read_manifest_roundtrip(tmp_path):
-    root = tmp_path / 'json@com.github.nlohmann+65ee6845'
+    root = tmp_path / '@json@nlohmann@github.com#65ee684'
     root.mkdir()
 
     resource_manifest.write_manifest(
@@ -100,7 +100,7 @@ def test_read_manifest_of_an_unknown_kind_returns_none(tmp_path):
     # though everything else about it is well-formed.
     manifest_file = tmp_path / resource_manifest.MANIFEST_FILENAME
     manifest_file.write_text(
-        json.dumps({'kind': 'recipes-repository', 'cache_key': 'recipes@h+main',
+        json.dumps({'kind': 'recipes-repository', 'cache_key': '@recipes@@h#main',
                     'source': make_source(reference='main')}),
         encoding='utf-8')
     assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
@@ -120,12 +120,12 @@ def test_read_manifest_naming_no_source_returns_none(tmp_path):
                    # A locator has to be settled: a bare path never identified one.
                    {'type': 'directory', 'locator': '../somewhere'}):
         manifest_file.write_text(
-            json.dumps({'kind': 'dependency', 'cache_key': 'json@h+abc', 'source': source}),
+            json.dumps({'kind': 'dependency', 'cache_key': '@json@@h#abc', 'source': source}),
             encoding='utf-8')
         assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
 
     manifest_file.write_text(
-        json.dumps({'kind': 'dependency', 'cache_key': 'json@h+abc', 'source': make_source()}),
+        json.dumps({'kind': 'dependency', 'cache_key': '@json@@h#abc', 'source': make_source()}),
         encoding='utf-8')
     assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is not None
 

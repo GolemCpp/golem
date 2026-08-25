@@ -35,10 +35,10 @@ def make_manager(*cache_dirs):
 
 def test_scan_identifies_resources_and_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@nlohmann@github.com#abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
                   source=make_source(reference='v3.12.0'))
-    make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, 'mystery@host+main')  # no manifest
+    make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, '@mystery@@host#main')  # no manifest
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     resources = manager.scan()
@@ -46,13 +46,13 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
     assert len(resources) == 2
     by_key = {resource.cache_key: resource for resource in resources}
 
-    dep = by_key['json@com.github.nlohmann+abc']
+    dep = by_key['@json@nlohmann@github.com#abc']
     assert dep.is_identified
     assert dep.kind == 'dependency'
     assert dep.source['resolved']['reference'] == 'v3.12.0'
     assert dep.size_bytes > 0
 
-    mystery = by_key['mystery@host+main']
+    mystery = by_key['@mystery@@host#main']
     assert not mystery.is_identified
     # Kind is inferred from the subdirectory when unidentified.
     assert mystery.kind == 'cookbook'
@@ -60,24 +60,24 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
 
 def test_select_substring_and_regex(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@com.github.nlohmann+abc',
+    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@nlohmann@github.com#abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'fmt@com.github.fmtlib+def',
+    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@fmt@fmtlib@github.com#def',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     resources = manager.scan()
 
     substring = cache_manager.CacheManager.select(resources, 'nlohmann')
-    assert [r.cache_key for r in substring] == ['json@com.github.nlohmann+abc']
+    assert [r.cache_key for r in substring] == ['@json@nlohmann@github.com#abc']
 
-    regex = cache_manager.CacheManager.select(resources, r'^fmt@', use_regex=True)
-    assert [r.cache_key for r in regex] == ['fmt@com.github.fmtlib+def']
+    regex = cache_manager.CacheManager.select(resources, r'^@fmt@', use_regex=True)
+    assert [r.cache_key for r in regex] == ['@fmt@fmtlib@github.com#def']
 
 
 def test_filter_kind(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@@h#abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
     make_resource(root, cache_configuration.TOOLS_SUBDIR, 'cppfront',
                   manifest_kind=resource_manifest.ResourceKind.TOOL,
@@ -93,9 +93,9 @@ def test_filter_kind(tmp_path):
 def test_remove_resources_skips_read_only(tmp_path):
     writable_root = str(tmp_path / 'writable')
     read_only_root = str(tmp_path / 'readonly')
-    make_resource(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, 'a@h+1',
+    make_resource(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, '@a@@h#1',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
-    make_resource(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, 'b@h+2',
+    make_resource(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, '@b@@h#2',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
 
     manager = make_manager(
@@ -105,10 +105,10 @@ def test_remove_resources_skips_read_only(tmp_path):
 
     removed, skipped = cache_manager.CacheManager.remove_resources(resources)
 
-    assert [r.cache_key for r in removed] == ['a@h+1']
-    assert [r.cache_key for r in skipped] == ['b@h+2']
-    assert not os.path.exists(os.path.join(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, 'a@h+1'))
-    assert os.path.exists(os.path.join(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, 'b@h+2'))
+    assert [r.cache_key for r in removed] == ['@a@@h#1']
+    assert [r.cache_key for r in skipped] == ['@b@@h#2']
+    assert not os.path.exists(os.path.join(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, '@a@@h#1'))
+    assert os.path.exists(os.path.join(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, '@b@@h#2'))
 
 
 def test_list_cache_locations_reports_existence(tmp_path):
@@ -131,15 +131,16 @@ def test_list_cache_locations_reports_existence(tmp_path):
 def test_scan_detects_legacy_flat_entries_as_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
     # A normal resource under a known subdirectory.
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@@h#abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
-    # A legacy flat resource stored directly at the cache root, no manifest.
+    # A legacy flat resource stored directly at the cache root, no manifest,
+    # named the way the golem that wrote it spelled a key.
     make_resource(root, '', 'mylogger@fsys.home+-')
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     by_key = {resource.cache_key: resource for resource in manager.scan()}
 
-    assert set(by_key) == {'json@h+abc', 'mylogger@fsys.home+-'}
+    assert set(by_key) == {'@json@@h#abc', 'mylogger@fsys.home+-'}
 
     legacy = by_key['mylogger@fsys.home+-']
     assert legacy.is_identified is False
@@ -157,7 +158,7 @@ def test_scan_identifies_top_level_entries_via_manifest(tmp_path):
     resource_manifest.write_manifest(
         resource_root=resource_root,
         kind=resource_manifest.ResourceKind.DEPENDENCY,
-        cache_key='json@com.github.nlohmann+abc',
+        cache_key='@json@nlohmann@github.com#abc',
         source=make_source())
 
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
@@ -168,12 +169,12 @@ def test_scan_identifies_top_level_entries_via_manifest(tmp_path):
     assert resource.is_identified is True
     assert resource.kind == resource_manifest.ResourceKind.DEPENDENCY.value
     # The real cache_key comes from the manifest, not the flat hashed dir name.
-    assert resource.cache_key == 'json@com.github.nlohmann+abc'
+    assert resource.cache_key == '@json@nlohmann@github.com#abc'
 
 
 def test_scan_does_not_treat_known_subdirs_as_resources(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, 'json@h+abc',
+    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@@h#abc',
                   manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
     # Create empty known subdirs; none of them should show up as a resource.
     for subdir in cache_configuration.RESOURCE_SUBDIRS:
@@ -182,7 +183,7 @@ def test_scan_does_not_treat_known_subdirs_as_resources(tmp_path):
     manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
     keys = {resource.cache_key for resource in manager.scan()}
 
-    assert keys == {'json@h+abc'}
+    assert keys == {'@json@@h#abc'}
     assert not (keys & set(cache_configuration.RESOURCE_SUBDIRS))
 
 

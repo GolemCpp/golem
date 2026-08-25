@@ -572,7 +572,7 @@ def test_a_cache_key_is_the_source_id_and_the_version_it_is_keyed_on():
         'https://github.com/GolemCpp/recipes.git', version='main'))
 
     assert CookbookManager.cache_key_for(cookbook) == \
-        'recipes@com.github.golemcpp#main=0d6e4079'
+        '@recipes@golemcpp@github.com#main=0d6e4079'
 
 
 def test_a_source_with_no_version_is_keyed_by_the_repository_alone():
@@ -582,7 +582,7 @@ def test_a_source_with_no_version_is_keyed_by_the_repository_alone():
 
     assert CookbookManager.cache_key_for(cookbook) == \
         ResourceManager.source_for(cookbook).locator.get_id()
-    assert CookbookManager.cache_key_for(cookbook) == 'mylib@fsys.tmp'
+    assert CookbookManager.cache_key_for(cookbook) == '@mylib@tmp@_local_'
 
 
 def test_an_object_name_in_a_key_abbreviates_the_way_git_does():
@@ -592,7 +592,7 @@ def test_an_object_name_in_a_key_abbreviates_the_way_git_does():
 
     # No digest to disambiguate: an object name already identifies itself, and a
     # component without one is by construction a commit.
-    assert DependencyManager.cache_key_for(dep) == 'json@com.github.nlohmann#65ee684'
+    assert DependencyManager.cache_key_for(dep) == '@json@nlohmann@github.com#65ee684'
 
 
 def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():

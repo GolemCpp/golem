@@ -959,7 +959,9 @@ class Context:
         context.add_option("--recipe",
                            action="store",
                            default='',
-                           help="Identifier to lookup a recipe")
+                           help="Identity to look a recipe up by, as "
+                                "@NAME[@OWNER[@HOST[@ROOTING]]]; defaults to "
+                                "the identity of the project's own remote")
 
         context.add_option("--no-cookbooks-fetch",
                            action="store_true",
@@ -3728,9 +3730,16 @@ class Context:
                 found_recipe_dir = directory
 
         if not found_recipe_dir:
+            # Naming the identity and the cookbooks searched, because the
+            # project carries no golemfile of its own and a message about a
+            # missing one sends the reader to the wrong repository entirely.
+            searched = '\n'.join(
+                '  {}'.format(cached.source_path) for cached in cached_cookbooks)
             raise RuntimeError(
-                "ERROR: no project file found ('golemfile.json' or 'golemfile.py')"
-            )
+                "ERROR: no recipe '{}' and no project file "
+                "('golemfile.json' or 'golemfile.py').\nSearched {} "
+                "cookbook(s):\n{}".format(
+                    recipe_id, len(cached_cookbooks), searched or '  (none)'))
 
         self.load_project(found_recipe_dir)
 
