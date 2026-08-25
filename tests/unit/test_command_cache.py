@@ -5,7 +5,7 @@ from datetime import timezone
 
 import pytest
 
-from conftest import make_source
+from support import make_source
 from golemcpp.golem import cache_configuration
 from golemcpp.golem import resource_manifest
 from golemcpp.golem import command_cache

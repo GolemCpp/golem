@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import absolute_path, ROOT
+from support import absolute_path, ROOT
 from golemcpp.golem import config_store
 from golemcpp.golem import settings
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy

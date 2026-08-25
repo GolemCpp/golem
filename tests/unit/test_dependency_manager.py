@@ -11,9 +11,9 @@ from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
 from golemcpp.golem.fetch_policy import FetchMode
-from conftest import default_setting
-from conftest import make_cache_configuration
-from conftest import stub_git_probes
+from support import default_setting
+from support import make_cache_configuration
+from support import stub_git_probes
 from golemcpp.golem.locator import Locator
 
 

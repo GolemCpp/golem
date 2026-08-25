@@ -36,3 +36,17 @@ clean-session
 # On UNIX/Linux
 ./clean-session
 ```
+
+## Where the recipes come from
+
+This example depends on libraries that do not ship a Golem project file, so Golem
+needs a recipe for each. It reads them from [../cookbook](../cookbook) rather than
+from the published cookbook, which [.golem/config.json](.golem/config.json) says:
+
+```json
+{ "cookbooks.locations": "directory+../cookbook" }
+```
+
+If you copy this example somewhere else, Golem will report that it cannot find the
+cookbook, so either take [../cookbook](../cookbook) with it or delete the setting
+to fall back on the published one.

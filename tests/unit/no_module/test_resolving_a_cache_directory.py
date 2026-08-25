@@ -9,7 +9,7 @@ from golemcpp.golem.cache_manager import CacheManager
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
-from conftest import make_cache_configuration
+from support import make_cache_configuration
 
 
 def _settings(project_dir=None, build_dir=None, options=None):
