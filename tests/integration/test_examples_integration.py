@@ -328,10 +328,7 @@ def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(exa
 @pytest.mark.parametrize('project_variant', PROJECT_VARIANTS)
 def test_minimal_example_builds_and_runs(example_tmp_path, project_variant):
     require_cxx_compiler()
-    require_git_remote_access(
-        'https://github.com/GolemCpp/recipes.git',
-        'https://github.com/nlohmann/json.git',
-    )
+    require_git_remote_access('https://github.com/nlohmann/json.git')
 
     project_dir = prepare_example_project('minimal', example_tmp_path, project_variant)
     cache_dir = example_tmp_path / f'cache-{project_variant}'
@@ -354,10 +351,7 @@ def test_minimal_example_builds_and_runs(example_tmp_path, project_variant):
 
 def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
     require_cxx_compiler()
-    require_git_remote_access(
-        'https://github.com/GolemCpp/recipes.git',
-        'https://github.com/nlohmann/json.git',
-    )
+    require_git_remote_access('https://github.com/nlohmann/json.git')
 
     project_dir = copy_example_project('dependencies', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'
@@ -389,7 +383,6 @@ def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
 def test_cache_example_respects_custom_cache_directories(example_tmp_path):
     require_cxx_compiler()
     require_git_remote_access(
-        'https://github.com/GolemCpp/recipes.git',
         'https://github.com/nlohmann/json.git',
         'https://github.com/microsoft/GSL.git',
     )
@@ -402,7 +395,10 @@ def test_cache_example_respects_custom_cache_directories(example_tmp_path):
         cache_dir,
         'configure',
         '--cache-directory=cache-default',
-        '--additional-cache-directory=cache-recipes=.*GolemCpp/recipes.*',
+        # Matched against the whole locator, so the cookbook's pattern has to
+        # hold for the checkout and for the copy this test runs in. Its trailing
+        # directory name is the part that is the same in both.
+        '--additional-cache-directory=cache-cookbook=.*cookbook$',
         '--additional-cache-directory=cache-json=.*nlohmann.*',
         '--variant=release',
     )
@@ -410,9 +406,11 @@ def test_cache_example_respects_custom_cache_directories(example_tmp_path):
     run_golem(project_dir, cache_dir, 'dependencies')
     run_golem(project_dir, cache_dir, 'build')
 
-    assert (project_dir / 'cache-default').exists()
-    assert (project_dir / 'cache-json').exists()
-    assert (project_dir / 'cache-recipes').exists()
+    # Non-empty, not merely present: the example gitignores these rather than
+    # not having them, so an existence check passes on a machine that has run it
+    # in place whether or not this run wrote anything.
+    for bucket in ('cache-default', 'cache-json', 'cache-cookbook'):
+        assert any((project_dir / bucket).iterdir()), bucket
 
     binary = program_path(project_dir, 'hello-cache')
     assert binary.exists()

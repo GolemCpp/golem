@@ -18,6 +18,13 @@ from support import ROOT as REPO_ROOT
 
 EXAMPLES_DIR = REPO_ROOT / 'examples'
 
+# The cookbook some examples name in their own `.golem/config.json`.
+COOKBOOK_DIR = EXAMPLES_DIR / 'cookbook'
+
+# What a copy may leave behind: build output, and the cache directories the
+# `cache` example writes.
+NOT_COPIED = ('build', 'dependencies.json', '__pycache__', 'cache-*')
+
 # The architecture every configure in this suite asks for. Empty means none is
 # asked for, which is the normal case: the compiler's own answer stands.
 REQUESTED_ARCH = os.environ.get('GOLEM_TEST_ARCH', '')
@@ -38,8 +45,9 @@ def make_golem_env(cache_dir: Path) -> dict[str, str]:
         pythonpath_entries.append(env['PYTHONPATH'])
 
     env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)
-    env['GOLEM_COOKBOOKS_LOCATIONS'] = ''
     env['GOLEM_ADDITIONAL_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
+    # Nothing sets GOLEM_COOKBOOKS_LOCATIONS: certain examples sets it through
+    # `.golem/config.json` and an environment variable would outrank it.
     env['GOLEM_OVERLAYS_LOCATIONS'] = ''
 
     return env
@@ -49,11 +57,24 @@ def copy_example_project(example_name: str, destination_root: Path) -> Path:
     source = EXAMPLES_DIR / example_name
     destination = destination_root / example_name
 
-    shutil.copytree(
-        source,
-        destination,
-        ignore=shutil.ignore_patterns('build', 'dependencies.json', '__pycache__'),
-    )
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(*NOT_COPIED))
+    copy_cookbook(destination_root)
+
+    return destination
+
+
+def copy_cookbook(destination_root: Path) -> Path:
+    '''
+    Copy the example cookbook beside wherever the examples are copied.
+
+    Copied for every example rather than the three that name it, so this does not
+    have to know which ones do.
+    '''
+    destination = destination_root / COOKBOOK_DIR.name
+
+    if not destination.exists():
+        shutil.copytree(COOKBOOK_DIR, destination,
+                        ignore=shutil.ignore_patterns('__pycache__'))
 
     return destination
 
