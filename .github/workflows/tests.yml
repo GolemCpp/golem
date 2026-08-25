@@ -271,3 +271,30 @@ jobs:
               /venv/bin/python -m pytest tests/integration \
                 -k "hello or minimal or conditions"
             '
+
+  default-cookbook:
+    name: Default cookbook
+    # The cookbook golem ships as its default lives in another repository, so
+    # this can go red with no diff here causing it (e.g. network issues). It
+    # gates nothing for that reason, and runs wherever integration does because
+    # a release should not be cut without anyone having checked it.
+    #
+    # It makes no claim about what the cookbook holds. That is the cookbook's
+    # own business, and its own repository's to test.
+    if: inputs.integration
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --group dev
+      - name: Reach and fetch the default cookbook
+        run: python -m pytest tests/external

@@ -18,18 +18,20 @@ on:
 #   integration           builds and runs the examples
 #   integration-emulated  builds and runs the examples under qemu
 #   canary                the unit tests on the unpinned -latest images
+#   default-cookbook      reaches and fetches the cookbook golem defaults to
 #
 # What runs when:
 #
 #   pull request into develop            unit, configure
-#     with label run-integration           + integration
+#     with label run-integration           + integration, default-cookbook
 #     with label run-integration-emulated  + integration-emulated
 #
 #   pull request into main or release/** unit, configure, integration,
-#                                        integration-emulated
+#                                        integration-emulated, default-cookbook
 #
 #   nightly, on develop                  unit, configure, integration,
-#                                        integration-emulated, canary
+#                                        integration-emulated, canary,
+#                                        default-cookbook
 #
 # python-publish.yml calls tests.yml too, on a push:
 #
@@ -37,7 +39,7 @@ on:
 #                                        -> development release to TestPyPI
 #
 #   push a version tag                   unit, configure, integration,
-#                                        integration-emulated
+#                                        integration-emulated, default-cookbook
 #                                        -> stable release to PyPI and TestPyPI
 #
 # unit and configure take no switch, so they run on every call. Features are
