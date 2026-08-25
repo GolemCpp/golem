@@ -2,6 +2,7 @@ from golemcpp.golem import locator as locator_module
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source import Source
 from golemcpp.golem.locator import Locator
+from golemcpp.golem.source_id import SourceId
 
 
 def test_for_repository_preserves_location_and_resolved_version():
@@ -29,7 +30,9 @@ def test_generate_id_accepts_local_path_under_non_ascii_parent(tmp_path):
 
     assert source_id.startswith('@recipes@')
     assert 'project' in source_id
-    assert source_id.endswith('@_local_')
+    # Read the host back rather than matching the end of the spelling: a
+    # Windows path is rooted at a drive, so a rooting field follows the host.
+    assert SourceId.parse(source_id).host == '_local_'
 
 
 def test_generate_id_uses_hash_for_local_path_uniqueness(tmp_path):
