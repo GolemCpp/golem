@@ -1,0 +1,5 @@
+# A markdown paragraph is one line, as on the documentation site.
+overrides:
+  - files: "*.md"
+    options:
+      proseWrap: never

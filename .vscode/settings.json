@@ -4,5 +4,10 @@
 		"editor.defaultFormatter": "ms-python.black-formatter",
 		"editor.formatOnSave": true,
 		"editor.formatOnSaveMode": "modifications"
+	},
+	"[markdown]": {
+		"editor.defaultFormatter":"esbenp.prettier-vscode",
+		"editor.formatOnSave": true,
+		"editor.wordWrap": "on"
 	}
 }
