@@ -1329,3 +1329,4 @@ def test_a_host_with_no_toolchain_name_leaves_wafs_order_alone(monkeypatch):
 
     assert context.msvc_target_preference() == [
         name for name, _ in msvc.all_msvc_platforms]
+
