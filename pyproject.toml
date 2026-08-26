@@ -66,6 +66,10 @@ markers = [
     "packaging: needs the platform's packaging tool",
 ]
 
+[tool.black]
+# Strings here are single-quoted, for now.
+skip-string-normalization = true
+
 [tool.ruff]
 line-length = 88
 
