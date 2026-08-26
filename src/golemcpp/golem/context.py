@@ -43,6 +43,8 @@ from golemcpp.golem import target_resolver
 from golemcpp.golem.target_platform import TargetPlatform
 from golemcpp.golem import locator
 from golemcpp.golem.source import Source
+from golemcpp.golem.recipe_resolver import RecipeResolver
+from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.template import Template
 from golemcpp.golem.target import TargetConfigurationFile
 from golemcpp.golem.version import Version
@@ -3687,7 +3689,9 @@ class Context:
             self.context.env.CXX = os.environ['CXX']  # override default
 
     def load_recipe(self):
-        recipe_id = self.context.options.recipe
+        # Read rather than kept as text: the ladder below works on the fields,
+        # and reading is what folds the case of an identity given by hand.
+        recipe_id = SourceId.parse(self.context.options.recipe or '')
 
         # A project carrying its own golemfile deosn't need any recipe. Only
         # projects carrying no golemfile need to search for a recipe.
@@ -3698,7 +3702,7 @@ class Context:
             recipe_url = self.load_git_remote_origin_url()
             if not recipe_url:
                 return
-            recipe_id = locator.generate_id(recipe_url)
+            recipe_id = SourceId.from_locator(recipe_url)
 
         # A resolve makes the cookbooks available, whether or not it needs a recipe
         # itself, because it updates once the recipes that the dependencies of the
@@ -3722,26 +3726,7 @@ class Context:
         if not recipe_id:
             return
 
-        found_recipe_dir = None
-        for cached_cookbook in cached_cookbooks:
-            # Recipes sit in the cookbook's content, never at the resource root.
-            directory = os.path.join(cached_cookbook.source_path, recipe_id)
-            if os.path.exists(directory):
-                found_recipe_dir = directory
-
-        if not found_recipe_dir:
-            # Naming the identity and the cookbooks searched, because the
-            # project carries no golemfile of its own and a message about a
-            # missing one sends the reader to the wrong repository entirely.
-            searched = '\n'.join(
-                '  {}'.format(cached.source_path) for cached in cached_cookbooks)
-            raise RuntimeError(
-                "ERROR: no recipe '{}' and no project file "
-                "('golemfile.json' or 'golemfile.py').\nSearched {} "
-                "cookbook(s):\n{}".format(
-                    recipe_id, len(cached_cookbooks), searched or '  (none)'))
-
-        self.load_project(found_recipe_dir)
+        self.load_project(RecipeResolver(cached_cookbooks).resolve(recipe_id))
 
         if self.project is None:
             raise RuntimeError(

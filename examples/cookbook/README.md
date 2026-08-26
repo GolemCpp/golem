@@ -12,10 +12,10 @@ The examples that use it say so in their own `.golem/config.json`:
 
 A recipe directory is named after the identity Golem composes for the dependency's repository, which is how a lookup finds it:
 
-| repository                             | recipe directory            |
-| -------------------------------------- | --------------------------- |
-| `https://github.com/nlohmann/json.git` | `@json@nlohmann@github.com` |
-| `https://github.com/microsoft/GSL.git` | `@gsl@microsoft@github.com` |
+| repository                             | recipe directory |
+| -------------------------------------- | ---------------- |
+| `https://github.com/nlohmann/json.git` | `@json@nlohmann` |
+| `https://github.com/microsoft/GSL.git` | `@gsl@microsoft` |
 
 The leading `@` is what tells a recipe from the rest of a cookbook, this `README.md` included.
 
