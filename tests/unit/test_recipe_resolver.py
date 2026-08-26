@@ -31,6 +31,17 @@ def resolve(cookbooks, identity):
     return RecipeResolver(cookbooks).resolve(SourceId.parse(identity))
 
 
+def tells_case_apart(directory):
+    '''
+    Whether a directory holds two names differing only in case as two names.
+
+    This probes the filesystem capabilities.
+    '''
+    (directory / 'CASE_PROBE').mkdir()
+
+    return not (directory / 'case_probe').exists()
+
+
 def test_a_recipe_named_exactly_serves_the_identity(tmp_path, capsys):
     cookbook = make_cookbook(tmp_path, 'base', ['@json@nlohmann@github.com'])
 
@@ -76,6 +87,12 @@ def test_the_last_cookbook_listed_shadows_the_ones_below_it(tmp_path):
 def test_a_directory_that_is_not_lowercase_is_never_reached(tmp_path):
     # Probing spells the path from an identity, which is always lowercase, so
     # the directory is a recipe nobody can look up.
+    #
+    # Wherever the filesystem tells case apart. APFS and NTFS do not, and there
+    # the very same directory answers.
+    if not tells_case_apart(tmp_path):
+        pytest.skip('the filesystem does not tell two names apart by case')
+
     cookbook = make_cookbook(tmp_path, 'base', ['@Json@nlohmann@github.com'])
 
     with pytest.raises(RuntimeError, match='no recipe'):
