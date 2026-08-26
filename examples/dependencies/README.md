@@ -12,7 +12,7 @@ Currently, `overrides.json` is forcing the JSON library to `3.10.0`, while the `
 
 ### Without overrides.json
 
-``` bash
+```bash
 golem configure
 golem resolve
 golem dependencies
@@ -23,7 +23,7 @@ In `dependencies.json`, the JSON library is resolved to `3.12.0`, latest availab
 
 ### With overrides.json
 
-``` bash
+```bash
 golem configure --overrides-configuration=overrides.json
 golem resolve
 golem dependencies
@@ -36,7 +36,7 @@ In `dependencies.json`, the JSON library is resolved to `3.10.0`, exacly the ver
 
 To run the commands without the Golem environment variables that you may have set on your system:
 
-``` bash
+```bash
 # On Windows
 clean-session
 
@@ -46,14 +46,10 @@ clean-session
 
 ## Where the recipes come from
 
-This example depends on libraries that do not ship a Golem project file, so Golem
-needs a recipe for each. It reads them from [../cookbook](../cookbook) rather than
-from the published cookbook, which [.golem/config.json](.golem/config.json) says:
+This example depends on libraries that do not ship a Golem project file, so Golem needs a recipe for each. It reads them from [../cookbook](../cookbook) rather than from the published cookbook, which [.golem/config.json](.golem/config.json) says:
 
 ```json
 { "cookbooks.locations": "directory+../cookbook" }
 ```
 
-If you copy this example somewhere else, Golem will report that it cannot find the
-cookbook, so either take [../cookbook](../cookbook) with it or delete the setting
-to fall back on the published one.
+If you copy this example somewhere else, Golem will report that it cannot find the cookbook, so either take [../cookbook](../cookbook) with it or delete the setting to fall back on the published one.

@@ -6,26 +6,26 @@
 
 **Requirements:** Python 3.10 or later, Git
 
-``` bash
+```bash
 git clone --recursive -b main https://github.com/GolemCpp/golem.git
 ```
 
 To later update your cloned version of Golem:
 
-``` bash
+```bash
 git pull origin/main
 git submodule update --init
 ```
 
 Golem's repository needs to be added to your **PATH** environment variable. And in a Python environment, install the needed dependencies for development:
 
-``` bash
+```bash
 pip install --group dev
 ```
 
 To run the automated tests locally:
 
-``` bash
+```bash
 python -m pytest
 ```
 
