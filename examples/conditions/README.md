@@ -6,14 +6,14 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 
 To showcase conditions in the project file, we suggest to run the following:
 
-``` bash
+```bash
 golem configure --variant=debug
 golem build
 ```
 
 Run the program:
 
-``` bash
+```bash
 # On Windows
 .\build\bin\hello-conditions.exe
 
@@ -27,7 +27,7 @@ The program displays a message containing the name of your platform, following t
 
 To run the commands without the Golem environment variables that you may have set on your system:
 
-``` bash
+```bash
 # On Windows
 clean-session
 

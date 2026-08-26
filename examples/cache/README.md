@@ -6,7 +6,7 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 
 To showcase how to control where dependencies get cached, we suggest to run the following:
 
-``` bash
+```bash
 golem configure --cache-directory=cache-default --additional-cache-directory="cache-cookbook=.*cookbook$" --additional-cache-directory="cache-json=.*nlohmann.*"
 golem resolve
 golem dependencies
@@ -14,12 +14,13 @@ golem build
 ```
 
 This will create 3 cache directories:
+
 - `cache-cookbook` will contain any repository matching `.*cookbook$`  
-Such as [../cookbook](../cookbook), the local cookbook this example reads its recipes from
+  Such as [../cookbook](../cookbook), the local cookbook this example reads its recipes from
 - `cache-json` will contain any repository matching `.*nlohmann.*`  
-Such as https://github.com/nlohmann/json.git
+  Such as https://github.com/nlohmann/json.git
 - `cache-default` will contain any dependency not matched by other cache rules  
-Such as https://github.com/microsoft/GSL.git
+  Such as https://github.com/microsoft/GSL.git
 
 By default, the cache resolution policy is set on `strict`, which forces dependencies to be stored or found in the the first cache directory matching explicitly the URL.
 
@@ -27,7 +28,7 @@ If we set the cache resolution policy to `weak`, a dependency is allowed to be f
 
 To illustrate this behavior, we suggest to run the following:
 
-``` bash
+```bash
 golem configure --cache-directory=cache-default --additional-cache-directory="cache-cookbook=.*cookbook$" --additional-cache-directory="cache-json=.*nlohmann.*" --additional-cache-directory="cache-gsl=.*microsoft.*" --cache-resolution-policy=weak
 golem resolve
 golem dependencies
@@ -40,7 +41,7 @@ Switching the cache resolution policy to `strict`, or removing the option (since
 
 To illustrate this behavior, we suggest to run the following:
 
-``` bash
+```bash
 golem configure --cache-directory=cache-default --additional-cache-directory="cache-cookbook=.*cookbook$" --additional-cache-directory="cache-json=.*nlohmann.*" --additional-cache-directory="cache-gsl=.*microsoft.*" --cache-resolution-policy=strict
 golem resolve
 golem dependencies
@@ -51,7 +52,7 @@ golem build
 
 To run the commands without the Golem environment variables that you may have set on your system:
 
-``` bash
+```bash
 # On Windows
 clean-session
 
@@ -61,14 +62,10 @@ clean-session
 
 ## Where the recipes come from
 
-This example depends on libraries that do not ship a Golem project file, so Golem
-needs a recipe for each. It reads them from [../cookbook](../cookbook) rather than
-from the published cookbook, which [.golem/config.json](.golem/config.json) says:
+This example depends on libraries that do not ship a Golem project file, so Golem needs a recipe for each. It reads them from [../cookbook](../cookbook) rather than from the published cookbook, which [.golem/config.json](.golem/config.json) says:
 
 ```json
 { "cookbooks.locations": "directory+../cookbook" }
 ```
 
-If you copy this example somewhere else, Golem will report that it cannot find the
-cookbook, so either take [../cookbook](../cookbook) with it or delete the setting
-to fall back on the published one.
+If you copy this example somewhere else, Golem will report that it cannot find the cookbook, so either take [../cookbook](../cookbook) with it or delete the setting to fall back on the published one.

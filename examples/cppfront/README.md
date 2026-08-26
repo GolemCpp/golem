@@ -6,7 +6,7 @@ Start a [clean session](#start-a-clean-session) to run commands, if needed.
 
 Build the program:
 
-``` bash
+```bash
 golem tools list --available
 golem tools install cppfront
 golem configure --variant=debug
@@ -15,14 +15,14 @@ golem build
 
 If you prefer to use your own cppfront build instead of the cache-backed installation, you can still configure it explicitly:
 
-``` bash
+```bash
 golem configure --variant=debug --cppfront-path=/path/to/cppfront --cppfront-include=/path/to/cppfront/include
 golem build
 ```
 
 Run the program:
 
-``` bash
+```bash
 # On Windows
 .\build\bin\hello-cppfront.exe
 
@@ -34,7 +34,7 @@ Run the program:
 
 To run the commands without the Golem environment variables that you may have set on your system:
 
-``` bash
+```bash
 # On Windows
 clean-session
 

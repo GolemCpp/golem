@@ -6,8 +6,7 @@
   </picture>
 </a>
 
-> **Branches:** `develop` is the default and integration branch; `main` tracks releases.
-> To use Golem, install from PyPI (see [How to install?](#how-to-install)) rather than cloning.
+> **Branches:** `develop` is the default and integration branch; `main` tracks releases. To use Golem, install from PyPI (see [How to install?](#how-to-install)) rather than cloning.
 
 ## Golem
 
@@ -30,10 +29,11 @@ Golem is a cross-platform build system for C/C++ projects. It can build projects
 
 Golem's main goal is to remove the noise in the project file, and favor the developers intents rather than the technical details when unneeded.
 
-Here is how a **golemfile.py** looks like: 
-``` python
+Here is how a **golemfile.py** looks like:
+
+```python
 def configure(project):
-    
+
     project.dependency(name='json',
                        repository='https://github.com/nlohmann/json.git',
                        version='^3.0.0',
@@ -80,7 +80,7 @@ Have a look at the full example in [examples/minimal](/examples/minimal).
 
 Using **pipx** (recommended, creates a virtual environment):
 
-``` bash
+```bash
 pipx install golemcpp
 
 # Or install it for all users
@@ -89,13 +89,13 @@ pipx install --global golemcpp
 
 Alternatively, using **pip**:
 
-``` bash
+```bash
 pip install golemcpp
 ```
 
 Since Golem is evolving fast, to upgrade it run:
 
-``` bash
+```bash
 # When using pipx
 pipx upgrade golemcpp
 
@@ -110,7 +110,7 @@ pip install --upgrade golemcpp
 
 Everything starts with `golemfile.py`. You can generate a documented starter file at the root of your project directory with:
 
-``` bash
+```bash
 golem init
 ```
 
@@ -118,7 +118,7 @@ If you prefer to create it manually, here is a minimal example:
 
 Here is an example of `golemfile.py` to compile a **Hello World** program:
 
-``` python
+```python
 def configure(project):
     project.program(name='hello',
                     source=['src'])
@@ -131,7 +131,7 @@ The project variable is the entry point to declare dependencies, libraries and p
 
 Here is `src/main.cpp`:
 
-``` cpp
+```cpp
 #include <iostream>
 int main()
 {
@@ -146,7 +146,7 @@ Have a look at the full example in [examples/hello](/examples/hello).
 
 To build the program, run:
 
-``` bash
+```bash
 # For a debug build
 golem configure --variant=debug
 
@@ -174,9 +174,9 @@ The commands are presented in the order they are expected to be called, when nee
 - [golem init](https://golemcpp.org/docs/commands/golem-init/) to generate a documented starter `golemfile.py`
 - [golem configure](https://golemcpp.org/docs/commands/golem-configure/) to configure your project
 - [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to retrieve and configure dependencies
-  * About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
-  * About managing [Dependencies](https://golemcpp.org/docs/advanced/dependencies/)
-  * About the [Recipes](https://golemcpp.org/docs/advanced/recipes/)
+  - About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
+  - About managing [Dependencies](https://golemcpp.org/docs/advanced/dependencies/)
+  - About the [Recipes](https://golemcpp.org/docs/advanced/recipes/)
 - [golem dependencies (if using dependencies)](https://golemcpp.org/docs/commands/golem-dependencies/) to build dependencies
 - [golem build](https://golemcpp.org/docs/commands/golem-build/) to build your project (dependencies are expected to be built if any)
 - [golem package](https://golemcpp.org/docs/commands/golem-package/) to generate a package (the project is expected have built successfully)
