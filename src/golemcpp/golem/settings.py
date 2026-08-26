@@ -14,7 +14,10 @@ from golemcpp.golem.setting_descriptor import SettingType
 
 
 # Default cookbook used when nothing is configured.
-DEFAULT_COOKBOOK_LOCATION = 'git+https://github.com/GolemCpp/recipes.git'
+#
+# Pinned on the branch holding the identity grammar this version spells. The
+# catalogue keeps one branch per grammar.
+DEFAULT_COOKBOOK_LOCATION = 'git+https://github.com/GolemCpp/recipes.git#v2'
 
 
 def get_default_cache_directory_path():
