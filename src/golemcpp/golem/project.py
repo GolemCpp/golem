@@ -49,7 +49,8 @@ class Project:
         for dependency in self.deps:
             is_dependency_to_keep = False
             for dependency_to_keep in dependencies_to_keep:
-                if dependency.repository == dependency_to_keep.repository and dependency.version == dependency_to_keep.version:
+                if (dependency.repository == dependency_to_keep.repository
+                        and dependency.version == dependency_to_keep.version):
                     dependency.resolved = dependency_to_keep.resolved
                     is_dependency_to_keep = True
                     break
@@ -90,7 +91,8 @@ class Project:
 
         for i, dependency in enumerate(self.deps):
             for cached_dependency in cached_dependencies:
-                if cached_dependency.name == dependency.name and cached_dependency.version == dependency.version:
+                if (cached_dependency.name == dependency.name
+                        and cached_dependency.version == dependency.version):
                     print("{}: {} -> {} ({})".format(
                         cached_dependency.name, cached_dependency.version,
                         cached_dependency.resolved.reference,

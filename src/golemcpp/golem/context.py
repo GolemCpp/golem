@@ -34,6 +34,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem import network
 from golemcpp.golem import safe_part
 from golemcpp.golem import settings
+from golemcpp.golem import project_file
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
@@ -111,7 +112,9 @@ class Context:
         def get_project_file_path(filname):
             return os.path.join(directory, filname)
 
-        self.project_path = get_project_file_path("golemfile.py")
+        # Tried in the order project.PROJECT_FILE_NAMES lists them, which is
+        # what everything asking whether a directory holds a project answers by.
+        self.project_path = get_project_file_path(project_file.PROJECT_FILE_NAMES[0])
 
         if os.path.exists(self.project_path):
             self.module = Module(directory)
@@ -119,8 +122,8 @@ class Context:
 
         if self.project is not None:
             return
-        
-        self.project_path = get_project_file_path("golemfile.json")
+
+        self.project_path = get_project_file_path(project_file.PROJECT_FILE_NAMES[1])
 
         if os.path.exists(self.project_path):
             json_object = None
@@ -3726,11 +3729,14 @@ class Context:
         if not recipe_id:
             return
 
-        self.load_project(RecipeResolver(cached_cookbooks).resolve(recipe_id))
+        recipe = RecipeResolver(cached_cookbooks).resolve(recipe_id)
+
+        self.load_project(recipe.require_project_directory())
 
         if self.project is None:
             raise RuntimeError(
-                "ERROR: unable to use recipe from {}".format(found_recipe_dir))
+                "ERROR: {} holds a project file Golem could not read:\n"
+                "  {}".format(recipe.served_by, recipe.project_directory))
 
     def load_git_remote_origin_url(self):
         if self.repository is not None:

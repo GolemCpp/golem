@@ -3,21 +3,13 @@ Which recipe serves an identity, and which cookbook it came from.
 
 A recipe is named after what it answers to, therefore finding one is a probe and
 never a listing: the rungs of the identity, most specific first, in each
-cookbook from the last listed to the first. Nothing is read to decide, so what a
-cookbook holds cannot slow a lookup down.
+cookbook from the last listed to the first. Nothing a cookbook holds is read
+before a rung matches, so what it holds cannot slow a lookup down.
 '''
 
-import os
-
-# What makes a directory a project, whether it is a project of its own or a
-# recipe standing in for one. Ordered as `Context.load_project` tries them, and
-# it has to agree with this.
-PROJECT_FILE_NAMES = ('golemfile.py', 'golemfile.json')
-
-PROJECT_FILE_NAMES_LISTED = ' or '.join(
-    "'{}'".format(name) for name in PROJECT_FILE_NAMES
-)
-
+from golemcpp.golem import project_file
+from golemcpp.golem.declared_recipe import DeclaredRecipe
+from golemcpp.golem.recipe import Recipe
 
 class RecipeResolver:
     '''The recipes a stack of cookbooks can serve, in the order they answer.'''
@@ -25,53 +17,52 @@ class RecipeResolver:
     def __init__(self, cached_cookbooks):
         self.cached_cookbooks = cached_cookbooks
 
-    def resolve(self, recipe_id):
+    def resolve(self, recipe_id) -> Recipe:
         '''
-        Return the directory of the recipe serving an identity.
+        Return the recipe serving an identity.
 
-        Raise when no cookbook answers, and when the one that does holds no
-        project file.
+        Raise when no cookbook answers, and when the one that does answers
+        nothing a caller could use.
+        
+        What a caller then asks of the recipe is its own business.
         '''
+
         for cookbook in reversed(self.cached_cookbooks):
             for rung in recipe_id.rungs():
-                directory = self.directory_of(cookbook, rung)
+                declared = DeclaredRecipe.read(cookbook, rung)
 
-                if not os.path.exists(directory):
+                if declared is None:
                     continue
 
-                self.require_a_project(cookbook, rung, directory)
-                self.report(recipe_id, rung, cookbook)
+                recipe = Recipe.resolve(declared)
+                self.require_an_answer(recipe)
+                self.report(recipe_id, recipe)
 
-                return directory
+                return recipe
 
         self.refuse(recipe_id)
 
     @staticmethod
-    def directory_of(cookbook, rung):
-        '''Name where a rung would sit in a cookbook.'''
-        # Recipes sit in the cookbook's content, never at the resource root.
-        return os.path.join(cookbook.source_path, str(rung))
-
-    @staticmethod
-    def require_a_project(cookbook, rung, directory):
-        '''Refuse a recipe directory that holds nothing to load.'''
-        if any(
-            os.path.exists(os.path.join(directory, name)) for name in PROJECT_FILE_NAMES
-        ):
+    def require_an_answer(recipe):
+        '''Refuse a recipe saying neither where its package is nor how to build it.'''
+        # Dropping to a shorter rung instead would serve a recipe nobody asked
+        # for, so a directory named right and holding nothing is an error case.
+        if recipe:
             return
 
         raise RuntimeError(
-            "ERROR: recipe '{}' in cookbook '{}' holds no project file "
-            "({}):\n  {}".format(
-                rung, cookbook.cache_key, PROJECT_FILE_NAMES_LISTED, directory
-            )
-        )
+            "ERROR: {} holds no project file ({}) and names no locator:\n"
+            "  {}".format(
+                recipe.served_by,
+                project_file.PROJECT_FILE_NAMES_LISTED,
+                recipe.served_by.directory))
 
     @staticmethod
-    def report(recipe_id, rung, cookbook):
+    def report(recipe_id, recipe):
         '''Say which recipe served an identity, and which cookbook it came from.'''
         # In the shape a resolved version is reported in.
-        print("{}: served by {} ({})".format(recipe_id, rung, cookbook.cache_key))
+        print("{}: served by {} ({})".format(
+            recipe_id, recipe.served_by.rung, recipe.served_by.cookbook.cache_key))
 
     def refuse(self, recipe_id):
         '''Refuse an identity no cookbook answers, naming the ones searched.'''
@@ -85,7 +76,7 @@ class RecipeResolver:
             "ERROR: no recipe '{}' and no project file ({}).\n"
             "Searched {} cookbook(s):\n{}".format(
                 recipe_id,
-                PROJECT_FILE_NAMES_LISTED,
+                project_file.PROJECT_FILE_NAMES_LISTED,
                 len(self.cached_cookbooks),
                 searched or '  (none)',
             )
