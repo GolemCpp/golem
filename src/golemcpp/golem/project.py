@@ -156,7 +156,7 @@ class Project:
 
     def dependency(self, **kwargs):
         dep = Dependency(**kwargs)
-        dep.update_source(self.project_dir)
+        dep.update_source(self.project_dir, identity_allowed=True)
         self.deps.append(dep)
         return dep
 
@@ -204,7 +204,7 @@ class Project:
                     # golemfile: a `location` reaches this path too, and left
                     # unresolved it would name a source no reader looks at.
                     dependency = Dependency.unserialize_from_json(json_obj)
-                    dependency.update_source(project_dir)
+                    dependency.update_source(project_dir, identity_allowed=True)
                     project.deps.append(dependency)
             elif key == 'targets':
                 for json_obj in value:

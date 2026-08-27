@@ -20,7 +20,7 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem.requested_source import RequestedSource
-from golemcpp.golem.requested_source import detect_kind
+from golemcpp.golem.source_location import detect_kind
 from golemcpp.golem.locator import Locator, generate_id
 from golemcpp.golem.source import Source
 from golemcpp.golem.resource_manager import make_revision_part

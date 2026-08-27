@@ -1,6 +1,7 @@
 {
 	"git.addAICoAuthor": "off",
 	"[python]": {
+		"editor.rulers": [88],
 		"editor.defaultFormatter": "ms-python.black-formatter",
 		"editor.formatOnSave": true,
 		"editor.formatOnSaveMode": "modifications"

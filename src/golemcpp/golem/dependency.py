@@ -4,7 +4,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
-from golemcpp.golem import requested_source
+from golemcpp.golem import source_location
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import source
@@ -63,7 +63,8 @@ class Dependency(Configuration):
         if len(declared) > 1:
             raise ValueError(
                 "dependency '{}' declares several sources ({}); it comes from "
-                "exactly one".format(self.name, ', '.join(declared)))
+                "exactly one".format(self.name, ', '.join(declared))
+            )
 
     def get_source_location(self):
         # Falls back to `location` so a dependency is identifiable before
@@ -78,31 +79,57 @@ class Dependency(Configuration):
         if self.directory:
             return RequestedSource.for_directory(self.directory)
         return RequestedSource.for_repository(
-            self.repository, version=self.version,
-            version_regex=self.version_regex)
+            self.repository, version=self.version, version_regex=self.version_regex
+        )
 
-    def update_source(self, project_dir):
+    def update_source(self, project_dir, identity_allowed=False):
         # Also the gate on a dependency read from a configuration: read_json
         # writes the members straight in, so __init__ never saw them.
+        #
+        # `identity_allowed` is false unless a caller says otherwise: an
+        # override entry arrives through here too and aren't supporting this.
         self.validate_source()
         if self.location:
-            requested = RequestedSource.parse(self.location, project_dir=project_dir)
+            settled = source_location.parse(
+                self.location,
+                project_directory=project_dir,
+                identity_allowed=identity_allowed,
+            )
+
+            if settled.names_an_identity:
+                # Read for its refusals and then left as it was written. An
+                # identity says which source is wanted without saying where it
+                # is, so there is no field here to resolve it into: what it
+                # composes to belongs with everything else Golem works out.
+                return
+
+            # A locator resolves away into the field naming its kind.
+            self.location = ''
+            self.update_version(settled.version)
+
             # These two stay strings: they are golemfile keywords and
             # dependencies.json keys, so a Locator is built from them rather than
             # stored in them.
-            self.directory = str(requested.locator) \
-                if requested.type == source.SOURCE_TYPE_DIRECTORY else ''
-            self.repository = '' if self.directory else str(requested.locator)
-            self.location = ''
-            self.update_version(requested.version)
+            self.directory = (
+                str(settled.locator)
+                if settled.kind == source.SOURCE_TYPE_DIRECTORY
+                else ''
+            )
+            self.repository = '' if self.directory else str(settled.locator)
         elif self.directory:
             # These two name their kind by being the field they are, so it is
             # stated rather than detected. No # version fragment.
-            self.directory = str(requested_source.resolve_locator(
-                self.directory, source.SOURCE_TYPE_DIRECTORY, project_dir))
+            self.directory = str(
+                source_location.resolve_locator(
+                    self.directory, source.SOURCE_TYPE_DIRECTORY, project_dir
+                )
+            )
         elif self.repository:
-            self.repository = str(requested_source.resolve_locator(
-                self.repository, source.SOURCE_TYPE_GIT, project_dir))
+            self.repository = str(
+                source_location.resolve_locator(
+                    self.repository, source.SOURCE_TYPE_GIT, project_dir
+                )
+            )
 
     def update_version(self, requested_version):
         '''
@@ -116,7 +143,9 @@ class Dependency(Configuration):
             raise ValueError(
                 "dependency '{}' declares version '{}' and a location naming "
                 "'{}'; it asks for exactly one".format(
-                    self.name, self.version, requested_version))
+                    self.name, self.version, requested_version
+                )
+            )
 
         self.version = requested_version
 
@@ -125,7 +154,8 @@ class Dependency(Configuration):
 
     def resolve(self):
         resolved = VersionResolver.resolve_requested(
-            self.requested(), self.resolved, require_revision=True)
+            self.requested(), self.resolved, require_revision=True
+        )
 
         # The same one back: a copied directory, or an answer already in hand.
         if resolved is self.resolved:
@@ -150,7 +180,9 @@ class Dependency(Configuration):
     @staticmethod
     def serialized_members():
         # `location` is read from a configuration but never written back:
-        # update_source resolves it into `repository` or `directory` and clears it.
+        # update_source resolves a locator into `repository` or `directory`
+        # and clears it. An identity is left as it was written, having no field
+        # here to resolve into.
         return [
             'name', 'repository', 'directory', 'location', 'version',
             'version_regex', 'resolved', 'shallow'

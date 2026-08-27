@@ -237,3 +237,42 @@ def test_a_recorded_revision_that_names_no_commit_is_refused():
 
     assert 'names no commit' in str(error.value)
     assert "'json'" in str(error.value)
+
+
+def test_a_dependency_written_as_an_identity_keeps_it_as_written():
+    # A locator resolves away into the field naming its kind; an identity has
+    # no such field, so it stays where it was written until something resolves
+    # it into where the source actually is.
+    dependency = Dependency(name='boost', location='@boost#^1.87.0')
+
+    dependency.update_source('/proj', identity_allowed=True)
+
+    assert dependency.location == '@boost#^1.87.0'
+
+
+def test_where_an_identity_comes_from_is_not_known_yet():
+    # The cookbook lookup finds it, so neither field naming a source is filled.
+    dependency = Dependency(name='boost', location='@boost')
+
+    dependency.update_source('/proj', identity_allowed=True)
+
+    assert dependency.repository == ''
+    assert dependency.directory == ''
+
+
+def test_an_identity_is_refused_for_anything_but_a_dependency():
+    # An override entry arrives through update_source too, and naming one by
+    # identity is what the deferred overrides work has to settle first.
+    dependency = Dependency(name='boost', location='@boost')
+
+    with pytest.raises(ValueError, match="only a dependency's source"):
+        dependency.update_source('/proj')
+
+
+def test_an_identity_is_read_for_its_refusals_even_though_it_is_kept():
+    # Leaving it as written is not leaving it unchecked: the grammar errors
+    # belong where the text a person typed is still in hand.
+    dependency = Dependency(name='boost', location='@a@b@c@d@e')
+
+    with pytest.raises(ValueError, match='more than the four fields'):
+        dependency.update_source('/proj', identity_allowed=True)
