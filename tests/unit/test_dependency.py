@@ -1,7 +1,12 @@
 import json
+import os
+from types import SimpleNamespace
 
 import pytest
 
+from golemcpp.golem.declared_recipe import DeclaredRecipe
+from golemcpp.golem.recipe import Recipe
+from golemcpp.golem.recipe_manifest import RecipeManifest
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem import overrides
 from golemcpp.golem.dependency_manager import DependencyManager
@@ -322,3 +327,101 @@ def test_a_copied_directory_takes_no_version_even_when_one_was_patched_in():
 
     assert dependency.version == '^2.0.0'
     assert dependency.requested_source().version == ''
+
+
+BOOST_LOCATOR = 'https://github.com/boostorg/boost.git'
+
+
+def make_recipe(locator, rung='@boost', cookbook='base'):
+    '''A recipe declaring where its package is, the way a cookbook does.'''
+    return Recipe.resolve(DeclaredRecipe(
+        directory=os.path.join('/cookbook', rung),
+        cookbook=SimpleNamespace(cache_key=cookbook),
+        rung=SourceId.parse(rung),
+        manifest=RecipeManifest(locator=locator),
+    ))
+
+
+def settled_from_identity(location, recipe):
+    '''A dependency written as an identity, read and then looked up.'''
+    dependency = Dependency(name='boost', location=location)
+    dependency.update_source('/proj', identity_allowed=True)
+    dependency.settle_from_recipe(dependency.declared_identity(), recipe)
+    return dependency
+
+
+def test_an_identity_is_read_back_out_of_what_was_declared():
+    # Nothing holds it: the location is the record of what was asked for.
+    dependency = Dependency(name='boost', location='@boost#^1.87.0')
+    dependency.update_source('/proj', identity_allowed=True)
+
+    assert str(dependency.declared_identity()) == '@boost'
+
+
+def test_a_dependency_naming_no_identity_has_none_to_look_up():
+    dependency = Dependency(name='json', location='git+https://host/json.git')
+    dependency.update_source('/proj', identity_allowed=True)
+
+    assert dependency.declared_identity() is None
+    assert Dependency(name='json', repository='x').declared_identity() is None
+
+
+def test_a_recipe_says_where_a_dependency_written_as_an_identity_comes_from():
+    dependency = settled_from_identity('@boost', make_recipe(BOOST_LOCATOR))
+
+    assert dependency.resolved.locator == BOOST_LOCATOR
+    assert dependency.resolved.kind == 'git'
+    # Composed from the locator, as every identity is, therefore `@boost` and
+    # the URL land on one cache entry with nothing filled in.
+    assert str(dependency.resolved.identity) == '@boost@boostorg@github.com'
+    assert dependency.location == '@boost'
+
+
+def test_the_lookup_says_what_the_identity_resolved_to(capsys):
+    settled_from_identity('@boost', make_recipe(BOOST_LOCATOR, cookbook='acme'))
+
+    out = capsys.readouterr().out
+
+    assert '@boost -> {}'.format(BOOST_LOCATOR) in out
+    assert '(acme)' in out
+
+
+def test_the_version_asked_of_an_identity_is_asked_of_the_recipes_locator():
+    # A cookbook says where a package is and never which version to take.
+    dependency = settled_from_identity('@boost#^1.87.0',
+                                       make_recipe(BOOST_LOCATOR))
+
+    requested = dependency.requested_source()
+
+    assert requested.version == '^1.87.0'
+    assert str(requested.locator) == BOOST_LOCATOR
+
+
+def test_a_recipe_answering_a_shorter_name_states_nothing_that_contradicts():
+    dependency = settled_from_identity('@boost@boostorg',
+                                       make_recipe(BOOST_LOCATOR))
+
+    assert dependency.resolved.locator == BOOST_LOCATOR
+
+
+def test_a_recipe_the_identity_contradicts_is_refused():
+    # The ladder's fallback is right for finding a recipe and wrong for finding
+    # a location: `@boost` says how to build boost wherever it was cloned from,
+    # and asking for a fork must not fetch boostorg instead.
+    dependency = Dependency(name='boost', location='@boost@somefork@github.com')
+    dependency.update_source('/proj', identity_allowed=True)
+
+    with pytest.raises(RuntimeError, match='@boost@somefork@github.com'):
+        dependency.settle_from_recipe(dependency.declared_identity(),
+                                      make_recipe(BOOST_LOCATOR))
+
+    assert dependency.resolved.locator == ''
+
+
+def test_a_recipe_naming_no_locator_cannot_be_used_as_a_location():
+    dependency = Dependency(name='boost', location='@boost')
+    dependency.update_source('/proj', identity_allowed=True)
+
+    with pytest.raises(RuntimeError, match='names no locator'):
+        dependency.settle_from_recipe(dependency.declared_identity(),
+                                      make_recipe(''))

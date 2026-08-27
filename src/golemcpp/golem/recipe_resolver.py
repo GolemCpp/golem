@@ -17,13 +17,13 @@ class RecipeResolver:
     def __init__(self, cached_cookbooks):
         self.cached_cookbooks = cached_cookbooks
 
-    def resolve(self, recipe_id) -> Recipe:
+    def resolve(self, recipe_id, report=True) -> Recipe:
         '''
         Return the recipe serving an identity.
 
         Raise when no cookbook answers, and when the one that does answers
         nothing a caller could use.
-        
+
         What a caller then asks of the recipe is its own business.
         '''
 
@@ -36,7 +36,9 @@ class RecipeResolver:
 
                 recipe = Recipe.resolve(declared)
                 self.require_an_answer(recipe)
-                self.report(recipe_id, recipe)
+
+                if report:
+                    self.report(recipe_id, recipe)
 
                 return recipe
 

@@ -349,6 +349,46 @@ def test_minimal_example_builds_and_runs(example_tmp_path, project_variant):
     assert 'FOO!' in result.stdout
 
 
+def test_a_dependency_is_named_by_the_recipe_saying_where_it_is(example_tmp_path):
+    require_cxx_compiler()
+    require_git_remote_access('https://github.com/nlohmann/json.git')
+
+    project_dir = copy_example_project('dependencies', example_tmp_path)
+    cache_dir = example_tmp_path / 'cache'
+
+    # The same dependency, written as the name the cookbook holds it under.
+    # `@json` is one rung: only what the recipe declares says where json is.
+    (project_dir / 'golemfile.py').write_text(
+        'def configure(project):\n'
+        "    project.dependency(name='json', location='@json',\n"
+        "                       version='^3.0.0', shallow=True)\n"
+        "    project.program(name='hello-dependencies', source=['src'],\n"
+        "                    deps=['json'])\n",
+        encoding='utf-8')
+
+    run_golem(project_dir, cache_dir, 'configure', '--variant=debug')
+    resolved = run_golem(project_dir, cache_dir, 'resolve')
+    run_golem(project_dir, cache_dir, 'build')
+
+    assert '@json -> https://github.com/nlohmann/json.git' in resolved.stdout
+
+    dependencies = read_dependencies_json(project_dir)
+    json_dependency = next(dep for dep in dependencies if dep['name'] == 'json')
+
+    # What was asked for, kept as written, and what the lookup made of it. The
+    # identity is composed from the locator, so the URL keys here too.
+    assert json_dependency['location'] == '@json'
+    assert json_dependency['resolved']['locator'] == (
+        'https://github.com/nlohmann/json.git')
+    assert json_dependency['resolved']['identity'] == '@json@nlohmann@github.com'
+
+    binary = program_path(project_dir, 'hello-dependencies-debug')
+    result = run_binary(binary, project_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert '"x": 1' in result.stdout
+
+
 def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
     require_cxx_compiler()
     require_git_remote_access('https://github.com/nlohmann/json.git')
@@ -369,7 +409,7 @@ def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
 
     dependencies = read_dependencies_json(project_dir)
     json_dependency = next(dep for dep in dependencies if dep['name'] == 'json')
-    assert json_dependency['resolved']['reference'] == 'v3.10.0'
+    assert json_dependency['resolved']['version']['reference'] == 'v3.10.0'
 
     binary = program_path(project_dir, 'hello-dependencies-debug')
     assert binary.exists()

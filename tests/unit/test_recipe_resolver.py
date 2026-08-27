@@ -65,6 +65,17 @@ def test_a_recipe_named_exactly_serves_the_identity(tmp_path, capsys):
             '@json@nlohmann@github.com (base)') in capsys.readouterr().out
 
 
+def test_a_lookup_saying_its_own_line_asks_for_no_report(tmp_path, capsys):
+    # The location lookup names where the package is, and the sub-invocation
+    # configuring the dependency names the recipe, so a second "served by" here
+    # would say what one of those two already says.
+    cookbook = make_cookbook(tmp_path, 'base', ['@json'])
+
+    RecipeResolver([cookbook]).resolve(SourceId.parse('@json'), report=False)
+
+    assert capsys.readouterr().out == ''
+
+
 def test_a_shorter_rung_serves_when_nothing_is_named_exactly(tmp_path, capsys):
     # An ssh clone spells a rooting field the recipe does not carry, so the
     # ladder drops it and the plain directory answers.

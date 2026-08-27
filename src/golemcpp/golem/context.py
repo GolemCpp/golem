@@ -82,6 +82,11 @@ class Context:
         self.cache_configuration = None
         self.repository = None
 
+        # The cookbooks a lookup searches, made available by load_recipe. Held
+        # rather than assembled again so that a dependency written as an identity is
+        # resolved out of the same stack.
+        self.cached_cookbooks = []
+
         self.context_tasks = []
 
     def get_build_number(self, default=None):
@@ -196,6 +201,27 @@ class Context:
 
         return dependencies_to_keep
 
+    def settle_dependency_identities(self):
+        '''
+        Fill in where each dependency written as an identity comes from.
+
+        Cookbooks are where the information is.
+        
+        `golem build` only reads the locator back out of the lock (dependencies.json).
+        '''
+        resolver = RecipeResolver(self.cached_cookbooks)
+
+        for dependency in self.project.deps:
+            identity = dependency.declared_identity()
+
+            if identity is None:
+                continue
+
+            # Quietly, since the line below names the source, and the
+            # sub-invocation configuring the dependency names the recipe.
+            dependency.settle_from_recipe(
+                identity, resolver.resolve(identity, report=False))
+
     def resolve_dependencies(self):
         deps_cache_file_json = self.make_project_path('dependencies.json')
         global_dependencies_configuration = self.get_global_dependencies_configuration_file(
@@ -208,6 +234,10 @@ class Context:
                 'dependencies.json')
 
         cached_dependencies_to_keep = self.load_cached_dependencies_to_keep()
+
+        # After the entries above, whose locators are read from the file, and
+        # before anything keys on a live dependency's.
+        self.settle_dependency_identities()
 
         if not self.context.options.keep_resolved_dependencies:
             if os.path.exists(deps_cache_file_json):
@@ -3724,12 +3754,12 @@ class Context:
         cookbooks = [
             manager.get_cookbook(source) for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
         ]
-        cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
+        self.cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
 
         if not recipe_id:
             return
 
-        recipe = RecipeResolver(cached_cookbooks).resolve(recipe_id)
+        recipe = RecipeResolver(self.cached_cookbooks).resolve(recipe_id)
 
         self.load_project(recipe.require_project_directory())
 

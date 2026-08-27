@@ -20,6 +20,18 @@ from collections import OrderedDict
 SOURCE_MEMBERS = ('repository', 'directory', 'location')
 
 
+def report_identity_resolution(identity, locator, recipe):
+    '''Say what an identity resolved to, and which cookbook answered.'''
+    # The only line naming the source of a dependency written as an identity:
+    # a resolved version names the version and never where it came from.
+    print("{} -> {}\n{}({})".format(
+        identity,
+        locator,
+        ' ' * (len(str(identity)) + len(' -> ')),
+        recipe.served_by.cookbook.cache_key,
+    ))
+
+
 class Dependency(Configuration):
     def __init__(self,
                  name=None,
@@ -140,6 +152,51 @@ class Dependency(Configuration):
                 ),
                 source.SOURCE_TYPE_GIT,
             )
+
+    def declared_identity(self):
+        '''
+        The identity this dependency's location names, None when it names none.
+        '''
+        if not self.location:
+            return None
+
+        if not source_location.names_an_identity(self.location):
+            return None
+
+        # No project directory needed.
+        return source_location.parse(
+            self.location, project_directory=None, identity_allowed=True
+        ).identity
+
+    def settle_from_recipe(self, identity, recipe):
+        '''
+        Settle the locator and kind from the recipe's manifest
+        '''
+        # Through the same parse a declaration goes through.
+        # The locator is anchored on the recipe directory already.
+        settled = source_location.parse(
+            recipe.require_locator(), project_directory=None
+        )
+        resolved = self.resolved.settle_locator(str(settled.locator), settled.kind)
+
+        # It's impossible to find a locator for a rung that isn't matching the locator
+        # of the recipe it matches.
+        if identity.filled_from(resolved.identity) != resolved.identity:
+            raise RuntimeError(
+                "ERROR: dependency '{}' asks for '{}', and {} names '{}', "
+                "which is '{}'.\nA recipe names one source, therefore it "
+                "cannot say where a fork of it is. Declare the fork with "
+                "`repository=`, and this recipe still builds it.".format(
+                    self.name,
+                    identity,
+                    recipe.served_by,
+                    resolved.locator,
+                    resolved.identity,
+                )
+            )
+
+        self.resolved = resolved
+        report_identity_resolution(identity, resolved.locator, recipe)
 
     def update_version(self, requested_version):
         '''
