@@ -6,6 +6,7 @@ from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem import overrides
 from golemcpp.golem.dependency_manager import DependencyManager
 from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.locator import Locator
 from golemcpp.golem import safe_part
@@ -29,19 +30,30 @@ def test_dependency_accepts_directory_keyword(tmp_path):
     dep = Dependency(name='mylib', directory='./mylib')
     assert dep.directory == './mylib'
     assert dep.repository == ''
-    assert dep.is_non_git_directory() is True
 
     # Against the project it was declared in, which is what every reader of a
-    # dependency does first.
+    # dependency does first. Only then does anything know what this is: the
+    # declaration says where, the reading says what.
     dep.update_source(str(tmp_path))
+
+    assert dep.is_non_git_directory() is True
+    # Kept as the golemfile wrote it; what it means sits in `resolved`.
+    assert dep.directory == './mylib'
+    assert dep.resolved.locator == (tmp_path / 'mylib').resolve().as_uri()
 
     # A directory dependency has no version to resolve, and resolving one names
     # nothing rather than standing something in for it.
     assert dep.resolve() == ResolvedVersion()
-    assert not dep.resolved
-    # Idempotent, and never serialized: there is nothing to record.
+    assert not dep.resolved.version
+    # Idempotent. Where it comes from was worked out even so, therefore the
+    # record holds that much and no version.
     assert dep.resolve() == ResolvedVersion()
-    assert 'resolved' not in Dependency.serialize_to_json(dep)
+    recorded = Dependency.serialize_to_json(dep)['resolved']
+    assert recorded['locator'] == (tmp_path / 'mylib').resolve().as_uri()
+    assert recorded['kind'] == 'directory'
+    assert recorded['version'] == {'reference': '', 'revision': ''}
+    # Composed from the locator, so the record explains the cache directory.
+    assert recorded['identity'] == str(SourceId.from_locator(recorded['locator']))
 
     source = ResourceManager.source_for(dep)
     assert source.type == 'directory'
@@ -90,7 +102,7 @@ def test_a_location_may_name_the_version(tmp_path):
     dep = Dependency(name='json', location='git+https://host/json.git#^3.0.0')
     dep.update_source(str(tmp_path))
 
-    assert dep.repository == 'https://host/json.git'
+    assert dep.resolved.locator == 'https://host/json.git'
     assert dep.version == '^3.0.0'
 
 
@@ -134,7 +146,8 @@ def test_a_repository_naming_a_checkout_resolves_against_the_project(tmp_path):
     dep = Dependency(name='mylib', repository='./myrepo')
     dep.update_source(str(tmp_path))
 
-    assert dep.repository == checkout.resolve().as_uri()
+    assert dep.repository == './myrepo'
+    assert dep.resolved.locator == checkout.resolve().as_uri()
 
 
 @pytest.mark.parametrize('field', ['repository', 'directory'])
@@ -151,7 +164,8 @@ def test_neither_field_reads_a_version_out_of_its_locator(tmp_path, field):
     dep = Dependency(name='mylib', **{field: './mylib#v1.2.0'})
     dep.update_source(str(tmp_path))
 
-    assert getattr(dep, field) == named.resolve().as_uri()
+    assert getattr(dep, field) == './mylib#v1.2.0'
+    assert dep.resolved.locator == named.resolve().as_uri()
     assert dep.version == ''
 
 
@@ -186,11 +200,17 @@ def test_a_recorded_reference_alone_is_not_a_resolution(monkeypatch):
     # a file recording only a reference is asking for a version rather than
     # answering one. Resolve it, rather than let a tag name a root that is never
     # fetched again.
-    dep = Dependency.unserialize_from_json({
-        'name': 'json',
-        'repository': 'https://host/json.git',
-        'resolved': {'reference': 'v3.12.0'},
-    })
+    dep = Dependency.unserialize_from_json(
+        {
+            'name': 'json',
+            'repository': 'https://host/json.git',
+            'resolved': {
+                'locator': 'https://host/json.git',
+                'kind': 'git',
+                'version': {'reference': 'v3.12.0'},
+            },
+        }
+    )
     whole = ResolvedVersion(reference='v3.12.0', revision=STUB_REVISION)
     monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(lambda _: whole))
 
@@ -200,28 +220,41 @@ def test_a_recorded_reference_alone_is_not_a_resolution(monkeypatch):
 def test_a_recorded_revision_alone_is_a_resolution(monkeypatch):
     # The commit is what names the root, so nothing is missing. The reference is
     # the label, and it stays empty rather than claiming the commit was one.
-    dep = Dependency.unserialize_from_json({
-        'name': 'json',
-        'repository': 'https://host/json.git',
-        'resolved': {'revision': STUB_REVISION},
-    })
-    monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(
-        lambda _: pytest.fail('the remote must not be reached')))
+    dep = Dependency.unserialize_from_json(
+        {
+            'name': 'json',
+            'repository': 'https://host/json.git',
+            'resolved': {
+                'locator': 'https://host/json.git',
+                'kind': 'git',
+                'version': {'revision': STUB_REVISION},
+            },
+        }
+    )
+    monkeypatch.setattr(
+        VersionResolver,
+        'resolve',
+        staticmethod(lambda _: pytest.fail('the remote must not be reached')),
+    )
 
     assert dep.resolve() == ResolvedVersion(revision=STUB_REVISION)
     assert DependencyManager.cache_key_for(dep).endswith(
-        safe_part.VERSION_SEPARATOR + make_revision_part(STUB_REVISION))
+        safe_part.VERSION_SEPARATOR + make_revision_part(STUB_REVISION)
+    )
 
 
 def test_a_dependency_records_a_whole_resolution_untouched():
-    dep = Dependency.unserialize_from_json({
-        'name': 'json',
-        'repository': 'https://host/json.git',
-        'resolved': {'reference': 'v3.12.0', 'revision': '65ee6845'},
-    })
+    dep = Dependency.unserialize_from_json(
+        {
+            'name': 'json',
+            'repository': 'https://host/json.git',
+            'resolved': {'version': {'reference': 'v3.12.0', 'revision': '65ee6845'}},
+        }
+    )
 
-    assert dep.resolved == ResolvedVersion(reference='v3.12.0',
-                                           revision='65ee6845')
+    assert dep.resolved.version == ResolvedVersion(
+        reference='v3.12.0', revision='65ee6845'
+    )
 
 
 def test_a_recorded_revision_that_names_no_commit_is_refused():
@@ -229,11 +262,13 @@ def test_a_recorded_revision_that_names_no_commit_is_refused():
     # named after it, and the fetch resets onto it without interpreting it. A
     # branch written here would reach git as a revision it reads its own way.
     with pytest.raises(RuntimeError) as error:
-        Dependency.unserialize_from_json({
-            'name': 'json',
-            'repository': 'https://host/json.git',
-            'resolved': {'reference': 'main', 'revision': 'main'},
-        })
+        Dependency.unserialize_from_json(
+            {
+                'name': 'json',
+                'repository': 'https://host/json.git',
+                'resolved': {'version': {'reference': 'main', 'revision': 'main'}},
+            }
+        )
 
     assert 'names no commit' in str(error.value)
     assert "'json'" in str(error.value)
@@ -276,3 +311,14 @@ def test_an_identity_is_read_for_its_refusals_even_though_it_is_kept():
 
     with pytest.raises(ValueError, match='more than the four fields'):
         dependency.update_source('/proj', identity_allowed=True)
+
+
+def test_a_copied_directory_takes_no_version_even_when_one_was_patched_in():
+    # An override writes `version` onto every entry it matches, kind and all,
+    # therefore one reaches a directory without anybody having asked for it.
+    dependency = Dependency(name='mylib', directory='/srv/mylib',
+                            version='^2.0.0')
+    dependency.update_source('')
+
+    assert dependency.version == '^2.0.0'
+    assert dependency.requested_source().version == ''

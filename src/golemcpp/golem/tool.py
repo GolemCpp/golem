@@ -26,14 +26,18 @@ class Tool:
     def name(self):
         return self.definition.name
 
-    def requested(self):
+    def requested_source(self):
         # What this tool asks for.
         return RequestedSource.for_repository(
             self.definition.repository, version=self.version)
 
+    def resolved_version(self):
+        return self.resolved
+
     def resolve(self):
         resolved = VersionResolver.resolve_requested(
-            self.requested(), self.resolved)
+            self.requested_source(), self.resolved_version()
+        )
 
         # The same one back: a copied directory, or an answer already in hand.
         if resolved is self.resolved:

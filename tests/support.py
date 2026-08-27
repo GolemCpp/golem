@@ -11,6 +11,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem.cache_configuration import CacheConfiguration
 from golemcpp.golem.fetch_policy import FetchMode
 from golemcpp.golem.git_fetcher import GitFetcher
+from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.settings import get_settings
 
 
@@ -125,3 +126,17 @@ def make_cache_configuration(*locations,
         minimization_length=minimization_length,
         fetch_mode=fetch_mode,
         fetch_jobs=fetch_jobs)
+
+
+def resolved_dependency(dependency, project_dir='', **version):
+    '''
+    Read a dependency's declaration, then stand in for a remote nobody reached.
+
+    Reading settles where it comes from and what kind it is; a unit test has no
+    remote to ask for a version, so it says one here instead.
+    '''
+    dependency.update_source(project_dir)
+    dependency.resolved = dependency.resolved.settle_version(
+        ResolvedVersion(**version))
+
+    return dependency

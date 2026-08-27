@@ -34,10 +34,10 @@ def test_read_overrides_names_the_source_the_way_a_project_file_does(tmp_path):
 
     overrides = read_overrides(path, str(tmp_path))
 
-    assert overrides[0].repository == 'https://host/json.git'
-    # A `location` resolves, and a relative path lands on the project.
-    assert overrides[1].directory == lib_dir.resolve().as_uri()
-    assert overrides[1].location == ''
+    assert overrides[0].resolved.locator == 'https://host/json.git'
+    # A `location` is read against the project, so a relative path lands on it.
+    assert overrides[1].resolved.locator == lib_dir.resolve().as_uri()
+    assert overrides[1].resolved.kind == 'directory'
 
 
 def test_write_overrides_round_trips_through_read_overrides(tmp_path):
@@ -63,7 +63,9 @@ def test_write_overrides_creates_the_directory_it_writes_into(tmp_path):
 
 
 def test_merge_overrides_writes_only_the_members_a_layer_sets():
-    first = make_dependency(repository='https://host/json.git', version='^3.0.0', shallow=True)
+    first = make_dependency(
+        repository='https://host/json.git', version='^3.0.0', shallow=True
+    )
     second = make_dependency(repository='https://host/json.git', version='^4.0.0')
 
     merged = merge_overrides([[first], [second]])

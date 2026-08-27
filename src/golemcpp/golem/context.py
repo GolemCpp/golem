@@ -145,8 +145,8 @@ class Context:
 
     @staticmethod
     def make_dependency_unique_identifier(dependency):
-        return '{}_{}_{}_{}_{}'.format(dependency.repository,
-                                       dependency.resolved.revision,
+        return '{}_{}_{}_{}_{}'.format(dependency.resolved.locator,
+                                       dependency.resolved.version.revision,
                                        dependency.link,
                                        dependency.runtime_link,
                                        dependency.runtime_variant)
@@ -191,7 +191,7 @@ class Context:
 
         dependencies_to_keep = []
         for dependency in cached_dependencies:
-            if not pattern.match(dependency.repository):
+            if not pattern.match(dependency.resolved.locator):
                 dependencies_to_keep.append(dependency)
 
         return dependencies_to_keep
@@ -1649,7 +1649,7 @@ class Context:
 
         if dep.shallow:
             configure_options += [
-                '--force-version="{}"'.format(dep.resolved.reference)
+                '--force-version="{}"'.format(dep.resolved.version.reference)
             ]
 
         dependencies_options = path_options + []

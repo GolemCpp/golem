@@ -7,10 +7,26 @@ from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.template import Template
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.dependency import SOURCE_MEMBERS
 from golemcpp.golem.package import Package
 from golemcpp.golem.helpers import *
 from waflib import Logs
 import copy
+
+
+# The members used when working out a resolution (the source, and the asked version).
+# A cached entry differing in any of them was resolved from a different request.
+#
+# Compare the requests, not the resolved counterparts.
+STALENESS_MEMBERS = SOURCE_MEMBERS + ('version', 'version_regex')
+
+
+def is_stale_for(cached, dependency) -> bool:
+    '''Was a cached entry resolved from a different request?'''
+    return any(
+        getattr(cached, member) != getattr(dependency, member)
+        for member in STALENESS_MEMBERS
+    )
 
 
 class Project:
@@ -49,7 +65,8 @@ class Project:
         for dependency in self.deps:
             is_dependency_to_keep = False
             for dependency_to_keep in dependencies_to_keep:
-                if (dependency.repository == dependency_to_keep.repository
+                if (dependency.resolved.locator
+                        == dependency_to_keep.resolved.locator
                         and dependency.version == dependency_to_keep.version):
                     dependency.resolved = dependency_to_keep.resolved
                     is_dependency_to_keep = True
@@ -57,13 +74,13 @@ class Project:
 
             cached_deps = [
                 dep for dep in cached_dependencies
-                if dep.repository == dependency.repository
+                if dep.resolved.locator == dependency.resolved.locator
                 and dep.version == dependency.version
             ]
             if not cached_deps:
                 if not is_dependency_to_keep:
                     Logs.debug("Querying Git for {} at {}".format(
-                        dependency.version, dependency.repository))
+                        dependency.version, dependency.resolved.locator))
                     dependency.resolve()
 
                 cached_dep = copy.deepcopy(dependency)
@@ -73,7 +90,8 @@ class Project:
 
             Logs.debug("Found {}: {} -> {} ({})".format(
                 dependency.name, dependency.version,
-                dependency.resolved.reference, dependency.resolved.revision))
+                dependency.resolved.version.reference,
+                dependency.resolved.version.revision))
 
         for dependency in cached_dependencies:
             dependency.name = None
@@ -91,17 +109,20 @@ class Project:
 
         for i, dependency in enumerate(self.deps):
             for cached_dependency in cached_dependencies:
-                if (cached_dependency.name == dependency.name
-                        and cached_dependency.version == dependency.version):
-                    print("{}: {} -> {} ({})".format(
-                        cached_dependency.name, cached_dependency.version,
-                        cached_dependency.resolved.reference,
-                        cached_dependency.resolved.revision))
-                    self.deps[i].resolved = cached_dependency.resolved
-                    break
+                if (cached_dependency.name != dependency.name
+                        or is_stale_for(cached_dependency, dependency)):
+                    continue
+
+                print("{}: {} -> {} ({})".format(
+                    cached_dependency.name, cached_dependency.version,
+                    cached_dependency.resolved.version.reference,
+                    cached_dependency.resolved.version.revision))
+                self.deps[i].resolved = cached_dependency.resolved
+                break
             # A copied directory has no version to have cached, so saying so about
             # one would report a failure that cannot happen.
-            if not self.deps[i].resolved and not dependency.is_non_git_directory():
+            if (not self.deps[i].resolved.version
+                    and not dependency.is_non_git_directory()):
                 print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()

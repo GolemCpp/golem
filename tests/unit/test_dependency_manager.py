@@ -11,6 +11,7 @@ from golemcpp.golem.resource_manifest import ResourceKind
 from golemcpp.golem.source import Source
 from golemcpp.golem.version_resolver import VersionResolver
 from golemcpp.golem.fetch_policy import FetchMode
+from support import resolved_dependency
 from support import default_setting
 from support import make_cache_configuration
 from support import stub_git_probes
@@ -27,11 +28,10 @@ def make_manager(tmp_path, minimization_enabled=False):
 
 
 def make_dependency():
-    dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
-    dep.resolved = ResolvedVersion(revision='1234567890abcdef')
-    return dep
+    return resolved_dependency(
+        Dependency(repository='https://github.com/nlohmann/json.git',
+                   version='^3.0.0'),
+        revision='1234567890abcdef')
 
 
 def expected_cache_key(dep):
@@ -40,6 +40,7 @@ def expected_cache_key(dep):
 
 def test_resource_for_uses_the_dependency_source():
     dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep.update_source('')
     resource = DependencyManager.resource_for(dep)
 
     assert resource.kind == ResourceKind.DEPENDENCY
@@ -53,7 +54,7 @@ def make_resolved_dependency():
     # Locating a dependency resolves it, and a unit test has no remote to resolve
     # against: these come pre-resolved.
     dep = Dependency(name='json', repository='https://example.com/json.git')
-    dep.resolved = ResolvedVersion(revision='1234567890abcdef')
+    resolved_dependency(dep, revision='1234567890abcdef')
     return dep
 
 
@@ -83,7 +84,10 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
     resource_root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(
-        os.path.join(resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'))
+        os.path.join(
+            resource_root, cache_configuration.SOURCE_DIRNAME, 'CMakeLists.txt'
+        )
+    )
     assert not os.path.exists(cached.staging_path)
     source = manager.cache_manager.read_manifest_source(cached)
     assert source.locator == Locator('https://example.com/json.git')
@@ -127,7 +131,7 @@ def test_the_source_tree_sits_under_the_resource_root():
 
 def test_the_policy_pins_to_the_resolved_commit(tmp_path):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
-    dep.resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabecafebabe')
+    resolved_dependency(dep, reference='v3.12.0', revision='cafebabecafebabe')
 
     policy = make_manager(tmp_path).policy_for(dep)
 
@@ -142,7 +146,7 @@ def test_the_policy_carries_the_shallow_request(tmp_path):
     # The one resource that departs from the configured mode, because a golemfile
     # said so about a repository too heavy to clone whole.
     dep = Dependency(repository='https://example.com/json.git', shallow=True)
-    dep.resolved = ResolvedVersion(revision='cafebabe')
+    resolved_dependency(dep, revision='cafebabe')
 
     assert make_manager(tmp_path).policy_for(dep).fetch_mode == FetchMode.SHALLOW
 
@@ -171,7 +175,7 @@ def test_a_refresh_keeps_what_was_built_from_the_dependency(tmp_path):
 
 def test_a_dependency_produces_the_expected_clone_sequence(tmp_path, monkeypatch):
     dep = Dependency(repository='https://example.com/json.git', version='^3.0.0')
-    dep.resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabecafebabe')
+    resolved_dependency(dep, reference='v3.12.0', revision='cafebabecafebabe')
     calls = []
     monkeypatch.setattr(
         helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
@@ -179,7 +183,9 @@ def test_a_dependency_produces_the_expected_clone_sequence(tmp_path, monkeypatch
 
     # A root under the temporary tree: the clone creates the directory it works
     # in, and a hard-coded one would be a real directory outside the run.
-    make_manager(tmp_path).fetcher_for(str(tmp_path / 'json' / 'source'), dep).populate()
+    make_manager(tmp_path).fetcher_for(
+        str(tmp_path / 'json' / 'source'), dep
+    ).populate()
 
     assert calls == [
         ['clone', '--filter=blob:none', '--', 'https://example.com/json.git', '.'],
@@ -211,12 +217,15 @@ def test_a_cached_resource_is_resolved_once_and_kept_on_the_dependency(tmp_path)
     assert manager.get_cached_resource(dep) is cached
 
 
-def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch, resolving):
+def test_locating_a_dependency_resolves_its_version_first(
+    tmp_path, monkeypatch, resolving
+):
     # The cache key comes from the resolved reference, so a location worked out
     # before resolution would name another resource. There is no way to obtain
     # one: asking where a dependency lives resolves it on the way.
     manager = make_manager(tmp_path)
     dep = Dependency(name='json', repository='https://example.com/json.git')
+    dep.update_source('')
     monkeypatch.setattr(
         VersionResolver, 'resolve',
         staticmethod(lambda *args, **kwargs: ResolvedVersion(
@@ -224,7 +233,7 @@ def test_locating_a_dependency_resolves_its_version_first(tmp_path, monkeypatch,
 
     cached = manager.get_cached_resource(dep)
 
-    assert dep.resolved.revision == '1234567890abcdef'
+    assert dep.resolved.version.revision == '1234567890abcdef'
     assert cached.cache_key == DependencyManager.cache_key_for(dep)
 
 
