@@ -66,6 +66,8 @@ class Context:
         self.load_project()
 
         self.resolved_dependencies_path = None
+        # Where the lock goes once resolve_recursively is done.
+        self.dependencies_save_path = None
         self.compiler_commands = []
         self.deps_to_resolve = []
 
@@ -274,10 +276,24 @@ class Context:
                 global_config_file=global_dependencies_configuration,
                 dependencies_to_keep=cached_dependencies_to_keep)
 
-            Logs.info("Saving dependencies in cache " + str(save_path))
-            self.save_dependencies_json(save_path)
-
+            # Written once resolve_recursively has fetched every dependency,
+            # since which recipe served one is only known from its source.
+            self.dependencies_save_path = save_path
             self.resolved_dependencies_path = save_path
+
+    def save_resolved_dependencies(self):
+        '''
+        Write the lock, and the recipes into the shared cache.
+
+        Called once the recursive resolve is over. The lock asserts that the
+        resolution succeeded, therefore a resolve that failed leaves none.
+        '''
+        if self.dependencies_save_path is None:
+            return
+
+        self.save_dependencies_json(self.dependencies_save_path)
+        self.project.record_recipes(
+            self.get_global_dependencies_configuration_file())
 
     def get_global_dependencies_configuration_file(self):
         global_dependencies_configuration = self.make_build_path(
@@ -293,6 +309,7 @@ class Context:
         self.project.deps_load_json(cache)
 
     def save_dependencies_json(self, path):
+        Logs.info("Saving resolved dependencies " + str(path))
         cache = self.project.deps_resolve_json()
         with open(path, 'w') as fp:
             json.dump(cache, fp, indent=4)
@@ -1584,6 +1601,27 @@ class Context:
                         Artifact(abspath, relpath, path_build))
         return artifacts_list
 
+    def record_dependency_recipe(self, dep, source_path):
+        '''
+        Record which recipes serve a dependency, in what it resolved to.
+
+        Raise when there is no project file and no recipe, because a successful resolve
+        must mean everything needed to build is in hand.
+        '''
+        # Only a resolve makes the cookbooks available.
+        if not self.deps_resolve:
+            return
+
+        # A dependency holding its own project file needs no recipe.
+        if project_file.holds_a_project(source_path):
+            return
+
+        # Quietly: the sub-invocation about to run announces the recipe it uses.
+        recipe = RecipeResolver(self.cached_cookbooks).resolve(
+            dep.resolved.identity, report=False)
+
+        dep.resolved = dep.resolved.settle_recipe(recipe)
+
     def run_dep_command(self, dep, command):
 
         should_clean_repo = False
@@ -1607,6 +1645,7 @@ class Context:
 
         dep_path = self.get_dep_location(dep)
         repo_path = manager.install(dep, refresh=should_clean_repo).source_path
+        self.record_dependency_recipe(dep, repo_path)
         build_path = self.get_dep_build_location(dep)
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file()
@@ -2206,6 +2245,8 @@ class Context:
         self.recursively_apply_to_deps(config, self.link_dependency)
 
     def recursively_apply_to_deps(self, config, callback):
+        # TODO: `deps_linked` is local to this call and process_external_deps
+        # runs once per task, so a dependency two tasks name is processed twice.
         deps_linked = []
         deps_count = 0
         while len(self.project.deps) != deps_count:

@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 from golemcpp.golem.dependency_resolution import DependencyResolution
+from golemcpp.golem.dependency_resolution import RecipeLink
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source_id import SourceId
 
@@ -59,3 +62,50 @@ def test_an_identity_comes_back_as_an_identity():
 def test_nothing_recorded_is_nothing_worked_out():
     assert not DependencyResolution.from_dict({})
     assert not DependencyResolution.from_dict(None)
+
+
+def make_chain(*links):
+    '''A resolved recipe, as the resolver hands one over.'''
+    return SimpleNamespace(chain=tuple(
+        SimpleNamespace(rung=SourceId.parse(name),
+                        cookbook=SimpleNamespace(cache_key=cookbook))
+        for name, cookbook in links))
+
+
+def test_a_resolution_records_the_recipes_that_served_it():
+    resolved = DependencyResolution().settle_recipe(
+        make_chain(('@boost', '@recipes@golemcpp@github.com#v2=fb04dcb6')))
+
+    assert resolved.recipe == (
+        RecipeLink(name='@boost',
+                   cookbook='@recipes@golemcpp@github.com#v2=fb04dcb6'),)
+
+
+def test_a_chain_is_recorded_as_links_rather_than_declarations():
+    # A declaration holds a live cookbook and a directory on this machine; a
+    # record holds the two strings naming which recipe served.
+    recorded = DependencyResolution().settle_recipe(
+        make_chain(('@boost', 'acme'), ('@boost', 'base'))).to_dict()
+
+    assert recorded['recipe'] == [{'name': '@boost', 'cookbook': 'acme'},
+                                  {'name': '@boost', 'cookbook': 'base'}]
+
+
+def test_a_recorded_chain_round_trips():
+    resolved = DependencyResolution().settle_recipe(make_chain(('@boost', 'base')))
+
+    assert DependencyResolution.from_dict(resolved.to_dict()) == resolved
+
+
+def test_a_resolution_serving_no_recipe_records_none():
+    # Absence says a recipe served none of it, or that nothing fetched it to
+    # find out; an empty list would claim the first.
+    assert 'recipe' not in DependencyResolution().settle_locator(
+        'https://host.xz/x.git', 'git').to_dict()
+
+
+def test_a_resolution_with_no_version_records_none():
+    recorded = DependencyResolution().settle_locator('/srv/mylib', 'directory')
+
+    assert 'version' not in recorded.to_dict()
+    assert DependencyResolution.from_dict(recorded.to_dict()) == recorded

@@ -218,9 +218,11 @@ def make_runtime_context(*,
     is a different case and only a request may emit selecting flags.
     '''
     context = Context.__new__(Context)
-    # Both are set by Context.__init__, which building through __new__ skips.
+    # All three are set by Context.__init__, which building through __new__
+    # skips. A build resolves nothing, so no cookbook is ever consulted.
     context.project = None
     context.settings = None
+    context.deps_resolve = False
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             variant=variant,

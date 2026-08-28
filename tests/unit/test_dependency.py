@@ -56,7 +56,9 @@ def test_dependency_accepts_directory_keyword(tmp_path):
     recorded = Dependency.serialize_to_json(dep)['resolved']
     assert recorded['locator'] == (tmp_path / 'mylib').resolve().as_uri()
     assert recorded['kind'] == 'directory'
-    assert recorded['version'] == {'reference': '', 'revision': ''}
+    # No version to record, therefore no key: an empty one would say a version
+    # was looked for and not found.
+    assert 'version' not in recorded
     # Composed from the locator, so the record explains the cache directory.
     assert recorded['identity'] == str(SourceId.from_locator(recorded['locator']))
 

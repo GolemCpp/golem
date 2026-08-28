@@ -25,6 +25,8 @@ def make_recording_context(observed, directory=''):
     )
     context.environment = lambda resolve_dependencies=False: record('environment')
     context.resolve_recursively = lambda: record('resolve_recursively')
+    context.save_resolved_dependencies = lambda: record(
+        'save_resolved_dependencies')
     context.build = lambda: record('build')
     context.dependencies = lambda: record('dependencies')
     return context
@@ -39,7 +41,8 @@ def test_resolve_is_the_command_that_may_reach_a_remote(monkeypatch, tmp_path):
     builder.resolve(SimpleNamespace())
 
     assert observed == [('environment', True, True),
-                        ('resolve_recursively', True, True)]
+                        ('resolve_recursively', True, True),
+                        ('save_resolved_dependencies', True, True)]
     assert network.is_allowed() is False
     assert advertisement_store.directory_in_use() == ''
 

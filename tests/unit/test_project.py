@@ -1,5 +1,9 @@
+import json
+from types import SimpleNamespace
+
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.project import Project
+from golemcpp.golem.source_id import SourceId
 
 
 STUB_REVISION = '65ee68451d8eb2b5f3a30b410476ab83deb3289b'
@@ -120,3 +124,104 @@ def test_a_cached_entry_for_another_dependency_is_not_read(capsys):
 
     assert not project.deps[0].resolved.version
     assert 'no cached version' in capsys.readouterr().out
+
+
+def make_chain(name, cookbook):
+    '''A resolved recipe, as the resolver hands one over.'''
+    return SimpleNamespace(chain=(
+        SimpleNamespace(rung=SourceId.parse(name),
+                        cookbook=SimpleNamespace(cache_key=cookbook)),))
+
+
+def shared_cache(tmp_path, *entries):
+    path = tmp_path / 'all_dependencies.json'
+    path.write_text(json.dumps(list(entries)), encoding='utf-8')
+    return str(path)
+
+
+def read_shared_cache(path):
+    with open(path, encoding='utf-8') as handle:
+        return json.load(handle)
+
+
+def test_the_shared_cache_records_which_recipe_served_a_dependency(tmp_path):
+    # The entries were written before anything was fetched, so they carry no
+    # recipe until the chain is known.
+    dependency = declare(name='json', repository='https://host/json.git',
+                         version='^3.0.0')
+    dependency.resolved = dependency.resolved.settle_recipe(
+        make_chain('@json', 'base'))
+    path = shared_cache(tmp_path, record(name=None, version='^3.0.0'))
+
+    make_project(dependency).record_recipes(path)
+
+    assert read_shared_cache(path)[0]['resolved']['recipe'] == [
+        {'name': '@json', 'cookbook': 'base'}]
+
+
+def test_the_shared_cache_keeps_what_the_sub_invocations_added(tmp_path):
+    # Every sub-invocation appends to the same file, therefore writing back what
+    # this project holds would drop their entries.
+    dependency = declare(name='json', repository='https://host/json.git',
+                         version='^3.0.0')
+    dependency.resolved = dependency.resolved.settle_recipe(
+        make_chain('@json', 'base'))
+    path = shared_cache(
+        tmp_path,
+        record(name=None, version='^3.0.0'),
+        record(name=None, locator='https://host/gsl.git', version='*'))
+
+    make_project(dependency).record_recipes(path)
+
+    cached = read_shared_cache(path)
+    assert [entry['resolved']['locator'] for entry in cached] == [
+        'https://host/json.git', 'https://host/gsl.git']
+    assert 'recipe' not in cached[1]['resolved']
+
+
+def test_an_entry_for_another_request_is_left_alone(tmp_path):
+    # Matched on the locator and the version asked of it, which is what
+    # identifies an entry there once save_cache has nulled the names.
+    dependency = declare(name='json', repository='https://host/json.git',
+                         version='^3.0.0')
+    dependency.resolved = dependency.resolved.settle_recipe(
+        make_chain('@json', 'base'))
+    path = shared_cache(tmp_path, record(name=None, version='^2.0.0'))
+
+    make_project(dependency).record_recipes(path)
+
+    assert 'recipe' not in read_shared_cache(path)[0]['resolved']
+
+
+def test_recording_recipes_where_there_is_no_shared_cache_does_nothing(tmp_path):
+    make_project().record_recipes(str(tmp_path / 'absent.json'))
+    make_project().record_recipes('')
+
+
+def test_a_request_is_identified_by_its_version_regex_too(tmp_path, monkeypatch):
+    # The regex filters the candidate tags before the range is matched, so two
+    # requests differing only in it can land on different revisions.
+    project = make_project(declare(name='json', repository='https://host/json.git',
+                                   version='^3.0.0', version_regex='^release-(.*)$'))
+    path = shared_cache(tmp_path, record(name=None, version='^3.0.0'))
+
+    resolved = []
+    monkeypatch.setattr(Dependency, 'resolve', lambda self: resolved.append(self.name))
+    project.resolve(global_config_file=path, dependencies_to_keep=[])
+
+    assert resolved == ['json']
+    assert len(read_shared_cache(path)) == 2
+
+
+def test_a_request_already_answered_is_not_resolved_again(tmp_path, monkeypatch):
+    project = make_project(declare(name='json', repository='https://host/json.git',
+                                   version='^3.0.0'))
+    path = shared_cache(tmp_path, record(name=None, version='^3.0.0'))
+
+    resolved = []
+    monkeypatch.setattr(Dependency, 'resolve', lambda self: resolved.append(self.name))
+    project.resolve(global_config_file=path, dependencies_to_keep=[])
+
+    assert resolved == []
+    assert len(read_shared_cache(path)) == 1
+    assert project.deps[0].resolved.version.reference == 'v3.12.0'

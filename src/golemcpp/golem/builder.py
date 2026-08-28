@@ -63,6 +63,10 @@ def resolve(context):
 
         ctx.resolve_recursively()
 
+        # Every source is fetched by now, so every recipe that served one is
+        # known and the lock can be written complete.
+        ctx.save_resolved_dependencies()
+
 
 def package(context):
     ctx = get_context(context)

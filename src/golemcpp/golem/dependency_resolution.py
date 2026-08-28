@@ -20,6 +20,25 @@ from golemcpp.golem.source_id import SourceId
 
 
 @dataclass(frozen=True)
+class RecipeLink:
+    '''
+    One recipe a dependency was served by, and the cookbook holding it.
+
+    It is a record of a DeclaredRecipe, but for what DependencyResolution needs.
+    '''
+
+    name: str = ''
+    cookbook: str = ''
+
+    def to_dict(self) -> dict:
+        return {'name': self.name, 'cookbook': self.cookbook}
+
+    @classmethod
+    def from_dict(cls, data) -> 'RecipeLink':
+        return cls(name=data.get('name', ''), cookbook=data.get('cookbook', ''))
+
+
+@dataclass(frozen=True)
 class DependencyResolution:
     '''Where a dependency comes from, and what it turned out to be.'''
 
@@ -30,6 +49,9 @@ class DependencyResolution:
     identity: SourceId = None
     # Which version the request landed on. A copied directory has none.
     version: ResolvedVersion = field(default_factory=ResolvedVersion)
+    # Which recipes served it, most derived first. Empty where a recipe served
+    # none of it, and where nothing fetched it to find out.
+    recipe: tuple = ()
 
     def __bool__(self) -> bool:
         '''
@@ -38,7 +60,9 @@ class DependencyResolution:
         True as soon as the location has been read, which is before anything is
         resolved. A caller asking whether a version was found asks `version`.
         '''
-        return bool(self.locator or self.kind or self.identity or self.version)
+        return bool(
+            self.locator or self.kind or self.identity or self.version or self.recipe
+        )
 
     def settle_locator(self, locator: str, kind: str) -> 'DependencyResolution':
         '''
@@ -63,8 +87,23 @@ class DependencyResolution:
         '''
         return replace(self, version=version)
 
+    def settle_recipe(self, recipe) -> 'DependencyResolution':
+        '''
+        This resolution with the recipes that served the dependency.
+        '''
+        return replace(
+            self,
+            recipe=tuple(
+                RecipeLink(
+                    name=str(declaration.rung),
+                    cookbook=declaration.cookbook.cache_key,
+                )
+                for declaration in recipe.chain
+            ),
+        )
+
     def to_dict(self) -> dict:
-        recorded = {'version': self.version.to_dict()}
+        recorded = {}
 
         for name in ('locator', 'kind'):
             if getattr(self, name):
@@ -72,6 +111,12 @@ class DependencyResolution:
 
         if self.identity:
             recorded['identity'] = str(self.identity)
+
+        if self.version:
+            recorded['version'] = self.version.to_dict()
+
+        if self.recipe:
+            recorded['recipe'] = [link.to_dict() for link in self.recipe]
 
         return recorded
 
@@ -88,4 +133,5 @@ class DependencyResolution:
             kind=data.get('kind', ''),
             identity=SourceId.parse(identity) if identity else None,
             version=ResolvedVersion.from_dict(data.get('version')),
+            recipe=tuple(RecipeLink.from_dict(link) for link in data.get('recipe', ())),
         )
