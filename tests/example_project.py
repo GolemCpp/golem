@@ -45,6 +45,10 @@ def make_golem_env(cache_dir: Path) -> dict[str, str]:
         pythonpath_entries.append(env['PYTHONPATH'])
 
     env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)
+    # The default cache is the one a machine shares between projects, so leaving
+    # it unset ran every example against whatever the developer or the runner had
+    # already built. A test then passed or failed on what ran before it.
+    env['GOLEM_CACHE_DIRECTORY'] = f'{cache_dir}-default'
     env['GOLEM_ADDITIONAL_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
     # Nothing sets GOLEM_COOKBOOKS_LOCATIONS: certain examples sets it through
     # `.golem/config.json` and an environment variable would outrank it.

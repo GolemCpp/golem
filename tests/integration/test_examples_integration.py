@@ -368,6 +368,7 @@ def test_a_dependency_is_named_by_the_recipe_saying_where_it_is(example_tmp_path
 
     run_golem(project_dir, cache_dir, 'configure', '--variant=debug')
     resolved = run_golem(project_dir, cache_dir, 'resolve')
+    run_golem(project_dir, cache_dir, 'dependencies')
     run_golem(project_dir, cache_dir, 'build')
 
     assert '@json -> https://github.com/nlohmann/json.git' in resolved.stdout
