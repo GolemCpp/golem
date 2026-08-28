@@ -141,7 +141,9 @@ class Context:
 
     def get_dependencies_json_path(self):
 
-        deps_cache_file_json = self.make_project_path('dependencies.json')
+        # Beside all_dependencies.json, in the build directory: golem writes it
+        # and golem reads it, so a project has no reason to carry it.
+        deps_cache_file_json = self.make_build_path('dependencies.json')
 
         if self.context.options.resolved_dependencies_directory:
             deps_cache_file_json = os.path.join(
@@ -225,7 +227,7 @@ class Context:
                 identity, resolver.resolve(identity, report=False))
 
     def resolve_dependencies(self):
-        deps_cache_file_json = self.make_project_path('dependencies.json')
+        deps_cache_file_json = self.make_build_path('dependencies.json')
         global_dependencies_configuration = self.get_global_dependencies_configuration_file(
         )
 
