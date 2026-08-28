@@ -4,10 +4,12 @@ from golemcpp.golem import helpers
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.helpers import *
-from golemcpp.golem import requested_source
+from golemcpp.golem import source_location
+from golemcpp.golem.locator import Locator
 from golemcpp.golem.requested_source import RequestedSource
-from golemcpp.golem.resolved_version import ResolvedVersion
+from golemcpp.golem.dependency_resolution import DependencyResolution
 from golemcpp.golem import source
+from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.version import Version
 from golemcpp.golem import version_resolver
 from golemcpp.golem.version_resolver import VersionResolver
@@ -17,6 +19,28 @@ from collections import OrderedDict
 # The members naming where a dependency comes from, at most one of which a
 # dependency declares.
 SOURCE_MEMBERS = ('repository', 'directory', 'location')
+
+
+def describe_locators(locators) -> str:
+    '''List locators with what each one composes, one per line.'''
+    # A reader comparing what was asked for against the identities is what makes
+    # the refusal below readable, so the composition is spelled out.
+    return '\n'.join(
+        '  {}  ({})'.format(locator, SourceId.from_locator(locator))
+        for locator in locators
+    )
+
+
+def report_identity_resolution(identity, locator, recipe):
+    '''Say what an identity resolved to, and which cookbook answered.'''
+    # The only line naming the source of a dependency written as an identity:
+    # a resolved version names the version and never where it came from.
+    print("{} -> {}\n{}({})".format(
+        identity,
+        locator,
+        ' ' * (len(str(identity)) + len(' -> ')),
+        recipe.served_by.cookbook.cache_key,
+    ))
 
 
 class Dependency(Configuration):
@@ -32,17 +56,17 @@ class Dependency(Configuration):
         super(Dependency, self).__init__(type='library',
                                          **kwargs)
         self.name = '' if name is None else name
-        # A dependency comes from one of three mutually-exclusive sources: a git
-        # `repository` (cloned), a local `directory` (copied as-is), or a
-        # `location` naming either in one field, spelling its kind or leaving it
-        # to detection. update_source resolves a location into the two others.
+        # A dependency comes from one of three mutually-exclusive sources: a
+        # git `repository` (cloned), a local `directory` (copied as-is), or a
+        # `location` naming either in one field, spelling its kind or leaving
+        # it to detection.
         self.location = '' if location is None else location
         self.repository = '' if repository is None else repository
         self.directory = '' if directory is None else directory
         self.validate_source()
         self.version = '' if version is None else version
         self.version_regex = '' if version_regex is None else version_regex
-        self.resolved = ResolvedVersion()
+        self.resolved = DependencyResolution()
         self.shallow = shallow
         # Where this dependency lives in the caches, once a DependencyManager has
         # worked it out. Not part of serialized_members, so a dependency restored
@@ -63,46 +87,127 @@ class Dependency(Configuration):
         if len(declared) > 1:
             raise ValueError(
                 "dependency '{}' declares several sources ({}); it comes from "
-                "exactly one".format(self.name, ', '.join(declared)))
+                "exactly one".format(self.name, ', '.join(declared))
+            )
 
     def get_source_location(self):
-        # Falls back to `location` so a dependency is identifiable before
-        # update_source has resolved which of the two fields it fills.
-        if self.directory:
-            return self.directory
-        return self.repository or self.location
+        # Where this dependency was found to come from.
+        # Normalized, so two spellings of one place are one key.
+        return self.resolved.locator
 
-    def requested(self):
-        # What this dependency asks for. The three fields stay as they are,
-        # golemfile keywords and dependencies.json keys.
-        if self.directory:
-            return RequestedSource.for_directory(self.directory)
-        return RequestedSource.for_repository(
-            self.repository, version=self.version,
-            version_regex=self.version_regex)
+    def requested_source(self):
+        # What this dependency asks for. The locator is the resolved one: a
+        # declaration may be relative, or an identity naming no locator at all.
+        if not self.resolved.locator:
+            raise ValueError(
+                "dependency '{}' has no settled source yet: a declaration has "
+                "to be resolved against a project first, and an identity "
+                "through a cookbook".format(self.name)
+            )
 
-    def update_source(self, project_dir):
+        is_directory = self.resolved.kind == source.SOURCE_TYPE_DIRECTORY
+
+        return RequestedSource(
+            locator=Locator(self.resolved.locator),
+            # A copied directory is whatever it holds now, so there is no
+            # version of it to ask for.
+            version='' if is_directory else self.version,
+            type=self.resolved.kind,
+            version_regex=self.version_regex,
+        )
+
+    def resolved_version(self):
+        return self.resolved.version
+
+    def update_source(self, project_dir, identity_allowed=False):
         # Also the gate on a dependency read from a configuration: read_json
         # writes the members straight in, so __init__ never saw them.
+        #
+        # `identity_allowed` is false unless a caller says otherwise: an
+        # override entry arrives through here too and aren't supporting this.
         self.validate_source()
         if self.location:
-            requested = RequestedSource.parse(self.location, project_dir=project_dir)
-            # These two stay strings: they are golemfile keywords and
-            # dependencies.json keys, so a Locator is built from them rather than
-            # stored in them.
-            self.directory = str(requested.locator) \
-                if requested.type == source.SOURCE_TYPE_DIRECTORY else ''
-            self.repository = '' if self.directory else str(requested.locator)
-            self.location = ''
-            self.update_version(requested.version)
+            settled = source_location.parse(
+                self.location,
+                project_directory=project_dir,
+                identity_allowed=identity_allowed,
+            )
+
+            self.update_version(settled.version)
+
+            if settled.names_an_identity:
+                # An identity says which source is wanted without saying where
+                # it is, so the cookbook lookup settles both fields below.
+                return
+
+            self.resolved = self.resolved.settle_locator(
+                str(settled.locator), settled.kind
+            )
         elif self.directory:
             # These two name their kind by being the field they are, so it is
             # stated rather than detected. No # version fragment.
-            self.directory = str(requested_source.resolve_locator(
-                self.directory, source.SOURCE_TYPE_DIRECTORY, project_dir))
+            self.resolved = self.resolved.settle_locator(
+                str(
+                    source_location.resolve_locator(
+                        self.directory, source.SOURCE_TYPE_DIRECTORY, project_dir
+                    )
+                ),
+                source.SOURCE_TYPE_DIRECTORY,
+            )
         elif self.repository:
-            self.repository = str(requested_source.resolve_locator(
-                self.repository, source.SOURCE_TYPE_GIT, project_dir))
+            self.resolved = self.resolved.settle_locator(
+                str(
+                    source_location.resolve_locator(
+                        self.repository, source.SOURCE_TYPE_GIT, project_dir
+                    )
+                ),
+                source.SOURCE_TYPE_GIT,
+            )
+
+    def declared_identity(self):
+        '''
+        The identity this dependency's location names, None when it names none.
+        '''
+        if not self.location:
+            return None
+
+        if not source_location.names_an_identity(self.location):
+            return None
+
+        # No project directory needed.
+        return source_location.parse(
+            self.location, project_directory=None, identity_allowed=True
+        ).identity
+
+    def settle_from_recipe(self, identity, recipe):
+        '''
+        Settle the locator and kind from the recipe's manifest
+        '''
+        # The view refuses a recipe naming no locator at all.
+        recipe.require_locators()
+
+        locator = recipe.locator_for(identity)
+
+        # A rung asks for a source, but the recipe may not have a locator mathing it.
+        if not locator:
+            raise RuntimeError(
+                "ERROR: dependency '{}' asks for '{}', and {} names no source "
+                "it can be:\n{}\nA recipe cannot say where a fork it knows nothing "
+                "about can be found. Declare the fork with `repository=`, and this "
+                "recipe still builds it.".format(
+                    self.name,
+                    identity,
+                    recipe.served_by,
+                    describe_locators(recipe.locators),
+                )
+            )
+
+        # The locator is anchored on the recipe directory already, just parse it.
+        settled = source_location.parse(locator, project_directory=None)
+
+        self.resolved = self.resolved.settle_locator(str(settled.locator), settled.kind)
+
+        report_identity_resolution(identity, self.resolved.locator, recipe)
 
     def update_version(self, requested_version):
         '''
@@ -116,28 +221,33 @@ class Dependency(Configuration):
             raise ValueError(
                 "dependency '{}' declares version '{}' and a location naming "
                 "'{}'; it asks for exactly one".format(
-                    self.name, self.version, requested_version))
+                    self.name, self.version, requested_version
+                )
+            )
 
         self.version = requested_version
 
     def is_non_git_directory(self):
-        return bool(self.directory)
+        return self.resolved.kind == source.SOURCE_TYPE_DIRECTORY
 
     def resolve(self):
         resolved = VersionResolver.resolve_requested(
-            self.requested(), self.resolved, require_revision=True)
+            self.requested_source(), self.resolved.version, require_revision=True
+        )
 
         # The same one back: a copied directory, or an answer already in hand.
-        if resolved is self.resolved:
-            return self.resolved
+        if resolved is self.resolved.version:
+            return self.resolved.version
 
-        self.resolved = resolved
+        # Settled onto what reading the location already worked out, rather
+        # than over it.
+        self.resolved = self.resolved.settle_version(resolved)
         # The cache key is built from the resolved commit, so anything resolved
         # before this point identified a different dependency: drop it.
         self.cached_resource = None
 
         version_resolver.report_resolution(self.name, self.version, resolved)
-        return self.resolved
+        return self.resolved.version
 
     def build(self, context, config):
         context.dep_command(config, self, 'build', False)
@@ -149,8 +259,8 @@ class Dependency(Configuration):
 
     @staticmethod
     def serialized_members():
-        # `location` is read from a configuration but never written back:
-        # update_source resolves it into `repository` or `directory` and clears it.
+        # The first four are what a golemfile declared, kept as it wrote them.
+        # What Golem worked out about them sits in `resolved`.
         return [
             'name', 'repository', 'directory', 'location', 'version',
             'version_regex', 'resolved', 'shallow'
@@ -178,18 +288,21 @@ class Dependency(Configuration):
                 self.__dict__[key] = value
 
         if Dependency.RESOLVED_MEMBER in o:
-            self.resolved = ResolvedVersion.from_dict(
-                o[Dependency.RESOLVED_MEMBER])
+            self.resolved = DependencyResolution.from_dict(
+                o[Dependency.RESOLVED_MEMBER]
+            )
+
             # A resolution names the commit it landed on, and everything reading
             # one downstream takes it for a commit: the cache root is named after
             # it, and the fetch resets onto it without interpreting it. A name
             # written here would reach git as a revision it reads its own way.
-            if self.resolved.revision and not Version.parse_git_hash(
-                    self.resolved.revision):
+            revision = self.resolved.version.revision
+            if revision and not Version.parse_git_hash(revision):
                 raise RuntimeError(
                     "dependency '{}' records '{}' as its revision, which names "
                     "no commit; write the version asked for as `version` "
-                    "instead".format(self.name, self.resolved.revision))
+                    "instead".format(self.name, revision)
+                )
 
     @staticmethod
     def unserialize_from_json(o):

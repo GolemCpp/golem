@@ -30,9 +30,9 @@ def make_source(version=''):
 def test_an_overlay_asks_for_exactly_what_its_location_names():
     # Nothing of its own to reconcile: the location said it in full, and
     # naming no version is a question the resolver puts to the remote.
-    assert Overlay(source=make_source(version='v1.2.0')).requested() == \
+    assert Overlay(source=make_source(version='v1.2.0')).requested_source() == \
         make_source(version='v1.2.0')
-    assert Overlay(source=make_source()).requested().version == ''
+    assert Overlay(source=make_source()).requested_source().version == ''
 
 
 def test_an_overlay_resolves_the_way_every_other_kind_does(resolutions):
@@ -84,7 +84,7 @@ def test_a_directory_overlay_keeps_its_empty_reference(resolutions):
     # which for a `file://` locator would be asking git to ls-remote a path.
     assert resolutions == []
     # No default branch to fall back on: a copied directory is what it holds.
-    assert overlay.requested().version == ''
+    assert overlay.requested_source().version == ''
     source = ResourceManager.source_for(overlay)
     assert source.type == 'directory'
     assert source.locator == requested.locator

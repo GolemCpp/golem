@@ -10,14 +10,26 @@ The examples that use it say so in their own `.golem/config.json`:
 { "cookbooks.locations": "directory+../cookbook" }
 ```
 
-A recipe directory is named after the identity Golem composes for the dependency's repository, which is how a lookup finds it:
+A recipe directory is named after the identity Golem composes for the dependency's repository, or after any shorter part of it, which is how a lookup finds it:
 
 | repository                             | recipe directory |
 | -------------------------------------- | ---------------- |
-| `https://github.com/nlohmann/json.git` | `@json@nlohmann` |
+| `https://github.com/nlohmann/json.git` | `@json`          |
 | `https://github.com/microsoft/GSL.git` | `@gsl@microsoft` |
 
 The leading `@` is what tells a recipe from the rest of a cookbook, this `README.md` included.
+
+`@json` drops the owner the public cookbook keeps, because nothing else here claims that name. A cookbook this small can afford it.
+
+## Naming a dependency by its recipe
+
+A recipe holding a `recipe.json` says where the source is, therefore its name is usable as a dependency's `location`:
+
+```python
+project.dependency(name='json', location='@json', version='^3.0.0')
+```
+
+Golem asks the cookbooks where `@json` is, and clones what the recipe answers.
 
 ## Editing a recipe
 

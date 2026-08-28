@@ -23,7 +23,7 @@ COOKBOOK_DIR = EXAMPLES_DIR / 'cookbook'
 
 # What a copy may leave behind: build output, and the cache directories the
 # `cache` example writes.
-NOT_COPIED = ('build', 'dependencies.json', '__pycache__', 'cache-*')
+NOT_COPIED = ('build', '__pycache__', 'cache-*')
 
 # The architecture every configure in this suite asks for. Empty means none is
 # asked for, which is the normal case: the compiler's own answer stands.
@@ -45,6 +45,10 @@ def make_golem_env(cache_dir: Path) -> dict[str, str]:
         pythonpath_entries.append(env['PYTHONPATH'])
 
     env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)
+    # The default cache is the one a machine shares between projects, so leaving
+    # it unset ran every example against whatever the developer or the runner had
+    # already built. A test then passed or failed on what ran before it.
+    env['GOLEM_CACHE_DIRECTORY'] = f'{cache_dir}-default'
     env['GOLEM_ADDITIONAL_CACHE_DIRECTORIES'] = f'{cache_dir}=^.*$'
     # Nothing sets GOLEM_COOKBOOKS_LOCATIONS: certain examples sets it through
     # `.golem/config.json` and an environment variable would outrank it.
@@ -135,7 +139,9 @@ def run_binary(binary: Path, project_dir: Path) -> subprocess.CompletedProcess[s
 
 
 def read_dependencies_json(project_dir: Path) -> list[dict[str, object]]:
-    with (project_dir / 'dependencies.json').open(encoding='utf-8') as handle:
+    '''What the resolve recorded, from the build directory golem writes it in.'''
+    path = project_dir / 'build' / 'golem' / 'obj' / 'dependencies.json'
+    with path.open(encoding='utf-8') as handle:
         return json.load(handle)
 
 

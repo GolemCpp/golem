@@ -20,11 +20,12 @@ from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem.requested_source import RequestedSource
-from golemcpp.golem.requested_source import detect_kind
+from golemcpp.golem.source_location import detect_kind
 from golemcpp.golem.locator import Locator, generate_id
 from golemcpp.golem.source import Source
 from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.dependency_manager import DependencyManager
+from support import resolved_dependency
 from support import absolute_path, make_cache_configuration
 
 
@@ -217,9 +218,11 @@ def make_runtime_context(*,
     is a different case and only a request may emit selecting flags.
     '''
     context = Context.__new__(Context)
-    # Both are set by Context.__init__, which building through __new__ skips.
+    # All three are set by Context.__init__, which building through __new__
+    # skips. A build resolves nothing, so no cookbook is ever consulted.
     context.project = None
     context.settings = None
+    context.deps_resolve = False
     context.context = SimpleNamespace(
         options=SimpleNamespace(
             variant=variant,
@@ -948,6 +951,8 @@ def test_directory_dependency_is_detected_as_non_git(tmp_path):
 
     dependency = Dependency(directory=directory.resolve().as_uri())
 
+    dependency.update_source(str(tmp_path))
+
     assert dependency.is_non_git_directory()
     assert detect_kind(Locator(dependency.directory)) == 'directory'
 
@@ -970,9 +975,10 @@ def test_a_dependency_location_resolves_to_the_kind_it_spells(tmp_path):
 
     detected = Dependency(location='mylib')
     detected.update_source(str(tmp_path))
-    assert detected.directory == lib_dir.resolve().as_uri()
-    assert detected.repository == ''
-    assert detected.location == ''
+    assert detected.resolved.locator == lib_dir.resolve().as_uri()
+    assert detected.resolved.kind == 'directory'
+    # Kept as it was written; reading it settled what it means.
+    assert detected.location == 'mylib'
 
     # The override that changes an answer is the other way round: a checkout git
     # would clone, asked for as a directory to copy instead. `git+` cannot turn
@@ -983,12 +989,13 @@ def test_a_dependency_location_resolves_to_the_kind_it_spells(tmp_path):
 
     copied = Dependency(location='directory+myrepo')
     copied.update_source(str(tmp_path))
-    assert copied.directory == checkout.resolve().as_uri()
-    assert copied.repository == ''
+    assert copied.resolved.locator == checkout.resolve().as_uri()
+    assert copied.resolved.kind == 'directory'
 
     cloned = Dependency(location='git+myrepo')
     cloned.update_source(str(tmp_path))
-    assert cloned.repository == checkout.resolve().as_uri()
+    assert cloned.resolved.locator == checkout.resolve().as_uri()
+    assert cloned.resolved.kind == 'git'
     assert cloned.directory == ''
 
 
@@ -1193,7 +1200,7 @@ def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     dep = Dependency(
         repository='https://github.com/nlohmann/json.git',
         version='^3.0.0')
-    dep.resolved = ResolvedVersion(revision='1234567890abcdef')
+    resolved_dependency(dep, revision='1234567890abcdef')
     # Primed the way configure does, so the path comes from that resolution.
     get_dependency_manager(context.cache_configuration).update_cached_resource(dep)
 
@@ -1214,7 +1221,9 @@ def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
     dep = Dependency.unserialize_from_json({
         'name': 'json',
         'repository': 'https://github.com/nlohmann/json.git',
-        'resolved': {'reference': '3.11.3', 'revision': '1234567890abcdef'},
+        'resolved': {'locator': 'https://host/json.git', 'kind': 'git',
+                     'version': {'reference': '3.11.3',
+                                 'revision': '1234567890abcdef'}},
     })
     assert dep.cached_resource is None
 
@@ -1231,7 +1240,7 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # Whole, not abbreviated: git is handed this as it is, and cutting it down to
     # fit a directory name is resource_manager.make_revision_part's job.
     dep = Dependency(repository='https://host/json.git')
-    dep.resolved = ResolvedVersion(reference='3.11.3', revision='1234567890abcdef')
+    resolved_dependency(dep, reference='3.11.3', revision='1234567890abcdef')
     assert ResourceManager.source_for(dep).resolved.revision == '1234567890abcdef'
 
     # Keyed on the commit, which is what the kind's Pinning names -- not the

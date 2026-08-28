@@ -7,10 +7,37 @@ from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.template import Template
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.dependency import SOURCE_MEMBERS
 from golemcpp.golem.package import Package
 from golemcpp.golem.helpers import *
 from waflib import Logs
 import copy
+
+
+# The members used when working out a resolution (the source, and the asked version).
+# A cached entry differing in any of them was resolved from a different request.
+#
+# Compare the requests, not the resolved counterparts.
+STALENESS_MEMBERS = SOURCE_MEMBERS + ('version', 'version_regex')
+
+
+def is_stale_for(cached, dependency) -> bool:
+    '''Was a cached entry resolved from a different request?'''
+    return any(
+        getattr(cached, member) != getattr(dependency, member)
+        for member in STALENESS_MEMBERS
+    )
+
+
+def resolution_key(dependency):
+    '''
+    What a resolution is looked up by; source and version.
+
+    `version_regex` belongs in it because it filters the candidate tags before
+    the range is matched, therefore two requests differing only in it can land
+    on different revisions.
+    '''
+    return (dependency.resolved.locator, dependency.version, dependency.version_regex)
 
 
 class Project:
@@ -49,20 +76,20 @@ class Project:
         for dependency in self.deps:
             is_dependency_to_keep = False
             for dependency_to_keep in dependencies_to_keep:
-                if dependency.repository == dependency_to_keep.repository and dependency.version == dependency_to_keep.version:
+                if resolution_key(dependency) == resolution_key(dependency_to_keep):
                     dependency.resolved = dependency_to_keep.resolved
                     is_dependency_to_keep = True
                     break
 
             cached_deps = [
-                dep for dep in cached_dependencies
-                if dep.repository == dependency.repository
-                and dep.version == dependency.version
+                dep
+                for dep in cached_dependencies
+                if resolution_key(dep) == resolution_key(dependency)
             ]
             if not cached_deps:
                 if not is_dependency_to_keep:
                     Logs.debug("Querying Git for {} at {}".format(
-                        dependency.version, dependency.repository))
+                        dependency.version, dependency.resolved.locator))
                     dependency.resolve()
 
                 cached_dep = copy.deepcopy(dependency)
@@ -72,7 +99,8 @@ class Project:
 
             Logs.debug("Found {}: {} -> {} ({})".format(
                 dependency.name, dependency.version,
-                dependency.resolved.reference, dependency.resolved.revision))
+                dependency.resolved.version.reference,
+                dependency.resolved.version.revision))
 
         for dependency in cached_dependencies:
             dependency.name = None
@@ -82,6 +110,39 @@ class Project:
             with open(global_config_file, 'w') as fp:
                 json.dump(cache, fp, indent=4)
 
+    def record_recipes(self, global_config_file):
+        '''
+        Write into the shared cache which recipes served this project's dependencies.
+
+        The entries were written before anything was fetched, so they carry no recipe.
+
+        Reloaded rather than saved from what this project holds. Because every
+        sub-invocation appends to the same file, and writing a stale list back would
+        drop what they added.
+        '''
+        if not global_config_file or not os.path.exists(global_config_file):
+            return
+
+        with open(global_config_file, 'r') as fp:
+            cache = json.load(fp)
+
+        cached_dependencies = Dependency.load_cache(cache=cache)
+        # An entry there is identified by the request it answers, the way
+        # resolve matches one. Never by name: save_cache nulls those.
+        resolved = {
+            resolution_key(dependency): dependency.resolved
+            for dependency in self.deps
+            if dependency.resolved.recipe
+        }
+
+        for cached in cached_dependencies:
+            key = resolution_key(cached)
+            if key in resolved:
+                cached.resolved = resolved[key]
+
+        with open(global_config_file, 'w') as fp:
+            json.dump(Dependency.save_cache(cached_dependencies), fp, indent=4)
+
     def deps_resolve_json(self):
         return Dependency.save_cache(dependencies=self.deps)
 
@@ -90,16 +151,20 @@ class Project:
 
         for i, dependency in enumerate(self.deps):
             for cached_dependency in cached_dependencies:
-                if cached_dependency.name == dependency.name and cached_dependency.version == dependency.version:
-                    print("{}: {} -> {} ({})".format(
-                        cached_dependency.name, cached_dependency.version,
-                        cached_dependency.resolved.reference,
-                        cached_dependency.resolved.revision))
-                    self.deps[i].resolved = cached_dependency.resolved
-                    break
+                if (cached_dependency.name != dependency.name
+                        or is_stale_for(cached_dependency, dependency)):
+                    continue
+
+                print("{}: {} -> {} ({})".format(
+                    cached_dependency.name, cached_dependency.version,
+                    cached_dependency.resolved.version.reference,
+                    cached_dependency.resolved.version.revision))
+                self.deps[i].resolved = cached_dependency.resolved
+                break
             # A copied directory has no version to have cached, so saying so about
             # one would report a failure that cannot happen.
-            if not self.deps[i].resolved and not dependency.is_non_git_directory():
+            if (not self.deps[i].resolved.version
+                    and not dependency.is_non_git_directory()):
                 print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()
@@ -154,7 +219,7 @@ class Project:
 
     def dependency(self, **kwargs):
         dep = Dependency(**kwargs)
-        dep.update_source(self.project_dir)
+        dep.update_source(self.project_dir, identity_allowed=True)
         self.deps.append(dep)
         return dep
 
@@ -202,7 +267,7 @@ class Project:
                     # golemfile: a `location` reaches this path too, and left
                     # unresolved it would name a source no reader looks at.
                     dependency = Dependency.unserialize_from_json(json_obj)
-                    dependency.update_source(project_dir)
+                    dependency.update_source(project_dir, identity_allowed=True)
                     project.deps.append(dependency)
             elif key == 'targets':
                 for json_obj in value:

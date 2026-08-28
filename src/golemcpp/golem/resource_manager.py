@@ -180,10 +180,10 @@ class ResourceManager:
             item.resolve()
             return item
 
-        if cls.pinning is not Pinning.REVISION or item.resolved.revision:
+        if cls.pinning is not Pinning.REVISION or item.resolved_version().revision:
             return item
 
-        requested = item.requested()
+        requested = item.requested_source()
         if requested.type == SOURCE_TYPE_GIT:
             raise RuntimeError(
                 "'{}' is not resolved, and reaching a remote is a resolve step. "
@@ -197,10 +197,10 @@ class ResourceManager:
         Make the Source of an item, from what it asked for and what that
         resolved to.
 
-        Every kind answers `requested()` and carries a `resolved`, therefore
-        none overrides this.
+        Every kind answers `requested_source()` and `resolved_version()`,
+        therefore none overrides this.
         '''
-        return item.requested().resolved_at(item.resolved)
+        return item.requested_source().resolved_at(item.resolved_version())
 
     @classmethod
     def resource_for(cls, item) -> Resource:
@@ -228,9 +228,9 @@ class ResourceManager:
             # Golem's own, therefore it is already safe as a directory name.
             return item.name
 
-        requested = item.requested()
+        requested = item.requested_source()
         component = make_revision_part(
-            item.resolved.revision
+            item.resolved_version().revision
             if cls.pinning is Pinning.REVISION else requested.version)
 
         # With no version to name, there is nothing for the separator to join.

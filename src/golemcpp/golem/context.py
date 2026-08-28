@@ -34,6 +34,7 @@ from golemcpp.golem import helpers
 from golemcpp.golem import network
 from golemcpp.golem import safe_part
 from golemcpp.golem import settings
+from golemcpp.golem import project_file
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_target import BuildTarget
 from golemcpp.golem.dependency import Dependency
@@ -65,6 +66,8 @@ class Context:
         self.load_project()
 
         self.resolved_dependencies_path = None
+        # Where the lock goes once resolve_recursively is done.
+        self.dependencies_save_path = None
         self.compiler_commands = []
         self.deps_to_resolve = []
 
@@ -80,6 +83,11 @@ class Context:
 
         self.cache_configuration = None
         self.repository = None
+
+        # The cookbooks a lookup searches, made available by load_recipe. Held
+        # rather than assembled again so that a dependency written as an identity is
+        # resolved out of the same stack.
+        self.cached_cookbooks = []
 
         self.context_tasks = []
 
@@ -111,7 +119,9 @@ class Context:
         def get_project_file_path(filname):
             return os.path.join(directory, filname)
 
-        self.project_path = get_project_file_path("golemfile.py")
+        # Tried in the order project.PROJECT_FILE_NAMES lists them, which is
+        # what everything asking whether a directory holds a project answers by.
+        self.project_path = get_project_file_path(project_file.PROJECT_FILE_NAMES[0])
 
         if os.path.exists(self.project_path):
             self.module = Module(directory)
@@ -119,8 +129,8 @@ class Context:
 
         if self.project is not None:
             return
-        
-        self.project_path = get_project_file_path("golemfile.json")
+
+        self.project_path = get_project_file_path(project_file.PROJECT_FILE_NAMES[1])
 
         if os.path.exists(self.project_path):
             json_object = None
@@ -131,7 +141,9 @@ class Context:
 
     def get_dependencies_json_path(self):
 
-        deps_cache_file_json = self.make_project_path('dependencies.json')
+        # Beside all_dependencies.json, in the build directory: golem writes it
+        # and golem reads it, so a project has no reason to carry it.
+        deps_cache_file_json = self.make_build_path('dependencies.json')
 
         if self.context.options.resolved_dependencies_directory:
             deps_cache_file_json = os.path.join(
@@ -142,8 +154,8 @@ class Context:
 
     @staticmethod
     def make_dependency_unique_identifier(dependency):
-        return '{}_{}_{}_{}_{}'.format(dependency.repository,
-                                       dependency.resolved.revision,
+        return '{}_{}_{}_{}_{}'.format(dependency.resolved.locator,
+                                       dependency.resolved.version.revision,
                                        dependency.link,
                                        dependency.runtime_link,
                                        dependency.runtime_variant)
@@ -188,13 +200,34 @@ class Context:
 
         dependencies_to_keep = []
         for dependency in cached_dependencies:
-            if not pattern.match(dependency.repository):
+            if not pattern.match(dependency.resolved.locator):
                 dependencies_to_keep.append(dependency)
 
         return dependencies_to_keep
 
+    def settle_dependency_identities(self):
+        '''
+        Fill in where each dependency written as an identity comes from.
+
+        Cookbooks are where the information is.
+        
+        `golem build` only reads the locator back out of the lock (dependencies.json).
+        '''
+        resolver = RecipeResolver(self.cached_cookbooks)
+
+        for dependency in self.project.deps:
+            identity = dependency.declared_identity()
+
+            if identity is None:
+                continue
+
+            # Quietly, since the line below names the source, and the
+            # sub-invocation configuring the dependency names the recipe.
+            dependency.settle_from_recipe(
+                identity, resolver.resolve(identity, report=False))
+
     def resolve_dependencies(self):
-        deps_cache_file_json = self.make_project_path('dependencies.json')
+        deps_cache_file_json = self.make_build_path('dependencies.json')
         global_dependencies_configuration = self.get_global_dependencies_configuration_file(
         )
 
@@ -205,6 +238,10 @@ class Context:
                 'dependencies.json')
 
         cached_dependencies_to_keep = self.load_cached_dependencies_to_keep()
+
+        # After the entries above, whose locators are read from the file, and
+        # before anything keys on a live dependency's.
+        self.settle_dependency_identities()
 
         if not self.context.options.keep_resolved_dependencies:
             if os.path.exists(deps_cache_file_json):
@@ -241,10 +278,24 @@ class Context:
                 global_config_file=global_dependencies_configuration,
                 dependencies_to_keep=cached_dependencies_to_keep)
 
-            Logs.info("Saving dependencies in cache " + str(save_path))
-            self.save_dependencies_json(save_path)
-
+            # Written once resolve_recursively has fetched every dependency,
+            # since which recipe served one is only known from its source.
+            self.dependencies_save_path = save_path
             self.resolved_dependencies_path = save_path
+
+    def save_resolved_dependencies(self):
+        '''
+        Write the lock, and the recipes into the shared cache.
+
+        Called once the recursive resolve is over. The lock asserts that the
+        resolution succeeded, therefore a resolve that failed leaves none.
+        '''
+        if self.dependencies_save_path is None:
+            return
+
+        self.save_dependencies_json(self.dependencies_save_path)
+        self.project.record_recipes(
+            self.get_global_dependencies_configuration_file())
 
     def get_global_dependencies_configuration_file(self):
         global_dependencies_configuration = self.make_build_path(
@@ -260,6 +311,7 @@ class Context:
         self.project.deps_load_json(cache)
 
     def save_dependencies_json(self, path):
+        Logs.info("Saving resolved dependencies " + str(path))
         cache = self.project.deps_resolve_json()
         with open(path, 'w') as fp:
             json.dump(cache, fp, indent=4)
@@ -1551,6 +1603,27 @@ class Context:
                         Artifact(abspath, relpath, path_build))
         return artifacts_list
 
+    def record_dependency_recipe(self, dep, source_path):
+        '''
+        Record which recipes serve a dependency, in what it resolved to.
+
+        Raise when there is no project file and no recipe, because a successful resolve
+        must mean everything needed to build is in hand.
+        '''
+        # Only a resolve makes the cookbooks available.
+        if not self.deps_resolve:
+            return
+
+        # A dependency holding its own project file needs no recipe.
+        if project_file.holds_a_project(source_path):
+            return
+
+        # Quietly: the sub-invocation about to run announces the recipe it uses.
+        recipe = RecipeResolver(self.cached_cookbooks).resolve(
+            dep.resolved.identity, report=False)
+
+        dep.resolved = dep.resolved.settle_recipe(recipe)
+
     def run_dep_command(self, dep, command):
 
         should_clean_repo = False
@@ -1574,6 +1647,7 @@ class Context:
 
         dep_path = self.get_dep_location(dep)
         repo_path = manager.install(dep, refresh=should_clean_repo).source_path
+        self.record_dependency_recipe(dep, repo_path)
         build_path = self.get_dep_build_location(dep)
 
         global_dependencies_configuration = self.get_global_dependencies_configuration_file()
@@ -1646,7 +1720,7 @@ class Context:
 
         if dep.shallow:
             configure_options += [
-                '--force-version="{}"'.format(dep.resolved.reference)
+                '--force-version="{}"'.format(dep.resolved.version.reference)
             ]
 
         dependencies_options = path_options + []
@@ -2173,6 +2247,8 @@ class Context:
         self.recursively_apply_to_deps(config, self.link_dependency)
 
     def recursively_apply_to_deps(self, config, callback):
+        # TODO: `deps_linked` is local to this call and process_external_deps
+        # runs once per task, so a dependency two tasks name is processed twice.
         deps_linked = []
         deps_count = 0
         while len(self.project.deps) != deps_count:
@@ -3721,16 +3797,19 @@ class Context:
         cookbooks = [
             manager.get_cookbook(source) for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
         ]
-        cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
+        self.cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
 
         if not recipe_id:
             return
 
-        self.load_project(RecipeResolver(cached_cookbooks).resolve(recipe_id))
+        recipe = RecipeResolver(self.cached_cookbooks).resolve(recipe_id)
+
+        self.load_project(recipe.require_project_directory())
 
         if self.project is None:
             raise RuntimeError(
-                "ERROR: unable to use recipe from {}".format(found_recipe_dir))
+                "ERROR: {} holds a project file Golem could not read:\n"
+                "  {}".format(recipe.served_by, recipe.project_directory))
 
     def load_git_remote_origin_url(self):
         if self.repository is not None:
