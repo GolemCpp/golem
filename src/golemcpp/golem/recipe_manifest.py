@@ -37,6 +37,7 @@ class RecipeManifest:
     '''
 
     locator: str = ''
+    mirrors: tuple = ()
     overrides: str = ''
     version: int = RECIPE_MANIFEST_VERSION
 
@@ -74,6 +75,7 @@ class RecipeManifest:
 
         return cls(
             locator=read_locator(data, origin),
+            mirrors=read_mirrors(data, origin),
             overrides=read_overrides(data, origin),
             version=read_version(data, origin),
         )
@@ -108,19 +110,59 @@ def read_version(data: dict, origin: str) -> int:
 
 def read_locator(data: dict, origin: str) -> str:
     '''
-    Read where a recipe says its package is, empty when it says nothing.
+    Read where a recipe says the source is, empty when it says nothing.
 
     A locator isn't an identity, so if an identity is encountered, it's refused.
     '''
+
     locator = read_text(data, 'locator', origin)
 
-    if locator.startswith(source_id.FIELD_SEPARATOR):
-        raise RuntimeError(
-            "ERROR: {} declares the locator '{}', which is an identity. Write "
-            "the locator the identity is composed from.".format(origin, locator)
-        )
+    refuse_an_identity(locator, 'locator', origin)
 
     return locator
+
+
+def read_mirrors(data: dict, origin: str) -> tuple:
+    '''
+    Read the other locators the source is served from.
+
+    A recipe has no default remote when it declares no locator. Mirrors aren't default
+    remotes.
+    '''
+
+    mirrors = data.get('mirrors')
+
+    if mirrors is None:
+        return ()
+
+    if not isinstance(mirrors, list):
+        raise RuntimeError(
+            "ERROR: {} declares mirrors as {}, and mirrors are written as a "
+            "list of locators".format(origin, type(mirrors).__name__)
+        )
+
+    for mirror in mirrors:
+        if not isinstance(mirror, str):
+            raise RuntimeError(
+                "ERROR: {} declares a mirror as {}, and a mirror is written as "
+                "text".format(origin, type(mirror).__name__)
+            )
+
+        refuse_an_identity(mirror, 'mirror', origin)
+
+    return tuple(mirrors)
+
+
+def refuse_an_identity(locator: str, field: str, origin: str):
+    '''Refuse an identity in a field taking a locator.'''
+    # A recipe cannot delegate where the source is.
+    if not locator.startswith(source_id.FIELD_SEPARATOR):
+        return
+
+    raise RuntimeError(
+        "ERROR: {} declares the {} '{}', which is an identity. Write "
+        "the locator the identity is composed from.".format(origin, field, locator)
+    )
 
 
 def read_overrides(data: dict, origin: str) -> str:

@@ -14,7 +14,7 @@ def make_cookbook(tmp_path, name, recipes=(), bare=(), declaring=()):
 
     A bare one is named like a recipe and holds nothing, which is what a
     half-made cookbook looks like from outside. One in `declaring` says where
-    its package is and holds no project file, which is what a recipe reachable
+    its source is and holds no project file, which is what a recipe reachable
     as a location but not loadable looks like.
     '''
     source = tmp_path / name / 'source'
@@ -66,7 +66,7 @@ def test_a_recipe_named_exactly_serves_the_identity(tmp_path, capsys):
 
 
 def test_a_lookup_saying_its_own_line_asks_for_no_report(tmp_path, capsys):
-    # The location lookup names where the package is, and the sub-invocation
+    # The location lookup names where the source is, and the sub-invocation
     # configuring the dependency names the recipe, so a second "served by" here
     # would say what one of those two already says.
     cookbook = make_cookbook(tmp_path, 'base', ['@json'])
@@ -147,7 +147,7 @@ def test_a_bare_directory_does_not_fall_through_to_a_shorter_rung(tmp_path):
         resolve([cookbook], '@json@nlohmann@github.com')
 
 
-def test_a_recipe_saying_only_where_its_package_is_still_serves(tmp_path):
+def test_a_recipe_saying_only_where_its_source_is_still_serves(tmp_path):
     # It answers a caller pointed at the name, and refuses one looking for a
     # project file. Which of the two asked is not the resolver's business.
     cookbook = make_cookbook(

@@ -9,6 +9,7 @@ from golemcpp.golem.locator import Locator
 from golemcpp.golem.requested_source import RequestedSource
 from golemcpp.golem.dependency_resolution import DependencyResolution
 from golemcpp.golem import source
+from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.version import Version
 from golemcpp.golem import version_resolver
 from golemcpp.golem.version_resolver import VersionResolver
@@ -18,6 +19,16 @@ from collections import OrderedDict
 # The members naming where a dependency comes from, at most one of which a
 # dependency declares.
 SOURCE_MEMBERS = ('repository', 'directory', 'location')
+
+
+def describe_locators(locators) -> str:
+    '''List locators with what each one composes, one per line.'''
+    # A reader comparing what was asked for against the identities is what makes
+    # the refusal below readable, so the composition is spelled out.
+    return '\n'.join(
+        '  {}  ({})'.format(locator, SourceId.from_locator(locator))
+        for locator in locators
+    )
 
 
 def report_identity_resolution(identity, locator, recipe):
@@ -172,31 +183,31 @@ class Dependency(Configuration):
         '''
         Settle the locator and kind from the recipe's manifest
         '''
-        # Through the same parse a declaration goes through.
-        # The locator is anchored on the recipe directory already.
-        settled = source_location.parse(
-            recipe.require_locator(), project_directory=None
-        )
-        resolved = self.resolved.settle_locator(str(settled.locator), settled.kind)
+        # The view refuses a recipe naming no locator at all.
+        recipe.require_locators()
 
-        # It's impossible to find a locator for a rung that isn't matching the locator
-        # of the recipe it matches.
-        if identity.filled_from(resolved.identity) != resolved.identity:
+        locator = recipe.locator_for(identity)
+
+        # A rung asks for a source, but the recipe may not have a locator mathing it.
+        if not locator:
             raise RuntimeError(
-                "ERROR: dependency '{}' asks for '{}', and {} names '{}', "
-                "which is '{}'.\nA recipe names one source, therefore it "
-                "cannot say where a fork of it is. Declare the fork with "
-                "`repository=`, and this recipe still builds it.".format(
+                "ERROR: dependency '{}' asks for '{}', and {} names no source "
+                "it can be:\n{}\nA recipe cannot say where a fork it knows nothing "
+                "about can be found. Declare the fork with `repository=`, and this "
+                "recipe still builds it.".format(
                     self.name,
                     identity,
                     recipe.served_by,
-                    resolved.locator,
-                    resolved.identity,
+                    describe_locators(recipe.locators),
                 )
             )
 
-        self.resolved = resolved
-        report_identity_resolution(identity, resolved.locator, recipe)
+        # The locator is anchored on the recipe directory already, just parse it.
+        settled = source_location.parse(locator, project_directory=None)
+
+        self.resolved = self.resolved.settle_locator(str(settled.locator), settled.kind)
+
+        report_identity_resolution(identity, self.resolved.locator, recipe)
 
     def update_version(self, requested_version):
         '''

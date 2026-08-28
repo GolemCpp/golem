@@ -2,7 +2,7 @@
 What one cookbook declares for one recipe name.
 
 A recipe is a directory, therefore what an author declares is everything in it:
-the manifest saying where the package is, and the project file saying how to
+the manifest saying where the source is, and the project file saying how to
 build it. A Recipe is resolved from these, one per cookbook it was found in.
 '''
 
@@ -67,12 +67,33 @@ class DeclaredRecipe:
 
     @property
     def locator(self) -> str:
-        '''
-        Where this declaration says its package is, empty when it says nothing.
+        '''Where this declaration says the source is, empty when it says nothing.'''
 
-        A relative locator is relative to the recipe directory.
+        return self.anchored(self.manifest.locator)
+
+    @property
+    def mirrors(self) -> tuple:
+        '''The other remotes this declaration says the source is reachable at.'''
+
+        return tuple(
+            self.anchored(mirror) for mirror in self.manifest.mirrors if mirror
+        )
+
+    @property
+    def locators(self) -> tuple:
         '''
-        locator = self.manifest.locator
+        Every locator this declaration names, the default remote first.
+
+        A declaration may name mirrors and no locator, therefore this can hold
+        mirrors alone.
+        '''
+
+        return tuple(locator for locator in (self.locator,) + self.mirrors if locator)
+
+    def anchored(self, locator: str) -> str:
+        '''
+        A locator resolved against the recipe directory, when it is relative.
+        '''
 
         if not locator or not is_relative(locator):
             return locator

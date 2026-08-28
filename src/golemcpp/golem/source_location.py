@@ -174,7 +174,8 @@ def names_an_identity(value) -> bool:
 
 
 def refuse_an_identity(value):
-    '''Refuse a field that takes a locator and was given an identity.'''
+    '''Refuse an identity in a field taking a locator.'''
+
     if not names_an_identity(value):
         return
 

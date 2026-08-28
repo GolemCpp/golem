@@ -29,7 +29,7 @@ def test_a_recipe_declaring_nothing_reads_as_an_empty_manifest(tmp_path):
     assert manifest.version == recipe_manifest.RECIPE_MANIFEST_VERSION
 
 
-def test_a_manifest_names_where_the_package_is(tmp_path):
+def test_a_manifest_names_where_the_source_is(tmp_path):
     path = write_manifest(tmp_path, {
         'version': 1,
         'locator': 'https://github.com/boostorg/boost.git',
@@ -99,7 +99,7 @@ def test_a_manifest_that_names_no_fields_is_refused(tmp_path):
 
 
 def test_a_locator_written_as_an_identity_is_refused(tmp_path):
-    # A recipe says where a package is. An identity says where to go looking,
+    # A recipe says where a source is. An identity says where to go looking,
     # therefore taking one here would leave nothing to fetch.
     path = write_manifest(tmp_path, {'locator': '@boost@boostorg@github.com'})
 
@@ -152,6 +152,63 @@ def test_an_overrides_that_names_no_identity_is_refused(tmp_path):
 def test_a_field_written_as_the_wrong_kind_of_value_is_refused(
         tmp_path, field, value):
     path = write_manifest(tmp_path, {field: value})
+
+    with pytest.raises(RuntimeError):
+        RecipeManifest.read(path)
+
+
+def test_a_manifest_names_the_other_locators_its_source_is_served_from(tmp_path):
+    path = write_manifest(tmp_path, {
+        'locator': 'https://github.com/boostorg/boost.git',
+        'mirrors': ['https://gitlab.com/boostorg/boost.git'],
+    })
+
+    assert RecipeManifest.read(path).mirrors == (
+        'https://gitlab.com/boostorg/boost.git',)
+
+
+def test_a_manifest_naming_no_mirror_reads_as_holding_none(tmp_path):
+    path = write_manifest(tmp_path, {
+        'locator': 'https://github.com/boostorg/boost.git',
+    })
+
+    assert RecipeManifest.read(path).mirrors == ()
+
+
+def test_a_mirror_that_names_an_identity_is_refused(tmp_path):
+    # The rule the locator carries: a recipe cannot delegate where its source
+    # is to another recipe.
+    path = write_manifest(tmp_path, {
+        'locator': 'https://github.com/boostorg/boost.git',
+        'mirrors': ['@boost@boostorg@gitlab.com'],
+    })
+
+    with pytest.raises(RuntimeError) as refusal:
+        RecipeManifest.read(path)
+
+    assert 'is an identity' in str(refusal.value)
+
+
+def test_a_manifest_may_name_mirrors_and_no_locator(tmp_path):
+    # A source with no default remote: every location it can be reached at is
+    # a mirror, and each is summoned by the identity it composes.
+    path = write_manifest(tmp_path, {
+        'mirrors': ['https://gitlab.com/boostorg/boost.git',
+                    'https://github.com/boostorg/boost.git'],
+    })
+    manifest = RecipeManifest.read(path)
+
+    assert manifest.locator == ''
+    assert len(manifest.mirrors) == 2
+
+
+@pytest.mark.parametrize('mirrors', ['https://gitlab.com/b/b.git', {}, [12]])
+def test_mirrors_written_as_the_wrong_kind_of_value_are_refused(
+        tmp_path, mirrors):
+    path = write_manifest(tmp_path, {
+        'locator': 'https://github.com/boostorg/boost.git',
+        'mirrors': mirrors,
+    })
 
     with pytest.raises(RuntimeError):
         RecipeManifest.read(path)

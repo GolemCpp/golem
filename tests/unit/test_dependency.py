@@ -332,13 +332,13 @@ def test_a_copied_directory_takes_no_version_even_when_one_was_patched_in():
 BOOST_LOCATOR = 'https://github.com/boostorg/boost.git'
 
 
-def make_recipe(locator, rung='@boost', cookbook='base'):
-    '''A recipe declaring where its package is, the way a cookbook does.'''
+def make_recipe(locator, rung='@boost', cookbook='base', mirrors=()):
+    '''A recipe declaring where its source is, the way a cookbook does.'''
     return Recipe.resolve(DeclaredRecipe(
         directory=os.path.join('/cookbook', rung),
         cookbook=SimpleNamespace(cache_key=cookbook),
         rung=SourceId.parse(rung),
-        manifest=RecipeManifest(locator=locator),
+        manifest=RecipeManifest(locator=locator, mirrors=mirrors),
     ))
 
 
@@ -387,7 +387,7 @@ def test_the_lookup_says_what_the_identity_resolved_to(capsys):
 
 
 def test_the_version_asked_of_an_identity_is_asked_of_the_recipes_locator():
-    # A cookbook says where a package is and never which version to take.
+    # A cookbook says where a source is and never which version to take.
     dependency = settled_from_identity('@boost#^1.87.0',
                                        make_recipe(BOOST_LOCATOR))
 
@@ -425,3 +425,48 @@ def test_a_recipe_naming_no_locator_cannot_be_used_as_a_location():
     with pytest.raises(RuntimeError, match='names no locator'):
         dependency.settle_from_recipe(dependency.declared_identity(),
                                       make_recipe(''))
+
+
+GITLAB_LOCATOR = 'https://gitlab.com/boostorg/boost.git'
+
+
+def test_an_identity_naming_a_mirror_settles_that_mirror(capsys):
+    recipe = make_recipe(BOOST_LOCATOR, mirrors=(GITLAB_LOCATOR,))
+    dependency = settled_from_identity('@boost@boostorg@gitlab.com', recipe)
+
+    assert dependency.resolved.locator == GITLAB_LOCATOR
+    # Composed from the locator that won, therefore the gitlab spelling is its
+    # own cache entry rather than the github one under another name.
+    assert str(dependency.resolved.identity) == '@boost@boostorg@gitlab.com'
+    assert GITLAB_LOCATOR in capsys.readouterr().out
+
+
+def test_a_bare_identity_settles_the_primary_though_a_mirror_matches_too():
+    recipe = make_recipe(BOOST_LOCATOR, mirrors=(GITLAB_LOCATOR,))
+    dependency = settled_from_identity('@boost', recipe)
+
+    assert dependency.resolved.locator == BOOST_LOCATOR
+
+
+def test_the_two_spellings_of_one_mirrored_source_are_two_cache_entries():
+    recipe = make_recipe(BOOST_LOCATOR, mirrors=(GITLAB_LOCATOR,))
+
+    primary = settled_from_identity('@boost', recipe)
+    mirror = settled_from_identity('@boost@boostorg@gitlab.com', recipe)
+
+    assert primary.resolved.identity != mirror.resolved.identity
+
+
+def test_a_refusal_names_every_locator_the_recipe_was_asked_about():
+    recipe = make_recipe(BOOST_LOCATOR, mirrors=(GITLAB_LOCATOR,))
+    dependency = Dependency(name='boost', location='@boost@somefork@github.com')
+    dependency.update_source('/proj', identity_allowed=True)
+
+    with pytest.raises(RuntimeError) as refusal:
+        dependency.settle_from_recipe(dependency.declared_identity(), recipe)
+
+    # With what each one composes, so a reader compares them with what was
+    # asked for rather than composing them by eye.
+    assert BOOST_LOCATOR in str(refusal.value)
+    assert GITLAB_LOCATOR in str(refusal.value)
+    assert '@boost@boostorg@gitlab.com' in str(refusal.value)

@@ -46,7 +46,8 @@ class RecipeResolver:
 
     @staticmethod
     def require_an_answer(recipe):
-        '''Refuse a recipe saying neither where its package is nor how to build it.'''
+        '''Refuse a recipe saying neither where the source is nor how to build it.'''
+
         # Dropping to a shorter rung instead would serve a recipe nobody asked
         # for, so a directory named right and holding nothing is an error case.
         if recipe:

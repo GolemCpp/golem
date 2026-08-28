@@ -23,7 +23,7 @@ The leading `@` is what tells a recipe from the rest of a cookbook, this `README
 
 ## Naming a dependency by its recipe
 
-A recipe holding a `recipe.json` says where its package is, therefore its name is usable as a dependency's `location`:
+A recipe holding a `recipe.json` says where the source is, therefore its name is usable as a dependency's `location`:
 
 ```python
 project.dependency(name='json', location='@json', version='^3.0.0')

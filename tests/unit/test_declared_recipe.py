@@ -48,7 +48,7 @@ def test_a_project_file_in_json_counts_as_one(tmp_path):
     assert read(cookbook).project_directory
 
 
-def test_a_recipe_holding_only_a_manifest_says_where_its_package_is(tmp_path):
+def test_a_recipe_holding_only_a_manifest_says_where_its_source_is(tmp_path):
     cookbook = make_recipe(
         tmp_path, manifest={'locator': 'https://github.com/nlohmann/json.git'})
 
