@@ -712,7 +712,7 @@ def make_static_library_build_target_context(*, variant='release', no_defaults=F
     return context, task, config
 
 
-def test_build_target_gather_config_applies_default_flags_per_target(monkeypatch):
+def test_gather_build_arguments_applies_default_flags_per_target(monkeypatch):
     context, task, config = make_build_target_context(no_defaults=False)
 
     monkeypatch.setattr(
@@ -721,19 +721,19 @@ def test_build_target_gather_config_applies_default_flags_per_target(monkeypatch
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
 
-    assert 'UNICODE' in build_target.defines
-    assert 'NDEBUG' in build_target.defines
-    assert '/MACHINE:X64' in build_target.linkflags
-    assert '/INCREMENTAL:NO' in build_target.linkflags
-    assert '/MD' in build_target.cxxflags
-    assert '/O2' in build_target.cxxflags
-    assert build_target.env_defines == ['FROM_ENV']
-    assert build_target.env_cxxflags == ['/env-cxx']
+    assert 'UNICODE' in build_arguments.defines
+    assert 'NDEBUG' in build_arguments.defines
+    assert '/MACHINE:X64' in build_arguments.linkflags
+    assert '/INCREMENTAL:NO' in build_arguments.linkflags
+    assert '/MD' in build_arguments.cxxflags
+    assert '/O2' in build_arguments.cxxflags
+    assert build_arguments.env_defines == ['FROM_ENV']
+    assert build_arguments.env_cxxflags == ['/env-cxx']
 
 
-def test_build_target_gather_config_skips_default_flags_when_no_defaults_is_enabled(monkeypatch):
+def test_gather_build_arguments_skips_default_flags_when_no_defaults_is_enabled(monkeypatch):
     context, task, config = make_build_target_context(no_defaults=True)
 
     monkeypatch.setattr(
@@ -742,19 +742,19 @@ def test_build_target_gather_config_skips_default_flags_when_no_defaults_is_enab
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
 
-    assert 'UNICODE' not in build_target.defines
-    assert 'NDEBUG' not in build_target.defines
-    assert '/MACHINE:X64' not in build_target.linkflags
-    assert '/INCREMENTAL:NO' not in build_target.linkflags
-    assert '/MD' not in build_target.cxxflags
-    assert '/O2' not in build_target.cxxflags
-    assert build_target.env_defines == ['FROM_ENV']
-    assert build_target.env_cxxflags == ['/env-cxx']
+    assert 'UNICODE' not in build_arguments.defines
+    assert 'NDEBUG' not in build_arguments.defines
+    assert '/MACHINE:X64' not in build_arguments.linkflags
+    assert '/INCREMENTAL:NO' not in build_arguments.linkflags
+    assert '/MD' not in build_arguments.cxxflags
+    assert '/O2' not in build_arguments.cxxflags
+    assert build_arguments.env_defines == ['FROM_ENV']
+    assert build_arguments.env_cxxflags == ['/env-cxx']
 
 
-def test_build_target_gather_config_applies_default_arflags_per_target(monkeypatch):
+def test_gather_build_arguments_applies_default_arflags_per_target(monkeypatch):
     context, task, config = make_static_library_build_target_context(
         no_defaults=False)
 
@@ -764,13 +764,13 @@ def test_build_target_gather_config_applies_default_arflags_per_target(monkeypat
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
 
-    assert '/MACHINE:X64' in build_target.arflags
-    assert '/INCREMENTAL:NO' in build_target.arflags
+    assert '/MACHINE:X64' in build_arguments.arflags
+    assert '/INCREMENTAL:NO' in build_arguments.arflags
 
 
-def test_build_target_gather_config_merges_config_arflags(monkeypatch):
+def test_gather_build_arguments_merges_config_arflags(monkeypatch):
     context, task, config = make_static_library_build_target_context(
         no_defaults=False)
     config.arflags = ['/custom-arflag']
@@ -781,14 +781,14 @@ def test_build_target_gather_config_merges_config_arflags(monkeypatch):
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
 
-    assert '/MACHINE:X64' in build_target.arflags
-    assert '/INCREMENTAL:NO' in build_target.arflags
-    assert '/custom-arflag' in build_target.arflags
+    assert '/MACHINE:X64' in build_arguments.arflags
+    assert '/INCREMENTAL:NO' in build_arguments.arflags
+    assert '/custom-arflag' in build_arguments.arflags
 
 
-def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_enabled(monkeypatch):
+def test_gather_build_arguments_skips_default_arflags_when_no_defaults_is_enabled(monkeypatch):
     context, task, config = make_static_library_build_target_context(
         no_defaults=True)
     config.arflags = ['/custom-arflag']
@@ -799,11 +799,11 @@ def test_build_target_gather_config_skips_default_arflags_when_no_defaults_is_en
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_target = context.build_target_gather_config(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
 
-    assert '/MACHINE:X64' not in build_target.arflags
-    assert '/INCREMENTAL:NO' not in build_target.arflags
-    assert build_target.arflags == ['/custom-arflag']
+    assert '/MACHINE:X64' not in build_arguments.arflags
+    assert '/INCREMENTAL:NO' not in build_arguments.arflags
+    assert build_arguments.arflags == ['/custom-arflag']
 
 
 def stub_dependency_manager(monkeypatch, context, *, is_read_only=False,

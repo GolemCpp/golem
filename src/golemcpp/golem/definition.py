@@ -8,7 +8,7 @@ from golemcpp.golem.template import Template
 import json
 
 
-class Target(Configuration):
+class Definition(Configuration):
     def __init__(self,
                  name=None,
                  version_template=None,
@@ -16,7 +16,7 @@ class Target(Configuration):
                  export=False,
                  args=None,
                  **kwargs):
-        super(Target, self).__init__(**kwargs)
+        super(Definition, self).__init__(**kwargs)
         self.name = name
         self.version_template = helpers.parameter_to_list(version_template)
         self.templates = helpers.parameter_to_list(templates)
@@ -35,7 +35,7 @@ class Target(Configuration):
         json_obj = Configuration.serialize_to_json(o)
 
         for key in o.__dict__:
-            if key in Target.serialized_members():
+            if key in Definition.serialized_members():
                 value = o.__dict__[key]
                 if value:
                     if (key == 'templates' or key == 'version_template'):
@@ -55,7 +55,7 @@ class Target(Configuration):
         Configuration.read_json(self, o)
 
         for key, value in o.items():
-            if key in Target.serialized_members():
+            if key in Definition.serialized_members():
                 if key == 'templates' or key == 'version_template':
                     array=[]
                     for item in value:
@@ -69,12 +69,12 @@ class Target(Configuration):
 
     @staticmethod
     def unserialize_from_json(o):
-        target = Target()
-        target.read_json(o)
-        return target
+        definition = Definition()
+        definition.read_json(o)
+        return definition
 
 
-class TargetConfigurationFile(object):
+class ExportedConfiguration(object):
     def __init__(self, project=None, configuration=None):
         self.dependencies = []
         self.configuration = configuration
@@ -96,16 +96,16 @@ class TargetConfigurationFile(object):
 
     @staticmethod
     def unserialize_from_json(o):
-        target_configuration_file = TargetConfigurationFile()
+        exported_configuration = ExportedConfiguration()
         for key, value in o.items():
             if key == 'dependencies':
                 for dep in value:
-                    target_configuration_file.dependencies.append(
+                    exported_configuration.dependencies.append(
                         Dependency.unserialize_from_json(dep))
             elif key == 'configuration':
-                target_configuration_file.configuration = Configuration.unserialize_from_json(
-                    value)
-        return target_configuration_file
+                exported_configuration.configuration = (
+                    Configuration.unserialize_from_json(value))
+        return exported_configuration
 
     @staticmethod
     def load_file(path, context):
@@ -114,7 +114,7 @@ class TargetConfigurationFile(object):
         with open(path, 'r') as file_json:
             json_content = json.load(file_json)
 
-        conf_file = TargetConfigurationFile.unserialize_from_json(json_content)
+        conf_file = ExportedConfiguration.unserialize_from_json(json_content)
 
         manager = get_dependency_manager(context.cache_configuration)
         for dependency in conf_file.dependencies:
@@ -152,7 +152,7 @@ class TargetConfigurationFile(object):
     @staticmethod
     def save_file(path, project, configuration, context):
 
-        conf_file = TargetConfigurationFile(project=project,
+        conf_file = ExportedConfiguration(project=project,
                                             configuration=configuration)
 
         conf_file.configuration.artifacts_dev = context.make_cache_dir_paths(
@@ -184,7 +184,7 @@ class TargetConfigurationFile(object):
 
         json_content = json.dumps(
             conf_file,
-            default=TargetConfigurationFile.serialize_to_json,
+            default=ExportedConfiguration.serialize_to_json,
             sort_keys=True,
             indent=4)
         with open(path, 'w') as output:

@@ -2,7 +2,7 @@ import os
 import sys
 from golemcpp.golem import helpers
 import json
-from golemcpp.golem.target import Target
+from golemcpp.golem.definition import Definition
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.template import Template
@@ -45,7 +45,7 @@ class Project:
         self.cache = []
         self.deps = []
 
-        self.targets = []
+        self.definitions = []
         self.exports = []
 
         self.qt = False
@@ -169,50 +169,50 @@ class Project:
 
         sys.stdout.flush()
 
-    def target(self,
-               type,
-               name,
-               link=None,
-               version_template=None,
-               templates=None,
-               args=None,
-               **kwargs):
-        new_target = Target(name=name,
-                            version_template=version_template,
-                            templates=templates,
-                            args=args,
-                            type=type,
-                            link=link,
-                            **kwargs)
+    def definition(self,
+                   type,
+                   name,
+                   link=None,
+                   version_template=None,
+                   templates=None,
+                   args=None,
+                   **kwargs):
+        new_definition = Definition(name=name,
+                                    version_template=version_template,
+                                    templates=templates,
+                                    args=args,
+                                    type=type,
+                                    link=link,
+                                    **kwargs)
 
-        self.targets.append(new_target)
-        return new_target
+        self.definitions.append(new_definition)
+        return new_definition
 
     def library(self, type=None, **kwargs):
-        return self.target(type='library', **kwargs)
+        return self.definition(type='library', **kwargs)
 
     def shared_library(self, type=None, link=None, **kwargs):
-        return self.target(type='library', link='shared', **kwargs)
+        return self.definition(type='library', link='shared', **kwargs)
 
     def static_library(self, type=None, link=None, **kwargs):
-        return self.target(type='library', link='static', **kwargs)
+        return self.definition(type='library', link='static', **kwargs)
 
     def program(self, type=None, **kwargs):
-        return self.target(type='program', **kwargs)
+        return self.definition(type='program', **kwargs)
 
     def objects(self, type=None, **kwargs):
-        return self.target(type='objects', **kwargs)
+        return self.definition(type='objects', **kwargs)
 
-    def task(self, name, **kwargs):
-        return self.target(type='task', name=name, args=kwargs)
+    def custom(self, name, **kwargs):
+        return self.definition(type='task', name=name, args=kwargs)
 
     def template(self, **kwargs):
         return Template(**kwargs)
 
     def export(self, type=None, **kwargs):
-        new_target = Target(type=None, export=True, **kwargs)
-        self.exports.append(new_target)
-        return new_target
+        new_definition = Definition(type=None, export=True, **kwargs)
+        self.exports.append(new_definition)
+        return new_definition
 
     def configuration(self, path):
         self.configuration_paths.append(path)
@@ -271,11 +271,11 @@ class Project:
                     project.deps.append(dependency)
             elif key == 'targets':
                 for json_obj in value:
-                    project.targets.append(
-                        Target.unserialize_from_json(json_obj))
+                    project.definitions.append(
+                        Definition.unserialize_from_json(json_obj))
             elif key == 'exports':
                 for json_obj in value:
-                    target = Target.unserialize_from_json(json_obj)
+                    target = Definition.unserialize_from_json(json_obj)
                     target.export = True
                     project.exports.append(target)
             elif key == 'packages':

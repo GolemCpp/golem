@@ -36,7 +36,7 @@ from golemcpp.golem import safe_part
 from golemcpp.golem import settings
 from golemcpp.golem import project_file
 from golemcpp.golem.project import Project
-from golemcpp.golem.build_target import BuildTarget
+from golemcpp.golem.build_arguments import BuildArguments
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem import build_slug
 from golemcpp.golem import target_platform
@@ -47,11 +47,11 @@ from golemcpp.golem.source import Source
 from golemcpp.golem.recipe_resolver import RecipeResolver
 from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.template import Template
-from golemcpp.golem.target import TargetConfigurationFile
+from golemcpp.golem.definition import ExportedConfiguration
 from golemcpp.golem.version import Version
 from golemcpp.golem import qt_discovery
 from golemcpp.golem import cppfront_tool
-from golemcpp.golem.target import Target
+from golemcpp.golem.definition import Definition
 from golemcpp.golem.artifact import Artifact
 from golemcpp.golem.package_msi import package_msi
 from golemcpp.golem.package_dmg import package_dmg
@@ -1370,9 +1370,6 @@ class Context:
         # back on one CacheConfiguration.
         return get_cache_configuration(self.get_settings())
 
-    def get_local_dep_pkl(self, dep):
-        return os.path.join(self.make_out_path(), dep.name + '.pkl')
-
     def get_dep_cached_resource(self, dep):
         '''
         Where the dependency lives in the caches. It is resolved once and kept on
@@ -1778,7 +1775,7 @@ class Context:
         if not self.can_open_json(dep=dep, target_name=target_name):
             raise RuntimeError("Can't read file {}".format(json_path))
 
-        return TargetConfigurationFile.load_file(path=json_path, context=self)
+        return ExportedConfiguration.load_file(path=json_path, context=self)
 
     def read_dep_configs(self, dep, target_name=None):
         config_file = self.read_dep_config_file(dep=dep,
@@ -2268,7 +2265,7 @@ class Context:
                         callback(config, dep)
                         deps_linked.append(dep.name)
 
-    def build_target_gather_config(self, task, targets, config):
+    def gather_build_arguments(self, task, targets, config):
 
         config = config.copy()
 
@@ -2695,7 +2692,7 @@ class Context:
                 lib_paths = helpers.filter_unique(lib_paths)
                 rpath_option = lib_paths
 
-        return BuildTarget(
+        return BuildArguments(
             config=config,
             defines=final_defines,
             includes=listinclude,
@@ -2750,10 +2747,10 @@ class Context:
     def initialize_compile_commands_configs(self):
         self.compile_commands_configs = []
 
-    def append_compiler_commands(self, build_target):
-        self.compiler_commands += self.make_compiler_commands(build_target)
+    def append_compiler_commands(self, build_arguments):
+        self.compiler_commands += self.make_compiler_commands(build_arguments)
 
-    def make_compiler_commands(self, build_target):
+    def make_compiler_commands(self, build_arguments):
         compiler_commands = []
 
         isystem_f = '-isystem'
@@ -2762,19 +2759,19 @@ class Context:
         if not self.is_isystem_supported():
             isystem_f = '-I'
         
-        for source in build_target.source:
+        for source in build_arguments.source:
             file = {
                 "directory": self.get_build_path(),
                 "arguments": [
                     self.context.env.get_flat('CXX')
-                ] + build_target.env_cxxflags + build_target.cxxflags +
-                ['-I' + str(d) for d in build_target.env_includes] +
-                ['-I' + str(d) for d in build_target.includes] +
-                [isystem_f + str(d) for d in build_target.env_isystems] +
-                [isystem_f + str(d) for d in build_target.isystems] +
-                ['-D' + d for d in build_target.env_defines] +
-                ['-D' + d for d in build_target.defines] +
-                [str(source), '-c'] + build_target.cppflags,
+                ] + build_arguments.env_cxxflags + build_arguments.cxxflags +
+                ['-I' + str(d) for d in build_arguments.env_includes] +
+                ['-I' + str(d) for d in build_arguments.includes] +
+                [isystem_f + str(d) for d in build_arguments.env_isystems] +
+                [isystem_f + str(d) for d in build_arguments.isystems] +
+                ['-D' + d for d in build_arguments.env_defines] +
+                ['-D' + d for d in build_arguments.defines] +
+                [str(source), '-c'] + build_arguments.cppflags,
                 "file": str(source)
             }
             compiler_commands.append(file)
@@ -2795,16 +2792,16 @@ class Context:
 
         targets_includes = []
 
-        build_target = self.build_target_gather_config(task=task,
+        build_arguments = self.gather_build_arguments(task=task,
                                                        targets=targets,
                                                        config=config)
 
-        targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
-        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystems]
-        targets_includes += [str(item) for item in build_target.isystems]
-        targets_includes += [str(item) for item in build_target.env_includes]
-        targets_includes += [str(item) for item in build_target.includes]
+        targets_includes += [str(item) for item in self.list_include(build_arguments.config.includes, self.get_project_dir())]
+        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_arguments.config.source))]
+        targets_includes += [str(item) for item in build_arguments.env_isystems]
+        targets_includes += [str(item) for item in build_arguments.isystems]
+        targets_includes += [str(item) for item in build_arguments.env_includes]
+        targets_includes += [str(item) for item in build_arguments.includes]
 
         targets_includes = helpers.filter_unique(targets_includes)
 
@@ -2857,16 +2854,16 @@ class Context:
 
         def list_all_targets_includes(task, targets, config, targets_includes,
                                       targets_cxxflags, targets_features, targets_wfeatures):
-            build_target = self.build_target_gather_config(task=task,
+            build_arguments = self.gather_build_arguments(task=task,
                                                            targets=targets,
                                                            config=config)
 
-            targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
-            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystems]
-            targets_includes += [str(item) for item in build_target.isystems]
-            targets_includes += [str(item) for item in build_target.env_includes]
-            targets_includes += [str(item) for item in build_target.includes]
+            targets_includes += [str(item) for item in self.list_include(build_arguments.config.includes, self.get_project_dir())]
+            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_arguments.config.source))]
+            targets_includes += [str(item) for item in build_arguments.env_isystems]
+            targets_includes += [str(item) for item in build_arguments.isystems]
+            targets_includes += [str(item) for item in build_arguments.env_includes]
+            targets_includes += [str(item) for item in build_arguments.includes]
             targets_cxxflags += config.cxxflags
             targets_features += config.features
             targets_wfeatures += config.wfeatures
@@ -2939,16 +2936,16 @@ class Context:
 
         targets_includes = []
 
-        build_target = self.build_target_gather_config(task=task,
+        build_arguments = self.gather_build_arguments(task=task,
                                                        targets=targets,
                                                        config=config)
 
-        targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
-        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystems]
-        targets_includes += [str(item) for item in build_target.isystems]
-        targets_includes += [str(item) for item in build_target.env_includes]
-        targets_includes += [str(item) for item in build_target.includes]
+        targets_includes += [str(item) for item in self.list_include(build_arguments.config.includes, self.get_project_dir())]
+        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_arguments.config.source))]
+        targets_includes += [str(item) for item in build_arguments.env_isystems]
+        targets_includes += [str(item) for item in build_arguments.isystems]
+        targets_includes += [str(item) for item in build_arguments.env_includes]
+        targets_includes += [str(item) for item in build_arguments.includes]
 
         targets_includes = helpers.filter_unique(targets_includes)
 
@@ -2965,16 +2962,16 @@ class Context:
 
         def list_all_targets_includes(task, targets, config, targets_includes,
                                       targets_cxxflags, targets_wfeatures):
-            build_target = self.build_target_gather_config(task=task,
+            build_arguments = self.gather_build_arguments(task=task,
                                                            targets=targets,
                                                            config=config)
 
-            targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
-            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystems]
-            targets_includes += [str(item) for item in build_target.isystems]
-            targets_includes += [str(item) for item in build_target.env_includes]
-            targets_includes += [str(item) for item in build_target.includes]
+            targets_includes += [str(item) for item in self.list_include(build_arguments.config.includes, self.get_project_dir())]
+            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_arguments.config.source))]
+            targets_includes += [str(item) for item in build_arguments.env_isystems]
+            targets_includes += [str(item) for item in build_arguments.isystems]
+            targets_includes += [str(item) for item in build_arguments.env_includes]
+            targets_includes += [str(item) for item in build_arguments.includes]
             targets_cxxflags += config.cxxflags
             targets_wfeatures += config.wfeatures
 
@@ -3015,16 +3012,16 @@ class Context:
 
         targets_includes = []
 
-        build_target = self.build_target_gather_config(task=task,
+        build_arguments = self.gather_build_arguments(task=task,
                                                        targets=targets,
                                                        config=config)
 
-        targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
-        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-        targets_includes += [str(item) for item in build_target.env_isystems]
-        targets_includes += [str(item) for item in build_target.isystems]
-        targets_includes += [str(item) for item in build_target.env_includes]
-        targets_includes += [str(item) for item in build_target.includes]
+        targets_includes += [str(item) for item in self.list_include(build_arguments.config.includes, self.get_project_dir())]
+        targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_arguments.config.source))]
+        targets_includes += [str(item) for item in build_arguments.env_isystems]
+        targets_includes += [str(item) for item in build_arguments.isystems]
+        targets_includes += [str(item) for item in build_arguments.env_includes]
+        targets_includes += [str(item) for item in build_arguments.includes]
 
         targets_includes = helpers.filter_unique(targets_includes)
 
@@ -3038,16 +3035,16 @@ class Context:
 
         def list_all_targets_includes(task, targets, config, targets_includes,
                                       targets_cxxflags, targets_wfeatures):
-            build_target = self.build_target_gather_config(task=task,
+            build_arguments = self.gather_build_arguments(task=task,
                                                            targets=targets,
                                                            config=config)
             
-            targets_includes += [str(item) for item in self.list_include(build_target.config.includes, self.get_project_dir())]
-            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_target.config.source))]
-            targets_includes += [str(item) for item in build_target.env_isystems]
-            targets_includes += [str(item) for item in build_target.isystems]
-            targets_includes += [str(item) for item in build_target.env_includes]
-            targets_includes += [str(item) for item in build_target.includes]
+            targets_includes += [str(item) for item in self.list_include(build_arguments.config.includes, self.get_project_dir())]
+            targets_includes += [str(item) for item in Context.get_parent_directories(self.list_source(build_arguments.config.source))]
+            targets_includes += [str(item) for item in build_arguments.env_isystems]
+            targets_includes += [str(item) for item in build_arguments.isystems]
+            targets_includes += [str(item) for item in build_arguments.env_includes]
+            targets_includes += [str(item) for item in build_arguments.includes]
             targets_cxxflags += config.cxxflags
             targets_wfeatures += config.wfeatures
 
@@ -3074,15 +3071,15 @@ class Context:
         with network.allowed():
             callback(self)
 
-    def build_target(self, task, targets, config):
-        build_target = self.build_target_gather_config(task=task,
+    def build_arguments(self, task, targets, config):
+        build_arguments = self.gather_build_arguments(task=task,
                                                        targets=targets,
                                                        config=config)
 
-        self.append_compiler_commands(build_target)
+        self.append_compiler_commands(build_arguments)
 
         if self.context.options.vscode:
-            compiler_commands_list = self.make_compiler_commands(build_target)
+            compiler_commands_list = self.make_compiler_commands(build_arguments)
 
             vscode_dir = self.get_vscode_path()
             compiler_commands_path = self.make_vscode_path(
@@ -3101,7 +3098,7 @@ class Context:
                 config=config)
 
         if self.context.options.clangd:
-            compiler_commands_list = self.make_compiler_commands(build_target)
+            compiler_commands_list = self.make_compiler_commands(build_arguments)
 
             clangd_dir = self.make_clangd_path(task.name)
             compiler_commands_path = os.path.join(clangd_dir, 'compile_commands.json')
@@ -3119,7 +3116,7 @@ class Context:
                 config=config)
 
         if self.context.options.compile_commands:
-            compiler_commands_list = self.make_compiler_commands(build_target)
+            compiler_commands_list = self.make_compiler_commands(build_arguments)
 
             compile_commands_dir = self.make_compile_commands_path(task.name)
             compiler_commands_path = os.path.join(compile_commands_dir, 'compile_commands.json')
@@ -3181,8 +3178,8 @@ class Context:
             raise Exception("ERROR: Bad target type {}".format(
                 task.type_unique))
 
-        if build_target.config.scripts:
-            for callback in build_target.config.scripts:
+        if build_arguments.config.scripts:
+            for callback in build_arguments.config.scripts:
                 self.run_build_script(callback)
 
                 if self.is_windows():
@@ -3212,37 +3209,37 @@ class Context:
                         source_artifacts=config.artifacts)
             return
 
-        build_fun(defines=build_target.defines,
-                  includes=build_target.includes,
-                  isystems=build_target.isystems,
-                  source=build_target.source,
-                  target=build_target.target[0],
-                  name=build_target.name,
-                  cxxflags=build_target.cxxflags,
-                  cflags=build_target.cflags,
-                  linkflags=build_target.linkflags,
-                  arflags=build_target.arflags,
-                  cpp2flags=build_target.cpp2flags,
-                  ldflags=build_target.ldflags,
-                  use=build_target.use,
-                  uselib=build_target.uselib,
-                  moc=build_target.moc,
-                  features=build_target.features,
-                  install_path=build_target.install_path,
-                  vnum=build_target.vnum,
-                  depends_on=build_target.depends_on,
-                  lib=build_target.lib,
-                  stlib=build_target.stlib,
-                  libpath=build_target.libpath,
-                  stlibpath=build_target.stlibpath,
-                  cppflags=build_target.cppflags,
-                  framework=build_target.framework,
-                  frameworkpath=build_target.frameworkpath,
-                  module_indices=build_target.module_indices,
-                  rpath=build_target.rpath,
-                  cxxdeps=build_target.cxxdeps,
-                  ccdeps=build_target.ccdeps,
-                  linkdeps=build_target.linkdeps)
+        build_fun(defines=build_arguments.defines,
+                  includes=build_arguments.includes,
+                  isystems=build_arguments.isystems,
+                  source=build_arguments.source,
+                  target=build_arguments.target[0],
+                  name=build_arguments.name,
+                  cxxflags=build_arguments.cxxflags,
+                  cflags=build_arguments.cflags,
+                  linkflags=build_arguments.linkflags,
+                  arflags=build_arguments.arflags,
+                  cpp2flags=build_arguments.cpp2flags,
+                  ldflags=build_arguments.ldflags,
+                  use=build_arguments.use,
+                  uselib=build_arguments.uselib,
+                  moc=build_arguments.moc,
+                  features=build_arguments.features,
+                  install_path=build_arguments.install_path,
+                  vnum=build_arguments.vnum,
+                  depends_on=build_arguments.depends_on,
+                  lib=build_arguments.lib,
+                  stlib=build_arguments.stlib,
+                  libpath=build_arguments.libpath,
+                  stlibpath=build_arguments.stlibpath,
+                  cppflags=build_arguments.cppflags,
+                  framework=build_arguments.framework,
+                  frameworkpath=build_arguments.frameworkpath,
+                  module_indices=build_arguments.module_indices,
+                  rpath=build_arguments.rpath,
+                  cxxdeps=build_arguments.cxxdeps,
+                  ccdeps=build_arguments.ccdeps,
+                  linkdeps=build_arguments.linkdeps)
 
     def find_dylibs(self, paths):
         result = list()
@@ -3272,18 +3269,18 @@ class Context:
 
     def cppcheck_target(self, task, targets, config):
 
-        build_target = self.build_target_gather_config(task=task,
+        build_arguments = self.gather_build_arguments(task=task,
                                                        targets=targets,
                                                        config=config)
 
-        all_includes = build_target.env_isystems + build_target.isystems + \
-            build_target.env_includes + build_target.includes
+        all_includes = build_arguments.env_isystems + build_arguments.isystems + \
+            build_arguments.env_includes + build_arguments.includes
         all_includes = ['-I' + str(d) for d in all_includes]
 
-        all_defines = build_target.env_defines + build_target.defines
+        all_defines = build_arguments.env_defines + build_arguments.defines
         all_defines = ['-D' + str(d) for d in all_defines]
 
-        all_sources = build_target.source
+        all_sources = build_arguments.source
         all_sources = [str(d) for d in all_sources]
 
         cppcheck_dir = self.make_build_path("cppcheck")
@@ -3341,13 +3338,13 @@ class Context:
 
     def clang_tidy_target(self, task, targets, config):
 
-        build_target = self.build_target_gather_config(task=task,
+        build_arguments = self.gather_build_arguments(task=task,
                                                        targets=targets,
                                                        config=config)
 
         clang_tidy_dir = self.make_golem_path('clang-tidy')
 
-        self.append_compiler_commands(build_target)
+        self.append_compiler_commands(build_arguments)
 
         checks = '*'
         if self.project.clang_tidy_checks:
@@ -3358,7 +3355,7 @@ class Context:
             '-p=' + str(clang_tidy_dir)
         ]
 
-        command += [str(s) for s in build_target.source]
+        command += [str(s) for s in build_arguments.source]
 
         self.context(rule=' '.join(command),
                      always=True,
@@ -4099,7 +4096,7 @@ class Context:
             self.initialize_compiler_commands()
             self.initialize_compile_commands_configs()
 
-        self.call_build_target(self.build_target, build_recursively=True)
+        self.call_build_target(self.build_arguments, build_recursively=True)
 
         if self.context.options.vscode:
             self.save_compiler_commands(vscode_compiler_commands_path)
@@ -4115,7 +4112,7 @@ class Context:
 
         for targetname in self.context.options.targets.split(','):
             if targetname and not targetname in [
-                    target.name for target in self.project.targets
+                    target.name for target in self.project.definitions
             ]:
                 if self.is_windows():
                     self.context(rule="type nul >> ${TGT}", target=targetname)
@@ -4131,13 +4128,13 @@ class Context:
     def merge_export_config_against_build_condition(self,
                                                     export,
                                                     exporting=False):
-        found_build_target = None
-        for build_target in self.project.targets:
-            if build_target.name == export.name:
-                found_build_target = build_target
+        found_definition = None
+        for definition in self.project.definitions:
+            if definition.name == export.name:
+                found_definition = definition
                 break
         return export.merge_configs(self,
-                                    condition=found_build_target,
+                                    condition=found_definition,
                                     exporting=exporting)
 
     def export(self):
@@ -4223,9 +4220,9 @@ class Context:
             is_exporting = target.export and self.context.options.export
 
             if is_exporting:
-                for project_target in self.project.targets:
-                    if target.name == project_target.name:
-                        self.resolve_target_deps(project_target)
+                for definition in self.project.definitions:
+                    if target.name == definition.name:
+                        self.resolve_target_deps(definition)
         return configs
 
     def build_local_dependencies(self, targets):
@@ -4364,10 +4361,10 @@ class Context:
     def find_related_build_task(self, task):
         build_tasks = []
         build_tasks_done = []
-        for build_task in self.project.targets:
-            if build_task.name == task.name:
-                build_tasks.append(build_task)
-                build_tasks_done.append(build_task.name)
+        for definition in self.project.definitions:
+            if definition.name == task.name:
+                build_tasks.append(definition)
+                build_tasks_done.append(definition.name)
         if len(build_tasks_done) > 1:
             raise RuntimeError("Ambiguous build task {}".format(task.name))
         return build_tasks[0] if build_tasks else None
@@ -4870,7 +4867,7 @@ class Context:
 
         helpers.make_directory(os.path.dirname(outpath_target))
 
-        TargetConfigurationFile.save_file(path=outpath_target,
+        ExportedConfiguration.save_file(path=outpath_target,
                                           project=self.project,
                                           configuration=config,
                                           context=self)
@@ -4879,7 +4876,7 @@ class Context:
         targets = []
         targets_done = []
         for export in exports:
-            for target in self.project.targets:
+            for target in self.project.definitions:
                 if target.name == export.name and target.name not in targets_done:
                     targets.append(target)
                     targets_done.append(target.name)
@@ -4901,7 +4898,7 @@ class Context:
             self.cleanup_old_build_files(config=config)
 
     def get_targets_or_exports(self):
-        return self.project.targets if (
+        return self.project.definitions if (
             not self.context.options.export
             or self.build_on) else self.project.exports
 
@@ -5022,7 +5019,7 @@ class Context:
                 break
 
         if not found_export_task:
-            found_export_task = Target(type=None,
+            found_export_task = Definition(type=None,
                                        export=True,
                                        name=task.name,
                                        args=task.args)
@@ -5032,7 +5029,7 @@ class Context:
 
         packages_to_process = dict()
         tasks_and_targets = self.get_tasks_and_targets_to_process(
-            tasks_source=self.project.targets)
+            tasks_source=self.project.definitions)
         for task, targets in tasks_and_targets:
             for package in self.project.packages:
                 task_targets = self.get_targets_from_task(
