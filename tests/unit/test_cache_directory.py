@@ -6,7 +6,6 @@ from support import absolute_path
 from golemcpp.golem import cache_directory
 from golemcpp.golem.setting_descriptor import SettingProcessingContext
 
-
 PROJECT_DIR = absolute_path('home', 'me', 'app')
 CACHE_DIR = absolute_path('opt', 'cache')
 
@@ -27,7 +26,8 @@ def test_parse_location_keeps_the_whole_value_as_a_path():
 
 def test_parse_location_resolves_a_relative_path_against_the_project():
     assert cache_directory.parse_location(
-        'local-cache', _context()).location == os.path.join(PROJECT_DIR, 'local-cache')
+        'local-cache', _context()
+    ).location == os.path.join(PROJECT_DIR, 'local-cache')
 
 
 def test_parse_entry_splits_the_url_regex():
@@ -73,5 +73,7 @@ def test_format_entry_is_the_reverse_of_parse_entry():
     # A relative entry comes back absolute, which is the point: a forwarded flag
     # must not depend on the directory the reading command runs in.
     parsed = cache_directory.parse_writable_entry('shared=github', context)
-    assert cache_directory.format_entry(parsed, context) == os.path.join(
-        PROJECT_DIR, 'shared') + '=github'
+    assert (
+        cache_directory.format_entry(parsed, context)
+        == os.path.join(PROJECT_DIR, 'shared') + '=github'
+    )

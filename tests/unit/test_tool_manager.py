@@ -23,9 +23,14 @@ def stub_version_resolver(monkeypatch):
     # Tool install now resolves the version like a dependency (git ls-remote);
     # stub it so unit tests neither touch the network nor depend on live tags.
     monkeypatch.setattr(
-        tool.VersionResolver, 'resolve',
-        staticmethod(lambda requested:
-                    ResolvedVersion(reference=requested.version, revision='deadbeef')))
+        tool.VersionResolver,
+        'resolve',
+        staticmethod(
+            lambda requested: ResolvedVersion(
+                reference=requested.version, revision='deadbeef'
+            )
+        ),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -47,8 +52,11 @@ def write_tool_manifest(resource_root, *, name='cppfront', version='v0.8.1'):
     resource_manifest.ResourceManifest.create(
         kind=resource_manifest.ResourceKind.TOOL,
         cache_key=name,
-        source={'type': 'git', 'locator': 'https://host/u.git',
-                'resolved': {'reference': version, 'revision': 'cafebabe'}},
+        source={
+            'type': 'git',
+            'locator': 'https://host/u.git',
+            'resolved': {'reference': version, 'revision': 'cafebabe'},
+        },
     ).write_to_root(str(resource_root))
 
 
@@ -67,26 +75,39 @@ def make_tools_cache_directory(tmp_path, *, tools_cache_directory=None):
     return tools_cache_directory
 
 
-def make_tool_manager(tmp_path, *, tools_cache_directory=None, locations=None,
-                       resolution_policy=cache_resolution_policy.CacheResolutionPolicy.STRICT,
-                       minimization_enabled=False,
-                       minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH')):
+def make_tool_manager(
+    tmp_path,
+    *,
+    tools_cache_directory=None,
+    locations=None,
+    resolution_policy=cache_resolution_policy.CacheResolutionPolicy.STRICT,
+    minimization_enabled=False,
+    minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'),
+):
     # Tools are resolved across the configured cache locations, exactly like every
     # other resource kind. Classic-layout tests keep minimization disabled for
     # deterministic <root>/tools/<name> paths; minimized-layout tests opt in.
     if locations is None:
-        locations = [cache_directory.CacheDirectory(location=make_tools_cache_directory(
-            tmp_path, tools_cache_directory=tools_cache_directory))]
+        locations = [
+            cache_directory.CacheDirectory(
+                location=make_tools_cache_directory(
+                    tmp_path, tools_cache_directory=tools_cache_directory
+                )
+            )
+        ]
     conf = make_cache_configuration(
         *locations,
         resolution_policy=resolution_policy,
         minimization_enabled=minimization_enabled,
-        minimization_length=minimization_length)
+        minimization_length=minimization_length,
+    )
     return tool_manager.get_tool_manager(conf)
 
 
 def classic_tool_root(base_cache_directory, tool_name='cppfront'):
-    return os.path.join(str(base_cache_directory), cache_configuration.TOOLS_SUBDIR, tool_name)
+    return os.path.join(
+        str(base_cache_directory), cache_configuration.TOOLS_SUBDIR, tool_name
+    )
 
 
 def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path, resolving):
@@ -102,7 +123,9 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path, resolvi
         build_handler=fake_build,
     )
 
-    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
+    manager = make_tool_manager(
+        tmp_path, tools_cache_directory=str(tools_cache_directory)
+    )
     installed_tool = manager.get_tool('cppfront')
     cached_tool = manager.install(installed_tool)
 
@@ -118,14 +141,18 @@ def test_install_tool_dispatches_to_registry_tool(monkeypatch, tmp_path, resolvi
     assert source.resolved.reference == 'v0.8.1'
     # The remote is recorded under the unified `location` key.
     assert source.locator == Locator(tool_registry.TOOLS['cppfront'].repository)
-    assert not (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront.tmp').exists()
+    assert not (
+        tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront.tmp'
+    ).exists()
 
 
 def test_get_tool_returns_the_tool_asked_for(tmp_path):
     manager = make_tool_manager(tmp_path)
 
-    assert manager.get_tool('cppfront').version == \
-        tool_registry.TOOLS['cppfront'].default_version
+    assert (
+        manager.get_tool('cppfront').version
+        == tool_registry.TOOLS['cppfront'].default_version
+    )
     assert manager.get_tool('cppfront', version='v0.8.0').version == 'v0.8.0'
     with pytest.raises(ValueError, match='unsupported tool'):
         manager.get_tool('nope')
@@ -135,25 +162,34 @@ def test_locating_a_tool_asks_no_remote(monkeypatch, tmp_path):
     # configure's cppfront autodiscovery and `golem tools uninstall` both go
     # through this: a tool is keyed by its name, so finding one needs no version.
     monkeypatch.setattr(
-        tool.VersionResolver, 'resolve',
-        staticmethod(lambda *args, **kwargs: pytest.fail('resolved a version to locate a tool')))
+        tool.VersionResolver,
+        'resolve',
+        staticmethod(
+            lambda *args, **kwargs: pytest.fail('resolved a version to locate a tool')
+        ),
+    )
 
-    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tmp_path / 'tools-cache'))
+    manager = make_tool_manager(
+        tmp_path, tools_cache_directory=str(tmp_path / 'tools-cache')
+    )
 
     assert manager.resolve_cached_resource(
-        manager.get_tool('cppfront')).path == \
-        classic_tool_root(tmp_path / 'tools-cache')
+        manager.get_tool('cppfront')
+    ).path == classic_tool_root(tmp_path / 'tools-cache')
 
 
 def test_removing_a_tool_deletes_the_resolved_tool_resource(tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
-    resource_root = tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    resource_root = (
+        tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    )
     resource_root.mkdir(parents=True)
     (resource_root / 'manifest.json').write_text('{}\n', encoding='utf-8')
 
-    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
-    cached_tool = manager.resolve_cached_resource(
-        manager.get_tool('cppfront'))
+    manager = make_tool_manager(
+        tmp_path, tools_cache_directory=str(tools_cache_directory)
+    )
+    cached_tool = manager.resolve_cached_resource(manager.get_tool('cppfront'))
 
     assert cached_tool.path == str(resource_root)
     assert cached_tool.exists() is True
@@ -165,9 +201,10 @@ def test_removing_a_tool_deletes_the_resolved_tool_resource(tmp_path):
 def test_removing_a_tool_that_is_not_there_deletes_nothing(tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
 
-    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
-    cached_tool = manager.resolve_cached_resource(
-        manager.get_tool('cppfront'))
+    manager = make_tool_manager(
+        tmp_path, tools_cache_directory=str(tools_cache_directory)
+    )
+    cached_tool = manager.resolve_cached_resource(manager.get_tool('cppfront'))
 
     assert cached_tool.exists() is False
     assert manager.cache_manager.remove_resources([cached_tool]) == ([], [])
@@ -175,11 +212,15 @@ def test_removing_a_tool_that_is_not_there_deletes_nothing(tmp_path):
 
 def test_list_installed_tools_returns_registry_installed_tools(monkeypatch, tmp_path):
     tools_cache_directory = tmp_path / 'tools-cache'
-    resource_root = tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    resource_root = (
+        tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
+    )
     resource_root.mkdir(parents=True)
     write_tool_manifest(resource_root)
 
-    installed_tools = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory)).list_installed_tools()
+    installed_tools = make_tool_manager(
+        tmp_path, tools_cache_directory=str(tools_cache_directory)
+    ).list_installed_tools()
 
     assert len(installed_tools) == 1
     assert installed_tools[0].name == 'cppfront'
@@ -197,12 +238,15 @@ def test_install_tool_uses_minimized_flat_layout_when_enabled(monkeypatch, tmp_p
     replace_cppfront_tool(monkeypatch, build_handler=fake_build)
 
     manager = make_tool_manager(
-        tmp_path, tools_cache_directory=str(tools_cache_directory),
-        minimization_enabled=True)
+        tmp_path,
+        tools_cache_directory=str(tools_cache_directory),
+        minimization_enabled=True,
+    )
 
     expected_name = manager.cache_manager.make_minimized_resource_name(
         manager.resource_for(manager.get_tool('cppfront')),
-        default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'))
+        default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'),
+    )
     expected_root = tools_cache_directory / expected_name
 
     cached_tool = manager.install(manager.get_tool('cppfront'))
@@ -211,7 +255,8 @@ def test_install_tool_uses_minimized_flat_layout_when_enabled(monkeypatch, tmp_p
     assert cached_tool.path == str(expected_root)
     assert captured['resource_root'] == str(expected_root)
     assert cache_configuration.TOOLS_SUBDIR not in os.path.relpath(
-        cached_tool.path, str(tools_cache_directory))
+        cached_tool.path, str(tools_cache_directory)
+    )
 
     # The manifest records the real cache_key, so the scanner and
     # `golem cache list` identify it wherever it is stored.
@@ -228,11 +273,14 @@ def test_install_tool_prefers_existing_classic_tool_layout(monkeypatch, tmp_path
     classic_root.mkdir(parents=True)
 
     manager = make_tool_manager(
-        tmp_path, tools_cache_directory=str(tools_cache_directory),
-        minimization_enabled=True)
+        tmp_path,
+        tools_cache_directory=str(tools_cache_directory),
+        minimization_enabled=True,
+    )
 
-    assert manager.resolve_cached_resource(
-        manager.get_tool('cppfront')).path == str(classic_root)
+    assert manager.resolve_cached_resource(manager.get_tool('cppfront')).path == str(
+        classic_root
+    )
 
 
 def test_list_installed_tools_scans_additional_cache(tmp_path):
@@ -244,10 +292,13 @@ def test_list_installed_tools_scans_additional_cache(tmp_path):
     resource_root.mkdir(parents=True)
     write_tool_manifest(resource_root)
 
-    manager = make_tool_manager(tmp_path, locations=[
-        cache_directory.CacheDirectory(location=str(primary)),
-        cache_directory.CacheDirectory(location=str(additional)),
-    ])
+    manager = make_tool_manager(
+        tmp_path,
+        locations=[
+            cache_directory.CacheDirectory(location=str(primary)),
+            cache_directory.CacheDirectory(location=str(additional)),
+        ],
+    )
 
     installed_tools = manager.list_installed_tools()
 
@@ -270,10 +321,10 @@ def test_removing_a_tool_finds_it_in_an_additional_cache_under_weak_policy(tmp_p
         locations=[
             cache_directory.CacheDirectory(location=str(primary)),
             cache_directory.CacheDirectory(location=str(additional)),
-        ])
+        ],
+    )
 
-    cached_tool = manager.resolve_cached_resource(
-        manager.get_tool('cppfront'))
+    cached_tool = manager.resolve_cached_resource(manager.get_tool('cppfront'))
 
     assert cached_tool.cache_root == str(additional)
     removed, _ = manager.cache_manager.remove_resources([cached_tool])
@@ -281,32 +332,49 @@ def test_removing_a_tool_finds_it_in_an_additional_cache_under_weak_policy(tmp_p
     assert not resource_root.exists()
 
 
-def test_install_tool_fetches_through_the_shared_mechanism(monkeypatch, tmp_path, git_calls, resolving):
+def test_install_tool_fetches_through_the_shared_mechanism(
+    monkeypatch, tmp_path, git_calls, resolving
+):
     tools_cache_directory = tmp_path / 'tools-cache'
     replace_cppfront_tool(monkeypatch, build_handler=lambda resource_root: None)
 
-    manager = make_tool_manager(tmp_path, tools_cache_directory=str(tools_cache_directory))
+    manager = make_tool_manager(
+        tmp_path, tools_cache_directory=str(tools_cache_directory)
+    )
     manager.install(manager.get_tool('cppfront', version='v0.8.1'))
 
     # The tool clones through the same policy-driven sequence as every other kind,
     # landing on the resolved commit under the tag it asked for.
     assert git_calls == [
-        ['clone', '--filter=blob:none', '--', tool_registry.TOOLS['cppfront'].repository, '.'],
+        [
+            'clone',
+            '--filter=blob:none',
+            '--',
+            tool_registry.TOOLS['cppfront'].repository,
+            '.',
+        ],
         ['reset', '--hard', 'deadbeef'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
-    assert (tools_cache_directory / cache_configuration.TOOLS_SUBDIR / 'cppfront'
-            / cache_configuration.SOURCE_DIRNAME).is_dir()
+    assert (
+        tools_cache_directory
+        / cache_configuration.TOOLS_SUBDIR
+        / 'cppfront'
+        / cache_configuration.SOURCE_DIRNAME
+    ).is_dir()
 
 
 def run_install(monkeypatch, tmp_path, version, build_handler):
     replace_cppfront_tool(monkeypatch, build_handler=build_handler)
     manager = make_tool_manager(
-        tmp_path, tools_cache_directory=str(tmp_path / 'tools-cache'))
+        tmp_path, tools_cache_directory=str(tmp_path / 'tools-cache')
+    )
     return manager.install(manager.get_tool('cppfront', version=version))
 
 
-def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp_path, git_calls, resolving):
+def test_reinstalling_at_another_version_refreshes_and_rebuilds(
+    monkeypatch, tmp_path, git_calls, resolving
+):
     def build(resource_root):
         os.makedirs(os.path.join(resource_root, 'bin'), exist_ok=True)
         with open(os.path.join(resource_root, 'bin', 'cppfront'), 'w') as fileout:
@@ -335,11 +403,17 @@ def test_reinstalling_at_another_version_refreshes_and_rebuilds(monkeypatch, tmp
     ]
     assert os.path.isfile(os.path.join(root, 'bin', 'cppfront'))
     # And the root stops claiming the version it used to hold.
-    assert resource_manifest.ResourceManifest.read_from_root(
-        root).source['resolved']['reference'] == 'v0.8.2'
+    assert (
+        resource_manifest.ResourceManifest.read_from_root(root).source['resolved'][
+            'reference'
+        ]
+        == 'v0.8.2'
+    )
 
 
-def test_a_failed_build_leaves_nothing_built_from_the_old_version(monkeypatch, tmp_path, resolving):
+def test_a_failed_build_leaves_nothing_built_from_the_old_version(
+    monkeypatch, tmp_path, resolving
+):
     def build(resource_root):
         os.makedirs(os.path.join(resource_root, 'bin'), exist_ok=True)
         with open(os.path.join(resource_root, 'bin', 'cppfront'), 'w') as fileout:
@@ -356,8 +430,12 @@ def test_a_failed_build_leaves_nothing_built_from_the_old_version(monkeypatch, t
     # Fetched and correctly named but not built, which is what is_valid() detects
     # -- never a binary from one version beside a source and manifest naming another.
     assert not os.path.exists(os.path.join(root, 'bin'))
-    assert resource_manifest.ResourceManifest.read_from_root(
-        root).source['resolved']['reference'] == 'v0.8.2'
+    assert (
+        resource_manifest.ResourceManifest.read_from_root(root).source['resolved'][
+            'reference'
+        ]
+        == 'v0.8.2'
+    )
 
 
 def test_installing_a_tool_into_a_read_only_cache_is_refused(tmp_path):
@@ -366,10 +444,13 @@ def test_installing_a_tool_into_a_read_only_cache_is_refused(tmp_path):
     read_only = tmp_path / 'read-only-cache'
     writable = tmp_path / 'writable-cache'
 
-    manager = make_tool_manager(tmp_path, locations=[
-        cache_directory.CacheDirectory(location=str(writable)),
-        cache_directory.CacheDirectory(location=str(read_only), is_read_only=True),
-    ])
+    manager = make_tool_manager(
+        tmp_path,
+        locations=[
+            cache_directory.CacheDirectory(location=str(writable)),
+            cache_directory.CacheDirectory(location=str(read_only), is_read_only=True),
+        ],
+    )
 
     with pytest.raises(RuntimeError, match='read-only'):
         manager.install(manager.get_tool('cppfront'))

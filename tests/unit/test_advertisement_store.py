@@ -5,7 +5,6 @@ import pytest
 from golemcpp.golem import advertisement_store
 from golemcpp.golem import safe_part
 
-
 LISTING = 'ref: refs/heads/main\tHEAD\nabc123\tHEAD\nabc123\trefs/heads/main\n'
 
 

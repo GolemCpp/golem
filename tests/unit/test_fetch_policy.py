@@ -14,8 +14,12 @@ def test_every_kind_fetches_the_same_way_unless_told_otherwise():
 
 def test_a_mode_survives_the_trip_through_a_setting():
     for mode in FetchMode:
-        assert fetch_policy.parse_fetch_mode(
-            fetch_policy.format_fetch_mode(mode, None), None) == mode
+        assert (
+            fetch_policy.parse_fetch_mode(
+                fetch_policy.format_fetch_mode(mode, None), None
+            )
+            == mode
+        )
 
 
 def test_an_unknown_mode_is_refused_rather_than_guessed():
@@ -31,7 +35,8 @@ def test_blobless_needs_a_git_that_can_also_be_told_not_to_phone_home(monkeypatc
     assert fetch_policy.default_fetch_mode() == FetchMode.FULL
 
     monkeypatch.setattr(
-        helpers, 'git_version', lambda: fetch_policy.BLOBLESS_MINIMUM_GIT_VERSION)
+        helpers, 'git_version', lambda: fetch_policy.BLOBLESS_MINIMUM_GIT_VERSION
+    )
     assert fetch_policy.supports_blobless() is True
     assert fetch_policy.default_fetch_mode() == FetchMode.BLOBLESS
 

@@ -46,7 +46,9 @@ class GitFetcher(Fetcher):
             self.run(['remote', 'add', 'origin', str(self.source.locator)], quiet=True)
             self.fetch_revision()
         else:
-            self.run(['clone'] + self.mode_args() + ['--', str(self.source.locator), '.'])
+            self.run(
+                ['clone'] + self.mode_args() + ['--', str(self.source.locator), '.']
+            )
 
         self.require_revision()
         self.reset()
@@ -72,7 +74,10 @@ class GitFetcher(Fetcher):
 
         self.run(['clean', '-ffxd'], quiet=True)
         if self.has_submodules():
-            self.run(['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'], quiet=True)
+            self.run(
+                ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
+                quiet=True,
+            )
 
         if self.policy.fetch_remote:
             self.fetch_for_refresh()
@@ -83,7 +88,10 @@ class GitFetcher(Fetcher):
         # Asked again rather than remembered: the revision that just landed may
         # declare submodules the previous one did not.
         if self.has_submodules():
-            self.run(['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'], quiet=True)
+            self.run(
+                ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
+                quiet=True,
+            )
 
             # After the reset, so .gitmodules is the one the revision names, and
             # before the update, which otherwise keeps fetching from the URL recorded
@@ -152,8 +160,12 @@ class GitFetcher(Fetcher):
         Asked for a revision and no refspec, git writes no ref, therefore
         FETCH_HEAD is the only thing naming what landed.
         '''
-        self.run(['fetch'] + self.mode_args() + ['origin'] + (
-            [self.policy.revision] if self.policy.revision else []))
+        self.run(
+            ['fetch']
+            + self.mode_args()
+            + ['origin']
+            + ([self.policy.revision] if self.policy.revision else [])
+        )
 
         self._fetched_head = 'FETCH_HEAD'
 
@@ -193,8 +205,10 @@ class GitFetcher(Fetcher):
             return
 
         raise RuntimeError(
-            'Cannot find "{}" in "{}": {} advertises no branch or tag that reaches it.'
-            .format(self.policy.revision, self.path, self.source.locator))
+            'Cannot find "{}" in "{}": {} advertises no branch or tag that reaches it.'.format(
+                self.policy.revision, self.path, self.source.locator
+            )
+        )
 
     # -- changing what a root already holds --------------------------------
 
@@ -219,8 +233,11 @@ class GitFetcher(Fetcher):
             if target == FetchMode.SHALLOW:
                 return None
 
-            print("Migrating {} from {} to {}".format(
-                self.path, current.value, target.value))
+            print(
+                "Migrating {} from {} to {}".format(
+                    self.path, current.value, target.value
+                )
+            )
 
             if current == FetchMode.SHALLOW:
                 # The history it never had. Everything else it holds stays.
@@ -230,9 +247,14 @@ class GitFetcher(Fetcher):
                 # Nothing to transfer: the objects are already here, and this only
                 # says that later fetches may leave file content behind.
                 self.run(['config', 'remote.origin.promisor', 'true'], quiet=True)
-                self.run(['config', 'remote.origin.partialclonefilter',
-                          fetch_policy.BLOBLESS_FILTER],
-                         quiet=True)
+                self.run(
+                    [
+                        'config',
+                        'remote.origin.partialclonefilter',
+                        fetch_policy.BLOBLESS_FILTER,
+                    ],
+                    quiet=True,
+                )
             else:
                 # Back to a self-contained root: drop the filter, then ask for
                 # everything it was allowed to leave out.
@@ -254,13 +276,21 @@ class GitFetcher(Fetcher):
         Never worth failing a refresh over: what it does is what a later command
         would have done anyway.
         '''
-        helpers.try_git(['gc', '--auto'], cwd=self.path,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        helpers.try_git(
+            ['gc', '--auto'],
+            cwd=self.path,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def unset(self, key):
         '''Remove a configuration key, succeeding when it was not there.'''
-        helpers.try_git(['config', '--unset', key], cwd=self.path,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        helpers.try_git(
+            ['config', '--unset', key],
+            cwd=self.path,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     # -- what the repository says about itself -----------------------------
 
@@ -285,7 +315,9 @@ class GitFetcher(Fetcher):
         try:
             landed, wanted = helpers.read_git(
                 ['rev-parse', 'HEAD', '{}^{{commit}}'.format(revision)],
-                cwd=self.path, stderr=subprocess.DEVNULL).split()
+                cwd=self.path,
+                stderr=subprocess.DEVNULL,
+            ).split()
         except Exception:
             return False
         return landed == wanted
@@ -298,9 +330,11 @@ class GitFetcher(Fetcher):
         clean.
         '''
         try:
-            return bool(helpers.read_git(
-                ['status', '--porcelain'], cwd=self.path,
-                stderr=subprocess.DEVNULL).strip())
+            return bool(
+                helpers.read_git(
+                    ['status', '--porcelain'], cwd=self.path, stderr=subprocess.DEVNULL
+                ).strip()
+            )
         except Exception:
             return True
 
@@ -322,8 +356,10 @@ class GitFetcher(Fetcher):
     def reads_true(self, args) -> bool:
         '''Read git's answer to a question it answers with one word.'''
         try:
-            return helpers.read_git(
-                args, cwd=self.path, stderr=subprocess.DEVNULL).strip() == 'true'
+            return (
+                helpers.read_git(args, cwd=self.path, stderr=subprocess.DEVNULL).strip()
+                == 'true'
+            )
         except Exception:
             return False
 
@@ -337,7 +373,9 @@ class GitFetcher(Fetcher):
         '''Does the repository already hold the commit this revision names?'''
         return helpers.try_git(
             ['rev-parse', '--verify', '--quiet', '{}^{{commit}}'.format(revision)],
-            cwd=self.path, stdout=subprocess.DEVNULL)
+            cwd=self.path,
+            stdout=subprocess.DEVNULL,
+        )
 
     def read_head(self) -> str:
         '''
@@ -348,7 +386,8 @@ class GitFetcher(Fetcher):
         '''
         try:
             return helpers.read_git(
-                ['rev-parse', 'HEAD'], cwd=self.path, stderr=subprocess.DEVNULL).strip()
+                ['rev-parse', 'HEAD'], cwd=self.path, stderr=subprocess.DEVNULL
+            ).strip()
         except Exception:
             return ''
 

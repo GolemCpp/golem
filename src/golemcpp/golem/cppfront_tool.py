@@ -11,10 +11,12 @@ CPPFRONT_REPOSITORY = 'https://github.com/hsutter/cppfront.git'
 DEFAULT_CPPFRONT_VERSION = 'v0.8.1'
 CPPFRONT_DESCRIPTION = 'Herb Sutter\'s compiler from an experimental C++ (cpp2) to today\'s C++ syntax (cpp).'
 
+
 def get_cppfront_binary_name() -> str:
     if sys.platform.startswith('win32'):
         return 'cppfront.exe'
     return 'cppfront'
+
 
 @dataclass(frozen=True)
 class CppFrontCacheInfo:
@@ -32,10 +34,12 @@ class CppFrontCacheInfo:
         executable_path = os.path.join(resource_root, 'bin', get_cppfront_binary_name())
         include_path = os.path.join(source_path, 'include')
 
-        return cls(resource_root=resource_root,
-                   source_path=source_path,
-                   executable_path=executable_path,
-                   include_path=include_path)
+        return cls(
+            resource_root=resource_root,
+            source_path=source_path,
+            executable_path=executable_path,
+            include_path=include_path,
+        )
 
     def is_valid(self) -> bool:
         has_executable = os.path.isfile(self.executable_path)
@@ -84,21 +88,32 @@ def build_cppfront(resource_root: str) -> None:
     # other project.
     write_cppfront_golemfile(project_dir=source_dir)
 
-    helpers.run_task(helpers.make_golem_command('configure') + [
-        '--project-dir=' + source_dir,
-        '--build-dir=' + build_dir,
-        '--variant=release',
-    ], cwd=source_dir)
+    helpers.run_task(
+        helpers.make_golem_command('configure')
+        + [
+            '--project-dir=' + source_dir,
+            '--build-dir=' + build_dir,
+            '--variant=release',
+        ],
+        cwd=source_dir,
+    )
 
-    helpers.run_task(helpers.make_golem_command('build') + [
-        '--project-dir=' + source_dir,
-        '--build-dir=' + build_dir,
-    ], cwd=source_dir)
+    helpers.run_task(
+        helpers.make_golem_command('build')
+        + [
+            '--project-dir=' + source_dir,
+            '--build-dir=' + build_dir,
+        ],
+        cwd=source_dir,
+    )
 
     built_executable_path = os.path.join(build_dir, 'bin', get_cppfront_binary_name())
     if not os.path.isfile(built_executable_path):
-        raise RuntimeError('Golem built cppfront but the executable was not found at {}'.format(built_executable_path))
+        raise RuntimeError(
+            'Golem built cppfront but the executable was not found at {}'.format(
+                built_executable_path
+            )
+        )
 
     os.makedirs(os.path.dirname(cache_info.executable_path), exist_ok=True)
     shutil.copy2(built_executable_path, cache_info.executable_path)
-

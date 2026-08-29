@@ -17,15 +17,17 @@ class Version:
             self.update_semver()
             return
 
-        self.gitlong = Version.retrieve_gitlong(working_dir=working_dir,
-                                                default='0.0.0')
-        self.gitshort = Version.retrieve_gitshort(working_dir=working_dir,
-                                                  default='0.0.0')
+        self.gitlong = Version.retrieve_gitlong(
+            working_dir=working_dir, default='0.0.0'
+        )
+        self.gitshort = Version.retrieve_gitshort(
+            working_dir=working_dir, default='0.0.0'
+        )
         self.githash = Version.retrieve_githash(working_dir=working_dir)
-        self.gitmessage = Version.retrieve_gitmessage(working_dir=working_dir,
-                                                      commit_hash=self.githash)
-        self.gitbranch = Version.retrieve_gitbranch(working_dir=working_dir,
-                                                    default='')
+        self.gitmessage = Version.retrieve_gitmessage(
+            working_dir=working_dir, commit_hash=self.githash
+        )
+        self.gitbranch = Version.retrieve_gitbranch(working_dir=working_dir, default='')
         self.build_number = build_number
         self.update_semver()
 
@@ -38,8 +40,9 @@ class Version:
         '''
         This project's own version as the pair every resolved resource carries.
         '''
-        return ResolvedVersion(reference=force_reference or self.gitlong,
-                               revision=self.githash)
+        return ResolvedVersion(
+            reference=force_reference or self.gitlong, revision=self.githash
+        )
 
     def update_semver(self):
         git_hash = Version.parse_git_hash(self.gitlong)
@@ -74,28 +77,35 @@ class Version:
         self.major = int(matches.group('major'))
         self.minor = int(matches.group('minor'))
         self.patch = int(matches.group('patch'))
-        self.prerelease = matches.group('prerelease') if matches.group(
-            'prerelease') else ''
-        self.buildmetadata = matches.group('buildmetadata') if matches.group(
-            'buildmetadata') else ''
-        self.semver_short = str(self.major) + '.' + str(
-            self.minor) + '.' + str(self.patch)
+        self.prerelease = (
+            matches.group('prerelease') if matches.group('prerelease') else ''
+        )
+        self.buildmetadata = (
+            matches.group('buildmetadata') if matches.group('buildmetadata') else ''
+        )
+        self.semver_short = (
+            str(self.major) + '.' + str(self.minor) + '.' + str(self.patch)
+        )
 
         if not self.buildmetadata and self.build_number:
             self.buildmetadata = str(self.build_number)
 
-        self.semver = Version.make_semver(major=self.major,
-                                          minor=self.minor,
-                                          patch=self.patch,
-                                          prerelease=self.prerelease,
-                                          buildmetadata=self.buildmetadata)
+        self.semver = Version.make_semver(
+            major=self.major,
+            minor=self.minor,
+            patch=self.patch,
+            prerelease=self.prerelease,
+            buildmetadata=self.buildmetadata,
+        )
 
     def to_semver_string(self):
-        return Version.make_semver(major=self.major,
-                                   minor=self.minor,
-                                   patch=self.patch,
-                                   prerelease=self.prerelease,
-                                   buildmetadata=self.buildmetadata)
+        return Version.make_semver(
+            major=self.major,
+            minor=self.minor,
+            patch=self.patch,
+            prerelease=self.prerelease,
+            buildmetadata=self.buildmetadata,
+        )
 
     @staticmethod
     def make_semver(major, minor, patch, prerelease, buildmetadata):
@@ -140,7 +150,8 @@ class Version:
                 minor=matches.group('minor'),
                 patch=matches.group('patch'),
                 prerelease=matches.group('prerelease'),
-                buildmetadata=matches.group('buildmetadata'))
+                buildmetadata=matches.group('buildmetadata'),
+            )
             return (new_version, matches)
 
         # Allow alternative separators
@@ -152,7 +163,8 @@ class Version:
                 minor=matches.group('minor'),
                 patch=matches.group('patch'),
                 prerelease=matches.group('prerelease'),
-                buildmetadata=matches.group('buildmetadata'))
+                buildmetadata=matches.group('buildmetadata'),
+            )
             return (new_version, matches)
 
         return None
@@ -166,7 +178,8 @@ class Version:
             version_string = helpers.read_git(
                 ['describe', '--long', '--tags', '--dirty=-d'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL)
+                stderr=subprocess.DEVNULL,
+            )
             version_string = version_string.splitlines()[0]
         except:
             version_string = default
@@ -182,7 +195,8 @@ class Version:
             version_string = helpers.read_git(
                 ['describe', '--abbrev=0', '--tags'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL)
+                stderr=subprocess.DEVNULL,
+            )
             version_string = version_string.splitlines()[0]
         except:
             version_string = default
@@ -195,9 +209,8 @@ class Version:
 
         try:
             version_string = helpers.read_git(
-                ['rev-parse', 'HEAD'],
-                cwd=working_dir,
-                stderr=subprocess.DEVNULL)
+                ['rev-parse', 'HEAD'], cwd=working_dir, stderr=subprocess.DEVNULL
+            )
             version_string = version_string.splitlines()[0]
         except:
             version_string = ''
@@ -216,7 +229,8 @@ class Version:
             message = helpers.read_git(
                 ['log', '--format=%B', '-n', '1', commit_hash],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL)
+                stderr=subprocess.DEVNULL,
+            )
             message = message.strip()
         except:
             message = ''
@@ -232,7 +246,8 @@ class Version:
             branch = helpers.read_git(
                 ['rev-parse', '--abbrev-ref', 'HEAD'],
                 cwd=working_dir,
-                stderr=subprocess.DEVNULL)
+                stderr=subprocess.DEVNULL,
+            )
             branch = branch.strip()
         except:
             branch = default

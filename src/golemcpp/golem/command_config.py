@@ -42,11 +42,19 @@ class ConfigCommandHandler:
         print('Get and set global or project-local Golem settings.')
         print('')
         print('Scopes:')
-        print('  --local      Project configuration in <project>/.golem/config.json (default)')
-        print('  --global     User configuration in {}'.format(config_store.get_global_config_path()))
+        print(
+            '  --local      Project configuration in <project>/.golem/config.json (default)'
+        )
+        print(
+            '  --global     User configuration in {}'.format(
+                config_store.get_global_config_path()
+            )
+        )
         print('')
         print('Actions:')
-        print('  config <key>            Print the resolved value (local overrides global)')
+        print(
+            '  config <key>            Print the resolved value (local overrides global)'
+        )
         print('  config <key> <value>    Set the value in the selected scope')
         print('  config --unset <key>    Remove the value from the selected scope')
         print('  config --list           List settings (merged, or per scope)')
@@ -87,9 +95,13 @@ class ConfigCommandHandler:
 
     def handle_list(self) -> int:
         if self.options.use_global:
-            values = config_store.list_scoped(scope=config_store.GLOBAL_SCOPE, project_dir=self.project_dir)
+            values = config_store.list_scoped(
+                scope=config_store.GLOBAL_SCOPE, project_dir=self.project_dir
+            )
         elif self.options.use_local:
-            values = config_store.list_scoped(scope=config_store.LOCAL_SCOPE, project_dir=self.project_dir)
+            values = config_store.list_scoped(
+                scope=config_store.LOCAL_SCOPE, project_dir=self.project_dir
+            )
         else:
             values = config_store.list_merged(project_dir=self.project_dir)
 
@@ -117,7 +129,11 @@ class ConfigCommandHandler:
             return 1
 
         if not removed:
-            print('{} is not set in the {} configuration'.format(self.options.key, self.selected_scope()))
+            print(
+                '{} is not set in the {} configuration'.format(
+                    self.options.key, self.selected_scope()
+                )
+            )
         return 0
 
     def handle_set(self) -> int:
@@ -128,7 +144,8 @@ class ConfigCommandHandler:
             # Refused here rather than at the next command reading the store,
             # which is the only other place the value is checked.
             settings.get_settings(project_dir=self.project_dir).parse_value(
-                self.options.key, self.options.value)
+                self.options.key, self.options.value
+            )
             config_store.set_value(
                 key=self.options.key,
                 value=self.options.value,
@@ -147,12 +164,20 @@ class ConfigCommandHandler:
 
         if self.options.use_global:
             value = config_store.get_scoped_value(
-                key=self.options.key, scope=config_store.GLOBAL_SCOPE, project_dir=self.project_dir)
+                key=self.options.key,
+                scope=config_store.GLOBAL_SCOPE,
+                project_dir=self.project_dir,
+            )
         elif self.options.use_local:
             value = config_store.get_scoped_value(
-                key=self.options.key, scope=config_store.LOCAL_SCOPE, project_dir=self.project_dir)
+                key=self.options.key,
+                scope=config_store.LOCAL_SCOPE,
+                project_dir=self.project_dir,
+            )
         else:
-            value = config_store.get_value(key=self.options.key, project_dir=self.project_dir)
+            value = config_store.get_value(
+                key=self.options.key, project_dir=self.project_dir
+            )
 
         if value is None:
             return 1

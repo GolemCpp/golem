@@ -10,7 +10,6 @@ from pathlib import Path
 
 from golemcpp.golem import network
 
-
 # Options carried by every git command golem runs. The advice is about landing on
 # a detached HEAD, which every resource golem checks out does, on purpose.
 GIT_OPTIONS = ['-c', 'advice.detachedHead=false']
@@ -37,8 +36,7 @@ def print_obj(obj, depth=5, l=""):
     else:
         # if basic type, or list thereof, just print
         def canprint(o):
-            return isinstance(
-                o, (int, float, str, bool, type(None), types.LambdaType))
+            return isinstance(o, (int, float, str, bool, type(None), types.LambdaType))
 
         try:
             if canprint(obj) or sum(not canprint(o) for o in obj) == 0:
@@ -47,24 +45,42 @@ def print_obj(obj, depth=5, l=""):
             pass
         # try to iterate as if obj were a list
         try:
-            return "[\n" + "\n".join(
-                l + print_obj(k, depth=depth - 1, l=l + "  ") + ","
-                for k in obj) + "\n" + l + "]"
+            return (
+                "[\n"
+                + "\n".join(
+                    l + print_obj(k, depth=depth - 1, l=l + "  ") + "," for k in obj
+                )
+                + "\n"
+                + l
+                + "]"
+            )
         except TypeError as e:
             # else, expand/recurse object attribs
-            name = (hasattr(obj, '__class__') and obj.__class__.__name__
-                    or type(obj).__name__)
+            name = (
+                hasattr(obj, '__class__')
+                and obj.__class__.__name__
+                or type(obj).__name__
+            )
             objdict = {}
             for a in dir(obj):
-                if a[:2] != "__" and (not hasattr(obj, a) or not hasattr(
-                        getattr(obj, a), '__call__')):
+                if a[:2] != "__" and (
+                    not hasattr(obj, a) or not hasattr(getattr(obj, a), '__call__')
+                ):
                     try:
                         objdict[a] = getattr(obj, a)
                     except Exception as e:
                         objdict[a] = str(e)
-    return name + " {\n" + "\n".join(
-        l + repr(k) + ": " + print_obj(v, depth=depth - 1, l=l + "  ") + ","
-        for k, v in objdict.items()) + "\n" + l + "}"
+    return (
+        name
+        + " {\n"
+        + "\n".join(
+            l + repr(k) + ": " + print_obj(v, depth=depth - 1, l=l + "  ") + ","
+            for k, v in objdict.items()
+        )
+        + "\n"
+        + l
+        + "}"
+    )
 
 
 def remove_tree(path):
@@ -90,19 +106,26 @@ def remove_tree(path):
             # executable to run. What an attempt has to say is worth reading only
             # once they have all failed, and then it is said once, with the path.
             attempt = subprocess.run(
-                command, shell=True,
-                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+            )
             if not os.path.exists(path):
                 return
             time.sleep(0.1)
-        raise RuntimeError('Cannot remove directory {}: {}'.format(
-            path, decode_output(attempt.stderr).strip()))
+        raise RuntimeError(
+            'Cannot remove directory {}: {}'.format(
+                path, decode_output(attempt.stderr).strip()
+            )
+        )
     else:
         shutil.rmtree(path)
 
 
 def get_environ(env_name):
-    if env_name in os.environ and os.environ[env_name] and len(str(os.environ[env_name])) > 0:
+    if (
+        env_name in os.environ
+        and os.environ[env_name]
+        and len(str(os.environ[env_name])) > 0
+    ):
         return str(os.environ[env_name])
     return None
 
@@ -111,7 +134,11 @@ def decode_output(output):
     if isinstance(output, str):
         return output
 
-    encoding = getattr(sys.stdout, 'encoding', None) or locale.getpreferredencoding(False) or 'utf-8'
+    encoding = (
+        getattr(sys.stdout, 'encoding', None)
+        or locale.getpreferredencoding(False)
+        or 'utf-8'
+    )
 
     try:
         return output.decode(encoding)
@@ -161,16 +188,18 @@ def copy_tree(source_path, destination_path):
 
 
 def directory_basename(path):
-    clean_path = path.rstrip('\\') if sys.platform.startswith(
-        'win32') else path.rstrip('/')
+    clean_path = (
+        path.rstrip('\\') if sys.platform.startswith('win32') else path.rstrip('/')
+    )
     return os.path.basename(clean_path)
 
 
 def copy_file(source_path, destination_path):
     if os.path.isdir(destination_path):
         destination_directory = destination_path
-        destination_path = os.path.join(destination_path,
-                                        directory_basename(source_path))
+        destination_path = os.path.join(
+            destination_path, directory_basename(source_path)
+        )
     else:
         destination_directory = os.path.dirname(destination_path)
 
@@ -181,8 +210,9 @@ def copy_file(source_path, destination_path):
             link_path_relative = os.path.basename(link_path_absolute)
         else:
             link_path_relative = link_path
-            link_path_absolute = os.path.join(os.path.dirname(source_path),
-                                              link_path_relative)
+            link_path_absolute = os.path.join(
+                os.path.dirname(source_path), link_path_relative
+            )
 
         copy_file(link_path_absolute, destination_directory)
         if os.path.exists(destination_path):
@@ -196,8 +226,8 @@ def copy_file_if_recent(source_path, destination_directory, callback=None):
     filename = os.path.basename(source_path)
     destination_path = os.path.join(destination_directory, filename)
     if os.path.exists(destination_path) and (
-            os.path.getmtime(source_path) <=
-            os.path.getmtime(destination_path)):
+        os.path.getmtime(source_path) <= os.path.getmtime(destination_path)
+    ):
         return False
 
     if not os.path.exists(destination_directory):
@@ -209,6 +239,7 @@ def copy_file_if_recent(source_path, destination_directory, callback=None):
     copy_file(source_path=source_path, destination_path=destination_path)
     return True
 
+
 def is_git_repository(path):
     '''
     Whether a git repository is there: one to clone from, or one to work in.
@@ -216,20 +247,25 @@ def is_git_repository(path):
     # Testing for a checkout, a worktree, a submodule checkout
     if os.path.exists(os.path.join(path, '.git')):
         return True
-    
+
     # Testing for a bare repository
-    return all(os.path.exists(os.path.join(path, entry))
-               for entry in ('HEAD', 'objects', 'refs'))
+    return all(
+        os.path.exists(os.path.join(path, entry))
+        for entry in ('HEAD', 'objects', 'refs')
+    )
+
 
 def does_git_command_need_no_repository(params):
     if params[0] in ['init', 'clone']:
         return True
     return False
 
+
 def does_git_command_need_nothing(params):
     if params[0] in ['ls-remote']:
         return True
     return False
+
 
 _git_version = None
 
@@ -272,6 +308,7 @@ def is_network_git_command(params):
         return params[1:2] == ['update'] and '--no-fetch' not in params
     return command in ['clone', 'fetch', 'pull', 'push', 'ls-remote']
 
+
 def validate_git_command(params, cwd):
     '''
     What a git command is allowed to do here, read from the command itself. Not
@@ -281,13 +318,16 @@ def validate_git_command(params, cwd):
     if is_network_git_command(params=params) and not network.is_allowed():
         raise RuntimeError(
             "Cannot run \"git {}\" from \"{}\": reaching a remote is a resolve step. "
-            "Run golem resolve first.".format(' '.join(params), cwd))
+            "Run golem resolve first.".format(' '.join(params), cwd)
+        )
 
     if does_git_command_need_no_repository(params=params):
         if is_git_repository(path=cwd):
             raise RuntimeError(
                 "Already a git repository: \"git {}\" from \"{}\"".format(
-                    ' '.join(params), cwd))
+                    ' '.join(params), cwd
+                )
+            )
     elif does_git_command_need_nothing(params=params):
         pass
     else:
@@ -295,7 +335,10 @@ def validate_git_command(params, cwd):
         if not is_git_repository(path=cwd):
             raise RuntimeError(
                 "Not a git repository: \"git {}\" from \"{}\"".format(
-                    ' '.join(params), cwd))
+                    ' '.join(params), cwd
+                )
+            )
+
 
 # Whether git may stop and ask for credentials. Off until a command's settings
 # say otherwise: a prompt nobody is watching reads as a hang rather than as the
@@ -384,7 +427,9 @@ def run_git(params, cwd, quiet=False, **kwargs):
     kwargs.setdefault('env', git_environment())
 
     delays = GIT_RETRY_DELAYS if is_network_git_command(params) else ()
-    run_task_with_retries(args=git_command_line(params), cwd=cwd, delays=delays, **kwargs)
+    run_task_with_retries(
+        args=git_command_line(params), cwd=cwd, delays=delays, **kwargs
+    )
 
 
 def read_git(params, cwd, **kwargs):
@@ -396,7 +441,8 @@ def read_git(params, cwd, **kwargs):
     kwargs.setdefault('env', git_environment())
 
     return decode_output(
-        subprocess.check_output(git_command_line(params), cwd=cwd, **kwargs))
+        subprocess.check_output(git_command_line(params), cwd=cwd, **kwargs)
+    )
 
 
 def try_git(params, cwd, **kwargs) -> bool:
@@ -408,6 +454,7 @@ def try_git(params, cwd, **kwargs) -> bool:
     kwargs.setdefault('env', git_environment())
 
     return subprocess.call(git_command_line(params), cwd=cwd, **kwargs) == 0
+
 
 def run_task_with_retries(args, cwd=None, delays=(), **kwargs):
     '''
@@ -430,16 +477,14 @@ def run_task_with_retries(args, cwd=None, delays=(), **kwargs):
 def run_task(args, cwd=None, debug=True, **kwargs):
     if debug:
         print("Run \"{}\" from \"{}\"".format(' '.join(args), cwd))
-    process = subprocess.Popen(args,
-                               cwd=cwd,
-                               shell=False,
-                               **kwargs)
+    process = subprocess.Popen(args, cwd=cwd, shell=False, **kwargs)
     ret = process.wait()
     if ret != 0:
         raise RuntimeError(
             "Return code {} when running \"{}\" from \"{}\"".format(
-                ret, ' '.join(args),
-                os.getcwd() if cwd is None else cwd))
+                ret, ' '.join(args), os.getcwd() if cwd is None else cwd
+            )
+        )
 
 
 def RepresentsInt(s):
@@ -476,6 +521,7 @@ def parameter_to_list(input):
         return [input]
     else:
         return input
+
 
 def make_absolute_path(path: str, cwd: str) -> str:
     if not path:
@@ -573,11 +619,13 @@ def confirm(prompt, assume_yes=False):
 
     return answer.strip().lower() in ('y', 'yes')
 
+
 def first_non_empty(*values):
     for value in values:
         if value:
             return value
     return None
+
 
 def first_non_empty_among_keys(dictionary, *keys):
     for key in keys:

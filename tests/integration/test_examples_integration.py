@@ -27,7 +27,6 @@ from host import require_packaging_tool
 from host import require_qt_dir
 from support import make_cache_configuration
 
-
 PROJECT_VARIANTS = ('python', 'json')
 
 
@@ -61,8 +60,9 @@ def configure_example(example_name: str, destination: Path, *args: str) -> str:
     require_cxx_compiler()
 
     project_dir = prepare_example_project(example_name, destination)
-    result = run_golem(project_dir, destination / 'cache', 'configure',
-                       '--variant=release', *args)
+    result = run_golem(
+        project_dir, destination / 'cache', 'configure', '--variant=release', *args
+    )
 
     reported = TARGET_LINE.search(result.stdout)
     assert reported is not None, result.stdout
@@ -124,9 +124,13 @@ def test_tools_install_cppfront_installs_cppfront_in_tools_cache(example_tmp_pat
     # root, honoring path minimization (on by default). This finds the tool
     # whether it landed under tools/<name> or a minimized flat path.
     manager = tool_manager.get_tool_manager(
-        make_cache_configuration(cache_directory.CacheDirectory(location=str(cache_dir))))
+        make_cache_configuration(
+            cache_directory.CacheDirectory(location=str(cache_dir))
+        )
+    )
     cached_tool = manager.resolve_cached_resource(
-        manager.get_tool(cppfront_tool.CPPFRONT_NAME))
+        manager.get_tool(cppfront_tool.CPPFRONT_NAME)
+    )
     cache_info = cppfront_tool.CppFrontCacheInfo.from_tool_root(cached_tool.path)
 
     assert Path(cache_info.executable_path).is_file()
@@ -159,7 +163,10 @@ def test_tools_list_available_mentions_supported_tools(example_tmp_path):
     assert 'Supported installable tools:' in result.stdout
     assert 'cppfront\n  Description:' in result.stdout
     assert '  Repository: {}'.format(cppfront_tool.CPPFRONT_REPOSITORY) in result.stdout
-    assert '  Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in result.stdout
+    assert (
+        '  Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION)
+        in result.stdout
+    )
 
 
 @pytest.mark.parametrize('project_variant', PROJECT_VARIANTS)
@@ -267,7 +274,10 @@ def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path
         'Variant is: Release',
         'Message is: ADVANCED_LIB_MESSAGE',
     ]:
-        pytest.xfail('Advanced example still does not apply the dependency define override for ADVANCED_LIB_MESSAGE')
+        pytest.xfail(
+            'Advanced example still does not apply the dependency define'
+            ' override for ADVANCED_LIB_MESSAGE'
+        )
 
     assert output_lines == [
         'Variant is: Release',
@@ -275,7 +285,9 @@ def test_advanced_example_resolves_dependencies_builds_and_runs(example_tmp_path
     ]
 
 
-def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(example_tmp_path):
+def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(
+    example_tmp_path,
+):
     require_cxx_compiler()
 
     project_dir = copy_example_project('modules', example_tmp_path)
@@ -305,7 +317,10 @@ def test_modules_example_resolves_dependencies_builds_and_runs_named_modules(exa
     assert result.returncode == 0, result.stderr
 
     if 'Caller: mylogger' in result.stdout:
-        pytest.xfail('MSVC returns "Caller: mylogger" instead of "Caller: consumer", see src/main.cpp')
+        pytest.xfail(
+            'MSVC returns "Caller: mylogger" instead of "Caller: consumer",'
+            ' see src/main.cpp'
+        )
 
     assert result.stdout == (
         '=> mylogger/MyLogger\n'
@@ -364,7 +379,8 @@ def test_a_dependency_is_named_by_the_recipe_saying_where_it_is(example_tmp_path
         "                       version='^3.0.0', shallow=True)\n"
         "    project.program(name='hello-dependencies', source=['src'],\n"
         "                    deps=['json'])\n",
-        encoding='utf-8')
+        encoding='utf-8',
+    )
 
     run_golem(project_dir, cache_dir, 'configure', '--variant=debug')
     resolved = run_golem(project_dir, cache_dir, 'resolve')
@@ -380,7 +396,8 @@ def test_a_dependency_is_named_by_the_recipe_saying_where_it_is(example_tmp_path
     # identity is composed from the locator, so the URL keys here too.
     assert json_dependency['location'] == '@json'
     assert json_dependency['resolved']['locator'] == (
-        'https://github.com/nlohmann/json.git')
+        'https://github.com/nlohmann/json.git'
+    )
     assert json_dependency['resolved']['identity'] == '@json@nlohmann@github.com'
 
     binary = program_path(project_dir, 'hello-dependencies-debug')
@@ -471,7 +488,9 @@ def test_qt_example_builds(example_tmp_path, project_variant):
     project_dir = prepare_example_project('qt', example_tmp_path, project_variant)
     cache_dir = example_tmp_path / f'cache-{project_variant}'
 
-    run_golem(project_dir, cache_dir, 'configure', '--variant=debug', f'--qtdir={qt_dir}')
+    run_golem(
+        project_dir, cache_dir, 'configure', '--variant=debug', f'--qtdir={qt_dir}'
+    )
     run_golem(project_dir, cache_dir, 'build')
 
     assert program_path(project_dir, 'hello-qt-debug').exists()
@@ -486,7 +505,9 @@ def test_qt_qml_example_builds(example_tmp_path, project_variant):
     project_dir = prepare_example_project('qt-qml', example_tmp_path, project_variant)
     cache_dir = example_tmp_path / f'cache-{project_variant}'
 
-    run_golem(project_dir, cache_dir, 'configure', '--variant=debug', f'--qtdir={qt_dir}')
+    run_golem(
+        project_dir, cache_dir, 'configure', '--variant=debug', f'--qtdir={qt_dir}'
+    )
     run_golem(project_dir, cache_dir, 'build')
 
     assert program_path(project_dir, 'hello-qt-qml-debug').exists()
@@ -502,7 +523,9 @@ def test_package_example_builds_and_packages(example_tmp_path):
     project_dir = copy_example_project('package', example_tmp_path)
     cache_dir = example_tmp_path / 'cache'
 
-    run_golem(project_dir, cache_dir, 'configure', '--variant=release', f'--qtdir={qt_dir}')
+    run_golem(
+        project_dir, cache_dir, 'configure', '--variant=release', f'--qtdir={qt_dir}'
+    )
     run_golem(project_dir, cache_dir, 'build')
     run_golem(project_dir, cache_dir, 'package')
 

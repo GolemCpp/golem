@@ -71,7 +71,7 @@ KIND_CLAIM = re.compile(r'^([a-z][a-z0-9]*)\{}'.format(KIND_SEPARATOR))
 def split_kind(location):
     '''
     Extracts the explicit kind found on a location, if any. And returns
-    what remains of the location.    
+    what remains of the location.
 
     Finding an unkonwn kind raises an error.
     '''
@@ -81,10 +81,13 @@ def split_kind(location):
 
     kind = match.group(1)
     if kind not in source.SOURCE_KINDS:
-        raise ValueError("unknown source kind '{}': expected {}".format(
-            kind, ', '.join(name + KIND_SEPARATOR for name in source.SOURCE_KINDS)))
+        raise ValueError(
+            "unknown source kind '{}': expected {}".format(
+                kind, ', '.join(name + KIND_SEPARATOR for name in source.SOURCE_KINDS)
+            )
+        )
 
-    return kind, location[match.end():]
+    return kind, location[match.end() :]
 
 
 def split_version(location):
@@ -100,7 +103,7 @@ def make_locator(locator, project_directory=None) -> Locator:
     A path is the only shape relative to anything, so it is the only one
     resolved against the project it was configured in, into an absolute
     `file://` URL.
-    
+
     Everything else git accepts is kept exactly as it was written.
     '''
     if not locator_module.is_bare_path(locator):
@@ -127,7 +130,7 @@ def is_path_locator_valid(locator: Locator, kind):
     '''Is the path locator valid for the given kind?'''
 
     # If it is a directory, there is no version to expect, it is valid.
-    
+
     if kind == source.SOURCE_TYPE_DIRECTORY:
         # A copied directory has no version to ask for, so `#` can only be part
         # of the name, whether that directory is there yet or not.
@@ -138,7 +141,7 @@ def is_path_locator_valid(locator: Locator, kind):
     if kind == source.SOURCE_TYPE_GIT:
         return locator.is_git_repository()
 
-    # If the kind is unknown, we must find at least an existing directory. 
+    # If the kind is unknown, we must find at least an existing directory.
 
     return locator.is_existing_directory()
 
@@ -153,7 +156,8 @@ def validate_locator_kind(locator: Locator, kind):
     if locator.is_existing_directory() and not locator.is_git_repository():
         raise ValueError(
             "'{}' is not a repository git can clone from, and a git location "
-            "must name one".format(locator))
+            "must name one".format(locator)
+        )
 
 
 def resolve_locator(locator, kind, project_directory) -> Locator:
@@ -262,7 +266,8 @@ def parse(location, project_directory, identity_allowed=False) -> 'SourceLocatio
     if kind == source.SOURCE_TYPE_DIRECTORY and version:
         raise ValueError(
             "location '{}' asks for version '{}' of a directory, but a copied "
-            "directory is whatever it holds now".format(locator, version))
+            "directory is whatever it holds now".format(locator, version)
+        )
 
     # If kind asks for a repository, check the locator is one.
 

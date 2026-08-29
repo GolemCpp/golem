@@ -15,7 +15,6 @@ from pathlib import Path
 
 from support import ROOT as REPO_ROOT
 
-
 EXAMPLES_DIR = REPO_ROOT / 'examples'
 
 # The cookbook some examples name in their own `.golem/config.json`.
@@ -77,13 +76,16 @@ def copy_cookbook(destination_root: Path) -> Path:
     destination = destination_root / COOKBOOK_DIR.name
 
     if not destination.exists():
-        shutil.copytree(COOKBOOK_DIR, destination,
-                        ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copytree(
+            COOKBOOK_DIR, destination, ignore=shutil.ignore_patterns('__pycache__')
+        )
 
     return destination
 
 
-def prepare_example_project(example_name: str, destination_root: Path, project_variant: str = 'python') -> Path:
+def prepare_example_project(
+    example_name: str, destination_root: Path, project_variant: str = 'python'
+) -> Path:
     project_dir = copy_example_project(example_name, destination_root)
     if project_variant == 'json':
         use_json_project_file(project_dir)
@@ -99,7 +101,9 @@ def use_json_project_file(project_dir: Path) -> None:
         python_project_file.unlink()
 
 
-def run_golem(project_dir: Path, cache_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def run_golem(
+    project_dir: Path, cache_dir: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
     # One CI leg builds for a target the runner is not: 32-bit Windows on a
     # 64-bit host. Threading --arch through here rather than through every
     # call site keeps the suite one suite.
@@ -118,7 +122,9 @@ def run_golem(project_dir: Path, cache_dir: Path, *args: str) -> subprocess.Comp
     if result.returncode != 0:
         raise AssertionError(
             'Command failed: {}\nstdout:\n{}\nstderr:\n{}'.format(
-                ' '.join(args), result.stdout, result.stderr))
+                ' '.join(args), result.stdout, result.stderr
+            )
+        )
 
     return result
 

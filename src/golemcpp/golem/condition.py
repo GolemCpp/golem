@@ -33,27 +33,30 @@ def normalize_values(member, values):
     normalized = []
     for value in values:
         if not isinstance(value, str) or any(
-                character in value for character in EXPRESSION_CHARACTERS):
+            character in value for character in EXPRESSION_CHARACTERS
+        ):
             normalized.append(value)
             continue
         negation = '!' if value.startswith('!') else ''
-        normalized.append(negation + normalize(value[len(negation):]))
+        normalized.append(negation + normalize(value[len(negation) :]))
     return normalized
 
 
 class Condition(object):
-    def __init__(self,
-                 variant=None,
-                 link=None,
-                 runtime_link=None,
-                 runtime_variant=None,
-                 osystem=None,
-                 arch=None,
-                 compiler=None,
-                 distribution=None,
-                 release=None,
-                 type=None,
-                 runtime=None):
+    def __init__(
+        self,
+        variant=None,
+        link=None,
+        runtime_link=None,
+        runtime_variant=None,
+        osystem=None,
+        arch=None,
+        compiler=None,
+        distribution=None,
+        release=None,
+        type=None,
+        runtime=None,
+    ):
 
         # Handle legacy 'runtime' parameter by mapping it to 'runtime_link'
         if runtime_link is None and runtime is not None:
@@ -72,8 +75,7 @@ class Condition(object):
         self.runtime_variant = helpers.parameter_to_list(runtime_variant)
 
         # Canonical operating system names, e.g. linux, windows, macos.
-        self.osystem = normalize_values('osystem',
-                                        helpers.parameter_to_list(osystem))
+        self.osystem = normalize_values('osystem', helpers.parameter_to_list(osystem))
 
         # Canonical architecture names, e.g. x86_64, i686, aarch64.
         self.arch = normalize_values('arch', helpers.parameter_to_list(arch))
@@ -100,8 +102,7 @@ class Condition(object):
         elif len(self.type) == 1:
             return self.type[0]
         else:
-            raise Exception("Can't have a unique value from {}".format(
-                self.type))
+            raise Exception("Can't have a unique value from {}".format(self.type))
 
     @property
     def link_unique(self):
@@ -110,8 +111,7 @@ class Condition(object):
         elif len(self.link) == 1:
             return self.link[0]
         else:
-            raise Exception("Can't have a unique value from {}".format(
-                self.link))
+            raise Exception("Can't have a unique value from {}".format(self.link))
 
     @staticmethod
     def intersection_expression(cond1, cond2):
@@ -126,31 +126,43 @@ class Condition(object):
 
     def intersection(self, condition):
         self.variant = Condition.intersection_expression(
-            condition.variant, self.variant)
-        self.link = Condition.intersection_expression(condition.link,
-                                                      self.link)
+            condition.variant, self.variant
+        )
+        self.link = Condition.intersection_expression(condition.link, self.link)
         self.runtime_link = Condition.intersection_expression(
-            condition.runtime_link, self.runtime_link)
+            condition.runtime_link, self.runtime_link
+        )
         self.runtime_variant = Condition.intersection_expression(
-            condition.runtime_variant, self.runtime_variant)
+            condition.runtime_variant, self.runtime_variant
+        )
         self.osystem = Condition.intersection_expression(
-            condition.osystem, self.osystem)
-        self.arch = Condition.intersection_expression(condition.arch,
-                                                      self.arch)
+            condition.osystem, self.osystem
+        )
+        self.arch = Condition.intersection_expression(condition.arch, self.arch)
         self.compiler = Condition.intersection_expression(
-            condition.compiler, self.compiler)
+            condition.compiler, self.compiler
+        )
         self.distribution = Condition.intersection_expression(
-            condition.distribution, self.distribution)
+            condition.distribution, self.distribution
+        )
         self.release = Condition.intersection_expression(
-            condition.release, self.release)
-        self.type = Condition.intersection_expression(condition.type,
-                                                      self.type)
+            condition.release, self.release
+        )
+        self.type = Condition.intersection_expression(condition.type, self.type)
 
     @staticmethod
     def serialized_members():
         return [
-            'variant', 'link', 'runtime_link', 'runtime_variant', 'osystem',
-            'arch', 'compiler', 'distribution', 'release', 'type'
+            'variant',
+            'link',
+            'runtime_link',
+            'runtime_variant',
+            'osystem',
+            'arch',
+            'compiler',
+            'distribution',
+            'release',
+            'type',
         ]
 
     @staticmethod
@@ -160,11 +172,15 @@ class Condition(object):
         for key in o.__dict__:
             if key in Condition.serialized_members():
                 if o.__dict__[key]:
-                    if avoid_lists and len(
-                            o.__dict__[key]) == 1 and isinstance(
-                                o.__dict__[key], list) and (
-                                    o.__dict__[key][0] is None or
-                                    not isinstance(o.__dict__[key][0], list)):
+                    if (
+                        avoid_lists
+                        and len(o.__dict__[key]) == 1
+                        and isinstance(o.__dict__[key], list)
+                        and (
+                            o.__dict__[key][0] is None
+                            or not isinstance(o.__dict__[key][0], list)
+                        )
+                    ):
                         json_obj[key] = o.__dict__[key][0]
                     else:
                         json_obj[key] = o.__dict__[key]
@@ -185,7 +201,8 @@ class Condition(object):
                 values = value if isinstance(value, list) else [value]
                 self.__dict__[raw_entry] += normalize_values(raw_entry, values)
                 self.__dict__[raw_entry] = helpers.filter_unique(
-                    self.__dict__[raw_entry])
+                    self.__dict__[raw_entry]
+                )
                 has_entry = True
 
         return has_entry

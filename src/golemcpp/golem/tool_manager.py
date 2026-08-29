@@ -48,8 +48,10 @@ class ToolManager(ResourceManager):
         # A tool's root stores many things, only the manifest and the source
         # directory should remain before a refresh.
         for name in os.listdir(root):
-            if name in (cache_configuration.SOURCE_DIRNAME,
-                        resource_manifest.MANIFEST_FILENAME):
+            if name in (
+                cache_configuration.SOURCE_DIRNAME,
+                resource_manifest.MANIFEST_FILENAME,
+            ):
                 continue
             path = os.path.join(root, name)
             if os.path.isdir(path):
@@ -69,14 +71,18 @@ class ToolManager(ResourceManager):
             resource = self.resource_for(Tool(definition=definition))
             for cache_dir in self.cache_manager.locations:
                 source = self.cache_manager.read_manifest_source(
-                    self.cache_manager.make_cached_resource(cache_dir, resource))
+                    self.cache_manager.make_cached_resource(cache_dir, resource)
+                )
                 if source is None:
                     continue
-                installed_tools.append(InstalledToolInfo(
-                    name=definition.name,
-                    version=source.resolved.reference,
-                    cache_root=cache_dir.location,
-                    is_read_only=cache_dir.is_read_only))
+                installed_tools.append(
+                    InstalledToolInfo(
+                        name=definition.name,
+                        version=source.resolved.reference,
+                        cache_root=cache_dir.location,
+                        is_read_only=cache_dir.is_read_only,
+                    )
+                )
         return installed_tools
 
 

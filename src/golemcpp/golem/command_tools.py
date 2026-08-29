@@ -22,12 +22,25 @@ def build_tools_parser() -> ArgumentParser:
     parser.add_argument('--project-dir', dest='project_dir', default='')
     parser.add_argument('--build-dir', dest='build_dir', default='')
     parser.add_argument('--cache-directory', dest='cache_directory', default='')
-    parser.add_argument('--cache-minimization-enabled', dest='cache_minimization_enabled', nargs='?', const='on', default='')
-    parser.add_argument('--cache-minimization-length', dest='cache_minimization_length', type=int, default=0)
+    parser.add_argument(
+        '--cache-minimization-enabled',
+        dest='cache_minimization_enabled',
+        nargs='?',
+        const='on',
+        default='',
+    )
+    parser.add_argument(
+        '--cache-minimization-length',
+        dest='cache_minimization_length',
+        type=int,
+        default=0,
+    )
     parser.add_argument('--available', action='store_true', dest='available')
     parser.add_argument('--yes', '-y', action='store_true', dest='yes')
     parser.add_argument('-h', '--help', action='store_true', dest='help')
     return parser
+
+
 def parse_tools_args(args: list[str]) -> Namespace:
     parser = build_tools_parser()
     return parser.parse_args(args)
@@ -37,11 +50,15 @@ def parse_tools_args(args: list[str]) -> Namespace:
 class ToolsCommandHandler:
     project_dir: str
     options: Namespace
-    _manager: tool_manager.ToolManager | None = field(default=None, init=False, repr=False)
+    _manager: tool_manager.ToolManager | None = field(
+        default=None, init=False, repr=False
+    )
 
     @staticmethod
     def print_help() -> None:
-        print('Usage: golem tools install <tool> [--version=<version>] [--cache-directory=<path>]')
+        print(
+            'Usage: golem tools install <tool> [--version=<version>] [--cache-directory=<path>]'
+        )
         print('       golem tools uninstall <tool> [--cache-directory=<path>] [--yes]')
         print('       golem tools list [--available] [--cache-directory=<path>]')
         print('Manage installable external tools stored in the Golem tools cache.')
@@ -49,16 +66,28 @@ class ToolsCommandHandler:
         print('Subcommands:')
         print('  install      Install a supported tool into the tools cache')
         print('  uninstall    Remove a supported tool from the tools cache')
-        print('  list         List installed tools, or supported tools with --available')
+        print(
+            '  list         List installed tools, or supported tools with --available'
+        )
         print('')
         print('Options:')
-        print('  --version=<version>                Tool version to install when supported')
+        print(
+            '  --version=<version>                Tool version to install when supported'
+        )
         print('  --available                        List supported installable tools')
-        print('  --yes, -y                          Do not prompt for confirmation before uninstalling')
+        print(
+            '  --yes, -y                          Do not prompt for confirmation before uninstalling'
+        )
         print('  --cache-directory=<path>           Select the base cache directory')
-        print('  --cache-minimization-enabled[=<on|off>]  Store tools under short hashed flat paths;')
-        print('                                           bare flag means on, omit for the automatic default (on)')
-        print('  --cache-minimization-length=<n>    Number of hash characters for minimized tool names (default 8)')
+        print(
+            '  --cache-minimization-enabled[=<on|off>]  Store tools under short hashed flat paths;'
+        )
+        print(
+            '                                           bare flag means on, omit for the automatic default (on)'
+        )
+        print(
+            '  --cache-minimization-length=<n>    Number of hash characters for minimized tool names (default 8)'
+        )
         print('')
         print('Available tools:')
         for tool in tool_manager.ToolManager.list_available_tools():
@@ -70,11 +99,13 @@ class ToolsCommandHandler:
 
     def make_tool_manager(self) -> tool_manager.ToolManager:
         if self._manager is None:
-            cache_configuration = get_cache_configuration(settings.get_settings(
-                options=self.options,
-                build_dir=self.options.build_dir or None,
-                project_dir=self.project_dir or None,
-            ))
+            cache_configuration = get_cache_configuration(
+                settings.get_settings(
+                    options=self.options,
+                    build_dir=self.options.build_dir or None,
+                    project_dir=self.project_dir or None,
+                )
+            )
             self._manager = tool_manager.get_tool_manager(cache_configuration)
 
         return self._manager
@@ -98,13 +129,15 @@ class ToolsCommandHandler:
         print('Installed tools:')
         for tool in installed_tools:
             marker = ' (read-only)' if tool.is_read_only else ''
-            print('{} {}  ({}{})'.format(
-                tool.name, tool.version, tool.cache_root, marker))
+            print(
+                '{} {}  ({}{})'.format(tool.name, tool.version, tool.cache_root, marker)
+            )
 
     def handle_install(self, manager: tool_manager.ToolManager) -> int:
         try:
             tool = tool_manager.ToolManager.get_tool(
-                self.options.tool, version=self.options.version)
+                self.options.tool, version=self.options.version
+            )
             # Installing a tool is what this command is for, so it may reach the
             # remote, both to resolve the version and to fetch the source.
             with network.allowed():
@@ -120,12 +153,18 @@ class ToolsCommandHandler:
         # A read-only location is served as it stands, so say so rather than
         # report an install that did not happen.
         if cached_tool.is_read_only:
-            print('{} {} is served from the read-only cache location {}; nothing was installed'
-                  .format(tool.name, tool.resolved.reference, cached_tool.cache_root))
+            print(
+                '{} {} is served from the read-only cache location {}; nothing was installed'.format(
+                    tool.name, tool.resolved.reference, cached_tool.cache_root
+                )
+            )
             return 0
 
-        print('Installed {} {} in {}'.format(
-            tool.name, tool.resolved.reference, cached_tool.path))
+        print(
+            'Installed {} {} in {}'.format(
+                tool.name, tool.resolved.reference, cached_tool.path
+            )
+        )
         print('Selected cache location: {}'.format(cached_tool.cache_root))
         return 0
 
@@ -147,8 +186,11 @@ class ToolsCommandHandler:
             return 0
 
         if cached_tool.is_read_only:
-            print('{} is in the read-only cache location {} and was not removed'.format(
-                tool_name, cached_tool.cache_root))
+            print(
+                '{} is in the read-only cache location {} and was not removed'.format(
+                    tool_name, cached_tool.cache_root
+                )
+            )
             return 0
 
         print('Uninstall {} from {}'.format(tool_name, cached_tool.path))
@@ -178,7 +220,10 @@ class ToolsCommandHandler:
         if self.options.action == 'uninstall' and self.options.tool is not None:
             return self.handle_uninstall(manager=self.make_tool_manager())
 
-        if self.options.action in ('install', 'uninstall') and self.options.tool is None:
+        if (
+            self.options.action in ('install', 'uninstall')
+            and self.options.tool is None
+        ):
             print('ERROR: unsupported tools command: {}'.format(' '.join(args)))
             self.print_help()
             return 1

@@ -30,8 +30,9 @@ def make_source(version=''):
 def test_an_overlay_asks_for_exactly_what_its_location_names():
     # Nothing of its own to reconcile: the location said it in full, and
     # naming no version is a question the resolver puts to the remote.
-    assert Overlay(source=make_source(version='v1.2.0')).requested_source() == \
-        make_source(version='v1.2.0')
+    assert Overlay(
+        source=make_source(version='v1.2.0')
+    ).requested_source() == make_source(version='v1.2.0')
     assert Overlay(source=make_source()).requested_source().version == ''
 
 
@@ -71,7 +72,9 @@ def test_an_overlay_is_named_the_same_before_and_after_being_resolved(resolution
     overlay.resolve()
 
     assert OverlayManager.cache_key_for(overlay) == unresolved
-    assert ResourceManager.source_for(overlay).locator == Locator('https://host/overrides.git')
+    assert ResourceManager.source_for(overlay).locator == Locator(
+        'https://host/overrides.git'
+    )
 
 
 def test_a_directory_overlay_keeps_its_empty_reference(resolutions):

@@ -10,7 +10,6 @@ from golemcpp.golem import cache_configuration
 from golemcpp.golem import command_version
 from golemcpp.golem.source import Source
 
-
 # Filename of the descriptor dropped at the root of every cached resource. It is
 # hidden and golem-namespaced so it never collides with (and stays visually
 # distinct from) the contents of a cloned repository, and it survives a
@@ -92,8 +91,9 @@ class ResourceManifest:
     last_used_at: str = ''
 
     @classmethod
-    def create(cls, kind, cache_key: str, source: dict,
-               fetched: dict = None) -> 'ResourceManifest':
+    def create(
+        cls, kind, cache_key: str, source: dict, fetched: dict = None
+    ) -> 'ResourceManifest':
         if isinstance(kind, ResourceKind):
             kind = kind.value
         now = utc_now()
@@ -193,8 +193,9 @@ class ResourceManifest:
             pass
 
 
-def write_manifest(resource_root: str, kind, cache_key: str, source: dict,
-                   fetched: dict = None) -> None:
+def write_manifest(
+    resource_root: str, kind, cache_key: str, source: dict, fetched: dict = None
+) -> None:
     '''
     Write a fresh manifest at the root of a newly created cache resource.
     Best-effort: a failure here must never break a build, so errors are
@@ -202,9 +203,8 @@ def write_manifest(resource_root: str, kind, cache_key: str, source: dict,
     '''
     try:
         manifest = ResourceManifest.create(
-            kind=kind, cache_key=cache_key, source=source, fetched=fetched)
+            kind=kind, cache_key=cache_key, source=source, fetched=fetched
+        )
         manifest.write_to_root(resource_root)
     except OSError:
         pass
-
-

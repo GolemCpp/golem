@@ -12,7 +12,9 @@ def make_context_for_platform(platform_name):
     return context
 
 
-def create_qt_sdk_root(path: Path, core_library_name: str, is_invalid: bool = False) -> None:
+def create_qt_sdk_root(
+    path: Path, core_library_name: str, is_invalid: bool = False
+) -> None:
     (path / 'bin').mkdir(parents=True)
     (path / 'include' / 'QtCore').mkdir(parents=True)
     (path / 'lib').mkdir(parents=True)
@@ -21,7 +23,9 @@ def create_qt_sdk_root(path: Path, core_library_name: str, is_invalid: bool = Fa
         (path / 'lib' / core_library_name).write_text('')
 
 
-def test_search_for_qt_root_in_default_dirs_returns_most_recent_valid_sdk(tmp_path, monkeypatch):
+def test_search_for_qt_root_in_default_dirs_returns_most_recent_valid_sdk(
+    tmp_path, monkeypatch
+):
     qt_base_dir = tmp_path / 'Qt'
     qt5_root = qt_base_dir / '5.15.2' / 'gcc_64'
     qt6_root = qt_base_dir / '6.7.2' / 'gcc_64'
@@ -36,11 +40,17 @@ def test_search_for_qt_root_in_default_dirs_returns_most_recent_valid_sdk(tmp_pa
         lambda _: [str(qt_base_dir)],
     )
 
-    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=False) == str(qt5_root)
-    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=True) == str(qt6_root)
+    assert qt_discovery.search_for_qt_root_in_default_dirs(
+        context, wants_qt6=False
+    ) == str(qt5_root)
+    assert qt_discovery.search_for_qt_root_in_default_dirs(
+        context, wants_qt6=True
+    ) == str(qt6_root)
 
 
-def test_search_for_qt_root_in_default_dirs_ignores_invalid_existing_dirs(tmp_path, monkeypatch):
+def test_search_for_qt_root_in_default_dirs_ignores_invalid_existing_dirs(
+    tmp_path, monkeypatch
+):
     qt_base_dir = tmp_path / 'Qt'
     invalid_root = qt_base_dir / '6.7.2' / 'gcc_64'
 
@@ -53,10 +63,14 @@ def test_search_for_qt_root_in_default_dirs_ignores_invalid_existing_dirs(tmp_pa
         lambda _: [str(qt_base_dir)],
     )
 
-    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=True) is None
+    assert (
+        qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=True) is None
+    )
 
 
-def test_search_for_qt_root_in_default_dirs_filters_other_qt_major_versions(tmp_path, monkeypatch):
+def test_search_for_qt_root_in_default_dirs_filters_other_qt_major_versions(
+    tmp_path, monkeypatch
+):
     qt_base_dir = tmp_path / 'Qt'
     qt6_root = qt_base_dir / '6.7.2' / 'gcc_64'
 
@@ -69,4 +83,7 @@ def test_search_for_qt_root_in_default_dirs_filters_other_qt_major_versions(tmp_
         lambda _: [str(qt_base_dir)],
     )
 
-    assert qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=False) is None
+    assert (
+        qt_discovery.search_for_qt_root_in_default_dirs(context, wants_qt6=False)
+        is None
+    )

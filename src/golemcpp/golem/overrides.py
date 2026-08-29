@@ -15,7 +15,6 @@ from collections import OrderedDict
 from golemcpp.golem import helpers
 from golemcpp.golem.dependency import Dependency
 
-
 # What an overlay carries at its root, and the name the layered result is
 # written under.
 OVERRIDES_FILENAME = 'overrides.json'
@@ -56,8 +55,11 @@ def write_overrides(overrides, path):
     '''Record overrides at `path`, returned so a caller can point at the result.'''
     helpers.make_directory(os.path.dirname(path))
     with open(path, 'w') as fp:
-        json.dump([Dependency.serialize_to_json(override) for override in overrides],
-                  fp, indent=4)
+        json.dump(
+            [Dependency.serialize_to_json(override) for override in overrides],
+            fp,
+            indent=4,
+        )
 
     return path
 
@@ -75,7 +77,8 @@ def merge_overrides(contributions):
     for overrides in contributions:
         for override in overrides:
             merged.setdefault(override.get_source_location(), {}).update(
-                Dependency.serialize_to_json(override))
+                Dependency.serialize_to_json(override)
+            )
 
     return [Dependency.unserialize_from_json(entry) for entry in merged.values()]
 

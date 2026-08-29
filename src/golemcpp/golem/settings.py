@@ -12,7 +12,6 @@ from golemcpp.golem.setting_descriptor import SettingDescriptor
 from golemcpp.golem.setting_descriptor import SettingProcessingContext
 from golemcpp.golem.setting_descriptor import SettingType
 
-
 # Default cookbook used when nothing is configured.
 #
 # Pinned on the branch holding the identity grammar this version spells. The
@@ -76,11 +75,11 @@ SETTINGS = (
         env_name='GOLEM_CACHE_MINIMIZATION_ENABLED',
         option_name='cache_minimization_enabled',
         description='Store cached resources under short hashed flat paths to avoid long-path '
-                    'limits (e.g. Windows CL.exe). Turning it off names a resource root '
-                    'after its cache key, which holds the # separating an identity from its '
-                    'version. A recipe may drive a build system of its own, passing it that '
-                    'root, but make and pkg-config read a # in a path as the start of a '
-                    'comment. on/off, default on.',
+        'limits (e.g. Windows CL.exe). Turning it off names a resource root '
+        'after its cache key, which holds the # separating an identity from its '
+        'version. A recipe may drive a build system of its own, passing it that '
+        'root, but make and pkg-config read a # in a path as the start of a '
+        'comment. on/off, default on.',
         value_type=SettingType.BOOL,
         default=True,
     ),
@@ -89,7 +88,7 @@ SETTINGS = (
         env_name='GOLEM_CACHE_MINIMIZATION_LENGTH',
         option_name='cache_minimization_length',
         description='Number of hash characters used for minimized cache resource names '
-                    '(default 8).',
+        '(default 8).',
         value_type=SettingType.INT,
         default=8,
         deserialize=setting_descriptor.require_positive,
@@ -99,11 +98,11 @@ SETTINGS = (
         env_name='GOLEM_GIT_FETCH_MODE',
         option_name='git_fetch_mode',
         description='How much of a resource to obtain when fetching it: blobless (every '
-                    'commit and tag, file content on demand), full (everything, the only '
-                    'mode whose cache keeps working with no access to the remotes) or '
-                    'shallow (the requested commit alone, for a repository too heavy to '
-                    'clone whole). Defaults to blobless, or to full when git is too old '
-                    'to be trusted with a partial clone.',
+        'commit and tag, file content on demand), full (everything, the only '
+        'mode whose cache keeps working with no access to the remotes) or '
+        'shallow (the requested commit alone, for a repository too heavy to '
+        'clone whole). Defaults to blobless, or to full when git is too old '
+        'to be trusted with a partial clone.',
         default=fetch_policy.default_fetch_mode,
         deserialize=fetch_policy.parse_fetch_mode,
         serialize=fetch_policy.format_fetch_mode,
@@ -113,7 +112,7 @@ SETTINGS = (
         env_name='GOLEM_GIT_JOBS',
         option_name='git_jobs',
         description='How many submodules to fetch at once (default: one per processor, '
-                    'capped at 8).',
+        'capped at 8).',
         value_type=SettingType.INT,
         default=fetch_policy.default_fetch_jobs,
         deserialize=setting_descriptor.require_positive,
@@ -122,11 +121,11 @@ SETTINGS = (
         key='git.prompt.enabled',
         env_name='GOLEM_GIT_PROMPT_ENABLED',
         description='Let git stop and ask for the credentials of a repository it cannot '
-                    'read. Off by default: a prompt nobody is watching looks like a hang, '
-                    'where a refusal names the repository. Turn it on to authenticate '
-                    'interactively once. Only what git asks for itself: a repository '
-                    'reached over ssh is left to ssh and to the keys it is configured '
-                    'with. on/off, default off.',
+        'read. Off by default: a prompt nobody is watching looks like a hang, '
+        'where a refusal names the repository. Turn it on to authenticate '
+        'interactively once. Only what git asks for itself: a repository '
+        'reached over ssh is left to ssh and to the keys it is configured '
+        'with. on/off, default off.',
         value_type=SettingType.BOOL,
         default=False,
     ),
@@ -135,7 +134,7 @@ SETTINGS = (
         env_name='GOLEM_COOKBOOKS_LOCATIONS',
         option_name='cookbook_location',
         description='Cookbooks searched for the recipes used to resolve dependencies '
-                    '(pipe-separated [KIND+]LOCATOR[#VERSION]).',
+        '(pipe-separated [KIND+]LOCATOR[#VERSION]).',
         value_type=SettingType.LIST,
         default=(DEFAULT_COOKBOOK_LOCATION,),
         deserialize=requested_source.parse_location,
@@ -154,7 +153,7 @@ SETTINGS = (
         env_name='GOLEM_OVERLAYS_LOCATIONS',
         option_name='overlay_location',
         description='Overlays contributing an overrides configuration, layered in order '
-                    '(pipe-separated [KIND+]LOCATOR[#VERSION]).',
+        '(pipe-separated [KIND+]LOCATOR[#VERSION]).',
         value_type=SettingType.LIST,
         default=(),
         deserialize=requested_source.parse_location,
@@ -186,9 +185,11 @@ def get_setting(name):
     '''
     if isinstance(name, SettingDescriptor):
         return name
-    return (SETTINGS_BY_ENV.get(name)
-            or SETTINGS_BY_KEY.get(name)
-            or SETTINGS_BY_OPTION.get(name))
+    return (
+        SETTINGS_BY_ENV.get(name)
+        or SETTINGS_BY_KEY.get(name)
+        or SETTINGS_BY_OPTION.get(name)
+    )
 
 
 def get_setting_by_env(env_name):
@@ -351,8 +352,10 @@ class Settings:
             return []
 
         values = value if isinstance(value, list) else [value]
-        return ['{}={}'.format(setting.option_flag, self._make_flag_value(setting, entry))
-                for entry in values]
+        return [
+            '{}={}'.format(setting.option_flag, self._make_flag_value(setting, entry))
+            for entry in values
+        ]
 
     def _make_flag_value(self, setting, value):
         # Written by the code that reads it, so a forwarded flag is one the
@@ -372,17 +375,21 @@ class Settings:
         # CLI option, either the live waf options or a native command Namespace.
         value, option_name = self._get_option_value(self.options, setting.option_names)
         if setting_descriptor.has_value(value):
-            return value, 'option {}'.format(setting_descriptor.format_option_flag(option_name))
+            return value, 'option {}'.format(
+                setting_descriptor.format_option_flag(option_name)
+            )
 
         # Persisted `golem configure` options, so a command reached through a
         # build directory honours what the project was configured with, without
         # the user re-passing the option.
         if self.build_dir:
             value, option_name = self._get_option_value(
-                get_persisted_configure_options(self.build_dir), setting.option_names)
+                get_persisted_configure_options(self.build_dir), setting.option_names
+            )
             if setting_descriptor.has_value(value):
                 return value, 'option {} persisted by golem configure'.format(
-                    setting_descriptor.format_option_flag(option_name))
+                    setting_descriptor.format_option_flag(option_name)
+                )
 
         # Environment variable.
         for env_name in setting.env_names:
@@ -396,7 +403,8 @@ class Settings:
                 continue
             for key in setting.keys:
                 value = config_store.get_scoped_value(
-                    key=key, scope=scope, project_dir=self.project_dir)
+                    key=key, scope=scope, project_dir=self.project_dir
+                )
                 if setting_descriptor.has_value(value):
                     return value, '{} configuration key {}'.format(scope, key)
 
@@ -423,7 +431,4 @@ class Settings:
 
 def get_settings(options=None, build_dir=None, project_dir=None):
     '''The single factory for a Settings.'''
-    return Settings(
-        options=options,
-        build_dir=build_dir,
-        project_dir=project_dir)
+    return Settings(options=options, build_dir=build_dir, project_dir=project_dir)

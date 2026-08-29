@@ -54,8 +54,12 @@ def resolve(context):
     # What the remotes advertise is kept for exactly as long, and shared with the
     # resolves this one spawns, so a repository two dependencies both need is
     # read once.
-    with network.allowed(), advertisement_store.shared(
-            ctx.make_golem_path(advertisement_store.DIRECTORY_NAME)):
+    with (
+        network.allowed(),
+        advertisement_store.shared(
+            ctx.make_golem_path(advertisement_store.DIRECTORY_NAME)
+        ),
+    ):
         ctx.environment(resolve_dependencies=True)
 
         # Disable targets as there is no task generator associated with this command for the moment

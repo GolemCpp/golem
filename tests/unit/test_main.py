@@ -19,7 +19,9 @@ def test_main_without_command_dispatches_to_command_help(tmp_path, monkeypatch, 
     def fail_if_called(*args, **kwargs):
         raise AssertionError('Waf entry point should not run without a command')
 
-    monkeypatch.setattr(main.command_help, 'handle_help_command', fake_handle_help_command)
+    monkeypatch.setattr(
+        main.command_help, 'handle_help_command', fake_handle_help_command
+    )
     monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
 
     result = main.main()
@@ -45,7 +47,9 @@ def test_main_version_flag_dispatches_to_command_version(monkeypatch, capsys):
     def fail_if_called(*args, **kwargs):
         raise AssertionError('Waf entry point should not run for --version')
 
-    monkeypatch.setattr(main.command_version, 'handle_version_command', fake_handle_version_command)
+    monkeypatch.setattr(
+        main.command_version, 'handle_version_command', fake_handle_version_command
+    )
     monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
 
     result = main.main()
@@ -76,14 +80,18 @@ def test_main_init_dispatches_to_command_init(tmp_path, monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError('Waf entry point should not run for init')
 
-    monkeypatch.setattr(main.command_init, 'handle_init_command', fake_handle_init_command)
+    monkeypatch.setattr(
+        main.command_init, 'handle_init_command', fake_handle_init_command
+    )
     monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
 
     result = main.main()
 
     assert result == 7
     assert captured['project_dir'] == str(project_dir)
-    assert captured['data_dir'] == Path(main.helpers.get_golemcpp_golem_dir()).parent.joinpath('data')
+    assert captured['data_dir'] == Path(
+        main.helpers.get_golemcpp_golem_dir()
+    ).parent.joinpath('data')
     assert captured['args'] == [
         '--project-dir=' + str(project_dir),
         '--build-dir=' + str(project_dir / 'build'),
@@ -107,7 +115,9 @@ def test_main_tools_dispatches_to_command_tools(tmp_path, monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError('Waf entry point should not run for tools')
 
-    monkeypatch.setattr(main.command_tools, 'handle_tools_command', fake_handle_tools_command)
+    monkeypatch.setattr(
+        main.command_tools, 'handle_tools_command', fake_handle_tools_command
+    )
     monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
 
     result = main.main()
@@ -127,7 +137,9 @@ def test_main_config_dispatches_to_command_config(tmp_path, monkeypatch):
     project_dir.mkdir()
 
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(main.sys, 'argv', ['golem', 'config', 'overlays.locations', '/opt/overrides'])
+    monkeypatch.setattr(
+        main.sys, 'argv', ['golem', 'config', 'overlays.locations', '/opt/overrides']
+    )
 
     captured = {}
 
@@ -139,7 +151,9 @@ def test_main_config_dispatches_to_command_config(tmp_path, monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError('Waf entry point should not run for config')
 
-    monkeypatch.setattr(main.command_config, 'handle_config_command', fake_handle_config_command)
+    monkeypatch.setattr(
+        main.command_config, 'handle_config_command', fake_handle_config_command
+    )
     monkeypatch.setattr(main.Scripting, 'waf_entry_point', fail_if_called)
 
     result = main.main()
@@ -199,7 +213,9 @@ def test_main_writes_wscript_with_repr_safe_builder_path(tmp_path, monkeypatch):
 
     monkeypatch.chdir(project_dir)
     monkeypatch.setattr(main.sys, 'argv', ['golem', 'configure'])
-    monkeypatch.setattr(main.helpers, 'get_golemcpp_golem_dir', lambda: str(fake_package_dir))
+    monkeypatch.setattr(
+        main.helpers, 'get_golemcpp_golem_dir', lambda: str(fake_package_dir)
+    )
 
     captured = {}
 
@@ -210,7 +226,9 @@ def test_main_writes_wscript_with_repr_safe_builder_path(tmp_path, monkeypatch):
 
     result = main.main()
 
-    generated_wscript = (project_dir / 'build' / 'golem' / 'wscript').read_text(encoding='utf-8')
+    generated_wscript = (project_dir / 'build' / 'golem' / 'wscript').read_text(
+        encoding='utf-8'
+    )
 
     assert result == 0
     assert captured['build_dir'] == str(project_dir / 'build' / 'golem')

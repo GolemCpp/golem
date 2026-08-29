@@ -27,7 +27,9 @@ def has_windows_msvc_toolchain() -> bool:
             os.environ.get('ProgramFiles', 'C:\\Program Files (x86)'),
         )
     )
-    vswhere_path = installer_root / 'Microsoft Visual Studio' / 'Installer' / 'vswhere.exe'
+    vswhere_path = (
+        installer_root / 'Microsoft Visual Studio' / 'Installer' / 'vswhere.exe'
+    )
     return command_exists('cl') or vswhere_path.is_file()
 
 
@@ -105,9 +107,16 @@ def require_qt_dir() -> str:
 
 def require_packaging_tool() -> None:
     if sys.platform.startswith('linux'):
-        if command_exists('fakeroot') and command_exists('strip') and command_exists('linuxdeployqt'):
+        if (
+            command_exists('fakeroot')
+            and command_exists('strip')
+            and command_exists('linuxdeployqt')
+        ):
             return
-        pytest.skip('fakeroot, strip, and linuxdeployqt are required for the package example on Linux')
+        pytest.skip(
+            'fakeroot, strip, and linuxdeployqt are required for the package'
+            ' example on Linux'
+        )
 
     if sys.platform.startswith('darwin'):
         if command_exists('hdiutil'):

@@ -12,14 +12,16 @@ def _setting(value_type=SettingType.STRING, **kwargs):
         option_name='cache_directory',
         description='',
         value_type=value_type,
-        **kwargs)
+        **kwargs,
+    )
 
 
 def test_names_list_the_current_spelling_first():
     setting = _setting(
         legacy_keys=('cache.dir',),
         legacy_env_names=('GOLEM_CACHE_DIR',),
-        legacy_option_names=('cache_dir',))
+        legacy_option_names=('cache_dir',),
+    )
 
     assert setting.keys == ('cache.directory', 'cache.dir')
     assert setting.env_names == ('GOLEM_CACHE_DIRECTORY', 'GOLEM_CACHE_DIR')
@@ -28,8 +30,9 @@ def test_names_list_the_current_spelling_first():
 
 
 def test_a_setting_without_an_option_has_no_option_name_nor_flag():
-    setting = SettingDescriptor(key='example.setting', env_name='GOLEM_EXAMPLE_SETTING',
-                      description='')
+    setting = SettingDescriptor(
+        key='example.setting', env_name='GOLEM_EXAMPLE_SETTING', description=''
+    )
 
     assert setting.option_names == ()
     assert setting.option_flag == ''
@@ -120,7 +123,10 @@ def test_format_value_is_the_reverse_of_parse():
 
     listed = _setting(value_type=SettingType.LIST)
     assert listed.format_value(['/first', '/second']) == '/first|/second'
-    assert listed.parse(listed.format_value(['/first', '/second'])) == ['/first', '/second']
+    assert listed.parse(listed.format_value(['/first', '/second'])) == [
+        '/first',
+        '/second',
+    ]
 
 
 def test_has_value_treats_a_boolean_as_an_answer_and_falsy_as_unset():

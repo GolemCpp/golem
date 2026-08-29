@@ -16,9 +16,11 @@ def test_normalizing_is_idempotent():
     # A canonical name has to survive being normalized again, or a value that
     # passes through two entry points comes out different from one that passes
     # through one.
-    spellings = list(target_platform.ARCH_ALIASES) + \
-        list(target_platform.ARCH_FAMILY_DEFAULTS) + \
-        list(target_platform.CANONICAL_ARCHS)
+    spellings = (
+        list(target_platform.ARCH_ALIASES)
+        + list(target_platform.ARCH_FAMILY_DEFAULTS)
+        + list(target_platform.CANONICAL_ARCHS)
+    )
     for spelling in spellings:
         once = target_platform.normalize_arch(spelling)
         assert target_platform.normalize_arch(once) == once
@@ -27,8 +29,7 @@ def test_normalizing_is_idempotent():
 def test_every_table_resolves_to_a_canonical_name():
     # An alias pointing at a name that is not in the vocabulary would be a typo
     # nobody notices until a build slug looks wrong.
-    for table in (target_platform.ARCH_ALIASES,
-                  target_platform.ARCH_FAMILY_DEFAULTS):
+    for table in (target_platform.ARCH_ALIASES, target_platform.ARCH_FAMILY_DEFAULTS):
         for canonical in table.values():
             assert canonical in target_platform.CANONICAL_ARCHS
 
@@ -40,15 +41,21 @@ def test_the_spellings_of_one_architecture_agree():
     # These used to disagree: the raw option reached the build slug while a
     # normalized copy reached everything else, so --arch=amd64 and
     # --arch=x86_64 built into two different directories.
-    assert target_platform.normalize_arch('amd64') == \
-        target_platform.normalize_arch('x86_64') == \
-        target_platform.normalize_arch('x64') == 'x86_64'
+    assert (
+        target_platform.normalize_arch('amd64')
+        == target_platform.normalize_arch('x86_64')
+        == target_platform.normalize_arch('x64')
+        == 'x86_64'
+    )
 
 
 def test_arm_answers_to_both_of_its_names():
     # Apple says arm64 and GNU says aarch64. Both have to arrive somewhere.
-    assert target_platform.normalize_arch('arm64') == \
-        target_platform.normalize_arch('aarch64') == 'aarch64'
+    assert (
+        target_platform.normalize_arch('arm64')
+        == target_platform.normalize_arch('aarch64')
+        == 'aarch64'
+    )
 
 
 def test_the_members_of_the_thirty_two_bit_family_stay_apart():
@@ -194,9 +201,12 @@ def test_a_system_that_emulates_another_is_not_called_the_other(monkeypatch):
 def test_an_operating_system_answers_to_the_names_people_use():
     # 'osx' is what Golem itself said before the rename, so it has to keep
     # working, and 'iphoneos' is what the runtime code already reports.
-    assert target_platform.normalize_osystem('Darwin') == \
-        target_platform.normalize_osystem('osx') == \
-        target_platform.normalize_osystem('macOS') == 'macos'
+    assert (
+        target_platform.normalize_osystem('Darwin')
+        == target_platform.normalize_osystem('osx')
+        == target_platform.normalize_osystem('macOS')
+        == 'macos'
+    )
     assert target_platform.normalize_osystem('Win32') == 'windows'
     assert target_platform.normalize_osystem('iphoneos') == 'ios'
 
@@ -264,26 +274,28 @@ def test_the_operating_system_vocabulary_reaches_past_what_golem_can_build():
 # --- Composing an identity from a compiler's own triple ------------------
 
 
-@pytest.mark.parametrize('triple, machine, expected', [
-    # The arch field is already canonical and carries no ABI to recover, so the
-    # machine is not consulted at all.
-    ('x86_64-pc-linux-gnu', 'x86_64', 'x86_64'),
-    ('aarch64-unknown-linux-gnu', 'aarch64', 'aarch64'),
-    ('i686-linux-gnu', 'i686', 'i686'),
-    # The two halves: the triple settles the ABI, the machine the ISA level.
-    # gcc says 'arm' whether it is armv6 or armv7, and uname says 'armv7l'
-    # whether it is hard float or soft.
-    ('arm-linux-gnueabihf', 'armv7l', 'armv7-eabihf'),
-    ('arm-linux-gnueabi', 'armv7l', 'armv7-eabi'),
-    ('arm-linux-gnueabihf', 'armv6l', 'armv6-eabihf'),
-    ('arm-linux-musleabihf', 'armv6l', 'armv6-eabihf'),
-    ('arm-linux-musleabi', 'armv5tel', 'armv5-eabi'),
-    # A triple that names its own ISA level does not need the machine.
-    ('armv7a-linux-gnueabihf', 'x86_64', 'armv7-eabihf'),
-])
+@pytest.mark.parametrize(
+    'triple, machine, expected',
+    [
+        # The arch field is already canonical and carries no ABI to recover, so the
+        # machine is not consulted at all.
+        ('x86_64-pc-linux-gnu', 'x86_64', 'x86_64'),
+        ('aarch64-unknown-linux-gnu', 'aarch64', 'aarch64'),
+        ('i686-linux-gnu', 'i686', 'i686'),
+        # The two halves: the triple settles the ABI, the machine the ISA level.
+        # gcc says 'arm' whether it is armv6 or armv7, and uname says 'armv7l'
+        # whether it is hard float or soft.
+        ('arm-linux-gnueabihf', 'armv7l', 'armv7-eabihf'),
+        ('arm-linux-gnueabi', 'armv7l', 'armv7-eabi'),
+        ('arm-linux-gnueabihf', 'armv6l', 'armv6-eabihf'),
+        ('arm-linux-musleabihf', 'armv6l', 'armv6-eabihf'),
+        ('arm-linux-musleabi', 'armv5tel', 'armv5-eabi'),
+        # A triple that names its own ISA level does not need the machine.
+        ('armv7a-linux-gnueabihf', 'x86_64', 'armv7-eabihf'),
+    ],
+)
 def test_a_compiler_triple_composes_an_identity(triple, machine, expected):
-    assert target_platform.Triple.parse(triple).canonical_arch(
-        machine) == expected
+    assert target_platform.Triple.parse(triple).canonical_arch(machine) == expected
 
 
 @pytest.mark.parametrize('triple', ['', '   ', '-'])
@@ -294,107 +306,137 @@ def test_a_triple_that_says_nothing_resolves_to_nothing(triple):
 
 def test_an_unrecognised_triple_still_yields_an_identity():
     # Totality again: no capability will be found for it, but it gets a name.
-    assert target_platform.Triple.parse(
-        'sparc64-unknown-linux-gnu').canonical_arch('sparc64') == 'sparc64'
+    assert (
+        target_platform.Triple.parse('sparc64-unknown-linux-gnu').canonical_arch(
+            'sparc64'
+        )
+        == 'sparc64'
+    )
 
 
 def test_a_family_field_is_not_an_identity():
     # 'arm' names the whole 32-bit line. Passing it through would put a name
     # that is not a target into a build slug, and would make an explicit
     # --arch=armv7-eabihf look like a disagreement with its own compiler.
-    assert target_platform.Triple.parse(
-        'arm-linux-gnuxyz').canonical_arch('armv7l') == ''
+    assert (
+        target_platform.Triple.parse('arm-linux-gnuxyz').canonical_arch('armv7l') == ''
+    )
 
 
 def test_a_cross_triple_does_not_borrow_the_ISA_level_from_uname():
     # uname describes the machine running the compiler, which for a cross
     # toolchain is not the machine being built for. Splicing the two would
     # invent an identity out of two unrelated sources.
-    assert target_platform.Triple.parse(
-        'arm-linux-gnueabihf').canonical_arch('x86_64') == ''
+    assert (
+        target_platform.Triple.parse('arm-linux-gnueabihf').canonical_arch('x86_64')
+        == ''
+    )
     # The same triple is fine where the compiler does target this machine.
-    assert target_platform.Triple.parse(
-        'arm-linux-gnueabihf').canonical_arch('armv7l') == 'armv7-eabihf'
+    assert (
+        target_platform.Triple.parse('arm-linux-gnueabihf').canonical_arch('armv7l')
+        == 'armv7-eabihf'
+    )
 
 
 def test_the_bare_abi_spellings_are_understood():
     # What a toolchain outside the glibc/musl world reports. Recognising the
     # spelling is vocabulary; being able to build it is not, and the operating
     # system half of such a target is still unrepresentable.
-    assert target_platform.Triple.parse(
-        'arm-none-eabi').canonical_arch('armv7l') == 'armv7-eabi'
-    assert target_platform.Triple.parse(
-        'arm-none-eabihf').canonical_arch('armv6l') == 'armv6-eabihf'
+    assert (
+        target_platform.Triple.parse('arm-none-eabi').canonical_arch('armv7l')
+        == 'armv7-eabi'
+    )
+    assert (
+        target_platform.Triple.parse('arm-none-eabihf').canonical_arch('armv6l')
+        == 'armv6-eabihf'
+    )
 
 
-@pytest.mark.parametrize('triple, expected', [
-    # Three of Android's four ABIs need nothing special: their triples put a
-    # canonical name in the arch field and the -android suffix never has to be
-    # read at all.
-    ('aarch64-linux-android', 'aarch64'),
-    ('x86_64-linux-android', 'x86_64'),
-    ('i686-linux-android', 'i686'),
-    # armeabi-v7a is the one that does, and it gets a name of its own rather
-    # than borrowing eabi, because softfp links with neither of the other two.
-    ('armv7a-linux-androideabi', 'armv7-androideabi'),
-])
+@pytest.mark.parametrize(
+    'triple, expected',
+    [
+        # Three of Android's four ABIs need nothing special: their triples put a
+        # canonical name in the arch field and the -android suffix never has to be
+        # read at all.
+        ('aarch64-linux-android', 'aarch64'),
+        ('x86_64-linux-android', 'x86_64'),
+        ('i686-linux-android', 'i686'),
+        # armeabi-v7a is the one that does, and it gets a name of its own rather
+        # than borrowing eabi, because softfp links with neither of the other two.
+        ('armv7a-linux-androideabi', 'armv7-androideabi'),
+    ],
+)
 def test_androids_abis_resolve(triple, expected):
     # The host is x86_64 throughout: an NDK is always a cross toolchain, and
     # none of these may borrow an ISA level from the machine running it.
-    assert target_platform.Triple.parse(triple).canonical_arch(
-        'x86_64') == expected
+    assert target_platform.Triple.parse(triple).canonical_arch('x86_64') == expected
 
 
-@pytest.mark.parametrize('triple, expected', [
-    ('aarch64-linux-android21', 'aarch64'),
-    ('armv7a-linux-androideabi21', 'armv7-androideabi'),
-])
+@pytest.mark.parametrize(
+    'triple, expected',
+    [
+        ('aarch64-linux-android21', 'aarch64'),
+        ('armv7a-linux-androideabi21', 'armv7-androideabi'),
+    ],
+)
 def test_the_android_api_level_is_not_part_of_the_architecture(triple, expected):
     # The NDK puts minSdkVersion in the triple it is invoked with. It is a real
     # part of the target and belongs to its own axis, the way a macOS
     # deployment target does -- never folded into an architecture's name.
-    assert target_platform.Triple.parse(triple).canonical_arch(
-        'x86_64') == expected
+    assert target_platform.Triple.parse(triple).canonical_arch('x86_64') == expected
 
 
 def test_androids_float_abi_is_not_confused_with_the_other_two():
     # softfp is neither, so these three must not collapse: an artifact built
     # for one links with neither of the others.
-    assert len({
-        target_platform.ARCH_ARMV7_EABI,
-        target_platform.ARCH_ARMV7_EABIHF,
-        target_platform.ARCH_ARMV7_ANDROIDEABI,
-    }) == 3
+    assert (
+        len(
+            {
+                target_platform.ARCH_ARMV7_EABI,
+                target_platform.ARCH_ARMV7_EABIHF,
+                target_platform.ARCH_ARMV7_ANDROIDEABI,
+            }
+        )
+        == 3
+    )
     assert target_platform.ARCH_ARMV7_ANDROIDEABI in target_platform.CANONICAL_ARCHS
     # Canonical for identity, empty for capability: nothing can select it with
     # a flag, because reaching it means using the NDK's own toolchain.
-    assert target_platform.arch_capability(
-        target_platform.ARCH_ARMV7_ANDROIDEABI) is target_platform.NO_CAPABILITY
+    assert (
+        target_platform.arch_capability(target_platform.ARCH_ARMV7_ANDROIDEABI)
+        is target_platform.NO_CAPABILITY
+    )
 
 
-@pytest.mark.parametrize('triple, machine', [
-    # riscv64-linux-gnu is the tuple for both lp64 and lp64d, and lp64 is soft
-    # float, so the two do not link. The arch field is a family exactly as
-    # `arm` is -- it is missing an ABI rather than an ISA level.
-    ('riscv64-linux-gnu', 'riscv64'),
-    ('mips64el-linux-gnuabi64', 'mips64el'),
-])
+@pytest.mark.parametrize(
+    'triple, machine',
+    [
+        # riscv64-linux-gnu is the tuple for both lp64 and lp64d, and lp64 is soft
+        # float, so the two do not link. The arch field is a family exactly as
+        # `arm` is -- it is missing an ABI rather than an ISA level.
+        ('riscv64-linux-gnu', 'riscv64'),
+        ('mips64el-linux-gnuabi64', 'mips64el'),
+    ],
+)
 def test_an_abi_the_triple_cannot_name_is_not_composed(triple, machine):
     # Even on the machine it describes, since the machine does not know either.
     assert target_platform.Triple.parse(triple).canonical_arch(machine) == ''
 
 
-@pytest.mark.parametrize('triple, arch, abi', [
-    # Coarse enough that no identity can be composed, specific enough to bind
-    # a request: this is the pair that keeps such a triple useful.
-    ('arm-linux-gnueabihf', 'arm', 'eabihf'),
-    ('arm-linux-gnueabi', 'arm', 'eabi'),
-    ('arm-none-eabi', 'arm', 'eabi'),
-    ('armv7a-linux-androideabi21', 'armv7a', 'androideabi'),
-    # An ABI the table does not name leaves that half open rather than guessing.
-    ('riscv64-linux-gnu', 'riscv64', ''),
-    ('sparc64-unknown-linux-gnu', 'sparc64', ''),
-])
+@pytest.mark.parametrize(
+    'triple, arch, abi',
+    [
+        # Coarse enough that no identity can be composed, specific enough to bind
+        # a request: this is the pair that keeps such a triple useful.
+        ('arm-linux-gnueabihf', 'arm', 'eabihf'),
+        ('arm-linux-gnueabi', 'arm', 'eabi'),
+        ('arm-none-eabi', 'arm', 'eabi'),
+        ('armv7a-linux-androideabi21', 'armv7a', 'androideabi'),
+        # An ABI the table does not name leaves that half open rather than guessing.
+        ('riscv64-linux-gnu', 'riscv64', ''),
+        ('sparc64-unknown-linux-gnu', 'sparc64', ''),
+    ],
+)
 def test_a_triple_constrains_even_when_it_cannot_name(triple, arch, abi):
     parsed = target_platform.Triple.parse(triple)
     assert parsed.arch == arch
@@ -413,19 +455,19 @@ def test_the_arch_field_is_a_position_and_the_libc_is_not_an_abi():
     # The two ends are read as written; only the ABI crosses into Golem's
     # vocabulary, where glibc and musl are the same target.
     assert target_platform.Triple.parse('arm-linux-musleabihf').arch == 'arm'
-    assert target_platform.Triple.parse(
-        'arm-linux-musleabihf').suffix == 'musleabihf'
-    assert target_platform.Triple.parse(
-        'arm-linux-musleabihf').canonical_abi() == 'eabihf'
-    assert target_platform.Triple.parse(
-        'arm-linux-gnueabihf').canonical_abi() == 'eabihf'
+    assert target_platform.Triple.parse('arm-linux-musleabihf').suffix == 'musleabihf'
+    assert (
+        target_platform.Triple.parse('arm-linux-musleabihf').canonical_abi() == 'eabihf'
+    )
+    assert (
+        target_platform.Triple.parse('arm-linux-gnueabihf').canonical_abi() == 'eabihf'
+    )
 
 
 # --- One answer, checked and settled in one place ------------------------
 
 
-ARM_CROSS = target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf',
-                                                       'x86_64')
+ARM_CROSS = target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf', 'x86_64')
 NAMED = target_platform.CompilerTarget(arch='x86_64')
 # A compiler Golem could get no answer out of, which is not MSVC: that one
 # answers through DEST_CPU and lands in NAMED's shape.
@@ -438,8 +480,7 @@ def test_a_compiler_that_named_its_target_admits_only_that_target():
     assert NAMED.settle('aarch64') == ('', target_platform.Refusal.ARCH)
 
 
-RISCV = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
-                                                   'riscv64')
+RISCV = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu', 'riscv64')
 
 
 def test_an_abi_the_triple_left_open_is_supplied_by_the_request():
@@ -468,11 +509,14 @@ def test_a_coarse_answer_admits_what_it_did_not_rule_out():
     assert ARM_CROSS.settle('armv6-eabihf') == ('armv6-eabihf', None)
 
 
-@pytest.mark.parametrize('requested, expected', [
-    ('armv7-eabi', target_platform.Refusal.ABI),
-    ('aarch64', target_platform.Refusal.FAMILY),
-    ('x86_64', target_platform.Refusal.FAMILY),
-])
+@pytest.mark.parametrize(
+    'requested, expected',
+    [
+        ('armv7-eabi', target_platform.Refusal.ABI),
+        ('aarch64', target_platform.Refusal.FAMILY),
+        ('x86_64', target_platform.Refusal.FAMILY),
+    ],
+)
 def test_a_coarse_answer_still_refuses_what_it_did_rule_out(requested, expected):
     # Which of the compiler's answers the request contradicts, not the words
     # someone will put around it.
@@ -490,18 +534,24 @@ def test_nothing_established_is_not_a_disagreement():
 # --- What an incomplete answer still leaves open --------------------------
 
 
-@pytest.mark.parametrize('triple, machine, expected', [
-    # A triple that named a target admits that target and nothing else.
-    ('x86_64-linux-gnu', 'x86_64', ('x86_64',)),
-    # riscv64's triple is the same one for every ABI in the family, and uname
-    # says `riscv64` too, so neither source narrows it. All three survive.
-    ('riscv64-linux-gnu', 'riscv64',
-     ('riscv64-lp64', 'riscv64-lp64f', 'riscv64-lp64d')),
-    # The ABI was reported even though the ISA level was not, so the soft-float
-    # members are already out.
-    ('arm-linux-gnueabihf', 'x86_64', ('armv6-eabihf', 'armv7-eabihf')),
-    ('arm-linux-gnueabi', 'x86_64', ('armv5-eabi', 'armv7-eabi')),
-])
+@pytest.mark.parametrize(
+    'triple, machine, expected',
+    [
+        # A triple that named a target admits that target and nothing else.
+        ('x86_64-linux-gnu', 'x86_64', ('x86_64',)),
+        # riscv64's triple is the same one for every ABI in the family, and uname
+        # says `riscv64` too, so neither source narrows it. All three survive.
+        (
+            'riscv64-linux-gnu',
+            'riscv64',
+            ('riscv64-lp64', 'riscv64-lp64f', 'riscv64-lp64d'),
+        ),
+        # The ABI was reported even though the ISA level was not, so the soft-float
+        # members are already out.
+        ('arm-linux-gnueabihf', 'x86_64', ('armv6-eabihf', 'armv7-eabihf')),
+        ('arm-linux-gnueabi', 'x86_64', ('armv5-eabi', 'armv7-eabi')),
+    ],
+)
 def test_an_answer_lists_the_targets_it_leaves_open(triple, machine, expected):
     target = target_platform.CompilerTarget.from_triple(triple, machine)
 
@@ -511,8 +561,7 @@ def test_an_answer_lists_the_targets_it_leaves_open(triple, machine, expected):
 def test_what_is_left_open_is_exactly_what_would_be_accepted():
     # The list exists to be printed in a message telling someone what to ask
     # for, so it has to be the same rule that would then accept the answer.
-    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
-                                                        'riscv64')
+    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu', 'riscv64')
 
     for arch in target.admitted:
         assert target.settle(arch) == (arch, None)
@@ -527,28 +576,31 @@ def test_a_compiler_that_said_nothing_leaves_everything_open():
 # --- Reading an identity off a compiler's own macros ----------------------
 
 
-@pytest.mark.parametrize('macros, expected', [
-    ({'__riscv_xlen': '64', '__riscv_float_abi_double': '1'},
-     'riscv64-lp64d'),
-    ({'__riscv_xlen': '64', '__riscv_float_abi_single': '1'},
-     'riscv64-lp64f'),
-    ({'__riscv_xlen': '64', '__riscv_float_abi_soft': '1'}, 'riscv64-lp64'),
-    ({'__riscv_xlen': '32', '__riscv_float_abi_double': '1'},
-     'riscv32-ilp32d'),
-    ({'__riscv_xlen': '32', '__riscv_float_abi_soft': '1'}, 'riscv32-ilp32'),
-])
+@pytest.mark.parametrize(
+    'macros, expected',
+    [
+        ({'__riscv_xlen': '64', '__riscv_float_abi_double': '1'}, 'riscv64-lp64d'),
+        ({'__riscv_xlen': '64', '__riscv_float_abi_single': '1'}, 'riscv64-lp64f'),
+        ({'__riscv_xlen': '64', '__riscv_float_abi_soft': '1'}, 'riscv64-lp64'),
+        ({'__riscv_xlen': '32', '__riscv_float_abi_double': '1'}, 'riscv32-ilp32d'),
+        ({'__riscv_xlen': '32', '__riscv_float_abi_soft': '1'}, 'riscv32-ilp32'),
+    ],
+)
 def test_a_compiler_names_the_abi_its_triple_could_not(macros, expected):
     assert target_platform.macro_arch(macros) == expected
 
 
-@pytest.mark.parametrize('macros', [
-    {},
-    # Not RISC-V at all. Its identity came off the triple already.
-    {'__x86_64__': '1'},
-    # The width without the float ABI is still not a target.
-    {'__riscv_xlen': '64'},
-    {'__riscv_xlen': '128', '__riscv_float_abi_double': '1'},
-])
+@pytest.mark.parametrize(
+    'macros',
+    [
+        {},
+        # Not RISC-V at all. Its identity came off the triple already.
+        {'__x86_64__': '1'},
+        # The width without the float ABI is still not a target.
+        {'__riscv_xlen': '64'},
+        {'__riscv_xlen': '128', '__riscv_float_abi_double': '1'},
+    ],
+)
 def test_macros_that_name_no_architecture_name_none(macros):
     assert target_platform.macro_arch(macros) == ''
 
@@ -558,15 +610,13 @@ def test_every_abi_a_compiler_can_report_has_a_canonical_name():
     # into a build slug without ever being listed as a choice.
     for xlen in ('32', '64'):
         for macro in target_platform.RISCV_FLOAT_ABI_MACROS:
-            named = target_platform.macro_arch(
-                {'__riscv_xlen': xlen, macro: '1'})
+            named = target_platform.macro_arch({'__riscv_xlen': xlen, macro: '1'})
 
             assert named in target_platform.CANONICAL_ARCHS
 
 
 def test_a_second_source_completes_an_answer_that_named_no_target():
-    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
-                                                        'riscv64')
+    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu', 'riscv64')
 
     assert target.completed_by('riscv64-lp64d').arch == 'riscv64-lp64d'
 
@@ -581,7 +631,6 @@ def test_a_second_source_contradicting_the_triple_is_dropped():
     # The triple ruled the family out, so an arch from anywhere else is not a
     # refinement of it. Keeping the triple's answer leaves the request to
     # settle it, rather than trusting the newer source.
-    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
-                                                        'riscv64')
+    target = target_platform.CompilerTarget.from_triple('riscv64-linux-gnu', 'riscv64')
 
     assert target.completed_by('armv7-eabihf') is target

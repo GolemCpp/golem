@@ -12,7 +12,6 @@ from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.resource_manifest import ResourceManifest
 from golemcpp.golem.source import Source
 
-
 # Reported kind for a resource that has neither a manifest nor a known
 # subdirectory to infer from (e.g. a legacy flat entry stored at the cache root
 # before the per-kind subdirectory layout existed).
@@ -136,37 +135,43 @@ class CacheManager:
         Resolves the CacheDirectory corresponding to the resource and all the cache settings.
         '''
         identifier = str(resource.locator)
-        exists_in_cache = lambda cache_directory: self.make_cached_resource(cache_directory, resource).exists()
+        exists_in_cache = lambda cache_directory: self.make_cached_resource(
+            cache_directory, resource
+        ).exists()
 
         read_only_caches_with_regex = self._find_matching_caches(
-            identifier,
-            is_read_only=True,
-            with_regex=True)
-        cache_directory = self._select_cache(read_only_caches_with_regex, exists_in_cache)
+            identifier, is_read_only=True, with_regex=True
+        )
+        cache_directory = self._select_cache(
+            read_only_caches_with_regex, exists_in_cache
+        )
         if cache_directory is not None:
             return cache_directory
 
         read_only_caches_without_regex = self._find_matching_caches(
-            identifier,
-            is_read_only=True,
-            with_regex=False)
-        cache_directory = self._select_cache(read_only_caches_without_regex, exists_in_cache)
+            identifier, is_read_only=True, with_regex=False
+        )
+        cache_directory = self._select_cache(
+            read_only_caches_without_regex, exists_in_cache
+        )
         if cache_directory is not None:
             return cache_directory
 
         writable_caches_with_regex = self._find_matching_caches(
-            identifier,
-            is_read_only=False,
-            with_regex=True)
-        cache_directory = self._select_cache(writable_caches_with_regex, exists_in_cache)
+            identifier, is_read_only=False, with_regex=True
+        )
+        cache_directory = self._select_cache(
+            writable_caches_with_regex, exists_in_cache
+        )
         if cache_directory is not None:
             return cache_directory
 
         writable_caches_without_regex = self._find_matching_caches(
-            identifier,
-            is_read_only=False,
-            with_regex=False)
-        cache_directory = self._select_cache(writable_caches_without_regex, exists_in_cache)
+            identifier, is_read_only=False, with_regex=False
+        )
+        cache_directory = self._select_cache(
+            writable_caches_without_regex, exists_in_cache
+        )
         if cache_directory is not None:
             return cache_directory
 
@@ -179,30 +184,38 @@ class CacheManager:
 
     def _get_resource_location(self, cache_directory, resource) -> str:
         '''
-        When minimization is disabled the classic "<cache_root>/<subdir>/<cache_key>" 
+        When minimization is disabled the classic "<cache_root>/<subdir>/<cache_key>"
         layout is used.
-        
-        When minimization is enabled a pre-existing classic location keeps priority 
-        (so caches populated before minimization stay usable); otherwise the resource 
+
+        When minimization is enabled a pre-existing classic location keeps priority
+        (so caches populated before minimization stay usable); otherwise the resource
         is stored flat at "<cache_root>/<hash>".
         '''
-        normal_path = os.path.join(cache_directory.location, resource.subdir, resource.cache_key)
+        normal_path = os.path.join(
+            cache_directory.location, resource.subdir, resource.cache_key
+        )
         if not self.minimization_enabled:
             return normal_path
         if os.path.exists(normal_path):
             return normal_path
         return os.path.join(
             cache_directory.location,
-            self.make_minimized_resource_name(resource, self.minimization_length))
+            self.make_minimized_resource_name(resource, self.minimization_length),
+        )
 
-    def resolve_cached_resource(self, resource, compute_size=False, read_manifest=False):
+    def resolve_cached_resource(
+        self, resource, compute_size=False, read_manifest=False
+    ):
         '''
         The cached form of a resource, in whichever cache directory the
         resolution settles on.
         '''
         cached_resource = self.make_cached_resource(
-            self.resolve_cache_directory(resource), resource,
-            compute_size=compute_size, read_manifest=read_manifest)
+            self.resolve_cache_directory(resource),
+            resource,
+            compute_size=compute_size,
+            read_manifest=read_manifest,
+        )
         self.mark_used(cached_resource)
         return cached_resource
 
@@ -214,8 +227,9 @@ class CacheManager:
         if not cached_resource.is_read_only:
             ResourceManifest.touch(cached_resource.path)
 
-    def make_cached_resource(self, cache_directory, resource,
-                             compute_size=False, read_manifest=False):
+    def make_cached_resource(
+        self, cache_directory, resource, compute_size=False, read_manifest=False
+    ):
         # Makes a cached resource from a Resource
         path = self._get_resource_location(cache_directory, resource)
 
@@ -227,17 +241,19 @@ class CacheManager:
             cache_key=resource.cache_key,
             size_bytes=helpers.get_tree_size(path) if compute_size else 0,
             manifest=ResourceManifest.read_from_root(path) if read_manifest else None,
-            resource=resource)
+            resource=resource,
+        )
 
     def make_minimized_resource_name(self, resource, length):
         '''
         Short flat directory name for a minimized resource.
-        
+
         Hashing "<subdir>/<cache_key>" keeps names unique across resource kinds once
         the per-kind subdirectory is dropped.
         '''
         return safe_part.digest(
-            '{}/{}'.format(resource.subdir, resource.cache_key), length)
+            '{}/{}'.format(resource.subdir, resource.cache_key), length
+        )
 
     def _find_matching_caches(self, identifier, is_read_only, with_regex):
         found_caches = []
@@ -285,7 +301,8 @@ class CacheManager:
     def read_manifest_fetched(cached_resource) -> Fetched:
         '''What a resource's manifest says the fetch left in its root.'''
         return Fetched.from_manifest(
-            ResourceManifest.read_from_root(cached_resource.path))
+            ResourceManifest.read_from_root(cached_resource.path)
+        )
 
     @staticmethod
     def write_manifest(cached_resource, fetched=None) -> None:
@@ -295,7 +312,8 @@ class CacheManager:
             kind=resource.kind,
             cache_key=resource.cache_key,
             source=resource.source.to_dict(),
-            fetched=(fetched or Fetched()).to_dict())
+            fetched=(fetched or Fetched()).to_dict(),
+        )
 
     def record_manifest(self, cached_resource, fetched=None) -> None:
         '''
@@ -305,8 +323,13 @@ class CacheManager:
         branch keeps naming the same reference while landing on a different commit
         every time it moves.
         '''
-        if (self.read_manifest_source(cached_resource) != cached_resource.resource.source
-                or self.read_manifest_fetched(cached_resource) != (fetched or Fetched())):
+        if self.read_manifest_source(
+            cached_resource
+        ) != cached_resource.resource.source or self.read_manifest_fetched(
+            cached_resource
+        ) != (
+            fetched or Fetched()
+        ):
             self.write_manifest(cached_resource, fetched=fetched)
 
     # -- per-resource mutations -------------------------------------------
@@ -370,22 +393,28 @@ class CacheManager:
             raise ValueError(
                 'cannot install {}: this cached resource was not made from a '
                 'resource, so it has no identity to write a manifest from'.format(
-                    cached_resource.path))
+                    cached_resource.path
+                )
+            )
 
     # -- cache inventory --------------------------------------------------
 
     def list_cache_locations(self):
         summaries = []
         for cache_directory in self.locations:
-            summaries.append(CacheLocationSummary(
-                location=cache_directory.location,
-                is_read_only=cache_directory.is_read_only,
-                regex=cache_directory.regex,
-                exists=os.path.isdir(cache_directory.location)))
+            summaries.append(
+                CacheLocationSummary(
+                    location=cache_directory.location,
+                    is_read_only=cache_directory.is_read_only,
+                    regex=cache_directory.regex,
+                    exists=os.path.isdir(cache_directory.location),
+                )
+            )
         return summaries
 
-    def _make_scanned_resource(self, cache_directory, subdir, entry, entry_path,
-                       compute_size):
+    def _make_scanned_resource(
+        self, cache_directory, subdir, entry, entry_path, compute_size
+    ):
         # Makes a cached resource from a manifest living in the given path.
         # No manifest means the resource is unidentified.
         manifest = ResourceManifest.read_from_root(entry_path)
@@ -396,9 +425,12 @@ class CacheManager:
             cache_root=cache_directory.location,
             is_read_only=cache_directory.is_read_only,
             subdir=subdir,
-            cache_key=(manifest.cache_key if manifest and manifest.cache_key else entry),
+            cache_key=(
+                manifest.cache_key if manifest and manifest.cache_key else entry
+            ),
             size_bytes=size,
-            manifest=manifest)
+            manifest=manifest,
+        )
 
     def scan(self, compute_size=True):
         '''
@@ -424,8 +456,11 @@ class CacheManager:
                     if not os.path.isdir(entry_path):
                         continue
 
-                    resources.append(self._make_scanned_resource(
-                        cache_directory, subdir, entry, entry_path, compute_size))
+                    resources.append(
+                        self._make_scanned_resource(
+                            cache_directory, subdir, entry, entry_path, compute_size
+                        )
+                    )
 
             if not os.path.isdir(cache_directory.location):
                 continue
@@ -438,8 +473,11 @@ class CacheManager:
                 if not os.path.isdir(entry_path):
                     continue
 
-                resources.append(self._make_scanned_resource(
-                    cache_directory, '', entry, entry_path, compute_size))
+                resources.append(
+                    self._make_scanned_resource(
+                        cache_directory, '', entry, entry_path, compute_size
+                    )
+                )
 
         return resources
 
@@ -451,12 +489,14 @@ class CacheManager:
         if use_regex:
             compiled = re.compile(pattern)
             return [
-                resource for resource in resources
+                resource
+                for resource in resources
                 if compiled.search(resource.cache_key) or compiled.search(resource.path)
             ]
 
         return [
-            resource for resource in resources
+            resource
+            for resource in resources
             if pattern in resource.cache_key or pattern in resource.path
         ]
 

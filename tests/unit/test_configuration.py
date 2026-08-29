@@ -46,11 +46,13 @@ def test_condition_deserializes_legacy_runtime_into_runtime_link():
 
 
 def test_dependency_deserializes_legacy_runtime_into_runtime_link():
-    restored = Dependency.unserialize_from_json({
-        'name': 'demo',
-        'repository': 'https://example.com/demo.git',
-        'runtime': 'static',
-    })
+    restored = Dependency.unserialize_from_json(
+        {
+            'name': 'demo',
+            'repository': 'https://example.com/demo.git',
+            'runtime': 'static',
+        }
+    )
 
     assert restored.runtime_link == ['static']
     assert restored.runtime_variant == []
@@ -98,7 +100,9 @@ def test_configuration_merge_matches_runtime_link_and_runtime_variant():
         release=lambda: None,
     )
     base = Configuration()
-    override = Configuration(runtime_link='shared', runtime_variant='release', defines=['USE_RELEASE_CRT'])
+    override = Configuration(
+        runtime_link='shared', runtime_variant='release', defines=['USE_RELEASE_CRT']
+    )
 
     merged = base.merge_copy(context=context, configs=[override])
 
@@ -118,7 +122,9 @@ def test_configuration_merge_rejects_non_matching_runtime_variant():
         release=lambda: None,
     )
     base = Configuration()
-    override = Configuration(runtime_link='shared', runtime_variant='release', defines=['USE_RELEASE_CRT'])
+    override = Configuration(
+        runtime_link='shared', runtime_variant='release', defines=['USE_RELEASE_CRT']
+    )
 
     merged = base.merge_copy(context=context, configs=[override])
 
@@ -200,12 +206,16 @@ def test_make_cxx_standard_flag(standard, compiler_name, expected_flag):
 def test_strip_language_standard_flags_removes_existing_standard_flags():
     flags = ['-O2', '-std=c++17', '/std:c++20', '-Wall']
 
-    assert Context.strip_language_standard_flags(flags, language='cxx') == ['-O2', '-Wall']
+    assert Context.strip_language_standard_flags(flags, language='cxx') == [
+        '-O2',
+        '-Wall',
+    ]
 
 
 def test_make_cxx_standard_flag_rejects_unsupported_msvc_standard():
     with pytest.raises(RuntimeError, match=r"Unsupported C\+\+ standard"):
         Context.make_cxx_standard_flag('12', 'msvc')
+
 
 # --- The condition vocabulary ------------------------------------------
 
@@ -224,25 +234,30 @@ def make_matching_context(*, osname, arch):
     )
 
 
-@pytest.mark.parametrize('written, canonical', [
-    ('x64', 'x86_64'),
-    ('amd64', 'x86_64'),
-    ('arm64', 'aarch64'),
-    ('x86', 'i686'),
-])
+@pytest.mark.parametrize(
+    'written, canonical',
+    [
+        ('x64', 'x86_64'),
+        ('amd64', 'x86_64'),
+        ('arm64', 'aarch64'),
+        ('x86', 'i686'),
+    ],
+)
 def test_an_architecture_condition_is_stored_canonically(written, canonical):
     # A condition and a build meet only as strings, so a recipe saying x64 has
     # to become the word the context reports or it silently stops matching.
     assert Condition(arch=[written]).arch == [canonical]
 
 
-@pytest.mark.parametrize('written, canonical', [
-    ('osx', 'macos'),
-    ('darwin', 'macos'),
-    ('Windows', 'windows'),
-])
-def test_an_operating_system_condition_is_stored_canonically(written,
-                                                             canonical):
+@pytest.mark.parametrize(
+    'written, canonical',
+    [
+        ('osx', 'macos'),
+        ('darwin', 'macos'),
+        ('Windows', 'windows'),
+    ],
+)
+def test_an_operating_system_condition_is_stored_canonically(written, canonical):
     assert Condition(osystem=[written]).osystem == [canonical]
 
 
@@ -261,10 +276,12 @@ def test_a_condition_written_before_the_rename_still_matches():
     # Restoring from JSON goes through parse_entry as well, so a cookbook or
     # artifact recorded with the old spelling is normalized on the way in
     # instead of needing a migration.
-    condition = Condition.unserialize_from_json({
-        'arch': ['x64'],
-        'osystem': 'osx',
-    })
+    condition = Condition.unserialize_from_json(
+        {
+            'arch': ['x64'],
+            'osystem': 'osx',
+        }
+    )
 
     assert condition.arch == ['x86_64']
     assert condition.osystem == ['macos']
@@ -273,11 +290,13 @@ def test_a_condition_written_before_the_rename_still_matches():
 def test_a_serialized_configuration_normalizes_on_the_way_back_in():
     # Configuration.read_json delegates to Condition's before its own, so a
     # cookbook or artifact recorded with the old spelling needs no migration.
-    config = Configuration.unserialize_from_json({
-        'arch': ['x64'],
-        'osystem': ['osx'],
-        'defines': ['D'],
-    })
+    config = Configuration.unserialize_from_json(
+        {
+            'arch': ['x64'],
+            'osystem': ['osx'],
+            'defines': ['D'],
+        }
+    )
 
     assert config.arch == ['x86_64']
     assert config.osystem == ['macos']
@@ -287,20 +306,22 @@ def test_an_old_spelling_still_selects_a_configuration():
     # The whole point, end to end: an unmigrated recipe against a context that
     # now reports the canonical names.
     context = make_matching_context(osname='macos', arch='x86_64')
-    override = Configuration(osystem=['osx'], arch=['x64'],
-                             defines=['LEGACY_SPELLING'])
+    override = Configuration(osystem=['osx'], arch=['x64'], defines=['LEGACY_SPELLING'])
 
     merged = Configuration().merge_copy(context=context, configs=[override])
 
     assert 'LEGACY_SPELLING' in merged.defines
 
 
-@pytest.mark.parametrize('key, arch, osystem', [
-    ('?x64', ['x86_64'], []),
-    ('?aarch64', ['aarch64'], []),
-    ('?arm64+linux', ['aarch64'], ['linux']),
-    ('?osx', [], ['macos']),
-])
+@pytest.mark.parametrize(
+    'key, arch, osystem',
+    [
+        ('?x64', ['x86_64'], []),
+        ('?aarch64', ['aarch64'], []),
+        ('?arm64+linux', ['aarch64'], ['linux']),
+        ('?osx', [], ['macos']),
+    ],
+)
 def test_the_shorthand_form_reads_the_whole_vocabulary(key, arch, osystem):
     # It used to know four words: x86, x64, windows, linux and osx. Anything
     # else fell through and the condition quietly did nothing.
@@ -322,8 +343,9 @@ def test_an_unknown_condition_is_reported_rather_than_dropped(monkeypatch):
     # Silence here means a condition nobody can satisfy, and if it is the only
     # entry the whole block goes with it.
     warnings = []
-    monkeypatch.setattr(configuration.Logs, 'warn',
-                        lambda message, *args: warnings.append(message))
+    monkeypatch.setattr(
+        configuration.Logs, 'warn', lambda message, *args: warnings.append(message)
+    )
 
     assert Configuration().parse_special_entry('?sparc99', {}) == []
     assert len(warnings) == 1

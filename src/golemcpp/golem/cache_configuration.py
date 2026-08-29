@@ -2,7 +2,6 @@ import os
 
 from golemcpp.golem import helpers
 
-
 # Canonical subdirectories carved out of a cache directory, one per resource
 # kind, so every consumer agrees on the on-disk layout.
 DEPENDENCIES_SUBDIR = 'dependencies'
@@ -31,6 +30,7 @@ def source_path(root):
     '''
     return os.path.join(root, SOURCE_DIRNAME)
 
+
 # Every setting describing the cache. A dependency sub-build inherits all of
 # them, so it reaches the same caches with the same layout as its parent.
 CACHE_SETTINGS = (
@@ -45,18 +45,27 @@ CACHE_SETTINGS = (
 
 class CacheConfiguration:
     '''
-    Cache settings shared by every class that touches the cache (the CacheManager, the per-kind 
+    Cache settings shared by every class that touches the cache (the CacheManager, the per-kind
     resource managers) so those settings live in one place instead of being passed loose.
     '''
 
-    def __init__(self, locations, resolution_policy,
-                 minimization_enabled, minimization_length, fetch_mode, fetch_jobs):
-        for name, value in (('locations', locations),
-                            ('resolution_policy', resolution_policy),
-                            ('minimization_enabled', minimization_enabled),
-                            ('minimization_length', minimization_length),
-                            ('fetch_mode', fetch_mode),
-                            ('fetch_jobs', fetch_jobs)):
+    def __init__(
+        self,
+        locations,
+        resolution_policy,
+        minimization_enabled,
+        minimization_length,
+        fetch_mode,
+        fetch_jobs,
+    ):
+        for name, value in (
+            ('locations', locations),
+            ('resolution_policy', resolution_policy),
+            ('minimization_enabled', minimization_enabled),
+            ('minimization_length', minimization_length),
+            ('fetch_mode', fetch_mode),
+            ('fetch_jobs', fetch_jobs),
+        ):
             if value is None:
                 raise ValueError('CacheConfiguration requires {}'.format(name))
 
@@ -111,4 +120,5 @@ def get_cache_configuration(settings):
         minimization_enabled=settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED'),
         minimization_length=settings.get('GOLEM_CACHE_MINIMIZATION_LENGTH'),
         fetch_mode=settings.get('GOLEM_GIT_FETCH_MODE'),
-        fetch_jobs=settings.get('GOLEM_GIT_JOBS'))
+        fetch_jobs=settings.get('GOLEM_GIT_JOBS'),
+    )

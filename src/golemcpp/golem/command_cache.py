@@ -17,7 +17,6 @@ from golemcpp.golem import resource_manager
 from golemcpp.golem import source
 from golemcpp.golem.source import Source
 
-
 # The widest a cache key prints in the listing before its middle is cut out. A
 # key naming a dependency ("<name>@<host>+<revision>") fits, where one made from
 # a deep local path would push every column after it off screen.
@@ -90,7 +89,8 @@ def parse_duration(text: str) -> timedelta:
     if match is None:
         raise ValueError(
             "'{}' is not a duration: write a number and one of the units "
-            "{} (for example 30d)".format(text, ', '.join(DURATION_UNITS)))
+            "{} (for example 30d)".format(text, ', '.join(DURATION_UNITS))
+        )
 
     return timedelta(seconds=int(match.group(1)) * DURATION_UNITS[match.group(2)])
 
@@ -137,7 +137,7 @@ def shorten(text: str, width: int) -> str:
         return text
     kept = width - len(ELLIPSIS)
     head = kept - kept // 2
-    return text[:head] + ELLIPSIS + text[len(text) - kept // 2:]
+    return text[:head] + ELLIPSIS + text[len(text) - kept // 2 :]
 
 
 def resource_version(resource) -> str:
@@ -184,13 +184,15 @@ def resource_flags(resource) -> str:
 
 def resource_cells(resource) -> tuple:
     '''Make the columns of one listing line, in the order they are printed.'''
-    return (resource.kind,
-            shorten(str(resource.cache_key), KEY_WIDTH),
-            resource_version(resource),
-            resource_origin(resource),
-            helpers.format_size(resource.size_bytes),
-            humanize_age(resource.last_used_at),
-            resource_flags(resource))
+    return (
+        resource.kind,
+        shorten(str(resource.cache_key), KEY_WIDTH),
+        resource_version(resource),
+        resource_origin(resource),
+        helpers.format_size(resource.size_bytes),
+        humanize_age(resource.last_used_at),
+        resource_flags(resource),
+    )
 
 
 def column_widths(rows) -> list:
@@ -211,13 +213,27 @@ def resource_details(resource) -> list:
     left_behind = (fetched.head, fetched.mode.value if fetched.mode else '')
 
     return [
-        ('source', '{} {}'.format(origin.type, origin.locator) if origin.locator else NOTHING),
-        ('version', ' '.join(part for part in (resolved.reference, resolved.revision)
-                             if part) or NOTHING),
+        (
+            'source',
+            '{} {}'.format(origin.type, origin.locator) if origin.locator else NOTHING,
+        ),
+        (
+            'version',
+            ' '.join(part for part in (resolved.reference, resolved.revision) if part)
+            or NOTHING,
+        ),
         ('fetched', ', '.join(part for part in left_behind if part) or NOTHING),
         ('created', humanize_age(resource.created_at)),
-        ('manifest', 'version {}, golem {}'.format(
-            manifest.version, manifest.golem_version or '?') if manifest else NOTHING),
+        (
+            'manifest',
+            (
+                'version {}, golem {}'.format(
+                    manifest.version, manifest.golem_version or '?'
+                )
+                if manifest
+                else NOTHING
+            ),
+        ),
         ('path', resource.path),
     ]
 
@@ -226,14 +242,18 @@ def resource_details(resource) -> list:
 class CacheCommandHandler:
     project_dir: str
     options: Namespace
-    _manager: cache_manager.CacheManager | None = field(default=None, init=False, repr=False)
+    _manager: cache_manager.CacheManager | None = field(
+        default=None, init=False, repr=False
+    )
 
     @staticmethod
     def print_help() -> None:
         print('Usage: golem cache list [<selection>] [--long] [--json]')
         print('       golem cache caches [--json]')
         print('       golem cache size [<selection>]')
-        print('       golem cache remove <path-or-regex> [--regex] [<selection>] [--dry-run] [--yes]')
+        print(
+            '       golem cache remove <path-or-regex> [--regex] [<selection>] [--dry-run] [--yes]'
+        )
         print('       golem cache purge [<selection>] [--dry-run] [--yes]')
         print('       golem cache unidentified [--remove] [--dry-run] [--yes]')
         print('Manage resources stored in the caches the project is configured to use.')
@@ -253,10 +273,14 @@ class CacheCommandHandler:
         print('  --kind=<kind>          Filter by resource kind (dependency, tool,')
         print('                         cookbook, overlay)')
         print('  --cache=<path>         Restrict to a single cache location')
-        print('  --older-than=<age>     Keep only the resources last used longer ago than')
+        print(
+            '  --older-than=<age>     Keep only the resources last used longer ago than'
+        )
         print('                         <age>, written as a number and a unit among')
         print('                         s, m, h, d, w (for example 90d)')
-        print('  --regex                Treat the remove pattern as a regular expression')
+        print(
+            '  --regex                Treat the remove pattern as a regular expression'
+        )
         print('  --long, -l             Show the source, version, timestamps and path')
         print('                         of every listed resource')
         print('  --json                 Emit machine-readable JSON')
@@ -292,7 +316,8 @@ class CacheCommandHandler:
         if not self.options.cache:
             return None
         return os.path.abspath(
-            helpers.make_absolute_path(self.options.cache, os.getcwd()))
+            helpers.make_absolute_path(self.options.cache, os.getcwd())
+        )
 
     def _scanned_resources(self, compute_size=True):
         manager = self.make_manager()
@@ -301,18 +326,21 @@ class CacheCommandHandler:
         cache_filter = self._cache_filter()
         if cache_filter is not None:
             resources = [
-                resource for resource in resources
+                resource
+                for resource in resources
                 if os.path.abspath(resource.cache_root) == cache_filter
             ]
 
         if self.options.kind:
             resources = cache_manager.CacheManager.filter_kind(
-                resources, self.options.kind)
+                resources, self.options.kind
+            )
 
         cutoff = self._older_than_cutoff()
         if cutoff is not None:
-            resources = [resource for resource in resources
-                         if is_older_than(resource, cutoff)]
+            resources = [
+                resource for resource in resources if is_older_than(resource, cutoff)
+            ]
 
         # Most recently used first: a cache is read to see what is live in it,
         # and cleaned of what nothing has touched in months. An unidentified
@@ -356,12 +384,14 @@ class CacheCommandHandler:
     def _totals(resources) -> str:
         return '{} resource(s), {}'.format(
             len(resources),
-            helpers.format_size(sum(resource.size_bytes for resource in resources)))
+            helpers.format_size(sum(resource.size_bytes for resource in resources)),
+        )
 
     def _cache_header(self, location, group) -> str:
         read_only = any(resource.is_read_only for resource in group)
         return '{}{}: {}'.format(
-            location, ' (read-only)' if read_only else '', self._totals(group))
+            location, ' (read-only)' if read_only else '', self._totals(group)
+        )
 
     def _group_by_cache(self, resources):
         '''
@@ -404,8 +434,10 @@ class CacheCommandHandler:
 
     def _print_resource(self, resource, widths) -> None:
         cells = resource_cells(resource)
-        aligned = [cell.rjust(width) if column in RIGHT_ALIGNED_COLUMNS else cell.ljust(width)
-                   for column, (cell, width) in enumerate(zip(cells, widths))]
+        aligned = [
+            cell.rjust(width) if column in RIGHT_ALIGNED_COLUMNS else cell.ljust(width)
+            for column, (cell, width) in enumerate(zip(cells, widths))
+        ]
         print('  {}'.format('  '.join(aligned).rstrip()))
 
         if not self.options.long:
@@ -423,12 +455,20 @@ class CacheCommandHandler:
         summaries = self.make_manager().list_cache_locations()
 
         if self.options.as_json:
-            print(json.dumps([{
-                'location': summary.location,
-                'read_only': summary.is_read_only,
-                'regex': summary.regex,
-                'exists': summary.exists,
-            } for summary in summaries], indent=2))
+            print(
+                json.dumps(
+                    [
+                        {
+                            'location': summary.location,
+                            'read_only': summary.is_read_only,
+                            'regex': summary.regex,
+                            'exists': summary.exists,
+                        }
+                        for summary in summaries
+                    ],
+                    indent=2,
+                )
+            )
             return 0
 
         print('Configured caches:')
@@ -450,16 +490,25 @@ class CacheCommandHandler:
         per_kind = {}
         total = 0
         for resource in resources:
-            per_cache[resource.cache_root] = per_cache.get(resource.cache_root, 0) + resource.size_bytes
-            per_kind[resource.kind] = per_kind.get(resource.kind, 0) + resource.size_bytes
+            per_cache[resource.cache_root] = (
+                per_cache.get(resource.cache_root, 0) + resource.size_bytes
+            )
+            per_kind[resource.kind] = (
+                per_kind.get(resource.kind, 0) + resource.size_bytes
+            )
             total += resource.size_bytes
 
         if self.options.as_json:
-            print(json.dumps({
-                'total_bytes': total,
-                'per_cache': per_cache,
-                'per_kind': per_kind,
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        'total_bytes': total,
+                        'per_cache': per_cache,
+                        'per_kind': per_kind,
+                    },
+                    indent=2,
+                )
+            )
             return 0
 
         print('Cache storage usage:')
@@ -467,7 +516,11 @@ class CacheCommandHandler:
         if per_cache:
             print('  By cache:')
             for location in sorted(per_cache):
-                print('    {}: {}'.format(location, helpers.format_size(per_cache[location])))
+                print(
+                    '    {}: {}'.format(
+                        location, helpers.format_size(per_cache[location])
+                    )
+                )
         if per_kind:
             print('  By kind:')
             for kind in sorted(per_kind):
@@ -482,13 +535,20 @@ class CacheCommandHandler:
             return 0
 
         total = sum(resource.size_bytes for resource in resources)
-        print('Selected {} resource(s), {}:'.format(len(resources), helpers.format_size(total)))
+        print(
+            'Selected {} resource(s), {}:'.format(
+                len(resources), helpers.format_size(total)
+            )
+        )
         for resource in resources:
-            print('  [{}] {}  ({})  {}'.format(
-                resource.kind,
-                resource_label(resource),
-                helpers.format_size(resource.size_bytes),
-                resource.path))
+            print(
+                '  [{}] {}  ({})  {}'.format(
+                    resource.kind,
+                    resource_label(resource),
+                    helpers.format_size(resource.size_bytes),
+                    resource.path,
+                )
+            )
 
         deletable = [resource for resource in resources if not resource.is_read_only]
         read_only = [resource for resource in resources if resource.is_read_only]
@@ -509,7 +569,11 @@ class CacheCommandHandler:
 
         removed, _ = cache_manager.CacheManager.remove_resources(deletable)
         freed = sum(resource.size_bytes for resource in removed)
-        print('Removed {} resource(s), freed {}.'.format(len(removed), helpers.format_size(freed)))
+        print(
+            'Removed {} resource(s), freed {}.'.format(
+                len(removed), helpers.format_size(freed)
+            )
+        )
         return 0
 
     # -- remove -----------------------------------------------------------
@@ -519,17 +583,19 @@ class CacheCommandHandler:
             print('ERROR: remove requires a path or regex pattern')
             if self.options.older_than:
                 # Age alone selects nothing here: that is what purging does.
-                print('Selecting by age alone is "golem cache purge --older-than={}".'.format(
-                    self.options.older_than))
+                print(
+                    'Selecting by age alone is "golem cache purge --older-than={}".'.format(
+                        self.options.older_than
+                    )
+                )
             self.print_help()
             return 1
 
         resources = self._scanned_resources()
         selected = cache_manager.CacheManager.select(
-            resources, self.options.pattern, use_regex=self.options.regex)
-        return self._delete_with_confirmation(
-            selected,
-            "Delete these resource(s)?")
+            resources, self.options.pattern, use_regex=self.options.regex
+        )
+        return self._delete_with_confirmation(selected, "Delete these resource(s)?")
 
     # -- purge ------------------------------------------------------------
 
@@ -540,7 +606,9 @@ class CacheCommandHandler:
         return self._delete_with_confirmation(
             resources,
             'Purge {} resource(s) from the caches?'.format(
-                'these' if self._is_narrowed() else 'ALL'))
+                'these' if self._is_narrowed() else 'ALL'
+            ),
+        )
 
     # -- unidentified -----------------------------------------------------
 
@@ -550,22 +618,29 @@ class CacheCommandHandler:
 
         if not self.options.remove:
             if self.options.as_json:
-                print(json.dumps([self._resource_to_dict(r) for r in unidentified], indent=2))
+                print(
+                    json.dumps(
+                        [self._resource_to_dict(r) for r in unidentified], indent=2
+                    )
+                )
                 return 0
             if not unidentified:
                 print('No unidentified resources found.')
                 return 0
             print('Unidentified resources (no valid manifest):')
             for resource in unidentified:
-                print('  {}  ({})  cache: {}'.format(
-                    resource.path,
-                    helpers.format_size(resource.size_bytes),
-                    resource.cache_root))
+                print(
+                    '  {}  ({})  cache: {}'.format(
+                        resource.path,
+                        helpers.format_size(resource.size_bytes),
+                        resource.cache_root,
+                    )
+                )
             return 0
 
         return self._delete_with_confirmation(
-            unidentified,
-            "Delete these unidentified resource(s)?")
+            unidentified, "Delete these unidentified resource(s)?"
+        )
 
     # -- dispatch ---------------------------------------------------------
 

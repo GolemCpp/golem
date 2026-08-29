@@ -2,7 +2,10 @@ import os
 
 from golemcpp.golem import helpers
 
-def parse_global_and_command_arguments(argv: list[str]) -> tuple[list[str], str | None, list[str]]:
+
+def parse_global_and_command_arguments(
+    argv: list[str],
+) -> tuple[list[str], str | None, list[str]]:
     global_args = []
     command = None
     command_args = []
@@ -11,14 +14,17 @@ def parse_global_and_command_arguments(argv: list[str]) -> tuple[list[str], str 
         if not arg.startswith('-') and command is None:
             global_args = argv[1:index]
             command = arg
-            command_args = argv[index + 1:]
+            command_args = argv[index + 1 :]
 
     if command is None:
         global_args = argv[1:]
 
     return global_args, command, command_args
 
-def parse_cli_arguments(argv: list[str], cwd: str) -> tuple[list[str], str | None, list[str]]:
+
+def parse_cli_arguments(
+    argv: list[str], cwd: str
+) -> tuple[list[str], str | None, list[str]]:
     # Default directories
     project_dir = cwd
     build_dir = os.path.join(cwd, 'build')
@@ -27,6 +33,7 @@ def parse_cli_arguments(argv: list[str], cwd: str) -> tuple[list[str], str | Non
     argv = normalize_argv(argv, cwd, project_dir=project_dir, build_dir=build_dir)
 
     return parse_global_and_command_arguments(argv)
+
 
 def parse_directories_from_arguments(argv: list[str]) -> tuple[str, str]:
     project_dir = None
@@ -39,6 +46,7 @@ def parse_directories_from_arguments(argv: list[str]) -> tuple[str, str]:
             build_dir = arg.split('=', 1)[1]
 
     return project_dir, build_dir
+
 
 def normalize_args_by_removing_deprecated_dir_option(argv: list[str]) -> list[str]:
     '''
@@ -66,7 +74,10 @@ def normalize_args_by_removing_deprecated_dir_option(argv: list[str]) -> list[st
 
     return normalized_argv
 
-def normalize_argv_by_adding_explicit_dirs(argv: list[str], project_dir: str | None = None, build_dir: str | None = None) -> list[str]:
+
+def normalize_argv_by_adding_explicit_dirs(
+    argv: list[str], project_dir: str | None = None, build_dir: str | None = None
+) -> list[str]:
     '''
     Normalizes the command-line arguments by appending --project-dir and --build-dir with provided values if they are not already specified in the arguments.
     They need to be passed explicitely to Waf, so that Golem keeps a consistent behavior between Golem-defined commands and direct Waf invocation.
@@ -82,6 +93,7 @@ def normalize_argv_by_adding_explicit_dirs(argv: list[str], project_dir: str | N
         normalized_argv.append('--build-dir=' + build_dir)
 
     return normalized_argv
+
 
 def normalize_argv_by_resolving_dirs(argv: list[str], cwd: str) -> list[str]:
     '''
@@ -112,6 +124,7 @@ def normalize_argv_by_resolving_dirs(argv: list[str], cwd: str) -> list[str]:
 
     return normalized_argv
 
+
 def normalize_argv_by_moving_explicit_dirs_after_command(argv: list[str]) -> list[str]:
     '''
     Normalizes the command-line arguments by moving --project-dir and --build-dir after the command, so that they are not parsed as global arguments but as command-specific arguments.
@@ -121,11 +134,11 @@ def normalize_argv_by_moving_explicit_dirs_after_command(argv: list[str]) -> lis
     if command is None:
         return argv
 
-    dirs_to_move = [ '--project-dir=', '--build-dir=' ]
+    dirs_to_move = ['--project-dir=', '--build-dir=']
 
     if not any(arg.startswith(tuple(dirs_to_move)) for arg in global_args):
         return argv
-    
+
     new_argv = [argv[0]]
     new_argv += [arg for arg in global_args if not arg.startswith(tuple(dirs_to_move))]
     new_argv.append(command)
@@ -133,9 +146,17 @@ def normalize_argv_by_moving_explicit_dirs_after_command(argv: list[str]) -> lis
     new_argv += command_args
     return new_argv
 
-def normalize_argv(argv: list[str], cwd: str, project_dir: str | None = None, build_dir: str | None = None) -> list[str]:
+
+def normalize_argv(
+    argv: list[str],
+    cwd: str,
+    project_dir: str | None = None,
+    build_dir: str | None = None,
+) -> list[str]:
     argv = normalize_args_by_removing_deprecated_dir_option(argv)
-    argv = normalize_argv_by_adding_explicit_dirs(argv, project_dir=project_dir, build_dir=build_dir)
+    argv = normalize_argv_by_adding_explicit_dirs(
+        argv, project_dir=project_dir, build_dir=build_dir
+    )
     argv = normalize_argv_by_resolving_dirs(argv, cwd)
     argv = normalize_argv_by_moving_explicit_dirs_after_command(argv)
     return argv

@@ -18,6 +18,7 @@ from golemcpp.golem.declared_recipe import DeclaredRecipe
 from golemcpp.golem.recipe import Recipe
 from golemcpp.golem.source_id import SourceId
 
+
 class RecipeResolver:
     '''The recipes a stack of cookbooks can serve, in the order they answer.'''
 

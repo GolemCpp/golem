@@ -25,8 +25,7 @@ class Module:
 
     def load_recipe_source(self, path):
         importlib.machinery.SOURCE_SUFFIXES.append('')
-        spec = importlib.util.spec_from_file_location('__golem_project_glm__',
-                                                      path)
+        spec = importlib.util.spec_from_file_location('__golem_project_glm__', path)
         self.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.module)
         importlib.machinery.SOURCE_SUFFIXES.pop()

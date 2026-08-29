@@ -14,16 +14,21 @@ from golemcpp.golem.git_fetcher import GitFetcher
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.settings import get_settings
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 # The commit a stubbed fetch reports having landed on.
 STUB_HEAD = 'cafebabecafebabecafebabecafebabecafebabe'
 
 
-def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_revision=True,
-                    has_submodules=True, mode=FetchMode.BLOBLESS,
-                    branches=('main',), tags=()):
+def stub_git_probes(
+    monkeypatch,
+    head=STUB_HEAD,
+    holds_revision=True,
+    has_submodules=True,
+    mode=FetchMode.BLOBLESS,
+    branches=('main',),
+    tags=(),
+):
     '''
     Stub what a fetch reads about a repository, so a test drives the mechanism
     without one being there.
@@ -71,9 +76,9 @@ def stub_git_probes(monkeypatch, head=STUB_HEAD, holds_revision=True,
         # commit, which a repository asked about its own revision holds.
         wanted = params[3].removesuffix('^{commit}')
         if wanted.startswith('refs/tags/'):
-            return wanted[len('refs/tags/'):] in tags
+            return wanted[len('refs/tags/') :] in tags
         if wanted.startswith('refs/remotes/origin/'):
-            return wanted[len('refs/remotes/origin/'):] in branches
+            return wanted[len('refs/remotes/origin/') :] in branches
         return True
 
     monkeypatch.setattr(helpers, 'try_git', try_git)
@@ -95,23 +100,31 @@ def default_setting(name):
     return get_settings().get_default(name)
 
 
-def make_source(locator='https://github.com/golemcpp/example.git',
-                reference='v1.0.0', revision=STUB_HEAD, source_type='git'):
+def make_source(
+    locator='https://github.com/golemcpp/example.git',
+    reference='v1.0.0',
+    revision=STUB_HEAD,
+    source_type='git',
+):
     '''
     Make the source a seeded manifest records. A manifest naming no locator
     identifies nothing, therefore the default is one a `Locator` accepts.
     '''
-    return {'type': source_type,
-            'locator': locator,
-            'resolved': {'reference': reference, 'revision': revision}}
+    return {
+        'type': source_type,
+        'locator': locator,
+        'resolved': {'reference': reference, 'revision': revision},
+    }
 
 
-def make_cache_configuration(*locations,
-                             resolution_policy=default_setting('GOLEM_CACHE_RESOLUTION_POLICY'),
-                             minimization_enabled=default_setting('GOLEM_CACHE_MINIMIZATION_ENABLED'),
-                             minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'),
-                             fetch_mode=default_setting('GOLEM_GIT_FETCH_MODE'),
-                             fetch_jobs=1):
+def make_cache_configuration(
+    *locations,
+    resolution_policy=default_setting('GOLEM_CACHE_RESOLUTION_POLICY'),
+    minimization_enabled=default_setting('GOLEM_CACHE_MINIMIZATION_ENABLED'),
+    minimization_length=default_setting('GOLEM_CACHE_MINIMIZATION_LENGTH'),
+    fetch_mode=default_setting('GOLEM_GIT_FETCH_MODE'),
+    fetch_jobs=1,
+):
     '''
     Make a CacheConfiguration for a test that cares about one of its settings.
     The constructor requires them all, therefore the defaults are filled here.
@@ -125,7 +138,8 @@ def make_cache_configuration(*locations,
         minimization_enabled=minimization_enabled,
         minimization_length=minimization_length,
         fetch_mode=fetch_mode,
-        fetch_jobs=fetch_jobs)
+        fetch_jobs=fetch_jobs,
+    )
 
 
 def resolved_dependency(dependency, project_dir='', **version):
@@ -136,7 +150,6 @@ def resolved_dependency(dependency, project_dir='', **version):
     remote to ask for a version, so it says one here instead.
     '''
     dependency.update_source(project_dir)
-    dependency.resolved = dependency.resolved.settle_version(
-        ResolvedVersion(**version))
+    dependency.resolved = dependency.resolved.settle_version(ResolvedVersion(**version))
 
     return dependency

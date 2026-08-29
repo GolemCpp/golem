@@ -7,12 +7,26 @@ from golemcpp.golem import resource_manifest
 
 
 def test_resource_kind_subdir_mapping():
-    assert resource_manifest.ResourceKind.DEPENDENCY.subdir == cache_configuration.DEPENDENCIES_SUBDIR
-    assert resource_manifest.ResourceKind.COOKBOOK.subdir == cache_configuration.COOKBOOKS_SUBDIR
-    assert resource_manifest.ResourceKind.OVERLAY.subdir == cache_configuration.OVERLAYS_SUBDIR
-    assert resource_manifest.ResourceKind.TOOL.subdir == cache_configuration.TOOLS_SUBDIR
+    assert (
+        resource_manifest.ResourceKind.DEPENDENCY.subdir
+        == cache_configuration.DEPENDENCIES_SUBDIR
+    )
+    assert (
+        resource_manifest.ResourceKind.COOKBOOK.subdir
+        == cache_configuration.COOKBOOKS_SUBDIR
+    )
+    assert (
+        resource_manifest.ResourceKind.OVERLAY.subdir
+        == cache_configuration.OVERLAYS_SUBDIR
+    )
+    assert (
+        resource_manifest.ResourceKind.TOOL.subdir == cache_configuration.TOOLS_SUBDIR
+    )
 
-    assert resource_manifest.ResourceKind.from_subdir('dependencies') == resource_manifest.ResourceKind.DEPENDENCY
+    assert (
+        resource_manifest.ResourceKind.from_subdir('dependencies')
+        == resource_manifest.ResourceKind.DEPENDENCY
+    )
     assert resource_manifest.ResourceKind.from_subdir('unknown') is None
 
 
@@ -74,8 +88,12 @@ def test_a_manifest_written_without_a_fetch_reads_back_empty(tmp_path):
         resource_root=str(root),
         kind=resource_manifest.ResourceKind.OVERLAY,
         cache_key=root.name,
-        source=make_source(locator='file:///somewhere', reference='',
-                           revision='', source_type='directory'),
+        source=make_source(
+            locator='file:///somewhere',
+            reference='',
+            revision='',
+            source_type='directory',
+        ),
     )
 
     assert resource_manifest.ResourceManifest.read_from_root(str(root)).fetched == {}
@@ -100,12 +118,21 @@ def test_read_manifest_of_an_unknown_kind_returns_none(tmp_path):
     # though everything else about it is well-formed.
     manifest_file = tmp_path / resource_manifest.MANIFEST_FILENAME
     manifest_file.write_text(
-        json.dumps({'kind': 'recipes-repository', 'cache_key': '@recipes@@h#main',
-                    'source': make_source(reference='main')}),
-        encoding='utf-8')
+        json.dumps(
+            {
+                'kind': 'recipes-repository',
+                'cache_key': '@recipes@@h#main',
+                'source': make_source(reference='main'),
+            }
+        ),
+        encoding='utf-8',
+    )
     assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
 
-    assert resource_manifest.ResourceKind.from_name('dependency') == resource_manifest.ResourceKind.DEPENDENCY
+    assert (
+        resource_manifest.ResourceKind.from_name('dependency')
+        == resource_manifest.ResourceKind.DEPENDENCY
+    )
     assert resource_manifest.ResourceKind.from_name('overrides-repository') is None
 
 
@@ -114,19 +141,32 @@ def test_read_manifest_naming_no_source_returns_none(tmp_path):
     # An earlier Golem version spelled a source `location`/`reference`, which is
     # what such a manifest holds today.
     manifest_file = tmp_path / resource_manifest.MANIFEST_FILENAME
-    for source in ({}, [], {'type': 'git'},
-                   {'type': 'git', 'location': 'https://github.com/nlohmann/json.git',
-                    'reference': 'v3.12.0'},
-                   # A locator has to be settled: a bare path never identified one.
-                   {'type': 'directory', 'locator': '../somewhere'}):
+    for source in (
+        {},
+        [],
+        {'type': 'git'},
+        {
+            'type': 'git',
+            'location': 'https://github.com/nlohmann/json.git',
+            'reference': 'v3.12.0',
+        },
+        # A locator has to be settled: a bare path never identified one.
+        {'type': 'directory', 'locator': '../somewhere'},
+    ):
         manifest_file.write_text(
-            json.dumps({'kind': 'dependency', 'cache_key': '@json@@h#abc', 'source': source}),
-            encoding='utf-8')
+            json.dumps(
+                {'kind': 'dependency', 'cache_key': '@json@@h#abc', 'source': source}
+            ),
+            encoding='utf-8',
+        )
         assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is None
 
     manifest_file.write_text(
-        json.dumps({'kind': 'dependency', 'cache_key': '@json@@h#abc', 'source': make_source()}),
-        encoding='utf-8')
+        json.dumps(
+            {'kind': 'dependency', 'cache_key': '@json@@h#abc', 'source': make_source()}
+        ),
+        encoding='utf-8',
+    )
     assert resource_manifest.ResourceManifest.read_from_root(str(tmp_path)) is not None
 
 

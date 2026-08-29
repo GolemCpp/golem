@@ -27,7 +27,6 @@ from golemcpp.golem import helpers
 from golemcpp.golem import locator
 from golemcpp.golem import safe_part
 
-
 # Where a resolve keeps them, under the build directory.
 DIRECTORY_NAME = 'resolve'
 
@@ -93,8 +92,7 @@ def path_for(url) -> str:
         return ''
 
     if len(name) > safe_part.READABLE_LENGTH:
-        name = safe_part.with_digest(
-            name[:safe_part.READABLE_LENGTH], of=name)
+        name = safe_part.with_digest(name[: safe_part.READABLE_LENGTH], of=name)
 
     return os.path.join(directory, name)
 

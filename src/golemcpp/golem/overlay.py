@@ -36,7 +36,6 @@ class Overlay:
 
         self.resolved = resolved
 
-        version_resolver.report_resolution(
-            self.name, self.source.version, resolved)
+        version_resolver.report_resolution(self.name, self.source.version, resolved)
 
         return self.resolved

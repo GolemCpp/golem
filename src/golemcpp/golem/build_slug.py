@@ -76,26 +76,34 @@ class BuildSlug:
                 if value not in vocabulary:
                     raise ValueError(
                         "'{}' is not a {}: it is one of {}.".format(
-                            value, field.name.replace('_', ' '),
-                            ', '.join(sorted(vocabulary))))
+                            value,
+                            field.name.replace('_', ' '),
+                            ', '.join(sorted(vocabulary)),
+                        )
+                    )
                 continue
 
             if not value:
                 raise ValueError(
                     'A build slug needs {} to name what it was built for; '
                     'leaving it out would name two different builds the '
-                    'same.'.format(field.name))
+                    'same.'.format(field.name)
+                )
             if SEPARATOR in value:
                 raise ValueError(
                     "'{}' cannot be a {}: '{}' separates a slug's fields, so "
                     'the name could not be read back.'.format(
-                        value, field.name, SEPARATOR))
+                        value, field.name, SEPARATOR
+                    )
+                )
 
     def __str__(self):
         return SEPARATOR.join(
             FIELD_VOCABULARIES.get(field.name, {}).get(
-                getattr(self, field.name), getattr(self, field.name))
-            for field in fields(self))
+                getattr(self, field.name), getattr(self, field.name)
+            )
+            for field in fields(self)
+        )
 
     @staticmethod
     def parse(name):
@@ -110,7 +118,8 @@ class BuildSlug:
         if len(values) != len(names):
             raise ValueError(
                 "'{}' is not a build slug: {} fields where there are "
-                '{}.'.format(name, len(values), len(names)))
+                '{}.'.format(name, len(values), len(names))
+            )
 
         settled = {}
         for field_name, value in zip(names, values):
@@ -121,7 +130,9 @@ class BuildSlug:
             if value not in spellings:
                 raise ValueError(
                     "'{}' is not a build slug: '{}' spells no {}.".format(
-                        name, value, field_name.replace('_', ' ')))
+                        name, value, field_name.replace('_', ' ')
+                    )
+                )
             settled[field_name] = spellings[value]
 
         return BuildSlug(**settled)

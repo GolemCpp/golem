@@ -39,22 +39,31 @@ def git_calls(monkeypatch):
     '''Every git invocation the mechanism makes, in order.'''
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git',
-        lambda args, cwd=None, quiet=False: calls.append(args))
+        helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args)
+    )
     stub_git_probes(monkeypatch)
     return calls
 
 
 def make_resource_manager(tmp_path):
     '''The base manager over a real cache, since it reads the configured mode.'''
-    return ResourceManager(get_cache_manager(make_cache_configuration(
-        cache_directory.CacheDirectory(location=str(tmp_path / 'cache')))))
+    return ResourceManager(
+        get_cache_manager(
+            make_cache_configuration(
+                cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+            )
+        )
+    )
 
 
 def make_manager(tmp_path, **configuration):
-    return get_cookbook_manager(make_cache_configuration(
-        cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
-        minimization_enabled=False, **configuration))
+    return get_cookbook_manager(
+        make_cache_configuration(
+            cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
+            minimization_enabled=False,
+            **configuration,
+        )
+    )
 
 
 def test_a_manager_holds_its_cache_manager_and_exposes_its_locations(tmp_path):
@@ -76,8 +85,13 @@ def test_every_kind_keeps_its_content_under_source():
     from golemcpp.golem.overlay_manager import OverlayManager
     from golemcpp.golem.tool_manager import ToolManager
 
-    for kind in (ResourceManager, DependencyManager, CookbookManager,
-                 OverlayManager, ToolManager):
+    for kind in (
+        ResourceManager,
+        DependencyManager,
+        CookbookManager,
+        OverlayManager,
+        ToolManager,
+    ):
         assert kind.source_path('/cache/r') == os.path.join(
             '/cache/r', SOURCE_DIRNAME
         ), '{} fetches outside source/'.format(kind.__name__)
@@ -777,8 +791,10 @@ def test_make_revision_part_abbreviates_either_object_name_format():
 
 def test_make_revision_part_abbreviates_nothing_of_another_length():
     # Neither is an object name, so neither may be silently cut down to one.
-    assert make_revision_part('c' * 39) == 'c' * 39 + '=' + \
-        hashlib.sha256(('c' * 39).encode('utf-8')).hexdigest()[:8]
+    assert (
+        make_revision_part('c' * 39)
+        == 'c' * 39 + '=' + hashlib.sha256(('c' * 39).encode('utf-8')).hexdigest()[:8]
+    )
     assert make_revision_part('d' * 41).startswith('d' * 40 + '=')
 
 
@@ -807,8 +823,18 @@ def test_revisions_a_filesystem_would_confuse_stay_distinct():
 
 
 def test_make_revision_part_is_always_a_usable_directory_name():
-    for revision in ['main', 'V1.0', 'release/1.2.3', 'feature:x', 'a b', '..',
-                     '...', 'café', 'x' * 200, 'a' * 40]:
+    for revision in [
+        'main',
+        'V1.0',
+        'release/1.2.3',
+        'feature:x',
+        'a b',
+        '..',
+        '...',
+        'café',
+        'x' * 200,
+        'a' * 40,
+    ]:
         component = make_revision_part(revision)
 
         assert re.fullmatch(r'[0-9a-z._~-]*(=[0-9a-f]{8})?', component)

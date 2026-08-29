@@ -9,7 +9,9 @@ from host import require_cxx_compiler
 
 def test_has_windows_msvc_toolchain_accepts_vswhere_installation(monkeypatch, tmp_path):
     installer_root = tmp_path / 'Program Files (x86)'
-    vswhere_path = installer_root / 'Microsoft Visual Studio' / 'Installer' / 'vswhere.exe'
+    vswhere_path = (
+        installer_root / 'Microsoft Visual Studio' / 'Installer' / 'vswhere.exe'
+    )
     vswhere_path.parent.mkdir(parents=True)
     vswhere_path.write_text('', encoding='utf-8')
 
@@ -22,7 +24,9 @@ def test_has_windows_msvc_toolchain_accepts_vswhere_installation(monkeypatch, tm
     assert has_windows_msvc_toolchain() is True
 
 
-def test_require_cxx_compiler_skips_on_windows_without_any_detected_toolchain(monkeypatch, tmp_path):
+def test_require_cxx_compiler_skips_on_windows_without_any_detected_toolchain(
+    monkeypatch, tmp_path
+):
     installer_root = tmp_path / 'Program Files (x86)'
     installer_root.mkdir()
 

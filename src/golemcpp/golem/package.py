@@ -46,8 +46,7 @@ class Package:
     def dump_json(self):
         json_obj = {}
         for key in self.__dict__:
-            if key in Package.serialized_members(
-            ) + Package.serialized_members_list():
+            if key in Package.serialized_members() + Package.serialized_members_list():
                 if self.__dict__[key]:
                     json_obj[key] = self.__dict__[key]
 
@@ -94,20 +93,22 @@ class Package:
 
 
 class DEBPackage:
-    def __init__(self,
-                 prefix=None,
-                 subdirectory=None,
-                 skeleton=None,
-                 control=None,
-                 section=None,
-                 priority=None,
-                 maintainer=None,
-                 description=None,
-                 homepage=None,
-                 depends=None,
-                 rpath=None,
-                 templates=None,
-                 copy_skeleton=None):
+    def __init__(
+        self,
+        prefix=None,
+        subdirectory=None,
+        skeleton=None,
+        control=None,
+        section=None,
+        priority=None,
+        maintainer=None,
+        description=None,
+        homepage=None,
+        depends=None,
+        rpath=None,
+        templates=None,
+        copy_skeleton=None,
+    ):
 
         self.prefix = prefix
         self.subdirectory = subdirectory
@@ -139,8 +140,11 @@ class DEBPackage:
     def dump_json(self):
         json_obj = {}
         for key in self.__dict__:
-            if key in DEBPackage.serialized_members(
-            ) + DEBPackage.serialized_members_list():
+            if (
+                key
+                in DEBPackage.serialized_members()
+                + DEBPackage.serialized_members_list()
+            ):
                 if self.__dict__[key]:
                     json_obj[key] = self.__dict__[key]
         return json_obj
@@ -148,8 +152,16 @@ class DEBPackage:
     @staticmethod
     def serialized_members():
         return [
-            'prefix', 'subdirectory', 'skeleton', 'control', 'section',
-            'priority', 'maintainer', 'description', 'homepage', 'rpath'
+            'prefix',
+            'subdirectory',
+            'skeleton',
+            'control',
+            'section',
+            'priority',
+            'maintainer',
+            'description',
+            'homepage',
+            'rpath',
         ]
 
     @staticmethod
@@ -168,15 +180,17 @@ class DEBPackage:
 
 
 class MSIPackage:
-    def __init__(self,
-                 skeleton=None,
-                 project=None,
-                 parameters=None,
-                 extensions=None,
-                 cultures=None,
-                 installdir_id=None,
-                 installdir_files_id=None,
-                 installdir_files_xslt=None):
+    def __init__(
+        self,
+        skeleton=None,
+        project=None,
+        parameters=None,
+        extensions=None,
+        cultures=None,
+        installdir_id=None,
+        installdir_files_id=None,
+        installdir_files_xslt=None,
+    ):
         self.skeleton = skeleton
         self.project = project
         self.parameters = helpers.parameter_to_list(parameters)
@@ -202,8 +216,11 @@ class MSIPackage:
     def dump_json(self):
         json_obj = {}
         for key in self.__dict__:
-            if key in MSIPackage.serialized_members(
-            ) + MSIPackage.serialized_members_list():
+            if (
+                key
+                in MSIPackage.serialized_members()
+                + MSIPackage.serialized_members_list()
+            ):
                 if self.__dict__[key]:
                     json_obj[key] = self.__dict__[key]
         return json_obj
@@ -211,8 +228,14 @@ class MSIPackage:
     @staticmethod
     def serialized_members():
         return [
-            'skeleton', 'project', 'parameters', 'extensions', 'cultures',
-            'installdir_id', 'installdir_files_id', 'installdir_files_xslt'
+            'skeleton',
+            'project',
+            'parameters',
+            'extensions',
+            'cultures',
+            'installdir_id',
+            'installdir_files_id',
+            'installdir_files_xslt',
         ]
 
     @staticmethod
@@ -252,8 +275,11 @@ class DMGPackage:
     def dump_json(self):
         json_obj = {}
         for key in self.__dict__:
-            if key in DMGPackage.serialized_members(
-            ) + DMGPackage.serialized_members_list():
+            if (
+                key
+                in DMGPackage.serialized_members()
+                + DMGPackage.serialized_members_list()
+            ):
                 if self.__dict__[key]:
                     json_obj[key] = self.__dict__[key]
         return json_obj

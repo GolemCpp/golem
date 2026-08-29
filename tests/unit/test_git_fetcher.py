@@ -16,8 +16,8 @@ def git_calls(monkeypatch):
     '''Every git invocation the fetcher makes, in order.'''
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git',
-        lambda args, cwd=None, quiet=False: calls.append(args))
+        helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args)
+    )
     stub_git_probes(monkeypatch)
     return calls
 
@@ -27,8 +27,10 @@ def quiet_calls(monkeypatch):
     '''Every git invocation with what it asked of stdout.'''
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git',
-        lambda args, cwd=None, quiet=False: calls.append((args, quiet)))
+        helpers,
+        'run_git',
+        lambda args, cwd=None, quiet=False: calls.append((args, quiet)),
+    )
     stub_git_probes(monkeypatch)
     return calls
 
@@ -55,8 +57,11 @@ REVISION = '4c83605c369b88eea65e63b90a08c382138ae68d'
 def make_fetcher(policy=None, revision=REVISION):
     return GitFetcher(
         _root,
-        Source.for_repository('https://host/r.git', ResolvedVersion(reference=revision, revision=revision)),
-        policy if policy is not None else FetchPolicy(revision=revision))
+        Source.for_repository(
+            'https://host/r.git', ResolvedVersion(reference=revision, revision=revision)
+        ),
+        policy if policy is not None else FetchPolicy(revision=revision),
+    )
 
 
 # -- the git sequence a policy produces -------------------------------------
@@ -101,7 +106,8 @@ def test_a_clone_lands_on_its_revision_through_the_reset(git_calls):
 
 def test_a_shallow_policy_fetches_only_the_requested_commit(git_calls):
     make_fetcher(
-        FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')).populate()
+        FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')
+    ).populate()
 
     assert git_calls == [
         ['init'],
@@ -117,7 +123,9 @@ def test_a_shallow_refresh_asks_for_what_the_clone_asked_for(git_calls):
     # for every tag and every branch is history it was deliberately not given, and
     # one refresh of it would leave a root marked shallow holding what a full clone
     # holds.
-    make_fetcher(FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')).refresh()
+    make_fetcher(
+        FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')
+    ).refresh()
 
     assert ['fetch', '--depth=1', 'origin', 'cafebabe'] in git_calls
     assert ['fetch', '--prune', '--prune-tags', '--tags', 'origin'] not in git_calls
@@ -137,7 +145,9 @@ def test_a_blobless_refresh_says_nothing_about_its_filter(git_calls):
     # filtered by it without being told.
     make_fetcher(FetchPolicy(fetch_mode=FetchMode.BLOBLESS, revision='main')).refresh()
 
-    assert not any('--filter=blob:none' in args for args in git_calls if args[0] == 'fetch')
+    assert not any(
+        '--filter=blob:none' in args for args in git_calls if args[0] == 'fetch'
+    )
 
 
 def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls):
@@ -153,12 +163,21 @@ def test_a_pinned_policy_discards_local_changes_without_fetching(git_calls):
         ['reset', '--hard'],
         ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
         ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none', '--no-fetch'],
+        [
+            'submodule',
+            'update',
+            '--init',
+            '--recursive',
+            '--filter=blob:none',
+            '--no-fetch',
+        ],
     ]
     assert not any(helpers.is_network_git_command(args) for args in git_calls)
 
 
-def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, git_calls):
+def test_a_resource_without_submodules_runs_no_submodule_command(
+    monkeypatch, git_calls
+):
     # Most resources declare none, and a submodule command in a repository without
     # them is a process spent to do nothing.
     stub_git_probes(monkeypatch, has_submodules=False)
@@ -175,18 +194,23 @@ def test_a_resource_without_submodules_runs_no_submodule_command(monkeypatch, gi
 def stub_a_revision_this_root_does_not_hold(monkeypatch):
     '''A root answering for no tag, no branch, and not the commit either.'''
     monkeypatch.setattr(
-        helpers, 'try_git',
+        helpers,
+        'try_git',
         # Everything else is housekeeping, where nothing is made of the answer.
-        lambda params, cwd=None, **kwargs: params[:3] != ['rev-parse', '--verify', '--quiet'])
+        lambda params, cwd=None, **kwargs: params[:3]
+        != ['rev-parse', '--verify', '--quiet'],
+    )
 
 
 def stub_a_revision_only_a_fetch_answers_for(monkeypatch):
     '''A root holding no ref for the revision, and only what a fetch just wrote.'''
     monkeypatch.setattr(
-        helpers, 'try_git',
-        lambda params, cwd=None, **kwargs:
-            params[:3] != ['rev-parse', '--verify', '--quiet']
-            or params[3].startswith('FETCH_HEAD'))
+        helpers,
+        'try_git',
+        lambda params, cwd=None, **kwargs: params[:3]
+        != ['rev-parse', '--verify', '--quiet']
+        or params[3].startswith('FETCH_HEAD'),
+    )
 
 
 @pytest.mark.parametrize('mode', [FetchMode.BLOBLESS, FetchMode.FULL])
@@ -199,8 +223,9 @@ def test_a_revision_no_branch_or_tag_reaches_is_refused(monkeypatch, git_calls, 
     stub_a_revision_this_root_does_not_hold(monkeypatch)
 
     with pytest.raises(RuntimeError, match='advertises no branch or tag'):
-        make_fetcher(FetchPolicy(
-            fetch_mode=mode, revision='cafebabe', fetch_remote=False)).refresh()
+        make_fetcher(
+            FetchPolicy(fetch_mode=mode, revision='cafebabe', fetch_remote=False)
+        ).refresh()
 
     assert not any(helpers.is_network_git_command(args) for args in git_calls)
 
@@ -212,11 +237,13 @@ def test_a_shallow_root_reaches_a_commit_nothing_advertises(monkeypatch, git_cal
     # this pins the asymmetry so it stays deliberate rather than becoming a promise.
     stub_a_revision_only_a_fetch_answers_for(monkeypatch)
 
-    make_fetcher(FetchPolicy(
-        fetch_mode=FetchMode.SHALLOW, revision='cafebabe')).populate()
+    make_fetcher(
+        FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')
+    ).populate()
 
-    assert git_calls.index(['fetch', '--depth=1', 'origin', 'cafebabe']) \
-        < git_calls.index(['reset', '--hard', 'FETCH_HEAD'])
+    assert git_calls.index(
+        ['fetch', '--depth=1', 'origin', 'cafebabe']
+    ) < git_calls.index(['reset', '--hard', 'FETCH_HEAD'])
 
 
 def test_a_present_revision_is_reset_to_without_asking_for_it(git_calls):
@@ -265,12 +292,15 @@ def test_only_what_reaches_the_remote_is_left_to_speak(quiet_calls):
         ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
         ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
     ]
-    assert all(helpers.is_network_git_command(args)
-               for args, quiet in quiet_calls if not quiet)
+    assert all(
+        helpers.is_network_git_command(args) for args, quiet in quiet_calls if not quiet
+    )
 
 
 def test_a_shallow_clone_only_speaks_while_it_fetches(quiet_calls):
-    make_fetcher(FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')).populate()
+    make_fetcher(
+        FetchPolicy(fetch_mode=FetchMode.SHALLOW, revision='cafebabe')
+    ).populate()
 
     assert [args for args, quiet in quiet_calls if not quiet] == [
         ['fetch', '--depth=1', 'origin', 'cafebabe'],
@@ -332,7 +362,8 @@ def test_becoming_shallow_is_not_worth_converting_in_place(git_calls):
 
 
 def test_a_root_that_recorded_nothing_is_recognised_rather_than_re_cloned(
-        monkeypatch, git_calls):
+    monkeypatch, git_calls
+):
     # Every cache populated before golem recorded a mode says nothing. Upgrading
     # must not re-clone all of them.
     monkeypatch.setattr(GitFetcher, 'detected_mode', lambda self: FetchMode.FULL)
@@ -341,8 +372,9 @@ def test_a_root_that_recorded_nothing_is_recognised_rather_than_re_cloned(
 
     # What it was detected as is handed back, so the manifest can record it and
     # the next resolve has nothing left to detect.
-    assert fetcher.migrate(Fetched(head=STUB_HEAD)) == \
-        Fetched(head=STUB_HEAD, mode=FetchMode.FULL)
+    assert fetcher.migrate(Fetched(head=STUB_HEAD)) == Fetched(
+        head=STUB_HEAD, mode=FetchMode.FULL
+    )
     assert git_calls == []
 
 
@@ -350,7 +382,8 @@ def test_what_a_root_looks_like_when_its_manifest_does_not_say(monkeypatch):
     fetcher = make_fetcher()
     answers = {}
     monkeypatch.setattr(
-        GitFetcher, 'reads_true', lambda self, args: answers.get(tuple(args), False))
+        GitFetcher, 'reads_true', lambda self, args: answers.get(tuple(args), False)
+    )
 
     assert fetcher.detected_mode() == FetchMode.FULL
 
@@ -417,8 +450,10 @@ def housekeeping(monkeypatch, git_calls):
     '''What the fetcher asks git about, where nothing is made of the answer.'''
     asked = []
     monkeypatch.setattr(
-        helpers, 'try_git',
-        lambda params, cwd=None, **kwargs: asked.append(params) or True)
+        helpers,
+        'try_git',
+        lambda params, cwd=None, **kwargs: asked.append(params) or True,
+    )
     return asked
 
 
@@ -442,8 +477,12 @@ def test_a_root_nothing_was_done_to_is_not_packed_either(monkeypatch, housekeepi
 
 def test_what_cannot_be_read_is_not_taken_for_clean(monkeypatch):
     monkeypatch.setattr(
-        helpers, 'read_git',
-        lambda params, cwd=None, **kwargs: (_ for _ in ()).throw(RuntimeError('no repo')))
+        helpers,
+        'read_git',
+        lambda params, cwd=None, **kwargs: (_ for _ in ()).throw(
+            RuntimeError('no repo')
+        ),
+    )
 
     assert make_fetcher().is_dirty() is True
     assert make_fetcher().is_at('cafebabe') is False
@@ -456,8 +495,13 @@ def test_submodules_are_fetched_in_parallel_when_asked(git_calls):
     make_fetcher(FetchPolicy(revision='main', fetch_jobs=4)).populate()
 
     assert git_calls[-1] == [
-        'submodule', 'update', '--init', '--recursive', '--filter=blob:none',
-        '--jobs', '4',
+        'submodule',
+        'update',
+        '--init',
+        '--recursive',
+        '--filter=blob:none',
+        '--jobs',
+        '4',
     ]
 
 

@@ -36,12 +36,15 @@ def test_the_default_names_one_cookbook_git_can_reach():
         assert can_access_git_remote(str(source.locator)), (
             'the default cookbook is unreachable: {}. The constant may have '
             'rotted, or the repository was renamed or made private.'.format(
-                source.locator))
+                source.locator
+            )
+        )
 
 
 def test_the_default_cookbook_is_fetched_into_a_cache(tmp_path, resolving):
-    manager = get_cookbook_manager(make_cache_configuration(
-        cache_directory.CacheDirectory(location=str(tmp_path))))
+    manager = get_cookbook_manager(
+        make_cache_configuration(cache_directory.CacheDirectory(location=str(tmp_path)))
+    )
 
     cookbooks = [manager.get_cookbook(source) for source in default_cookbook_sources()]
     for cookbook in cookbooks:

@@ -13,14 +13,15 @@ def git_calls(monkeypatch):
     '''Every git invocation, so a copied source can be shown to make none.'''
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git',
-        lambda args, cwd=None, quiet=False: calls.append(args))
+        helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args)
+    )
     return calls
 
 
 def make_fetcher(origin, destination):
     return DirectoryFetcher(
-        str(destination), Source.for_directory(origin.resolve().as_uri()), FetchPolicy())
+        str(destination), Source.for_directory(origin.resolve().as_uri()), FetchPolicy()
+    )
 
 
 def test_populate_copies_the_directory_and_records_its_origin(tmp_path, git_calls):
@@ -32,8 +33,9 @@ def test_populate_copies_the_directory_and_records_its_origin(tmp_path, git_call
     result = make_fetcher(origin, destination).populate()
 
     assert (destination / 'marker.txt').read_text(encoding='utf-8') == 'copied\n'
-    assert (destination / ORIGIN_FILENAME).read_text(encoding='utf-8') == \
-        origin.resolve().as_uri()
+    assert (destination / ORIGIN_FILENAME).read_text(
+        encoding='utf-8'
+    ) == origin.resolve().as_uri()
     # A copied source has no remote to talk to and no commit to name.
     assert git_calls == []
     assert result == Fetched()

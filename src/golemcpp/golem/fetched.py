@@ -31,7 +31,7 @@ class Fetched:
         '''
         What a recorded fetch means. Anything absent reads as nothing recorded,
         which is what a manifest written before a field existed says.
-        
+
         An unrecognised mode reads the same way, since a root fetched by a golem
         that knows modes this one does not is a root this one cannot reason about.
         '''

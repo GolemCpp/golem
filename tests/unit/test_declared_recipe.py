@@ -50,7 +50,8 @@ def test_a_project_file_in_json_counts_as_one(tmp_path):
 
 def test_a_recipe_holding_only_a_manifest_says_where_its_source_is(tmp_path):
     cookbook = make_recipe(
-        tmp_path, manifest={'locator': 'https://github.com/nlohmann/json.git'})
+        tmp_path, manifest={'locator': 'https://github.com/nlohmann/json.git'}
+    )
 
     declared = read(cookbook)
 
@@ -84,11 +85,14 @@ def test_an_absolute_locator_is_left_alone(tmp_path):
     assert read(cookbook).locator == str(tmp_path / 'here')
 
 
-@pytest.mark.parametrize('locator', [
-    'https://github.com/nlohmann/json.git',
-    'git@github.com:nlohmann/json.git',
-    'ext::sh -c foo',
-])
+@pytest.mark.parametrize(
+    'locator',
+    [
+        'https://github.com/nlohmann/json.git',
+        'git@github.com:nlohmann/json.git',
+        'ext::sh -c foo',
+    ],
+)
 def test_a_locator_that_is_no_path_is_left_alone(tmp_path, locator):
     # Git's own rule tells a path from a remote, so Golem never disagrees with
     # it about which is which.

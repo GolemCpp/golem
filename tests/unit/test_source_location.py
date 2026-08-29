@@ -29,8 +29,8 @@ def make_bare_repository(path):
 def read(location, tmp_path, identity_allowed=True):
     '''Read a location the way a dependency reads one.'''
     return source_location.parse(
-        location, project_directory=str(tmp_path),
-        identity_allowed=identity_allowed)
+        location, project_directory=str(tmp_path), identity_allowed=identity_allowed
+    )
 
 
 def test_parse_normalizes_and_classifies_local_directory(tmp_path):
@@ -126,7 +126,8 @@ def test_parse_honours_an_explicit_directory_kind_on_a_git_checkout(tmp_path):
 
 def test_parse_honours_an_explicit_kind_on_a_remote_url(tmp_path):
     settled = source_location.parse(
-        'git+https://github.com/GolemCpp/recipes.git', str(tmp_path))
+        'git+https://github.com/GolemCpp/recipes.git', str(tmp_path)
+    )
 
     assert settled.kind == 'git'
     assert settled.locator == Locator('https://github.com/GolemCpp/recipes.git')
@@ -135,7 +136,8 @@ def test_parse_honours_an_explicit_kind_on_a_remote_url(tmp_path):
 def test_parse_refuses_an_unknown_kind(tmp_path):
     with pytest.raises(ValueError) as error:
         source_location.parse(
-            'gti+https://github.com/GolemCpp/recipes.git', str(tmp_path))
+            'gti+https://github.com/GolemCpp/recipes.git', str(tmp_path)
+        )
 
     assert "unknown source kind 'gti'" in str(error.value)
     assert 'git+' in str(error.value)
@@ -150,8 +152,7 @@ def test_parse_does_not_read_a_plus_inside_a_url_as_a_kind(tmp_path):
 
 
 def test_parse_reads_the_version_a_remote_location_names(tmp_path):
-    settled = source_location.parse(
-        'https://host/r.git#^3.0.0', str(tmp_path))
+    settled = source_location.parse('https://host/r.git#^3.0.0', str(tmp_path))
 
     assert settled.locator == Locator('https://host/r.git')
     assert settled.version == '^3.0.0'
@@ -161,7 +162,8 @@ def test_parse_reads_the_version_a_remote_location_names(tmp_path):
 def test_parse_keeps_a_version_holding_a_slash(tmp_path):
     # A namespaced ref is the common shape, and only the first separator counts.
     settled = source_location.parse(
-        'git+https://host/r.git#release/1.2.3', str(tmp_path))
+        'git+https://host/r.git#release/1.2.3', str(tmp_path)
+    )
 
     assert settled.locator == Locator('https://host/r.git')
     assert settled.version == 'release/1.2.3'
@@ -191,7 +193,8 @@ def test_parse_reads_a_version_spelled_on_a_file_url(tmp_path):
     checkout = make_repository(project_dir / 'mylib')
 
     settled = source_location.parse(
-        checkout.resolve().as_uri() + '#v1.2.0', str(project_dir))
+        checkout.resolve().as_uri() + '#v1.2.0', str(project_dir)
+    )
 
     assert settled.locator == Locator(checkout.resolve().as_uri())
     assert settled.version == 'v1.2.0'
@@ -243,8 +246,7 @@ def test_an_explicit_directory_kind_reads_no_version_at_all(tmp_path):
     settled = source_location.parse('directory+mylib#v1.2.0', str(project_dir))
 
     assert settled.version == ''
-    assert settled.locator == Locator(
-        (project_dir / 'mylib#v1.2.0').resolve().as_uri())
+    assert settled.locator == Locator((project_dir / 'mylib#v1.2.0').resolve().as_uri())
 
 
 def test_parse_refuses_a_version_asked_of_a_copied_directory(tmp_path):
@@ -261,7 +263,8 @@ def test_an_scp_style_remote_keeps_its_spelling_and_takes_a_version(tmp_path):
     # The form a host hands you by default. Rewriting it to ssh:// would not be
     # lossless, so what git gets is what was written.
     settled = source_location.parse(
-        'git@github.com:nlohmann/json.git#v3.12.0', str(tmp_path))
+        'git@github.com:nlohmann/json.git#v3.12.0', str(tmp_path)
+    )
 
     assert settled.kind == 'git'
     assert settled.locator == Locator('git@github.com:nlohmann/json.git')
@@ -376,7 +379,6 @@ def test_a_field_taking_a_locator_refuses_an_identity(tmp_path, kind):
         source_location.resolve_locator('@boost', kind, str(tmp_path))
 
 
-
 def test_a_location_naming_a_source_indirectly_says_so():
     settled = SourceLocation.for_identity(SourceId.parse('@boost'))
 
@@ -385,7 +387,8 @@ def test_a_location_naming_a_source_indirectly_says_so():
 
 def test_a_location_saying_where_a_source_is_does_not():
     settled = SourceLocation.for_locator(
-        Locator('https://host.xz/repo.git'), kind=source.SOURCE_TYPE_GIT)
+        Locator('https://host.xz/repo.git'), kind=source.SOURCE_TYPE_GIT
+    )
 
     assert not settled.names_an_identity
 
@@ -402,7 +405,9 @@ def test_a_location_naming_an_identity_carries_no_kind():
 def test_either_shape_may_name_a_version():
     asked = SourceLocation.for_identity(SourceId.parse('@boost'), '^1.87.0')
     written = SourceLocation.for_locator(
-        Locator('https://host.xz/repo.git'), kind=source.SOURCE_TYPE_GIT,
-        version='^1.87.0')
+        Locator('https://host.xz/repo.git'),
+        kind=source.SOURCE_TYPE_GIT,
+        version='^1.87.0',
+    )
 
     assert asked.version == written.version == '^1.87.0'

@@ -3,8 +3,7 @@
 	"[python]": {
 		"editor.rulers": [88],
 		"editor.defaultFormatter": "ms-python.black-formatter",
-		"editor.formatOnSave": true,
-		"editor.formatOnSaveMode": "modifications"
+		"editor.formatOnSave": true
 	},
 	"[markdown]": {
 		"editor.defaultFormatter":"esbenp.prettier-vscode",

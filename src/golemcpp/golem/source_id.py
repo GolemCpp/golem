@@ -26,7 +26,6 @@ from dataclasses import replace
 from golemcpp.golem import locator as locator_module
 from golemcpp.golem import safe_part
 
-
 # What the fields are spelled as when a locator names no host Golem can read,
 # and when it names this filesystem. A digest is added when a host is really
 # spelled like one of these to avoid any conflict.
@@ -124,7 +123,7 @@ def strip_git(segments, local):
         return segments[:-1]
 
     if not local and last.lower().endswith(GIT_SUFFIX):
-        return segments[:-1] + [last[:-len(GIT_SUFFIX)]]
+        return segments[:-1] + [last[: -len(GIT_SUFFIX)]]
 
     return segments
 
@@ -169,9 +168,11 @@ def host_of(parsed, hostname, local):
         # Two ports on one host are two servers, and the readable half cannot
         # say so. Digested over the host and the port that were read, so the
         # userinfo an absolute URL discards cannot come back in through here.
-        return '{}{}{}'.format(host.split(safe_part.DIGEST_SEPARATOR)[0],
-                               safe_part.DIGEST_SEPARATOR,
-                               safe_part.digest('{}:{}'.format(hostname.lower(), port)))
+        return '{}{}{}'.format(
+            host.split(safe_part.DIGEST_SEPARATOR)[0],
+            safe_part.DIGEST_SEPARATOR,
+            safe_part.digest('{}:{}'.format(hostname.lower(), port)),
+        )
 
     if host in (LOCAL_HOST, NO_HOST):
         # A host really spelled like a sentinel has to say it is not one. Only
@@ -246,19 +247,22 @@ class SourceId:
             raise ValueError(
                 "identity '{}' does not start with '{}': every identity does, "
                 "so that a recipe is told from the furniture a cookbook also "
-                "holds".format(text, FIELD_SEPARATOR))
+                "holds".format(text, FIELD_SEPARATOR)
+            )
 
-        fields = text[len(FIELD_SEPARATOR):].lower().split(FIELD_SEPARATOR)
+        fields = text[len(FIELD_SEPARATOR) :].lower().split(FIELD_SEPARATOR)
 
         if len(fields) > 4:
             raise ValueError(
                 "identity '{}' names more than the four fields an identity "
-                "has".format(text))
+                "has".format(text)
+            )
 
         if not fields[0]:
             raise ValueError(
                 "identity '{}' names no name, which is the one field an "
-                "identity cannot leave out".format(text))
+                "identity cannot leave out".format(text)
+            )
 
         return SourceId(*(fields + [''] * (4 - len(fields))))
 
@@ -285,14 +289,16 @@ class SourceId:
             return SourceId(
                 name=spell_field(transport, safe_part.UNSAFE_IN_STANDALONE),
                 host=NO_HOST,
-                rooting=safe_part.DIGEST_SEPARATOR + safe_part.digest(value))
+                rooting=safe_part.DIGEST_SEPARATOR + safe_part.digest(value),
+            )
 
         url = locator_module.as_url(value)
         parsed = locator_module.parse_url(url)
         hostname, segments = locator_module.url_components(parsed)
 
         local = url.startswith(
-            locator_module.FILE_SCHEME + locator_module.URL_SCHEME_SEPARATOR)
+            locator_module.FILE_SCHEME + locator_module.URL_SCHEME_SEPARATOR
+        )
         segments = strip_git(segments, local)
         rooting = rooting_of(parsed, segments, local)
 
@@ -304,13 +310,15 @@ class SourceId:
         if not segments:
             raise ValueError(
                 "locator '{}' names no repository: nothing in it is a "
-                "name".format(value))
+                "name".format(value)
+            )
 
         return SourceId(
             name=spell_field(segments[-1], safe_part.UNSAFE_IN_STANDALONE),
             owner=spell_joined_field(segments[:-1]),
             host=host_of(parsed, hostname, local),
-            rooting=rooting)
+            rooting=rooting,
+        )
 
     def rungs(self):
         '''
@@ -341,7 +349,10 @@ class SourceId:
         Therefore `@boost` keys to `@boost@boostorg@github.com`, while
         `@boost@somefork@github.com` stays as it was written.
         '''
-        return replace(self, **{
-            field: getattr(self, field) or getattr(other, field)
-            for field in ('name', 'owner', 'host', 'rooting')
-        })
+        return replace(
+            self,
+            **{
+                field: getattr(self, field) or getattr(other, field)
+                for field in ('name', 'owner', 'host', 'rooting')
+            },
+        )

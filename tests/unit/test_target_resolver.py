@@ -22,8 +22,7 @@ def make_resolver(*, arch=None, msvc=False, builds=False, dest_cpu=''):
     resolver = TargetResolver(conf, msvc=msvc)
     resolver.attempted = []
     resolver.reported = []
-    conf.check_cxx = lambda **kw: (
-        resolver.attempted.append(kw['cxxflags']) or builds)
+    conf.check_cxx = lambda **kw: (resolver.attempted.append(kw['cxxflags']) or builds)
     conf.msg = lambda label, value: resolver.reported.append((label, value))
     return resolver
 
@@ -36,8 +35,7 @@ def answering(resolver, target):
 @pytest.fixture
 def warnings(monkeypatch):
     said = []
-    monkeypatch.setattr(Logs, 'warn', lambda message, *args: said.append(
-        message))
+    monkeypatch.setattr(Logs, 'warn', lambda message, *args: said.append(message))
     return said
 
 
@@ -70,8 +68,7 @@ def test_a_compiler_that_is_not_there_is_not_run():
 
 
 def test_resolution_refuses_to_name_an_architecture_nobody_established():
-    resolver = answering(make_resolver(),
-                         target_platform.CompilerTarget())
+    resolver = answering(make_resolver(), target_platform.CompilerTarget())
 
     with pytest.raises(RuntimeError, match=r'Cannot tell what architecture'):
         resolver.resolve()
@@ -79,23 +76,25 @@ def test_resolution_refuses_to_name_an_architecture_nobody_established():
 
 def test_resolution_takes_the_compilers_answer_when_nothing_was_asked():
     resolver = answering(
-        make_resolver(),
-        target_platform.CompilerTarget(arch='armv7-eabihf'))
+        make_resolver(), target_platform.CompilerTarget(arch='armv7-eabihf')
+    )
 
     assert resolver.resolve() == 'armv7-eabihf'
 
 
 def test_resolution_accepts_a_request_the_compiler_agrees_with():
-    resolver = answering(make_resolver(arch='amd64'),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='amd64'), target_platform.CompilerTarget(arch='x86_64')
+    )
 
     # Spelled 'amd64', resolved to the canonical name, and no disagreement.
     assert resolver.resolve() == 'x86_64'
 
 
 def test_resolution_rejects_a_request_the_compiler_contradicts():
-    resolver = answering(make_resolver(arch='aarch64'),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='aarch64'), target_platform.CompilerTarget(arch='x86_64')
+    )
 
     with pytest.raises(RuntimeError, match=r"Requested architecture 'aarch64'"):
         resolver.resolve()
@@ -107,8 +106,8 @@ def test_a_request_supplies_the_isa_level_a_cross_triple_cannot():
     # describing the host. The request is allowed to settle exactly that.
     resolver = answering(
         make_resolver(arch='armv7-eabihf'),
-        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf',
-                                                   'x86_64'))
+        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf', 'x86_64'),
+    )
 
     assert resolver.resolve() == 'armv7-eabihf'
 
@@ -119,8 +118,8 @@ def test_a_request_may_not_contradict_the_abi_the_triple_did_report():
     # nothing.
     resolver = answering(
         make_resolver(arch='armv7-eabi'),
-        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf',
-                                                   'x86_64'))
+        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf', 'x86_64'),
+    )
 
     with pytest.raises(RuntimeError, match=r"'eabihf' ABI"):
         resolver.resolve()
@@ -130,8 +129,8 @@ def test_a_request_may_not_contradict_the_abi_the_triple_did_report():
 def test_a_request_may_not_contradict_the_family_either(arch):
     resolver = answering(
         make_resolver(arch=arch),
-        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf',
-                                                   'x86_64'))
+        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf', 'x86_64'),
+    )
 
     with pytest.raises(RuntimeError, match=r"'arm' family"):
         resolver.resolve()
@@ -144,8 +143,10 @@ def test_a_multilib_compiler_reaches_a_target_its_triple_never_names():
     # gcc reports the target it was configured for, not the only one it can
     # build: `gcc -m32 -dumpmachine` still answers x86_64. Comparing triples
     # alone would refuse every 32-bit build on a 64-bit host.
-    resolver = answering(make_resolver(arch='i686', builds=True),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='i686', builds=True),
+        target_platform.CompilerTarget(arch='x86_64'),
+    )
 
     assert resolver.resolve() == 'i686'
     assert resolver.attempted == [['-m32']]
@@ -154,8 +155,10 @@ def test_a_multilib_compiler_reaches_a_target_its_triple_never_names():
 def test_a_multilib_target_the_compiler_cannot_actually_build_is_refused():
     # The flag exists but the platform ships no 32-bit userland, so nothing
     # links. Asking is what tells the two apart.
-    resolver = answering(make_resolver(arch='i686', builds=False),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='i686', builds=False),
+        target_platform.CompilerTarget(arch='x86_64'),
+    )
 
     with pytest.raises(RuntimeError, match=r'-m32'):
         resolver.resolve()
@@ -164,8 +167,10 @@ def test_a_multilib_target_the_compiler_cannot_actually_build_is_refused():
 def test_a_target_no_flag_reaches_is_refused_without_asking():
     # No -m flag turns an x86_64 compiler into an ARM one, and the capability
     # table says so by carrying no flags at all. Nothing to try.
-    resolver = answering(make_resolver(arch='aarch64', builds=True),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='aarch64', builds=True),
+        target_platform.CompilerTarget(arch='x86_64'),
+    )
 
     with pytest.raises(RuntimeError, match=r"builds for 'x86_64'"):
         resolver.resolve()
@@ -178,8 +183,8 @@ def test_a_ruled_out_family_is_not_a_multilib_question():
     # from. -m64 must not be tried, nor claimed to have been.
     resolver = answering(
         make_resolver(arch='x86_64'),
-        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf',
-                                                   'x86_64'))
+        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf', 'x86_64'),
+    )
 
     with pytest.raises(RuntimeError, match=r"'arm' family") as raised:
         resolver.resolve()
@@ -191,8 +196,10 @@ def test_a_ruled_out_family_is_not_a_multilib_question():
 def test_msvc_is_never_asked_to_build_with_a_gnu_flag():
     # It takes no such flag, and its request already reached waf through
     # MSVC_TARGETS before detection ran.
-    resolver = answering(make_resolver(arch='i686', msvc=True, builds=True),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='i686', msvc=True, builds=True),
+        target_platform.CompilerTarget(arch='x86_64'),
+    )
 
     with pytest.raises(RuntimeError, match=r"builds for 'x86_64'"):
         resolver.resolve()
@@ -203,12 +210,12 @@ def test_msvc_is_never_asked_to_build_with_a_gnu_flag():
 # --- A compiler that answered nothing ------------------------------------
 
 
-def test_a_silent_compiler_is_still_asked_to_build_where_a_flag_can_ask(
-        warnings):
+def test_a_silent_compiler_is_still_asked_to_build_where_a_flag_can_ask(warnings):
     # It reported no target, but the request is one Golem has a flag for, so
     # there is a check available and taking it on trust would be a choice.
-    resolver = answering(make_resolver(arch='i686', builds=True),
-                         target_platform.CompilerTarget())
+    resolver = answering(
+        make_resolver(arch='i686', builds=True), target_platform.CompilerTarget()
+    )
 
     assert resolver.resolve() == 'i686'
     assert resolver.attempted == [['-m32']]
@@ -219,8 +226,9 @@ def test_a_silent_compiler_is_still_asked_to_build_where_a_flag_can_ask(
 def test_a_silent_compiler_that_cannot_build_the_request_is_an_error():
     # Nothing supports the request: no target reported, and the one check
     # available failed. Naming the artifact anyway would be a plain lie.
-    resolver = answering(make_resolver(arch='i686', builds=False),
-                         target_platform.CompilerTarget())
+    resolver = answering(
+        make_resolver(arch='i686', builds=False), target_platform.CompilerTarget()
+    )
 
     with pytest.raises(RuntimeError, match=r'no target of its own'):
         resolver.resolve()
@@ -231,8 +239,9 @@ def test_a_request_nothing_can_check_is_taken_on_trust(warnings):
     # no_autodetect(): it returns before writing DEST_CPU. No flag can put the
     # question to cl.exe either, so nothing checks the request. The other
     # silent case is a toolchain with no -dumpmachine.
-    resolver = answering(make_resolver(arch='i686', msvc=True),
-                         target_platform.CompilerTarget())
+    resolver = answering(
+        make_resolver(arch='i686', msvc=True), target_platform.CompilerTarget()
+    )
 
     assert resolver.resolve() == 'i686'
     assert resolver.attempted == []
@@ -243,8 +252,9 @@ def test_a_request_nothing_can_check_is_taken_on_trust(warnings):
 def test_a_compiler_that_did_answer_is_not_second_guessed(warnings):
     # The warning is about nothing having checked the request, so a compiler
     # that agreed must not produce it.
-    resolver = answering(make_resolver(arch='x86_64'),
-                         target_platform.CompilerTarget(arch='x86_64'))
+    resolver = answering(
+        make_resolver(arch='x86_64'), target_platform.CompilerTarget(arch='x86_64')
+    )
 
     assert resolver.resolve() == 'x86_64'
     assert warnings == []
@@ -255,8 +265,8 @@ def test_a_coarse_answer_counts_as_an_answer(warnings):
     # request was held to something and is not being taken on trust.
     resolver = answering(
         make_resolver(arch='armv7-eabihf'),
-        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf',
-                                                   'x86_64'))
+        target_platform.CompilerTarget.from_triple('arm-linux-gnueabihf', 'x86_64'),
+    )
 
     assert resolver.resolve() == 'armv7-eabihf'
     assert warnings == []
@@ -269,8 +279,9 @@ def test_the_settled_target_is_reported():
     # The answer reaches the slug, the advertisement and every arch condition,
     # so a build settling on the wrong one is wrong everywhere and visible
     # nowhere. On a host nobody has run Golem on, this line is the diagnosis.
-    resolver = answering(make_resolver(),
-                         target_platform.CompilerTarget(arch='aarch64'))
+    resolver = answering(
+        make_resolver(), target_platform.CompilerTarget(arch='aarch64')
+    )
 
     resolver.resolve()
 
@@ -278,8 +289,9 @@ def test_the_settled_target_is_reported():
 
 
 def test_a_target_that_could_not_be_settled_is_not_reported():
-    resolver = answering(make_resolver(arch='x86_64'),
-                         target_platform.CompilerTarget(arch='aarch64'))
+    resolver = answering(
+        make_resolver(arch='x86_64'), target_platform.CompilerTarget(arch='aarch64')
+    )
 
     with pytest.raises(RuntimeError):
         resolver.resolve()
@@ -294,8 +306,8 @@ def test_a_family_with_no_abi_says_which_targets_would_do():
     # on a native host with nothing to act on.
     resolver = answering(
         make_resolver(),
-        target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
-                                                   'riscv64'))
+        target_platform.CompilerTarget.from_triple('riscv64-linux-gnu', 'riscv64'),
+    )
 
     with pytest.raises(RuntimeError) as raised:
         resolver.resolve()
@@ -319,8 +331,8 @@ def test_a_compiler_that_truly_said_nothing_still_says_so():
 def test_a_family_settled_by_a_request_is_not_an_error():
     resolver = answering(
         make_resolver(arch='riscv64-lp64d'),
-        target_platform.CompilerTarget.from_triple('riscv64-linux-gnu',
-                                                   'riscv64'))
+        target_platform.CompilerTarget.from_triple('riscv64-linux-gnu', 'riscv64'),
+    )
 
     assert resolver.resolve() == 'riscv64-lp64d'
 
@@ -338,8 +350,11 @@ def asking(resolver, triple, macros):
 def test_a_triple_that_named_no_target_is_completed_from_the_macros():
     # riscv64-linux-gnu covers every RISC-V ABI and uname says riscv64 too, so
     # the compiler's own macros are the only source left.
-    resolver = asking(make_resolver(), 'riscv64-linux-gnu',
-                      {'__riscv_xlen': '64', '__riscv_float_abi_double': '1'})
+    resolver = asking(
+        make_resolver(),
+        'riscv64-linux-gnu',
+        {'__riscv_xlen': '64', '__riscv_float_abi_double': '1'},
+    )
 
     assert resolver.resolve() == 'riscv64-lp64d'
 

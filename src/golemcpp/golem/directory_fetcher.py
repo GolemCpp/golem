@@ -11,7 +11,6 @@ import shutil
 from golemcpp.golem.fetched import Fetched
 from golemcpp.golem.fetcher import Fetcher
 
-
 # Records where a copied directory came from, so a resource obtained without git
 # can still name its origin (see Context.load_git_remote_origin_url).
 ORIGIN_FILENAME = '.golem-origin'

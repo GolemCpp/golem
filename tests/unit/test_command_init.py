@@ -29,7 +29,9 @@ def test_handle_init_command_creates_golemfile_from_template(tmp_path, capsys):
 
     assert result == 0
     assert created_file.exists()
-    assert created_file.read_text(encoding='utf-8') == template_path.read_text(encoding='utf-8')
+    assert created_file.read_text(encoding='utf-8') == template_path.read_text(
+        encoding='utf-8'
+    )
 
     stdout = capsys.readouterr().out
     assert 'Created' in stdout

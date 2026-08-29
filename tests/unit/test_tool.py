@@ -27,7 +27,8 @@ def make_definition(default_version='v0.8.1'):
         description='',
         repository='https://host/cppfront.git',
         default_version=default_version,
-        build_handler=lambda resource_root: None)
+        build_handler=lambda resource_root: None,
+    )
 
 
 def test_a_tool_asked_for_without_a_version_takes_its_definitions_default():

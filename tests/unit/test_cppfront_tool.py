@@ -38,7 +38,9 @@ def test_build_cppfront_builds_from_the_fetched_source(monkeypatch, tmp_path):
         built.write_text('', encoding='utf-8')
 
     def refuse_git(params, cwd=None, **kwargs):
-        raise AssertionError('the source is fetched by the resource manager: {}'.format(params))
+        raise AssertionError(
+            'the source is fetched by the resource manager: {}'.format(params)
+        )
 
     monkeypatch.setattr(cppfront_tool.helpers, 'run_git', refuse_git)
     monkeypatch.setattr(cppfront_tool.helpers, 'run_task', fake_run_task)

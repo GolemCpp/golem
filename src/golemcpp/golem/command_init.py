@@ -16,10 +16,14 @@ def initialize_project(project_dir: str, data_dir: Path, force: bool = False) ->
             project_file_found = True
 
         if project_file_found:
-            print("Use `golem init --force` to remove existing project files and generate a new golemfile.py.")
+            print(
+                "Use `golem init --force` to remove existing project files and generate a new golemfile.py."
+            )
             return 1
     else:
-        print("WARNING: --force option removes existing golemfile.py and golemfile.json files in the project directory if they exist.")
+        print(
+            "WARNING: --force option removes existing golemfile.py and golemfile.json files in the project directory if they exist."
+        )
 
         if alternate_project_path.exists():
             alternate_project_path.unlink()
@@ -37,7 +41,9 @@ def initialize_project(project_dir: str, data_dir: Path, force: bool = False) ->
         fileout.write(content)
 
     print("Created {}".format(project_path))
-    print("Add your sources, then run `golem configure --variant=debug` and `golem build`.")
+    print(
+        "Add your sources, then run `golem configure --variant=debug` and `golem build`."
+    )
     return 0
 
 

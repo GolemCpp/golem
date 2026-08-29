@@ -48,7 +48,9 @@ def matches_required_qt_major_version(path, wants_qt6=False):
 
 def is_valid_qt_sdk_root(path, wants_qt6=False):
     required_directories = ['bin', 'include', 'lib', 'mkspecs']
-    required_paths = [os.path.join(path, directory) for directory in required_directories]
+    required_paths = [
+        os.path.join(path, directory) for directory in required_directories
+    ]
 
     if not all(os.path.isdir(required_path) for required_path in required_paths):
         return False

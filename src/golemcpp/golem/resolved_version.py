@@ -46,5 +46,6 @@ class ResolvedVersion:
         if not data:
             return cls()
 
-        return cls(reference=data.get('reference', ''),
-                   revision=data.get('revision', ''))
+        return cls(
+            reference=data.get('reference', ''), revision=data.get('revision', '')
+        )

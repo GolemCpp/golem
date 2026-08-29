@@ -16,7 +16,8 @@ def _arguments(**overrides):
         minimization_enabled=True,
         minimization_length=8,
         fetch_mode=FetchMode.BLOBLESS,
-        fetch_jobs=1)
+        fetch_jobs=1,
+    )
     arguments.update(overrides)
     return arguments
 
@@ -31,7 +32,8 @@ def test_every_setting_is_required():
 def test_a_disabled_or_empty_setting_is_a_value():
     # False and an empty location list are answers, not missing settings.
     configuration = CacheConfiguration(
-        **_arguments(locations=[], minimization_enabled=False))
+        **_arguments(locations=[], minimization_enabled=False)
+    )
 
     assert configuration.locations == []
     assert configuration.minimization_enabled is False

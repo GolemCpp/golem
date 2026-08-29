@@ -1,6 +1,5 @@
 from enum import Enum
 
-
 # Separator packing a list setting into a single environment variable or
 # configuration store entry (e.g. PATH1|PATH2=url-regex).
 LIST_SEPARATOR = '|'
@@ -63,10 +62,21 @@ class SettingDescriptor:
     `is_path`, which resolves it against the project directory.
     '''
 
-    def __init__(self, key, env_name, description,
-                 value_type=SettingType.STRING, default=None, option_name=None,
-                 is_path=False, deserialize=None, serialize=None,
-                 legacy_keys=(), legacy_env_names=(), legacy_option_names=()):
+    def __init__(
+        self,
+        key,
+        env_name,
+        description,
+        value_type=SettingType.STRING,
+        default=None,
+        option_name=None,
+        is_path=False,
+        deserialize=None,
+        serialize=None,
+        legacy_keys=(),
+        legacy_env_names=(),
+        legacy_option_names=(),
+    ):
         self.key = key
         self.env_name = env_name
         self.option_name = option_name
@@ -130,8 +140,9 @@ class SettingDescriptor:
                 return True
             if text in FALSE_VALUES:
                 return False
-            raise self._type_error(value, 'one of {}'.format(
-                ', '.join(TRUE_VALUES + FALSE_VALUES)))
+            raise self._type_error(
+                value, 'one of {}'.format(', '.join(TRUE_VALUES + FALSE_VALUES))
+            )
 
         if self.value_type == SettingType.INT:
             try:
@@ -143,7 +154,9 @@ class SettingDescriptor:
             if isinstance(value, (list, tuple)):
                 return [str(entry) for entry in value if entry]
             if not isinstance(value, str):
-                raise self._type_error(value, 'entries separated by {}'.format(LIST_SEPARATOR))
+                raise self._type_error(
+                    value, 'entries separated by {}'.format(LIST_SEPARATOR)
+                )
             return [entry for entry in value.split(LIST_SEPARATOR) if entry]
 
         if isinstance(value, (list, tuple, dict, set)):

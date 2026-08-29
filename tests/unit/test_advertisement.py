@@ -1,12 +1,9 @@
 from golemcpp.golem import advertisement
 from golemcpp.golem.advertisement import Advertisement
 
-
 MAIN = 'ref: refs/heads/main\tHEAD\nabc123\tHEAD\nabc123\trefs/heads/main\n'
 
-ANNOTATED = (MAIN
-             + '0bjec7ff\trefs/tags/v2.0.0\n'
-             + 'c0mm17ff\trefs/tags/v2.0.0^{}\n')
+ANNOTATED = MAIN + '0bjec7ff\trefs/tags/v2.0.0\n' + 'c0mm17ff\trefs/tags/v2.0.0^{}\n'
 
 
 def test_the_default_branch_is_read_off_the_symref_line():
@@ -19,8 +16,10 @@ def test_a_remote_advertising_nothing_reads_empty():
 
 
 def test_a_line_naming_no_ref_is_left_out():
-    assert Advertisement.parse(MAIN + 'warning: something\n').refs == \
-        {'HEAD': 'abc123', 'refs/heads/main': 'abc123'}
+    assert Advertisement.parse(MAIN + 'warning: something\n').refs == {
+        'HEAD': 'abc123',
+        'refs/heads/main': 'abc123',
+    }
 
 
 # -- looking a version up ---------------------------------------------------
@@ -42,9 +41,9 @@ def test_each_step_of_the_lookup_order_answers():
 def test_an_ambiguous_name_answers_the_tag_the_way_git_does():
     # `git rev-parse v1.2.0` answers the tag, warning that the name is ambiguous:
     # `gitrevisions` looks in refs/tags/ before refs/heads/.
-    parsed = Advertisement.parse(MAIN
-                                 + 'b2a4c400\trefs/heads/v1.2.0\n'
-                                 + 'ta61e5000\trefs/tags/v1.2.0\n')
+    parsed = Advertisement.parse(
+        MAIN + 'b2a4c400\trefs/heads/v1.2.0\n' + 'ta61e5000\trefs/tags/v1.2.0\n'
+    )
 
     assert parsed.revision_of('v1.2.0') == 'ta61e5000'
 
@@ -83,13 +82,14 @@ def test_a_peeled_entry_is_never_a_ref_of_its_own():
 
 
 def test_tags_leaves_out_what_is_not_one():
-    assert Advertisement.parse(MAIN + 'cafebabe\trefs/tags/v1.2.0\n').tags() == \
-        ['v1.2.0']
+    assert Advertisement.parse(MAIN + 'cafebabe\trefs/tags/v1.2.0\n').tags() == [
+        'v1.2.0'
+    ]
 
 
 def test_tags_keeps_only_what_a_regex_accepts():
-    parsed = Advertisement.parse(MAIN
-                                 + 'cafebabe\trefs/tags/v1.2.0\n'
-                                 + 'deadbeef\trefs/tags/nightly-1.2.0\n')
+    parsed = Advertisement.parse(
+        MAIN + 'cafebabe\trefs/tags/v1.2.0\n' + 'deadbeef\trefs/tags/nightly-1.2.0\n'
+    )
 
     assert parsed.tags(version_regex=r'^v') == ['v1.2.0']

@@ -11,7 +11,7 @@ class CookbookManager(ResourceManager):
 
     Cookbooks are pinned in cache on the version asked. It means that when asking
     a branch on a cookbook, it will update in place to follow this branch at resolve
-    time. Same if asking for a Node-like version, it will update in place on 
+    time. Same if asking for a Node-like version, it will update in place on
     the same asked version. E.g. "^1.0.0" will follow 1.1.0, then 1.2.0, etc.
     '''
 

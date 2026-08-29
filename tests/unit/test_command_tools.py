@@ -23,7 +23,8 @@ def make_cached_tool(path, cache_root, is_read_only=False):
         is_read_only=is_read_only,
         subdir=cache_configuration.TOOLS_SUBDIR,
         cache_key='cppfront',
-        size_bytes=0)
+        size_bytes=0,
+    )
 
 
 def test_handle_tools_command_prints_help(capsys, tmp_path):
@@ -43,7 +44,10 @@ def test_handle_tools_command_prints_help(capsys, tmp_path):
     assert 'golem tools list [--available]' in stdout
     assert '  cppfront\n    Description:' in stdout
     assert '    Repository: {}'.format(cppfront_tool.CPPFRONT_REPOSITORY) in stdout
-    assert '    Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in stdout
+    assert (
+        '    Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION)
+        in stdout
+    )
 
 
 def test_handle_tools_command_rejects_unknown_subcommand(capsys, tmp_path):
@@ -76,7 +80,9 @@ def test_handle_tools_command_rejects_unknown_tool(capsys, tmp_path):
     assert 'unsupported tool: unknown-tool' in stdout
 
 
-def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch, capsys, tmp_path):
+def test_handle_tools_command_installs_cppfront_with_default_version(
+    monkeypatch, capsys, tmp_path
+):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()
 
@@ -87,14 +93,14 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
         captured['version'] = tool.version
         captured['location'] = self.locations[0].location
         tool.resolved = ResolvedVersion(
-            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
-            revision='deadbeef')
+            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION, revision='deadbeef'
+        )
         return make_cached_tool(
             path='/tmp/golem-tools-cache/cppfront',
-            cache_root=self.locations[0].location)
+            cache_root=self.locations[0].location,
+        )
 
-    monkeypatch.setattr(
-        tool_manager.ToolManager, 'make_available', fake_make_available)
+    monkeypatch.setattr(tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -108,7 +114,9 @@ def test_handle_tools_command_installs_cppfront_with_default_version(monkeypatch
     assert captured['location']
 
     stdout = capsys.readouterr().out
-    assert 'Installed cppfront {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in stdout
+    assert (
+        'Installed cppfront {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in stdout
+    )
     assert 'Selected cache location: {}'.format(captured['location']) in stdout
 
 
@@ -123,17 +131,21 @@ def test_installing_a_tool_may_reach_a_remote(monkeypatch, tmp_path):
     def fake_make_available(self, tool, fetch=True, refresh=True):
         captured['network_allowed'] = network.is_allowed()
         tool.resolved = ResolvedVersion(
-            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
-            revision='deadbeef')
+            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION, revision='deadbeef'
+        )
         return make_cached_tool(
             path='/tmp/golem-tools-cache/cppfront',
-            cache_root=self.locations[0].location)
+            cache_root=self.locations[0].location,
+        )
 
-    monkeypatch.setattr(
-        tool_manager.ToolManager, 'make_available', fake_make_available)
+    monkeypatch.setattr(tool_manager.ToolManager, 'make_available', fake_make_available)
 
-    assert command_tools.handle_tools_command(
-        project_dir=str(project_dir), args=['install', 'cppfront']) == 0
+    assert (
+        command_tools.handle_tools_command(
+            project_dir=str(project_dir), args=['install', 'cppfront']
+        )
+        == 0
+    )
 
     assert captured['network_allowed'] is True
     assert network.is_allowed() is False
@@ -149,10 +161,10 @@ def test_handle_tools_command_accepts_explicit_version(monkeypatch, tmp_path):
         captured['version'] = tool.version
         return make_cached_tool(
             path='/tmp/golem-tools-cache/cppfront',
-            cache_root=self.locations[0].location)
+            cache_root=self.locations[0].location,
+        )
 
-    monkeypatch.setattr(
-        tool_manager.ToolManager, 'make_available', fake_make_available)
+    monkeypatch.setattr(tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -173,10 +185,10 @@ def test_handle_tools_command_accepts_explicit_cache_directory(monkeypatch, tmp_
         captured['location'] = self.locations[0].location
         return make_cached_tool(
             path=self.locations[0].location + '/cppfront',
-            cache_root=self.locations[0].location)
+            cache_root=self.locations[0].location,
+        )
 
-    monkeypatch.setattr(
-        tool_manager.ToolManager, 'make_available', fake_make_available)
+    monkeypatch.setattr(tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -199,8 +211,10 @@ def test_handle_tools_command_honors_persisted_configure_options(monkeypatch, tm
     configured_cache = tmp_path / 'configured-cache'
 
     monkeypatch.setattr(
-        settings, 'get_persisted_configure_options',
-        lambda build_dir: {'cache_directory': str(configured_cache)})
+        settings,
+        'get_persisted_configure_options',
+        lambda build_dir: {'cache_directory': str(configured_cache)},
+    )
 
     captured = {}
 
@@ -208,10 +222,10 @@ def test_handle_tools_command_honors_persisted_configure_options(monkeypatch, tm
         captured['location'] = self.locations[0].location
         return make_cached_tool(
             path=self.locations[0].location + '/cppfront',
-            cache_root=self.locations[0].location)
+            cache_root=self.locations[0].location,
+        )
 
-    monkeypatch.setattr(
-        tool_manager.ToolManager, 'make_available', fake_make_available)
+    monkeypatch.setattr(tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -223,7 +237,8 @@ def test_handle_tools_command_honors_persisted_configure_options(monkeypatch, tm
 
 
 def test_handle_tools_command_reports_a_tool_served_from_a_read_only_cache(
-        monkeypatch, capsys, tmp_path):
+    monkeypatch, capsys, tmp_path
+):
     # Already there and unwritable: nothing was installed, and the command says so
     # rather than claiming an install that did not happen.
     project_dir = tmp_path / 'demo-project'
@@ -231,15 +246,15 @@ def test_handle_tools_command_reports_a_tool_served_from_a_read_only_cache(
 
     def fake_make_available(self, tool, fetch=True, refresh=True):
         tool.resolved = ResolvedVersion(
-            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION,
-            revision='deadbeef')
+            reference=cppfront_tool.DEFAULT_CPPFRONT_VERSION, revision='deadbeef'
+        )
         return make_cached_tool(
             path='/shared/cache/tools/cppfront',
             cache_root='/shared/cache',
-            is_read_only=True)
+            is_read_only=True,
+        )
 
-    monkeypatch.setattr(
-        tool_manager.ToolManager, 'make_available', fake_make_available)
+    monkeypatch.setattr(tool_manager.ToolManager, 'make_available', fake_make_available)
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -298,26 +313,37 @@ def test_handle_tools_command_uninstall_prompts_for_confirmation(capsys, tmp_pat
 
 
 def test_handle_tools_command_refuses_to_uninstall_from_a_read_only_cache(
-        capsys, monkeypatch, tmp_path):
+    capsys, monkeypatch, tmp_path
+):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()
     writable_cache = tmp_path / 'cache'
     read_only_cache = tmp_path / 'read-only-cache'
     tool_root = install_fake_tool_on_disk(read_only_cache)
     monkeypatch.setenv(
-        'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES', str(read_only_cache))
+        'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES', str(read_only_cache)
+    )
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
-        args=['uninstall', 'cppfront', '--cache-directory=' + str(writable_cache), '--yes'],
+        args=[
+            'uninstall',
+            'cppfront',
+            '--cache-directory=' + str(writable_cache),
+            '--yes',
+        ],
     )
 
     assert result == 0
     assert tool_root.exists()
 
     stdout = capsys.readouterr().out
-    assert 'cppfront is in the read-only cache location {} and was not removed'.format(
-        str(read_only_cache)) in stdout
+    assert (
+        'cppfront is in the read-only cache location {} and was not removed'.format(
+            str(read_only_cache)
+        )
+        in stdout
+    )
 
 
 def test_handle_tools_command_reports_when_tool_is_not_installed(capsys, tmp_path):
@@ -352,19 +378,25 @@ def test_handle_tools_command_lists_available_tools(capsys, tmp_path):
     assert 'Supported installable tools:' in stdout
     assert 'cppfront\n  Description:' in stdout
     assert '  Repository: {}'.format(cppfront_tool.CPPFRONT_REPOSITORY) in stdout
-    assert '  Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in stdout
+    assert (
+        '  Default version: {}'.format(cppfront_tool.DEFAULT_CPPFRONT_VERSION) in stdout
+    )
 
 
 def test_handle_tools_command_lists_installed_tools(monkeypatch, capsys, tmp_path):
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()
 
-    monkeypatch.setattr(tool_manager.ToolManager, 'list_installed_tools', lambda self: [
-        tool_manager.InstalledToolInfo(
-            name='cppfront',
-            version='v0.8.1',
-        )
-    ])
+    monkeypatch.setattr(
+        tool_manager.ToolManager,
+        'list_installed_tools',
+        lambda self: [
+            tool_manager.InstalledToolInfo(
+                name='cppfront',
+                version='v0.8.1',
+            )
+        ],
+    )
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -382,7 +414,9 @@ def test_handle_tools_command_reports_no_installed_tools(monkeypatch, capsys, tm
     project_dir = tmp_path / 'demo-project'
     project_dir.mkdir()
 
-    monkeypatch.setattr(tool_manager.ToolManager, 'list_installed_tools', lambda self: [])
+    monkeypatch.setattr(
+        tool_manager.ToolManager, 'list_installed_tools', lambda self: []
+    )
 
     result = command_tools.handle_tools_command(
         project_dir=str(project_dir),
@@ -401,7 +435,8 @@ def test_cache_minimization_enabled_optional_value_states(monkeypatch):
     def resolve(args):
         options = command_tools.parse_tools_args(args)
         return settings.get_settings(options=options).get(
-            'GOLEM_CACHE_MINIMIZATION_ENABLED')
+            'GOLEM_CACHE_MINIMIZATION_ENABLED'
+        )
 
     # Absent -> automatic default (on).
     assert resolve(['list']) is True

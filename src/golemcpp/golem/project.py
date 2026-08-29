@@ -13,7 +13,6 @@ from golemcpp.golem.helpers import *
 from waflib import Logs
 import copy
 
-
 # The members used when working out a resolution (the source, and the asked version).
 # A cached entry differing in any of them was resolved from a different request.
 #
@@ -88,8 +87,11 @@ class Project:
             ]
             if not cached_deps:
                 if not is_dependency_to_keep:
-                    Logs.debug("Querying Git for {} at {}".format(
-                        dependency.version, dependency.resolved.locator))
+                    Logs.debug(
+                        "Querying Git for {} at {}".format(
+                            dependency.version, dependency.resolved.locator
+                        )
+                    )
                     dependency.resolve()
 
                 cached_dep = copy.deepcopy(dependency)
@@ -97,10 +99,14 @@ class Project:
             else:
                 dependency.resolved = cached_deps[0].resolved
 
-            Logs.debug("Found {}: {} -> {} ({})".format(
-                dependency.name, dependency.version,
-                dependency.resolved.version.reference,
-                dependency.resolved.version.revision))
+            Logs.debug(
+                "Found {}: {} -> {} ({})".format(
+                    dependency.name,
+                    dependency.version,
+                    dependency.resolved.version.reference,
+                    dependency.resolved.version.revision,
+                )
+            )
 
         for dependency in cached_dependencies:
             dependency.name = None
@@ -151,39 +157,50 @@ class Project:
 
         for i, dependency in enumerate(self.deps):
             for cached_dependency in cached_dependencies:
-                if (cached_dependency.name != dependency.name
-                        or is_stale_for(cached_dependency, dependency)):
+                if cached_dependency.name != dependency.name or is_stale_for(
+                    cached_dependency, dependency
+                ):
                     continue
 
-                print("{}: {} -> {} ({})".format(
-                    cached_dependency.name, cached_dependency.version,
-                    cached_dependency.resolved.version.reference,
-                    cached_dependency.resolved.version.revision))
+                print(
+                    "{}: {} -> {} ({})".format(
+                        cached_dependency.name,
+                        cached_dependency.version,
+                        cached_dependency.resolved.version.reference,
+                        cached_dependency.resolved.version.revision,
+                    )
+                )
                 self.deps[i].resolved = cached_dependency.resolved
                 break
             # A copied directory has no version to have cached, so saying so about
             # one would report a failure that cannot happen.
-            if (not self.deps[i].resolved.version
-                    and not dependency.is_non_git_directory()):
+            if (
+                not self.deps[i].resolved.version
+                and not dependency.is_non_git_directory()
+            ):
                 print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()
 
-    def definition(self,
-                   type,
-                   name,
-                   link=None,
-                   version_template=None,
-                   templates=None,
-                   args=None,
-                   **kwargs):
-        new_definition = Definition(name=name,
-                                    version_template=version_template,
-                                    templates=templates,
-                                    args=args,
-                                    type=type,
-                                    link=link,
-                                    **kwargs)
+    def definition(
+        self,
+        type,
+        name,
+        link=None,
+        version_template=None,
+        templates=None,
+        args=None,
+        **kwargs,
+    ):
+        new_definition = Definition(
+            name=name,
+            version_template=version_template,
+            templates=templates,
+            args=args,
+            type=type,
+            link=link,
+            **kwargs,
+        )
 
         self.definitions.append(new_definition)
         return new_definition
@@ -238,8 +255,7 @@ class Project:
         for path in self.configuration_paths:
             resolved_path = context.make_project_path(path)
             if not os.path.exists(resolved_path):
-                raise Exception("Can't find configuration file at " +
-                                resolved_path)
+                raise Exception("Can't find configuration file at " + resolved_path)
             resolved_paths.append(resolved_path)
 
         configs = []
@@ -272,7 +288,8 @@ class Project:
             elif key == 'targets':
                 for json_obj in value:
                     project.definitions.append(
-                        Definition.unserialize_from_json(json_obj))
+                        Definition.unserialize_from_json(json_obj)
+                    )
             elif key == 'exports':
                 for json_obj in value:
                     target = Definition.unserialize_from_json(json_obj)
@@ -280,8 +297,7 @@ class Project:
                     project.exports.append(target)
             elif key == 'packages':
                 for json_obj in value:
-                    project.packages.append(
-                        Package.unserialize_from_json(json_obj))
+                    project.packages.append(Package.unserialize_from_json(json_obj))
             elif key == 'qt_enabled':
                 project.qt = value
             elif key == 'qt_path':

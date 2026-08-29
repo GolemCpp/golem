@@ -30,8 +30,9 @@ def make_source(version=''):
 def test_a_cookbook_asks_for_exactly_what_its_location_names():
     # Nothing of its own to reconcile: the location said it in full, and
     # naming no version is a question the resolver puts to the remote.
-    assert Cookbook(source=make_source(version='v1.2.0')).requested_source() == \
-        make_source(version='v1.2.0')
+    assert Cookbook(
+        source=make_source(version='v1.2.0')
+    ).requested_source() == make_source(version='v1.2.0')
     assert Cookbook(source=make_source()).requested_source().version == ''
 
 
@@ -75,7 +76,9 @@ def test_a_cookbook_is_named_the_same_before_and_after_being_resolved(resolution
     cookbook.resolve()
 
     assert CookbookManager.cache_key_for(cookbook) == unresolved
-    assert ResourceManager.source_for(cookbook).locator == Locator('https://host/recipes.git')
+    assert ResourceManager.source_for(cookbook).locator == Locator(
+        'https://host/recipes.git'
+    )
 
 
 def test_a_directory_cookbook_keeps_its_empty_reference(resolutions):

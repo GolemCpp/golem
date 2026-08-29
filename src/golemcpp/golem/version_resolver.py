@@ -18,8 +18,12 @@ from semver import max_satisfying
 
 # `advertisement` is the local name every resolution works from, therefore these
 # come in directly rather than through the module they would shadow.
-from golemcpp.golem.advertisement import (ADVERTISED_PREFIXES, Advertisement,
-                                          HEAD_VERSION, TAG_PREFIX)
+from golemcpp.golem.advertisement import (
+    ADVERTISED_PREFIXES,
+    Advertisement,
+    HEAD_VERSION,
+    TAG_PREFIX,
+)
 
 
 class VersionResolver:
@@ -34,14 +38,16 @@ class VersionResolver:
         if not listing:
             listing = helpers.read_git(
                 ['ls-remote', '--symref', url] + list(ADVERTISED_PREFIXES),
-                cwd=os.getcwd())
+                cwd=os.getcwd(),
+            )
             advertisement_store.write(url, listing)
 
         return Advertisement.parse(listing)
 
     @staticmethod
-    def resolve_requested(requested, resolved,
-                          require_revision=False) -> ResolvedVersion:
+    def resolve_requested(
+        requested, resolved, require_revision=False
+    ) -> ResolvedVersion:
         '''
         Resolve the version of a `RequestedSource`, unless the resolution
         given already answers.
@@ -58,7 +64,9 @@ class VersionResolver:
         if require_revision and not resolved.revision:
             raise RuntimeError(
                 "no commit of '{}' answers version '{}'".format(
-                    requested.locator, requested.version))
+                    requested.locator, requested.version
+                )
+            )
 
         return resolved
 
@@ -92,26 +100,29 @@ class VersionResolver:
             revision = advertisement.revision_of(HEAD_VERSION)
             if not advertisement.head_reference or not revision:
                 raise RuntimeError(
-                    "nothing in '{}' answers version '{}'".format(url, version))
-            return ResolvedVersion(reference=advertisement.head_reference,
-                                   revision=revision)
+                    "nothing in '{}' answers version '{}'".format(url, version)
+                )
+            return ResolvedVersion(
+                reference=advertisement.head_reference, revision=revision
+            )
 
         revision = advertisement.revision_of(version)
         if revision:
             return ResolvedVersion(reference=version, revision=revision)
 
         found_version = VersionResolver.find_version(
-            advertisement.tags(requested.version_regex), version)
+            advertisement.tags(requested.version_regex), version
+        )
         if found_version:
             return ResolvedVersion(
                 reference=found_version,
-                revision=advertisement.revision_of(TAG_PREFIX + found_version))
+                revision=advertisement.revision_of(TAG_PREFIX + found_version),
+            )
 
         if Version.parse_git_hash(version):
             return ResolvedVersion(reference=version, revision=version)
 
-        raise RuntimeError(
-            "nothing in '{}' answers version '{}'".format(url, version))
+        raise RuntimeError("nothing in '{}' answers version '{}'".format(url, version))
 
     @staticmethod
     def find_version(versions, ver):
@@ -180,5 +191,8 @@ def report_resolution(name, version, resolved):
     '''Say what a version resolved to, under the name the resource goes by.'''
     # Asking for nothing is asking for HEAD, so say that rather than leave a gap
     # where the question goes.
-    print("{}: {} -> {} ({})".format(
-        name, version or HEAD_VERSION, resolved.reference, resolved.revision))
+    print(
+        "{}: {} -> {} ({})".format(
+            name, version or HEAD_VERSION, resolved.reference, resolved.revision
+        )
+    )

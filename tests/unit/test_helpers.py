@@ -27,9 +27,13 @@ def test_get_environ_returns_value_for_populated_variable(monkeypatch):
     assert get_environ('GOLEM_TEST_ENV') == 'configured'
 
 
-def test_decode_output_uses_preferred_encoding_when_stdout_encoding_is_missing(monkeypatch):
+def test_decode_output_uses_preferred_encoding_when_stdout_encoding_is_missing(
+    monkeypatch,
+):
     monkeypatch.setattr(helpers.sys, 'stdout', SimpleNamespace(encoding=None))
-    monkeypatch.setattr(helpers.locale, 'getpreferredencoding', lambda do_setlocale=False: 'utf-8')
+    monkeypatch.setattr(
+        helpers.locale, 'getpreferredencoding', lambda do_setlocale=False: 'utf-8'
+    )
 
     assert helpers.decode_output('café'.encode('utf-8')) == 'café'
 
@@ -56,31 +60,37 @@ def test_remove_tree_handles_a_name_a_command_line_would_split(tmp_path):
     assert not directory.exists()
 
 
-@pytest.mark.parametrize('params', [
-    ['clone', '--', 'https://example.test/repo.git', '.'],
-    ['fetch', 'origin'],
-    ['fetch', '--depth=1', 'origin', 'abcdef'],
-    ['pull'],
-    ['push', 'origin', 'main'],
-    ['ls-remote', '--tags', 'https://example.test/repo.git'],
-    ['submodule', 'update', '--init', '--recursive'],
-])
+@pytest.mark.parametrize(
+    'params',
+    [
+        ['clone', '--', 'https://example.test/repo.git', '.'],
+        ['fetch', 'origin'],
+        ['fetch', '--depth=1', 'origin', 'abcdef'],
+        ['pull'],
+        ['push', 'origin', 'main'],
+        ['ls-remote', '--tags', 'https://example.test/repo.git'],
+        ['submodule', 'update', '--init', '--recursive'],
+    ],
+)
 def test_is_network_git_command_recognizes_what_reaches_a_remote(params):
     assert helpers.is_network_git_command(params) is True
 
 
-@pytest.mark.parametrize('params', [
-    ['init'],
-    ['remote', 'add', 'origin', 'https://example.test/repo.git'],
-    ['checkout', 'v1.0.0'],
-    ['reset', '--hard'],
-    ['clean', '-ffxd'],
-    ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
-    # Told to work from the objects already here and to fail rather than go looking.
-    ['submodule', 'update', '--init', '--recursive', '--no-fetch'],
-    ['describe', '--long', '--tags'],
-    ['config', '--get', 'remote.origin.url'],
-])
+@pytest.mark.parametrize(
+    'params',
+    [
+        ['init'],
+        ['remote', 'add', 'origin', 'https://example.test/repo.git'],
+        ['checkout', 'v1.0.0'],
+        ['reset', '--hard'],
+        ['clean', '-ffxd'],
+        ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
+        # Told to work from the objects already here and to fail rather than go looking.
+        ['submodule', 'update', '--init', '--recursive', '--no-fetch'],
+        ['describe', '--long', '--tags'],
+        ['config', '--get', 'remote.origin.url'],
+    ],
+)
 def test_is_network_git_command_leaves_local_commands_alone(params):
     assert helpers.is_network_git_command(params) is False
 
@@ -98,8 +108,8 @@ def git_task(monkeypatch):
     '''What run_git hands to run_task, once it decided about stdout.'''
     recorded = {}
     monkeypatch.setattr(
-        helpers, 'run_task',
-        lambda args, cwd=None, **kwargs: recorded.update(kwargs))
+        helpers, 'run_task', lambda args, cwd=None, **kwargs: recorded.update(kwargs)
+    )
     return recorded
 
 
@@ -118,8 +128,9 @@ def test_run_git_leaves_a_command_speaking_by_default(tmp_path, git_task):
 
 
 def test_run_git_keeps_the_stdout_a_caller_asked_for(tmp_path, git_task):
-    helpers.run_git(['reset', '--hard'], cwd=make_git_repository(tmp_path),
-                    quiet=True, stdout=None)
+    helpers.run_git(
+        ['reset', '--hard'], cwd=make_git_repository(tmp_path), quiet=True, stdout=None
+    )
 
     assert git_task['stdout'] is None
 
@@ -131,13 +142,20 @@ def test_a_git_command_line_carries_the_options_golem_runs_git_with():
     # Detached is where every resource golem checks out lands, on purpose, so the
     # advice about it is noise.
     assert helpers.git_command_line(['reset', '--hard']) == [
-        'git', '-c', 'advice.detachedHead=false', 'reset', '--hard']
+        'git',
+        '-c',
+        'advice.detachedHead=false',
+        'reset',
+        '--hard',
+    ]
 
 
 def test_the_options_are_not_what_a_command_is_validated_as(tmp_path, monkeypatch):
     # Read from the command itself: an option in front of it would answer for it.
     ran = []
-    monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, **kwargs: ran.append(args))
+    monkeypatch.setattr(
+        helpers, 'run_task', lambda args, cwd=None, **kwargs: ran.append(args)
+    )
 
     with pytest.raises(RuntimeError, match='Run golem resolve first'):
         helpers.run_git(['fetch', 'origin'], cwd=make_git_repository(tmp_path))
@@ -158,14 +176,18 @@ def no_waiting(monkeypatch):
 
 def failing_task(failures, attempts):
     '''A command that fails its first `failures` attempts and then succeeds.'''
+
     def run_task(args, cwd=None, **kwargs):
         attempts.append(args)
         if len(attempts) <= failures:
             raise RuntimeError('early EOF')
+
     return run_task
 
 
-def test_a_network_command_is_run_again_after_it_fails(tmp_path, monkeypatch, no_waiting):
+def test_a_network_command_is_run_again_after_it_fails(
+    tmp_path, monkeypatch, no_waiting
+):
     attempts = []
     monkeypatch.setattr(helpers, 'run_task', failing_task(1, attempts))
 
@@ -176,7 +198,9 @@ def test_a_network_command_is_run_again_after_it_fails(tmp_path, monkeypatch, no
     assert no_waiting == [helpers.GIT_RETRY_DELAYS[0]]
 
 
-def test_a_network_command_that_keeps_failing_says_so(tmp_path, monkeypatch, no_waiting):
+def test_a_network_command_that_keeps_failing_says_so(
+    tmp_path, monkeypatch, no_waiting
+):
     # Waited out as many times as there are delays, and no further: a remote that
     # is not answering is an answer.
     attempts = []
@@ -226,9 +250,9 @@ def test_nothing_else_about_the_environment_is_golem_s_to_change(monkeypatch):
     inherited = dict(os.environ)
     environment = helpers.git_environment()
 
-    assert {name for name, value in environment.items()
-            if inherited.get(name) != value} == {
-        'GIT_NO_LAZY_FETCH', 'GIT_TERMINAL_PROMPT', 'GIT_ASKPASS'}
+    assert {
+        name for name, value in environment.items() if inherited.get(name) != value
+    } == {'GIT_NO_LAZY_FETCH', 'GIT_TERMINAL_PROMPT', 'GIT_ASKPASS'}
     # Added to, never taken from.
     assert set(environment) >= set(inherited)
 
@@ -257,15 +281,15 @@ def test_a_git_command_may_not_fetch_what_it_is_missing_on_its_own(monkeypatch):
 def test_validate_git_command_refuses_a_remote_outside_a_network_scope(tmp_path):
     with pytest.raises(RuntimeError, match='Run golem resolve first'):
         helpers.validate_git_command(
-            ['ls-remote', '--tags', 'https://example.test/repo.git'],
-            cwd=str(tmp_path))
+            ['ls-remote', '--tags', 'https://example.test/repo.git'], cwd=str(tmp_path)
+        )
 
 
 def test_validate_git_command_allows_a_remote_inside_a_network_scope(tmp_path):
     with network.allowed():
         helpers.validate_git_command(
-            ['ls-remote', '--tags', 'https://example.test/repo.git'],
-            cwd=str(tmp_path))
+            ['ls-remote', '--tags', 'https://example.test/repo.git'], cwd=str(tmp_path)
+        )
 
 
 # -- and whether there is a repository to run it in -------------------------
@@ -286,8 +310,7 @@ def test_everything_else_needs_a_repository_to_work_in(tmp_path):
     with pytest.raises(RuntimeError, match='Not a git repository'):
         helpers.validate_git_command(['reset', '--hard'], cwd=str(tmp_path))
 
-    helpers.validate_git_command(
-        ['reset', '--hard'], cwd=make_git_repository(tmp_path))
+    helpers.validate_git_command(['reset', '--hard'], cwd=make_git_repository(tmp_path))
 
 
 def test_every_shape_git_recognises_is_a_repository(tmp_path):
@@ -301,8 +324,9 @@ def test_every_shape_git_recognises_is_a_repository(tmp_path):
 
     borrowed = tmp_path / 'borrowed'
     borrowed.mkdir()
-    (borrowed / '.git').write_text('gitdir: /elsewhere/.git/worktrees/wt\n',
-                                   encoding='utf-8')
+    (borrowed / '.git').write_text(
+        'gitdir: /elsewhere/.git/worktrees/wt\n', encoding='utf-8'
+    )
 
     bare = tmp_path / 'bare.git'
     bare.mkdir()

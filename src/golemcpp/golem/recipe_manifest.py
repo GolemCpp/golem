@@ -47,7 +47,7 @@ class RecipeManifest:
         Read the manifest at path, or an empty one where there is no file.
 
         Raise on a file golem cannot read as a manifest.
-        
+
         `origin` is how the recipe is named for logging purposes, defaulting to the
         path, because a path under the cache names its cookbook by a hash.
         '''

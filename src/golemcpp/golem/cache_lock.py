@@ -24,6 +24,7 @@ from contextlib import contextmanager
 
 try:
     import fcntl
+
     msvcrt = None
 except ImportError:  # Windows, which locks byte ranges instead.
     fcntl = None
@@ -84,7 +85,8 @@ def held(path, timeout=WAIT_TIMEOUT_SECONDS):
             if time.monotonic() >= give_up_at:
                 raise RuntimeError(
                     'Gave up after {}s waiting for another golem to be done with '
-                    '{}. Nothing was changed there.'.format(timeout, path))
+                    '{}. Nothing was changed there.'.format(timeout, path)
+                )
 
             time.sleep(POLL_SECONDS)
 

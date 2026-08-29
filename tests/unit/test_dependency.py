@@ -18,7 +18,6 @@ from golemcpp.golem import safe_part
 from golemcpp.golem.resource_manager import make_revision_part
 from golemcpp.golem.version_resolver import VersionResolver
 
-
 # A full object name, so make_revision_part abbreviates it the way it
 # abbreviates a real one.
 STUB_REVISION = '65ee68451d8eb2b5f3a30b410476ab83deb3289b'
@@ -101,8 +100,12 @@ def test_dependency_serializes_directory():
 def test_a_dependency_starts_without_a_cached_resource():
     # A DependencyManager fills it in; a dependency restored from a
     # dependencies.json comes back without one.
-    assert Dependency(
-        name='json', repository='https://example.com/json.git').cached_resource is None
+    assert (
+        Dependency(
+            name='json', repository='https://example.com/json.git'
+        ).cached_resource
+        is None
+    )
 
 
 def test_a_location_may_name_the_version(tmp_path):
@@ -124,7 +127,8 @@ def test_a_location_naming_no_version_leaves_the_version_alone(tmp_path):
 
 def test_a_declared_version_survives_a_location_naming_none(tmp_path):
     dep = Dependency(
-        name='json', location='git+https://host/json.git', version='^3.0.0')
+        name='json', location='git+https://host/json.git', version='^3.0.0'
+    )
     dep.update_source(str(tmp_path))
 
     assert dep.version == '^3.0.0'
@@ -182,7 +186,8 @@ def test_an_override_naming_a_plain_directory_as_a_repository_is_refused(tmp_pat
     (tmp_path / 'plaindir').mkdir()
     overrides_path = tmp_path / 'overrides.json'
     overrides_path.write_text(
-        json.dumps([{'name': 'mylib', 'repository': './plaindir'}]), encoding='utf-8')
+        json.dumps([{'name': 'mylib', 'repository': './plaindir'}]), encoding='utf-8'
+    )
 
     with pytest.raises(ValueError) as error:
         overrides.read_overrides(str(overrides_path), str(tmp_path))
@@ -192,7 +197,8 @@ def test_an_override_naming_a_plain_directory_as_a_repository_is_refused(tmp_pat
 
 def test_a_dependency_asking_for_two_versions_is_refused(tmp_path):
     dep = Dependency(
-        name='json', location='git+https://host/json.git#v1', version='^3.0.0')
+        name='json', location='git+https://host/json.git#v1', version='^3.0.0'
+    )
 
     with pytest.raises(ValueError) as error:
         dep.update_source(str(tmp_path))
@@ -323,8 +329,7 @@ def test_an_identity_is_read_for_its_refusals_even_though_it_is_kept():
 def test_a_copied_directory_takes_no_version_even_when_one_was_patched_in():
     # An override writes `version` onto every entry it matches, kind and all,
     # therefore one reaches a directory without anybody having asked for it.
-    dependency = Dependency(name='mylib', directory='/srv/mylib',
-                            version='^2.0.0')
+    dependency = Dependency(name='mylib', directory='/srv/mylib', version='^2.0.0')
     dependency.update_source('')
 
     assert dependency.version == '^2.0.0'
@@ -336,12 +341,14 @@ BOOST_LOCATOR = 'https://github.com/boostorg/boost.git'
 
 def make_recipe(locator, rung='@boost', cookbook='base', mirrors=()):
     '''A recipe declaring where its source is, the way a cookbook does.'''
-    return Recipe.resolve(DeclaredRecipe(
-        directory=os.path.join('/cookbook', rung),
-        cookbook=SimpleNamespace(cache_key=cookbook),
-        rung=SourceId.parse(rung),
-        manifest=RecipeManifest(locator=locator, mirrors=mirrors),
-    ))
+    return Recipe.resolve(
+        DeclaredRecipe(
+            directory=os.path.join('/cookbook', rung),
+            cookbook=SimpleNamespace(cache_key=cookbook),
+            rung=SourceId.parse(rung),
+            manifest=RecipeManifest(locator=locator, mirrors=mirrors),
+        )
+    )
 
 
 def settled_from_identity(location, recipe):
@@ -390,8 +397,7 @@ def test_the_lookup_says_what_the_identity_resolved_to(capsys):
 
 def test_the_version_asked_of_an_identity_is_asked_of_the_recipes_locator():
     # A cookbook says where a source is and never which version to take.
-    dependency = settled_from_identity('@boost#^1.87.0',
-                                       make_recipe(BOOST_LOCATOR))
+    dependency = settled_from_identity('@boost#^1.87.0', make_recipe(BOOST_LOCATOR))
 
     requested = dependency.requested_source()
 
@@ -400,8 +406,7 @@ def test_the_version_asked_of_an_identity_is_asked_of_the_recipes_locator():
 
 
 def test_a_recipe_answering_a_shorter_name_states_nothing_that_contradicts():
-    dependency = settled_from_identity('@boost@boostorg',
-                                       make_recipe(BOOST_LOCATOR))
+    dependency = settled_from_identity('@boost@boostorg', make_recipe(BOOST_LOCATOR))
 
     assert dependency.resolved.locator == BOOST_LOCATOR
 
@@ -414,8 +419,9 @@ def test_a_recipe_the_identity_contradicts_is_refused():
     dependency.update_source('/proj', identity_allowed=True)
 
     with pytest.raises(RuntimeError, match='@boost@somefork@github.com'):
-        dependency.settle_from_recipe(dependency.declared_identity(),
-                                      make_recipe(BOOST_LOCATOR))
+        dependency.settle_from_recipe(
+            dependency.declared_identity(), make_recipe(BOOST_LOCATOR)
+        )
 
     assert dependency.resolved.locator == ''
 
@@ -425,8 +431,7 @@ def test_a_recipe_naming_no_locator_cannot_be_used_as_a_location():
     dependency.update_source('/proj', identity_allowed=True)
 
     with pytest.raises(RuntimeError, match='names no locator'):
-        dependency.settle_from_recipe(dependency.declared_identity(),
-                                      make_recipe(''))
+        dependency.settle_from_recipe(dependency.declared_identity(), make_recipe(''))
 
 
 GITLAB_LOCATOR = 'https://gitlab.com/boostorg/boost.git'

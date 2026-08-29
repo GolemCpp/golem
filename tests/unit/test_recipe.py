@@ -36,8 +36,7 @@ FORK = 'https://git.corp/fork/json.git'
 
 def mirrored(tmp_path):
     '''A recipe served from github, and from a gitlab mirror of it.'''
-    return Recipe.resolve(
-        declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
+    return Recipe.resolve(declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
 
 
 def test_a_recipe_answers_where_its_source_is(tmp_path):
@@ -87,7 +86,8 @@ def test_asking_for_a_project_file_a_recipe_does_not_hold_is_refused(tmp_path):
 
 def test_what_a_recipe_answers_is_returned_rather_than_refused(tmp_path):
     recipe = Recipe.resolve(
-        declaration(tmp_path, locator='https://host.xz/j.git', project=True))
+        declaration(tmp_path, locator='https://host.xz/j.git', project=True)
+    )
 
     assert recipe.require_locators() == ('https://host.xz/j.git',)
     assert recipe.require_project_directory() == str(tmp_path / '@json')
@@ -133,8 +133,8 @@ def test_a_mirror_written_relative_hangs_off_the_recipe_directory(tmp_path):
     # The one anchor a cookbook author can see, the same rule the locator has.
     (tmp_path / 'vendor').mkdir()
     recipe = Recipe.resolve(
-        declaration(tmp_path, locator='https://host.xz/j.git',
-                    mirrors=('../vendor',)))
+        declaration(tmp_path, locator='https://host.xz/j.git', mirrors=('../vendor',))
+    )
 
     assert recipe.locators[1] == str(tmp_path / 'vendor')
 
@@ -157,8 +157,7 @@ def test_a_recipe_naming_only_mirrors_serves_no_identity_asking_for_none(tmp_pat
     recipe = Recipe.resolve(declaration(tmp_path, mirrors=(GITLAB, GITHUB)))
 
     assert recipe.locator_for(SourceId.parse('@json')) == ''
-    assert recipe.locator_for(
-        SourceId.parse('@json@nlohmann@github.com')) == GITHUB
+    assert recipe.locator_for(SourceId.parse('@json@nlohmann@github.com')) == GITHUB
 
 
 def test_a_mirror_serves_the_identity_naming_it_and_no_other(tmp_path):
@@ -174,8 +173,7 @@ def test_a_mirror_is_read_before_the_locator(tmp_path):
     # The two never both answer, since an identity naming a mirror exactly
     # states a remote the locator does not. Order settles only a mirror
     # composing the same identity as the locator, which is a redundant one.
-    recipe = Recipe.resolve(
-        declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
+    recipe = Recipe.resolve(declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
 
     assert recipe.locator_for(SourceId.parse('@json@nlohmann@gitlab.com')) == GITLAB
     assert recipe.locator_for(SourceId.parse('@json@nlohmann@github.com')) == GITHUB
@@ -183,8 +181,7 @@ def test_a_mirror_is_read_before_the_locator(tmp_path):
 
 def test_a_mirror_is_never_served_to_an_identity_naming_the_recipe_alone(tmp_path):
     # With a default source, `@json` is served that one and never a mirror.
-    recipe = Recipe.resolve(
-        declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
+    recipe = Recipe.resolve(declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
 
     assert recipe.locator_for(SourceId.parse('@json')) == GITHUB
 
@@ -192,7 +189,8 @@ def test_a_mirror_is_never_served_to_an_identity_naming_the_recipe_alone(tmp_pat
 def test_the_most_derived_declaration_naming_a_field_wins(tmp_path):
     recipe = layered(
         declaration(tmp_path, locator=FORK, name='@delta'),
-        declaration(tmp_path, locator=GITHUB, project=True, name='@base'))
+        declaration(tmp_path, locator=GITHUB, project=True, name='@base'),
+    )
 
     assert recipe.locator == FORK
     assert recipe.project_directory == str(tmp_path / '@base')
@@ -203,7 +201,8 @@ def test_a_delta_naming_mirrors_leaves_the_locator_to_the_layer_below(tmp_path):
     # shadow the other and a mirrors-only delta keeps the default below it.
     recipe = layered(
         declaration(tmp_path, mirrors=(GITLAB,), name='@delta'),
-        declaration(tmp_path, locator=GITHUB, name='@base'))
+        declaration(tmp_path, locator=GITHUB, name='@base'),
+    )
 
     assert recipe.locator == GITHUB
     assert recipe.mirrors == (GITLAB,)
@@ -215,7 +214,8 @@ def test_a_delta_replacing_the_locator_keeps_the_mirrors_below_it(tmp_path):
     # inherited one reaches nobody who did not spell its full identity.
     recipe = layered(
         declaration(tmp_path, locator=FORK, name='@delta'),
-        declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,), name='@base'))
+        declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,), name='@base'),
+    )
 
     assert recipe.locator == FORK
     assert recipe.mirrors == (GITLAB,)
@@ -228,7 +228,8 @@ def test_a_refusal_names_the_layers_a_recipe_was_made_of(tmp_path):
     # missing field was expected from.
     recipe = layered(
         declaration(tmp_path, locator=FORK, name='@delta'),
-        declaration(tmp_path, locator=GITHUB, name='@base'))
+        declaration(tmp_path, locator=GITHUB, name='@base'),
+    )
 
     with pytest.raises(RuntimeError) as refusal:
         recipe.require_project_directory()

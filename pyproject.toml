@@ -25,6 +25,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  # Capped at the year, because Black's stable style may change with each
+  # calendar version.
+  "black>=26.0,<27",
   "node-semver==0.8.0",
   "pytest>=9.0,<10",
   "ruff>=0.16,<1"

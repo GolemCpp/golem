@@ -18,6 +18,7 @@ from golemcpp.golem import source_location
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.source import Source
 
+
 @dataclass(frozen=True)
 class RequestedSource:
     # `locator` is where the source is, settled. `version` is what was asked of
@@ -35,15 +36,20 @@ class RequestedSource:
 
     @classmethod
     def for_repository(cls, locator, version='', version_regex=''):
-        return cls(locator=Locator(str(locator)), version=version,
-                   type=source.SOURCE_TYPE_GIT, version_regex=version_regex)
+        return cls(
+            locator=Locator(str(locator)),
+            version=version,
+            type=source.SOURCE_TYPE_GIT,
+            version_regex=version_regex,
+        )
 
     @classmethod
     def for_directory(cls, locator):
         # A copied directory is whatever it holds now: there is no version of it
         # to ask for.
-        return cls(locator=Locator(str(locator)), version='',
-                   type=source.SOURCE_TYPE_DIRECTORY)
+        return cls(
+            locator=Locator(str(locator)), version='', type=source.SOURCE_TYPE_DIRECTORY
+        )
 
     @classmethod
     def parse(cls, location, project_dir):
@@ -57,8 +63,7 @@ class RequestedSource:
         '''
         settled = source_location.parse(location, project_directory=project_dir)
 
-        return cls(locator=settled.locator, version=settled.version,
-                   type=settled.kind)
+        return cls(locator=settled.locator, version=settled.version, type=settled.kind)
 
     def get_id(self):
         '''Make the identity of the source itself, whatever version is asked of it.'''

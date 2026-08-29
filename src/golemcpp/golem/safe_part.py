@@ -17,7 +17,6 @@ digests always, and an advertisement digests only what it had to cut.
 import hashlib
 import re
 
-
 # What a character outside a safe set becomes.
 # Read a `~` as "something outside the safe set was here, possibly a `~`".
 SUBSTITUTE_MARKER = '~'

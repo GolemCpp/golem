@@ -8,7 +8,8 @@ from golemcpp.golem.source_id import SourceId
 def test_for_repository_preserves_location_and_resolved_version():
     source = Source.for_repository(
         'https://github.com/GolemCpp/recipes.git',
-        ResolvedVersion(reference='stable', revision='cafebabe'))
+        ResolvedVersion(reference='stable', revision='cafebabe'),
+    )
 
     assert source.locator == Locator('https://github.com/GolemCpp/recipes.git')
     assert source.resolved == ResolvedVersion(reference='stable', revision='cafebabe')
@@ -66,12 +67,17 @@ def test_get_id_matches_existing_format():
 
 def test_to_dict_round_trips_canonical_keys():
     source = Source(
-        type='git', locator=Locator('https://github.com/nlohmann/json.git'),
-        resolved=ResolvedVersion(reference='v3.12.0', revision='65ee6845'))
+        type='git',
+        locator=Locator('https://github.com/nlohmann/json.git'),
+        resolved=ResolvedVersion(reference='v3.12.0', revision='65ee6845'),
+    )
 
     data = source.to_dict()
-    assert data == {'type': 'git', 'locator': 'https://github.com/nlohmann/json.git',
-                    'resolved': {'reference': 'v3.12.0', 'revision': '65ee6845'}}
+    assert data == {
+        'type': 'git',
+        'locator': 'https://github.com/nlohmann/json.git',
+        'resolved': {'reference': 'v3.12.0', 'revision': '65ee6845'},
+    }
     assert Source.from_dict(data) == source
 
 
@@ -79,11 +85,17 @@ def test_every_field_round_trips_so_a_manifest_is_not_rewritten_each_resolve():
     # record_manifest compares a disk Source against the in-memory one, so a
     # field dropped by from_dict rewrites every manifest on every resolve.
     for source in [
-            Source(type='git', locator=Locator('https://h/r.git'),
-                   resolved=ResolvedVersion(reference='main', revision='cafebabe')),
-            Source(type='directory', locator=Locator('file:///tmp/mylib')),
-            Source(type='git', locator=Locator('https://h/r.git'),
-                   resolved=ResolvedVersion(revision='cafebabe')),
+        Source(
+            type='git',
+            locator=Locator('https://h/r.git'),
+            resolved=ResolvedVersion(reference='main', revision='cafebabe'),
+        ),
+        Source(type='directory', locator=Locator('file:///tmp/mylib')),
+        Source(
+            type='git',
+            locator=Locator('https://h/r.git'),
+            resolved=ResolvedVersion(revision='cafebabe'),
+        ),
     ]:
         assert Source.from_dict(source.to_dict()) == source
 
@@ -94,16 +106,24 @@ def test_from_manifest_reads_source_dict():
     manifest = resource_manifest.ResourceManifest.create(
         kind=resource_manifest.ResourceKind.TOOL,
         cache_key='cppfront',
-        source={'type': 'git', 'locator': 'https://host/u.git',
-                'resolved': {'reference': 'v0.8.1', 'revision': 'cafebabe'}})
+        source={
+            'type': 'git',
+            'locator': 'https://host/u.git',
+            'resolved': {'reference': 'v0.8.1', 'revision': 'cafebabe'},
+        },
+    )
     source = Source.from_manifest(manifest)
     assert source.locator == Locator('https://host/u.git')
     assert source.resolved.reference == 'v0.8.1'
 
 
 def test_label_prefers_locator_and_reference():
-    assert Source(locator=Locator('https://x/json.git'),
-                  resolved=ResolvedVersion(reference='v3.12.0')).label == \
-        'https://x/json.git v3.12.0'
+    assert (
+        Source(
+            locator=Locator('https://x/json.git'),
+            resolved=ResolvedVersion(reference='v3.12.0'),
+        ).label
+        == 'https://x/json.git v3.12.0'
+    )
     assert Source.for_directory('file:///tmp/mylib').label == 'file:///tmp/mylib'
     assert Source().label == ''

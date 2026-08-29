@@ -48,8 +48,10 @@ def refusal_phrase(refusal, target):
     if refusal is target_platform.Refusal.FAMILY:
         return "builds for the '{}' family".format(target.family)
 
-    return ("builds for the '{}' ABI, and objects built for one ABI do not "
-            "link with the other".format(target.abi))
+    return (
+        "builds for the '{}' ABI, and objects built for one ABI do not "
+        "link with the other".format(target.abi)
+    )
 
 
 class TargetResolver:
@@ -79,12 +81,11 @@ class TargetResolver:
         if not cxx:
             return ''
 
-        command = (list(cxx) if isinstance(cxx, list) else [cxx]) + [
-            '-dumpmachine']
+        command = (list(cxx) if isinstance(cxx, list) else [cxx]) + ['-dumpmachine']
         try:
             return subprocess.check_output(
-                command, universal_newlines=True,
-                stderr=subprocess.DEVNULL).strip()
+                command, universal_newlines=True, stderr=subprocess.DEVNULL
+            ).strip()
         except (OSError, ValueError, subprocess.SubprocessError):
             return ''
 
@@ -101,10 +102,16 @@ class TargetResolver:
             return {}
 
         command = (list(cxx) if isinstance(cxx, list) else [cxx]) + [
-            '-dM', '-E', '-x', 'c++', os.devnull]
+            '-dM',
+            '-E',
+            '-x',
+            'c++',
+            os.devnull,
+        ]
         try:
             output = subprocess.check_output(
-                command, universal_newlines=True, stderr=subprocess.DEVNULL)
+                command, universal_newlines=True, stderr=subprocess.DEVNULL
+            )
         except (OSError, ValueError, subprocess.SubprocessError):
             return {}
 
@@ -123,18 +130,15 @@ class TargetResolver:
         the installation it found in DEST_CPU.
         '''
         if self.msvc:
-            return target_platform.CompilerTarget.from_arch(
-                self.conf.env.DEST_CPU)
+            return target_platform.CompilerTarget.from_arch(self.conf.env.DEST_CPU)
 
-        target = target_platform.CompilerTarget.from_triple(
-            self.compiler_triple())
+        target = target_platform.CompilerTarget.from_triple(self.compiler_triple())
         if target.arch or not target.family:
             return target
 
         # The triple named a family and stopped there. Asking costs a second
         # process, therefore it runs only where the first answer came up short.
-        return target.completed_by(
-            target_platform.macro_arch(self.compiler_macros()))
+        return target.completed_by(target_platform.macro_arch(self.compiler_macros()))
 
     def compiler_builds_with(self, flags):
         '''
@@ -145,10 +149,16 @@ class TargetResolver:
         where the platform ships a userland for it, and nothing short of
         linking says whether it does.
         '''
-        return bool(self.conf.check_cxx(
-            cxxflags=flags, linkflags=flags, mandatory=False,
-            msg='Checking whether the compiler builds with {}'.format(
-                ' '.join(flags))))
+        return bool(
+            self.conf.check_cxx(
+                cxxflags=flags,
+                linkflags=flags,
+                mandatory=False,
+                msg='Checking whether the compiler builds with {}'.format(
+                    ' '.join(flags)
+                ),
+            )
+        )
 
     def compiler_command(self):
         '''The compiler as it was invoked, for a message that has to name it.'''
@@ -183,16 +193,14 @@ class TargetResolver:
         # way. Those name a different target, not one alongside the one it
         # builds, and objects built for one ABI do not link with the other
         # however well a trivial program compiles.
-        unsettled = (refusal is target_platform.Refusal.ARCH
-                     or (requested and silent))
+        unsettled = refusal is target_platform.Refusal.ARCH or (requested and silent)
 
         attempted = []
         verified = False
         # MSVC takes no such flag, and its request already reached waf through
         # MSVC_TARGETS before detection ran.
         if unsettled and not self.msvc:
-            attempted = list(
-                target_platform.arch_capability(requested).gnu_flags)
+            attempted = list(target_platform.arch_capability(requested).gnu_flags)
             if attempted:
                 verified = self.compiler_builds_with(attempted)
                 if verified:
@@ -210,13 +218,20 @@ class TargetResolver:
         if refusal:
             attempt = ''
             if build_failed:
-                attempt = (" Building with {} was tried as well and produced "
-                           "nothing that links, so it has no multilib for that "
-                           "target either.".format(' '.join(attempted)))
+                attempt = (
+                    " Building with {} was tried as well and produced "
+                    "nothing that links, so it has no multilib for that "
+                    "target either.".format(' '.join(attempted))
+                )
             raise RuntimeError(
                 "Requested architecture '{}' but the selected compiler ({}) "
-                "{}.{}".format(requested, self.compiler_command(),
-                               refusal_phrase(refusal, target), attempt))
+                "{}.{}".format(
+                    requested,
+                    self.compiler_command(),
+                    refusal_phrase(refusal, target),
+                    attempt,
+                )
+            )
 
         if only_a_family:
             # Saying the compiler did not say would be wrong here, and would
@@ -224,22 +239,27 @@ class TargetResolver:
             raise RuntimeError(
                 "The selected compiler ({}) does not say which {} it builds "
                 "for, and the choices are not interchangeable. Name one with "
-                "--arch: {}.".format(self.compiler_command(), target.family,
-                                     ', '.join(target.admitted)))
+                "--arch: {}.".format(
+                    self.compiler_command(), target.family, ', '.join(target.admitted)
+                )
+            )
 
         if unnamed:
             raise RuntimeError(
                 "Cannot tell what architecture this build is for: the compiler "
                 "did not say, and none was asked for with --arch. Naming one "
                 "here would be a guess, and it would end up in the build slug "
-                "and in what the artifact advertises about itself.")
+                "and in what the artifact advertises about itself."
+            )
 
         if silent and build_failed:
             raise RuntimeError(
                 "Requested architecture '{}' but the selected compiler ({}) "
                 "did not build for it: {} produced nothing that links, and it "
                 "reported no target of its own to fall back on.".format(
-                    requested, self.compiler_command(), ' '.join(attempted)))
+                    requested, self.compiler_command(), ' '.join(attempted)
+                )
+            )
 
         if unverifiable:
             # The request names the artifact on the user's word alone, so a
@@ -255,7 +275,8 @@ class TargetResolver:
             Logs.warn(
                 "Building for '{}' on request alone: the selected compiler "
                 "reported no target of its own, so nothing confirms it builds "
-                "for that architecture.".format(resolved))
+                "for that architecture.".format(resolved)
+            )
 
         # Log the resolved target architecture
         self.conf.msg('Target architecture', resolved)

@@ -17,10 +17,14 @@ def make_repository(path):
 def test_format_location_always_spells_the_kind():
     context = SettingProcessingContext(project_dir=None)
 
-    assert format_location(
-        RequestedSource.for_repository('https://host/r.git'), context) == 'git+https://host/r.git'
-    assert format_location(
-        RequestedSource.for_directory('file:///tmp/mylib'), context) == 'directory+file:///tmp/mylib'
+    assert (
+        format_location(RequestedSource.for_repository('https://host/r.git'), context)
+        == 'git+https://host/r.git'
+    )
+    assert (
+        format_location(RequestedSource.for_directory('file:///tmp/mylib'), context)
+        == 'directory+file:///tmp/mylib'
+    )
 
 
 def test_parse_location_round_trips_through_format_location(tmp_path):
@@ -29,7 +33,8 @@ def test_parse_location_round_trips_through_format_location(tmp_path):
 
     assert spelled == 'git+https://host/r.git'
     assert parse_location(spelled, context) == parse_location(
-        'https://host/r.git', context)
+        'https://host/r.git', context
+    )
 
 
 # -- a location may name the version to obtain -----------------------------
@@ -51,19 +56,22 @@ def test_a_local_git_location_survives_being_written_back_and_read_again(tmp_pat
 def test_format_location_writes_the_version_back(tmp_path):
     context = SettingProcessingContext(project_dir=str(tmp_path))
     spelled = format_location(
-        parse_location('https://host/r.git#^3.0.0', context), context)
+        parse_location('https://host/r.git#^3.0.0', context), context
+    )
 
     assert spelled == 'git+https://host/r.git#^3.0.0'
-    assert parse_location(spelled, context) == \
-        parse_location('https://host/r.git#^3.0.0', context)
+    assert parse_location(spelled, context) == parse_location(
+        'https://host/r.git#^3.0.0', context
+    )
 
 
 def test_format_location_omits_a_version_that_was_never_asked_for(tmp_path):
     context = SettingProcessingContext(project_dir=str(tmp_path))
 
-    assert format_location(
-        parse_location('https://host/r.git', context), context) == \
-        'git+https://host/r.git'
+    assert (
+        format_location(parse_location('https://host/r.git', context), context)
+        == 'git+https://host/r.git'
+    )
 
 
 # -- the shapes git accepts, which golem does not try to enumerate ----------

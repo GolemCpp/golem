@@ -36,7 +36,6 @@ from golemcpp.golem.fetch_policy import FetchPolicy
 from golemcpp.golem.resource import Resource
 from golemcpp.golem.source import SOURCE_TYPE_GIT
 
-
 # 40 hex is a SHA-1 object name, 64 a SHA-256 one. Git is migrating to SHA-256 and
 # a repository names its objects in one format or the other, so both have to read
 # as an object name here.
@@ -77,8 +76,7 @@ def make_revision_part(revision):
 
     spelled, _ = safe_part.spell(revision, safe_part.UNSAFE_IN_STANDALONE)
 
-    return safe_part.with_digest(
-        spelled[:safe_part.READABLE_LENGTH], of=revision)
+    return safe_part.with_digest(spelled[: safe_part.READABLE_LENGTH], of=revision)
 
 
 class Pinning(Enum):
@@ -146,7 +144,8 @@ class ResourceManager:
         return self.cache_manager.resolve_cached_resource(
             self.resource_for(self.resolve_version(item)),
             compute_size=compute_size,
-            read_manifest=read_manifest)
+            read_manifest=read_manifest,
+        )
 
     def guard_install(self, cached_resource, populate) -> str:
         '''
@@ -187,7 +186,8 @@ class ResourceManager:
         if requested.type == SOURCE_TYPE_GIT:
             raise RuntimeError(
                 "'{}' is not resolved, and reaching a remote is a resolve step. "
-                "Run golem resolve first.".format(requested.locator))
+                "Run golem resolve first.".format(requested.locator)
+            )
 
         return item
 
@@ -207,7 +207,8 @@ class ResourceManager:
         return Resource(
             kind=cls.kind,
             cache_key=cls.cache_key_for(item),
-            source=cls.source_for(item))
+            source=cls.source_for(item),
+        )
 
     @classmethod
     def cache_key_for(cls, item):
@@ -231,7 +232,9 @@ class ResourceManager:
         requested = item.requested_source()
         component = make_revision_part(
             item.resolved_version().revision
-            if cls.pinning is Pinning.REVISION else requested.version)
+            if cls.pinning is Pinning.REVISION
+            else requested.version
+        )
 
         # With no version to name, there is nothing for the separator to join.
         if not component:
@@ -248,7 +251,7 @@ class ResourceManager:
     def fetch_mode(self):
         '''
         How much of a source to obtain.
-        
+
         It is configured once for every kind, because each kind has to be
         refreshable in place and some follow a branch. A single resource may still
         ask for something else, see fetch_mode_for.
@@ -283,7 +286,8 @@ class ResourceManager:
             fetch_mode=self.fetch_mode_for(item),
             fetch_jobs=self.fetch_jobs,
             revision=self.source_for(item).resolved.revision,
-            fetch_remote=self.pinning is not Pinning.REVISION)
+            fetch_remote=self.pinning is not Pinning.REVISION,
+        )
 
     @staticmethod
     def pre_install(item):
@@ -300,7 +304,7 @@ class ResourceManager:
         '''
         Drop whatever the kind built from the previous source, before a refresh
         moves it.
-        
+
         What it built goes stale as soon as the source changes.
         '''
 
@@ -308,7 +312,7 @@ class ResourceManager:
     def post_install(root, item):
         '''
         Build whatever the kind makes from the source it now holds.
-        
+
         Most kinds make nothing here, because a later command builds what they
         need.
         '''
@@ -359,8 +363,11 @@ class ResourceManager:
 
         installed = self.is_installed(cached_resource)
 
-        if installed and self.may_migrate(cached_resource) \
-                and not self.migrate(cached_resource, item):
+        if (
+            installed
+            and self.may_migrate(cached_resource)
+            and not self.migrate(cached_resource, item)
+        ):
             # What the root holds is not what is asked for any more, and cannot
             # be turned into it. Obtain it again instead.
             installed = False
@@ -372,19 +379,24 @@ class ResourceManager:
         if cached_resource.is_read_only:
             raise RuntimeError(
                 'cannot install {} into read-only cache location {}'.format(
-                    cached_resource.cache_key, cached_resource.cache_root))
+                    cached_resource.cache_key, cached_resource.cache_root
+                )
+            )
 
         if installed:
             self.pre_install_refresh(cached_resource.path, item)
             self.guard_refresh(
                 cached_resource,
-                lambda root: self.refresh_source(self.source_path(root), item))
+                lambda root: self.refresh_source(self.source_path(root), item),
+            )
         else:
             self.pre_install(item)
             self.guard_install(
                 cached_resource,
                 lambda staging_root: self.populate(
-                    self.source_path(staging_root), item))
+                    self.source_path(staging_root), item
+                ),
+            )
 
         self.post_install(cached_resource.path, item)
         return cached_resource
@@ -413,8 +425,7 @@ class ResourceManager:
     def make_available_all(self, items, fetch=True, refresh=True):
         '''Make every item available, in the order it was given.'''
         return [
-            self.make_available(item, fetch=fetch, refresh=refresh)
-            for item in items
+            self.make_available(item, fetch=fetch, refresh=refresh) for item in items
         ]
 
     def fetcher_for(self, path, item):
@@ -440,10 +451,14 @@ class ResourceManager:
         recorded = self.cache_manager.read_manifest_fetched(cached_resource)
         try:
             fetched = self.fetcher_for(
-                self.source_path(cached_resource.path), item).migrate(recorded)
+                self.source_path(cached_resource.path), item
+            ).migrate(recorded)
         except RuntimeError as error:
-            print("Cannot migrate {}, fetching it again: {}".format(
-                cached_resource.path, error))
+            print(
+                "Cannot migrate {}, fetching it again: {}".format(
+                    cached_resource.path, error
+                )
+            )
             return False
 
         if fetched is None:

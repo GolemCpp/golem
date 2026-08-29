@@ -15,6 +15,7 @@ archive to unpack, is a Fetcher beside these ones and one line here.
 import os
 
 from golemcpp.golem.fetched import Fetched
+
 # Import this kind alone, rather than the `source` module every other reader
 # imports, to avoid naming conflicts.
 from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
@@ -43,7 +44,7 @@ class Fetcher:
         '''
         A directory holding what `recorded` describes brought to what the policy
         now asks for, converting it in place if that takes anything.
-        
+
         What comes back is what it holds afterwards, for the manifest to keep. None
         means it cannot be converted and has to be obtained again from scratch.
 
@@ -64,10 +65,12 @@ class Fetcher:
 
         if not os.path.exists(local_path):
             raise RuntimeError(
-                "Can't find local source directory: {}".format(local_path))
+                "Can't find local source directory: {}".format(local_path)
+            )
         if not os.path.isdir(local_path):
             raise RuntimeError(
-                "Local source path is not a directory: {}".format(local_path))
+                "Local source path is not a directory: {}".format(local_path)
+            )
 
         return local_path
 

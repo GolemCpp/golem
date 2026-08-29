@@ -4,34 +4,39 @@ import pytest
 
 from golemcpp.golem.locator import Locator, generate_id, is_bare_path
 
-
 # -- what counts as a path, which is git's question to answer ---------------
 
 
-@pytest.mark.parametrize('value', [
-    'mylib',
-    './mylib',
-    '../mylib',
-    '/srv/git/mylib.git',
-    './weird:name',
-    r'\\server\share\mylib.git',
-])
+@pytest.mark.parametrize(
+    'value',
+    [
+        'mylib',
+        './mylib',
+        '../mylib',
+        '/srv/git/mylib.git',
+        './weird:name',
+        r'\\server\share\mylib.git',
+    ],
+)
 def test_a_path_written_as_one_is_a_path(value):
     assert is_bare_path(value) is True
 
 
-@pytest.mark.parametrize('value', [
-    'https://github.com/org/repo.git',
-    'ssh://git@github.com/org/repo.git',
-    'git://host/repo.git',
-    'file:///srv/git/mylib.git',
-    # scp-style, the form a host hands you by default.
-    'git@github.com:org/repo.git',
-    # A transport helper, dispatched to `git-remote-hg`.
-    'hg::https://host/repo',
-    # An alias only the user's git config knows how to rewrite.
-    'gh:org/repo',
-])
+@pytest.mark.parametrize(
+    'value',
+    [
+        'https://github.com/org/repo.git',
+        'ssh://git@github.com/org/repo.git',
+        'git://host/repo.git',
+        'file:///srv/git/mylib.git',
+        # scp-style, the form a host hands you by default.
+        'git@github.com:org/repo.git',
+        # A transport helper, dispatched to `git-remote-hg`.
+        'hg::https://host/repo',
+        # An alias only the user's git config knows how to rewrite.
+        'gh:org/repo',
+    ],
+)
 def test_everything_git_takes_as_it_stands_is_not_a_path(value):
     assert is_bare_path(value) is False
 
@@ -118,8 +123,9 @@ def test_a_repository_is_recognised_through_the_locator(tmp_path):
 def test_get_id_is_the_identity_of_what_the_locator_names():
     # A Locator answers for its own identity; how that identity is composed is
     # source_id's, and its arguments live in test_source_id.py.
-    assert Locator('https://github.com/nlohmann/json.git').get_id() == \
-        generate_id('https://github.com/nlohmann/json.git')
+    assert Locator('https://github.com/nlohmann/json.git').get_id() == generate_id(
+        'https://github.com/nlohmann/json.git'
+    )
 
 
 def test_a_settled_locator_carries_no_fragment(tmp_path):
@@ -153,4 +159,3 @@ def test_a_locator_no_url_parser_can_read_is_named_by_the_error():
 
     assert "'http://['" in str(error.value)
     assert 'cannot be read as a URL' in str(error.value)
-

@@ -4,7 +4,6 @@ import sys
 
 from golemcpp.golem import helpers
 
-
 # The JSON configuration store `golem config` reads and writes, and one of the
 # sources a setting resolves against (see settings.Settings). It knows
 # about scopes and files, not about which settings exist.
@@ -82,7 +81,9 @@ def get_scoped_value(key, scope, project_dir):
 
 def get_value(key, project_dir=None):
     if project_dir:
-        local_value = get_scoped_value(key=key, scope=LOCAL_SCOPE, project_dir=project_dir)
+        local_value = get_scoped_value(
+            key=key, scope=LOCAL_SCOPE, project_dir=project_dir
+        )
         if local_value is not None:
             return local_value
 
@@ -92,7 +93,9 @@ def get_value(key, project_dir=None):
 def set_value(key, value, scope, project_dir):
     path = get_config_path(scope=scope, project_dir=project_dir)
     if path is None:
-        raise ValueError('A project directory is required to set a local configuration value')
+        raise ValueError(
+            'A project directory is required to set a local configuration value'
+        )
 
     data = read_config(path)
     data[key] = value
@@ -102,7 +105,9 @@ def set_value(key, value, scope, project_dir):
 def unset_value(key, scope, project_dir):
     path = get_config_path(scope=scope, project_dir=project_dir)
     if path is None:
-        raise ValueError('A project directory is required to unset a local configuration value')
+        raise ValueError(
+            'A project directory is required to unset a local configuration value'
+        )
 
     data = read_config(path)
     if key not in data:
@@ -123,4 +128,3 @@ def list_merged(project_dir=None):
     if project_dir:
         merged.update(list_scoped(scope=LOCAL_SCOPE, project_dir=project_dir))
     return merged
-

@@ -56,14 +56,12 @@ class Recipe:
     @property
     def mirrors(self) -> tuple:
         '''The other locators the source is reachable at.'''
-        return first(
-            (declaration.mirrors for declaration in self.chain), default=())
+        return first((declaration.mirrors for declaration in self.chain), default=())
 
     @property
     def locators(self) -> tuple:
         '''Every locator the recipe names, the default one first.'''
-        return tuple(
-            locator for locator in (self.locator,) + self.mirrors if locator)
+        return tuple(locator for locator in (self.locator,) + self.mirrors if locator)
 
     def locator_for(self, identity) -> str:
         '''
@@ -116,8 +114,12 @@ class Recipe:
         raise RuntimeError(
             "ERROR: {} names no locator, therefore '{}' cannot be used as a "
             "location:\n  {}{}".format(
-                self.served_by, self.served_by.rung, self.served_by.directory,
-                self.inherited_from()))
+                self.served_by,
+                self.served_by.rung,
+                self.served_by.directory,
+                self.inherited_from(),
+            )
+        )
 
     def require_project_directory(self) -> str:
         '''
@@ -134,7 +136,9 @@ class Recipe:
                 self.served_by,
                 project_file.PROJECT_FILE_NAMES_LISTED,
                 self.served_by.directory,
-                self.inherited_from()))
+                self.inherited_from(),
+            )
+        )
 
 
 def describe_chain(chain) -> str:

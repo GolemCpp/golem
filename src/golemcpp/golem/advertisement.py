@@ -13,7 +13,6 @@ one.
 import re
 from dataclasses import dataclass, field
 
-
 # What `ls-remote --symref` puts in front of the ref HEAD points at, and what
 # git puts in front of a branch name and a tag name.
 SYMREF_PREFIX = 'ref: '
@@ -55,8 +54,11 @@ class Advertisement:
         refs = {}
         for line in listing.splitlines():
             if line.startswith(SYMREF_PREFIX):
-                head_reference = line[len(SYMREF_PREFIX):].split(
-                    '\t')[0].removeprefix(BRANCH_PREFIX)
+                head_reference = (
+                    line[len(SYMREF_PREFIX) :]
+                    .split('\t')[0]
+                    .removeprefix(BRANCH_PREFIX)
+                )
                 continue
 
             revision, _, name = line.partition('\t')
@@ -74,8 +76,12 @@ class Advertisement:
         name follows from it rather than from a rule of ours. The remote-tracking
         steps git ends with have no equivalent here: a remote advertises none.
         '''
-        for candidate in (version, 'refs/' + version,
-                          TAG_PREFIX + version, BRANCH_PREFIX + version):
+        for candidate in (
+            version,
+            'refs/' + version,
+            TAG_PREFIX + version,
+            BRANCH_PREFIX + version,
+        ):
             if candidate in self.refs:
                 return self.refs[candidate]
 
@@ -85,8 +91,11 @@ class Advertisement:
         '''
         Every tag advertised, but without whatever `version_regex` rejects.
         '''
-        names = [name.removeprefix(TAG_PREFIX)
-                 for name in self.refs if name.startswith(TAG_PREFIX)]
+        names = [
+            name.removeprefix(TAG_PREFIX)
+            for name in self.refs
+            if name.startswith(TAG_PREFIX)
+        ]
         if not version_regex:
             return names
 

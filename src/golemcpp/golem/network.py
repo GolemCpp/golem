@@ -10,7 +10,6 @@ Denied by default. A command opens it for the work it is meant to do.
 
 import contextlib
 
-
 _allowed = False
 
 

@@ -15,7 +15,6 @@ from golemcpp.golem import version_resolver
 from golemcpp.golem.version_resolver import VersionResolver
 from collections import OrderedDict
 
-
 # The members naming where a dependency comes from, at most one of which a
 # dependency declares.
 SOURCE_MEMBERS = ('repository', 'directory', 'location')
@@ -35,26 +34,29 @@ def report_identity_resolution(identity, locator, recipe):
     '''Say what an identity resolved to, and which cookbook answered.'''
     # The only line naming the source of a dependency written as an identity:
     # a resolved version names the version and never where it came from.
-    print("{} -> {}\n{}({})".format(
-        identity,
-        locator,
-        ' ' * (len(str(identity)) + len(' -> ')),
-        recipe.served_by.cookbook.cache_key,
-    ))
+    print(
+        "{} -> {}\n{}({})".format(
+            identity,
+            locator,
+            ' ' * (len(str(identity)) + len(' -> ')),
+            recipe.served_by.cookbook.cache_key,
+        )
+    )
 
 
 class Dependency(Configuration):
-    def __init__(self,
-                 name=None,
-                 repository=None,
-                 directory=None,
-                 location=None,
-                 version=None,
-                 version_regex=None,
-                 shallow=False,
-                 **kwargs):
-        super(Dependency, self).__init__(type='library',
-                                         **kwargs)
+    def __init__(
+        self,
+        name=None,
+        repository=None,
+        directory=None,
+        location=None,
+        version=None,
+        version_regex=None,
+        shallow=False,
+        **kwargs,
+    ):
+        super(Dependency, self).__init__(type='library', **kwargs)
         self.name = '' if name is None else name
         # A dependency comes from one of three mutually-exclusive sources: a
         # git `repository` (cloned), a local `directory` (copied as-is), or a
@@ -262,8 +264,14 @@ class Dependency(Configuration):
         # The first four are what a golemfile declared, kept as it wrote them.
         # What Golem worked out about them sits in `resolved`.
         return [
-            'name', 'repository', 'directory', 'location', 'version',
-            'version_regex', 'resolved', 'shallow'
+            'name',
+            'repository',
+            'directory',
+            'location',
+            'version',
+            'version_regex',
+            'resolved',
+            'shallow',
         ]
 
     @staticmethod

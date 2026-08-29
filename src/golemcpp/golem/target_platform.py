@@ -47,7 +47,6 @@ import re
 import sys
 from dataclasses import dataclass, replace
 
-
 # --- Operating system ---------------------------------------------------
 
 OS_WINDOWS = 'windows'
@@ -122,7 +121,7 @@ def is_osystem_name(name):
 def host_arch():
     '''
     The architecture Golem is running on.
-    
+
     This helps to answers the question: which toolchain to reach for first where
     several are installed and nothing was asked for, since that is what a native
     build means.
@@ -217,9 +216,7 @@ ARCH_ALIASES = {
     'x64': ARCH_X86_64,
     'amd64': ARCH_X86_64,
     'em64t': ARCH_X86_64,
-
     'arm64': ARCH_AARCH64,
-
     'powerpc64le': ARCH_PPC64LE,
 }
 
@@ -264,8 +261,11 @@ def is_arch_name(name):
     as readily as it resolves `amd64`.
     '''
     cleaned = str(name).strip().lower()
-    return (cleaned in CANONICAL_ARCHS or cleaned in ARCH_ALIASES
-            or cleaned in ARCH_FAMILY_DEFAULTS)
+    return (
+        cleaned in CANONICAL_ARCHS
+        or cleaned in ARCH_ALIASES
+        or cleaned in ARCH_FAMILY_DEFAULTS
+    )
 
 
 # --- Reading an identity off a compiler's triple -------------------------
@@ -386,8 +386,7 @@ class Triple:
         to supply that, but it is emphatic about hard float and a request
         claiming soft float against it is wrong.
         '''
-        return ABI_BY_TRIPLE_SUFFIX.get(
-            TRIPLE_SUFFIX_LEVEL.sub('', self.suffix), '')
+        return ABI_BY_TRIPLE_SUFFIX.get(TRIPLE_SUFFIX_LEVEL.sub('', self.suffix), '')
 
     def canonical_arch(self, machine=None):
         '''
@@ -426,8 +425,7 @@ class Triple:
         # only when it is describing the machine being built for.
         isa, _ = machine_isa(field)
         if isa == field and field in FAMILY_ARCH_FIELDS:
-            isa, _ = machine_isa(
-                platform.machine() if machine is None else machine)
+            isa, _ = machine_isa(platform.machine() if machine is None else machine)
             if not isa.startswith(field):
                 return incomplete
 
@@ -476,9 +474,11 @@ class CompilerTarget:
     @staticmethod
     def from_triple(triple, machine=None):
         parsed = Triple.parse(triple)
-        return CompilerTarget(arch=parsed.canonical_arch(machine),
-                              family=parsed.arch,
-                              abi=parsed.canonical_abi())
+        return CompilerTarget(
+            arch=parsed.canonical_arch(machine),
+            family=parsed.arch,
+            abi=parsed.canonical_abi(),
+        )
 
     @property
     def answered(self):
@@ -525,8 +525,7 @@ class CompilerTarget:
         Each one is checked with `refusal`. Therefore a message offering these
         as choices cannot disagree with what `settle` goes on to accept.
         '''
-        return tuple(arch for arch in CANONICAL_ARCHS
-                     if not self.refusal(arch))
+        return tuple(arch for arch in CANONICAL_ARCHS if not self.refusal(arch))
 
     def completed_by(self, arch):
         '''
@@ -545,9 +544,9 @@ class CompilerTarget:
         Reconcile what the compiler reported with what was requested.
 
         Returns an architecture when the two are compatible
-        
+
         Returns a refusal when they aren't compatible.
-        
+
         There is no refusal if both are empty, because the request settles
         what the compiler left open.
         '''

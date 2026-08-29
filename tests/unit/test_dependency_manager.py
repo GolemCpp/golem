@@ -17,21 +17,23 @@ from support import make_cache_configuration
 from support import stub_git_probes
 from golemcpp.golem.locator import Locator
 
-
 DEPENDENCIES_SUBDIR = cache_configuration.DEPENDENCIES_SUBDIR
 
 
 def make_manager(tmp_path, minimization_enabled=False):
-    return get_dependency_manager(make_cache_configuration(
-        cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
-        minimization_enabled=minimization_enabled))
+    return get_dependency_manager(
+        make_cache_configuration(
+            cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
+            minimization_enabled=minimization_enabled,
+        )
+    )
 
 
 def make_dependency():
     return resolved_dependency(
-        Dependency(repository='https://github.com/nlohmann/json.git',
-                   version='^3.0.0'),
-        revision='1234567890abcdef')
+        Dependency(repository='https://github.com/nlohmann/json.git', version='^3.0.0'),
+        revision='1234567890abcdef',
+    )
 
 
 def expected_cache_key(dep):
@@ -100,7 +102,8 @@ def test_resolved_location_reuses_the_repository_cache_key(tmp_path):
     cached_dep = manager.resolve_cached_resource(dep)
 
     assert cached_dep.path == os.path.join(
-        cached_dep.cache_root, DEPENDENCIES_SUBDIR, expected_cache_key(dep))
+        cached_dep.cache_root, DEPENDENCIES_SUBDIR, expected_cache_key(dep)
+    )
 
 
 def test_resolved_location_is_minimized_flat_when_enabled(tmp_path):
@@ -116,7 +119,8 @@ def test_resolved_location_is_minimized_flat_when_enabled(tmp_path):
     assert cached_dep.path == os.path.join(cached_dep.cache_root, expected_name)
     # Flat: no per-kind subdirectory in the path.
     assert DEPENDENCIES_SUBDIR not in os.path.relpath(
-        cached_dep.path, cached_dep.cache_root)
+        cached_dep.path, cached_dep.cache_root
+    )
 
 
 # -- what a dependency asks of the shared fetch mechanism -------------------
@@ -126,7 +130,8 @@ def test_the_source_tree_sits_under_the_resource_root():
     # The root also holds what was built from the source, so the source itself
     # gets a subdirectory of its own.
     assert DependencyManager.source_path('/cache/json@x') == os.path.join(
-        '/cache/json@x', cache_configuration.SOURCE_DIRNAME)
+        '/cache/json@x', cache_configuration.SOURCE_DIRNAME
+    )
 
 
 def test_the_policy_pins_to_the_resolved_commit(tmp_path):
@@ -178,7 +183,8 @@ def test_a_dependency_produces_the_expected_clone_sequence(tmp_path, monkeypatch
     resolved_dependency(dep, reference='v3.12.0', revision='cafebabecafebabe')
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args))
+        helpers, 'run_git', lambda args, cwd=None, quiet=False: calls.append(args)
+    )
     stub_git_probes(monkeypatch)
 
     # A root under the temporary tree: the clone creates the directory it works
@@ -199,7 +205,8 @@ def test_resolved_location_prefers_an_existing_non_minimized_layout(tmp_path):
     dep = make_dependency()
 
     non_minimized = os.path.join(
-        str(tmp_path / 'cache'), DEPENDENCIES_SUBDIR, expected_cache_key(dep))
+        str(tmp_path / 'cache'), DEPENDENCIES_SUBDIR, expected_cache_key(dep)
+    )
     os.makedirs(non_minimized, exist_ok=True)
 
     # A resource already present under the classic layout keeps its location even
@@ -227,9 +234,14 @@ def test_locating_a_dependency_resolves_its_version_first(
     dep = Dependency(name='json', repository='https://example.com/json.git')
     dep.update_source('')
     monkeypatch.setattr(
-        VersionResolver, 'resolve',
-        staticmethod(lambda *args, **kwargs: ResolvedVersion(
-            reference='3.11.3', revision='1234567890abcdef')))
+        VersionResolver,
+        'resolve',
+        staticmethod(
+            lambda *args, **kwargs: ResolvedVersion(
+                reference='3.11.3', revision='1234567890abcdef'
+            )
+        ),
+    )
 
     cached = manager.get_cached_resource(dep)
 

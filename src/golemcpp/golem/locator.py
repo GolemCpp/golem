@@ -26,7 +26,6 @@ from urllib.parse import quote, unquote, urlparse
 
 from golemcpp.golem import helpers
 
-
 # What separates a scheme from the rest of a URL. A locator holding one names
 # nothing on this filesystem unless that scheme is `file`.
 URL_SCHEME_SEPARATOR = '://'
@@ -43,13 +42,14 @@ FILE_SCHEME = 'file'
 # `<transport>::<address>`, dispatched to a `git-remote-<transport>` helper. The
 # address is defined by that helper rather than by git, so golem has no grammar
 # for it.
-# 
+#
 # E.g. `ext::sh -c foo` is a command and `bzr::lp:project` is a bzr alias,
 # neither of which names a hierarchy.
-# 
+#
 # Only an address that is itself a URL is read, see is_opaque for the rest.
 TRANSPORT_HELPER = re.compile(
-    r'^(?P<transport>[a-zA-Z][a-zA-Z0-9+.-]*)::(?P<address>.+)$')
+    r'^(?P<transport>[a-zA-Z][a-zA-Z0-9+.-]*)::(?P<address>.+)$'
+)
 
 # `[user@]host:path`, the ssh shorthand git accepts.
 SCP_STYLE = re.compile(r'^(?:(?P<user>[^/@]+)@)?(?P<host>[^/:]+):(?P<path>.+)$')
@@ -57,7 +57,7 @@ SCP_STYLE = re.compile(r'^(?:(?P<user>[^/@]+)@)?(?P<host>[^/:]+):(?P<path>.+)$')
 # What scp-style is read under, so it cannot flatten onto `ssh://`.
 #
 # Note that `git@host:repo.git` and `ssh://host/repo.git` name two different
-# repositories. The former is relative to the user's home, the latter is 
+# repositories. The former is relative to the user's home, the latter is
 # an asbolute path.
 SCP_IDENTITY_SCHEME = 'scp+ssh'
 
@@ -85,7 +85,8 @@ def parse_url(value):
         return urlparse(value)
     except ValueError as error:
         raise ValueError(
-            "locator '{}' cannot be read as a URL: {}".format(value, error)) from error
+            "locator '{}' cannot be read as a URL: {}".format(value, error)
+        ) from error
 
 
 def is_bare_path(value):
@@ -109,8 +110,10 @@ def url_components(parsed):
 
     Segments come back decoded and the hostname is left exactly as it stands.
     '''
-    return (parsed.hostname or '',
-            [unquote(segment) for segment in parsed.path.split('/') if segment])
+    return (
+        parsed.hostname or '',
+        [unquote(segment) for segment in parsed.path.split('/') if segment],
+    )
 
 
 def is_opaque(value):
@@ -119,7 +122,7 @@ def is_opaque(value):
 
     A transport helper hands its address to `git-remote-<transport>`, which is the
     only thing that knows how to read it.
-    
+
     E.g. `ext::sh -c foo` is a command line and `bzr::lp:project` is a bzr alias.
 
     An address that is itself a URL is the exception, and the documented common
@@ -166,8 +169,7 @@ def as_url(value):
         #
         #   C:/proj/mylib      -> file:///C:/proj/mylib
         #   C:\proj\weird#name -> file:///C:/proj/weird%23name
-        return 'file:///' + quote(
-            value.replace('\\', '/').lstrip('/'), safe='/:')
+        return 'file:///' + quote(value.replace('\\', '/').lstrip('/'), safe='/:')
 
     if is_bare_path(value):
         # Make a path a URL and ensure it is absolute.
@@ -195,12 +197,14 @@ def as_url(value):
         authority = match.group('host').translate(NETLOC_BREAKING)
         if match.group('user'):
             authority = '{}@{}'.format(
-                match.group('user').translate(NETLOC_BREAKING), authority)
+                match.group('user').translate(NETLOC_BREAKING), authority
+            )
         return '{}://{}/{}'.format(
-            SCP_IDENTITY_SCHEME, authority, quote(match.group('path')))
+            SCP_IDENTITY_SCHEME, authority, quote(match.group('path'))
+        )
 
     # What is left names neither a host nor a path.
-    # 
+    #
     # Encoded like a path so what comes back out decodes the same way, and
     # identified by the digest, since there is no hierarchy in it to read.
     #
@@ -237,19 +241,21 @@ class Locator:
 
         if not self.value:
             return
-        
+
         # A bare path is not a resolved locator.
         if is_bare_path(self.value):
             raise ValueError(
                 "locator '{}' is a path, not a settled locator: it has to be "
-                "resolved against a project first".format(self.value))
-        
+                "resolved against a project first".format(self.value)
+            )
+
         # Must be a valid URL
         hostname, segments = url_components(parse_url(self.value))
         if not hostname and not segments:
             raise ValueError(
                 "locator '{}' names nothing: a scheme on its own identifies no "
-                "source".format(self.value))
+                "source".format(self.value)
+            )
 
     def __bool__(self) -> bool:
         return bool(self.value)

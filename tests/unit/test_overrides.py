@@ -27,10 +27,13 @@ def make_dependency(**kwargs):
 def test_read_overrides_names_the_source_the_way_a_project_file_does(tmp_path):
     lib_dir = tmp_path / 'mylib'
     lib_dir.mkdir()
-    path = write_configuration(tmp_path / 'overlay', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0'},
-        {'location': 'mylib'},
-    ])
+    path = write_configuration(
+        tmp_path / 'overlay',
+        [
+            {'repository': 'https://host/json.git', 'version': '^3.0.0'},
+            {'location': 'mylib'},
+        ],
+    )
 
     overrides = read_overrides(path, str(tmp_path))
 
@@ -41,8 +44,10 @@ def test_read_overrides_names_the_source_the_way_a_project_file_does(tmp_path):
 
 
 def test_write_overrides_round_trips_through_read_overrides(tmp_path):
-    path = write_configuration(tmp_path / 'overlay', [
-        {'repository': 'https://host/json.git', 'version': '^3.0.0', 'shallow': True}])
+    path = write_configuration(
+        tmp_path / 'overlay',
+        [{'repository': 'https://host/json.git', 'version': '^3.0.0', 'shallow': True}],
+    )
     overrides = read_overrides(path, str(tmp_path))
 
     written = write_overrides(overrides, str(tmp_path / 'build' / 'overrides.json'))
@@ -82,8 +87,10 @@ def test_merge_overrides_keeps_declaration_order():
 
     merged = merge_overrides([[first, second], [third]])
 
-    assert [override.repository for override in merged] == \
-        ['https://host/json.git', 'https://host/fmt.git']
+    assert [override.repository for override in merged] == [
+        'https://host/json.git',
+        'https://host/fmt.git',
+    ]
 
 
 def test_merge_overrides_separates_entries_by_the_source_they_override():

@@ -22,14 +22,18 @@ def test_global_config_path_honors_xdg_config_home(monkeypatch, tmp_path):
     monkeypatch.setattr(config_store.sys, 'platform', 'linux')
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'xdg'))
 
-    assert config_store.get_global_config_path() == str(tmp_path / 'xdg' / 'golem' / 'config.json')
+    assert config_store.get_global_config_path() == str(
+        tmp_path / 'xdg' / 'golem' / 'config.json'
+    )
 
 
 def test_global_config_path_falls_back_to_home(monkeypatch, tmp_path):
     monkeypatch.setattr(config_store.sys, 'platform', 'linux')
     home = _isolate_home(monkeypatch, tmp_path)
 
-    assert config_store.get_global_config_path() == str(home / '.config' / 'golem' / 'config.json')
+    assert config_store.get_global_config_path() == str(
+        home / '.config' / 'golem' / 'config.json'
+    )
 
 
 def test_global_config_path_uses_appdata_on_windows(monkeypatch, tmp_path):
@@ -39,15 +43,20 @@ def test_global_config_path_uses_appdata_on_windows(monkeypatch, tmp_path):
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'xdg'))
 
     assert config_store.get_global_config_path() == os.path.join(
-        r'C:\Users\Alice\AppData\Roaming', 'golem', 'config.json')
+        r'C:\Users\Alice\AppData\Roaming', 'golem', 'config.json'
+    )
 
 
-def test_global_config_path_without_appdata_on_windows_falls_back(monkeypatch, tmp_path):
+def test_global_config_path_without_appdata_on_windows_falls_back(
+    monkeypatch, tmp_path
+):
     monkeypatch.setattr(config_store.sys, 'platform', 'win32')
     monkeypatch.delenv('APPDATA', raising=False)
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'xdg'))
 
-    assert config_store.get_global_config_path() == str(tmp_path / 'xdg' / 'golem' / 'config.json')
+    assert config_store.get_global_config_path() == str(
+        tmp_path / 'xdg' / 'golem' / 'config.json'
+    )
 
 
 def test_global_config_path_ignores_appdata_off_windows(monkeypatch, tmp_path):
@@ -55,13 +64,17 @@ def test_global_config_path_ignores_appdata_off_windows(monkeypatch, tmp_path):
     home = _isolate_home(monkeypatch, tmp_path)
     monkeypatch.setenv('APPDATA', r'C:\Users\Alice\AppData\Roaming')
 
-    assert config_store.get_global_config_path() == str(home / '.config' / 'golem' / 'config.json')
+    assert config_store.get_global_config_path() == str(
+        home / '.config' / 'golem' / 'config.json'
+    )
 
 
 def test_local_config_path(tmp_path):
     project_dir = tmp_path / 'demo-project'
 
-    assert config_store.get_local_config_path(str(project_dir)) == str(project_dir / '.golem' / 'config.json')
+    assert config_store.get_local_config_path(str(project_dir)) == str(
+        project_dir / '.golem' / 'config.json'
+    )
 
 
 def test_read_config_missing_file_returns_empty(tmp_path):
@@ -99,35 +112,72 @@ def test_set_and_get_local_value(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value(
+        'overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir
+    )
 
-    assert config_store.get_scoped_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) == '/local/overrides'
-    assert config_store.get_value('overlays.locations', project_dir) == '/local/overrides'
+    assert (
+        config_store.get_scoped_value(
+            'overlays.locations', config_store.LOCAL_SCOPE, project_dir
+        )
+        == '/local/overrides'
+    )
+    assert (
+        config_store.get_value('overlays.locations', project_dir) == '/local/overrides'
+    )
 
 
 def test_local_overrides_global(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('overlays.locations', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
-    assert config_store.get_value('overlays.locations', project_dir) == '/global/overrides'
+    config_store.set_value(
+        'overlays.locations',
+        '/global/overrides',
+        config_store.GLOBAL_SCOPE,
+        project_dir,
+    )
+    assert (
+        config_store.get_value('overlays.locations', project_dir) == '/global/overrides'
+    )
 
-    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
-    assert config_store.get_value('overlays.locations', project_dir) == '/local/overrides'
+    config_store.set_value(
+        'overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir
+    )
+    assert (
+        config_store.get_value('overlays.locations', project_dir) == '/local/overrides'
+    )
 
 
 def test_unset_removes_value_and_reports(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value(
+        'overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir
+    )
 
-    assert config_store.unset_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) is True
-    assert config_store.get_scoped_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) is None
+    assert (
+        config_store.unset_value(
+            'overlays.locations', config_store.LOCAL_SCOPE, project_dir
+        )
+        is True
+    )
+    assert (
+        config_store.get_scoped_value(
+            'overlays.locations', config_store.LOCAL_SCOPE, project_dir
+        )
+        is None
+    )
     # File is cleaned up once empty.
     assert not os.path.exists(config_store.get_local_config_path(project_dir))
     # Unsetting again reports nothing removed.
-    assert config_store.unset_value('overlays.locations', config_store.LOCAL_SCOPE, project_dir) is False
+    assert (
+        config_store.unset_value(
+            'overlays.locations', config_store.LOCAL_SCOPE, project_dir
+        )
+        is False
+    )
 
 
 def test_set_local_without_project_dir_raises(monkeypatch, tmp_path):
@@ -137,18 +187,31 @@ def test_set_local_without_project_dir_raises(monkeypatch, tmp_path):
         config_store.set_value('overlays.locations', '/x', config_store.LOCAL_SCOPE, '')
     except ValueError:
         return
-    raise AssertionError('expected ValueError when setting a local value without a project directory')
+    raise AssertionError(
+        'expected ValueError when setting a local value without a project directory'
+    )
 
 
 def test_list_merged_combines_scopes(monkeypatch, tmp_path):
     _isolate_home(monkeypatch, tmp_path)
     project_dir = str(tmp_path / 'project')
 
-    config_store.set_value('cache.directory', '/global/cache', config_store.GLOBAL_SCOPE, project_dir)
-    config_store.set_value('overlays.locations', '/global/overrides', config_store.GLOBAL_SCOPE, project_dir)
-    config_store.set_value('overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir)
+    config_store.set_value(
+        'cache.directory', '/global/cache', config_store.GLOBAL_SCOPE, project_dir
+    )
+    config_store.set_value(
+        'overlays.locations',
+        '/global/overrides',
+        config_store.GLOBAL_SCOPE,
+        project_dir,
+    )
+    config_store.set_value(
+        'overlays.locations', '/local/overrides', config_store.LOCAL_SCOPE, project_dir
+    )
 
     merged = config_store.list_merged(project_dir)
 
-    assert merged == {'cache.directory': '/global/cache', 'overlays.locations': '/local/overrides'}
-
+    assert merged == {
+        'cache.directory': '/global/cache',
+        'overlays.locations': '/local/overrides',
+    }

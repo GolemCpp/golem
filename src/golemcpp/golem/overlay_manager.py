@@ -15,7 +15,7 @@ class OverlayManager(ResourceManager):
 
     Overlays are pinned in cache on the version asked. It means that when asking
     a branch on a overlay, it will update in place to follow this branch at resolve
-    time. Same if asking for a Node-like version, it will update in place on 
+    time. Same if asking for a Node-like version, it will update in place on
     the same asked version. E.g. "^1.0.0" will follow 1.1.0, then 1.2.0, etc.
     '''
 
@@ -36,16 +36,19 @@ class OverlayManager(ResourceManager):
         contributions = []
         for cached_overlay in cached_overlays:
             overrides_path = os.path.join(
-                cached_overlay.source_path, overrides.OVERRIDES_FILENAME)
+                cached_overlay.source_path, overrides.OVERRIDES_FILENAME
+            )
             if os.path.exists(overrides_path):
                 contributions.append(
-                    overrides.read_overrides(overrides_path, project_dir))
+                    overrides.read_overrides(overrides_path, project_dir)
+                )
 
         if not contributions:
             return ''
 
         return overrides.write_overrides(
-            overrides.merge_overrides(contributions), merged_path)
+            overrides.merge_overrides(contributions), merged_path
+        )
 
 
 def get_overlay_manager(cache_configuration) -> OverlayManager:

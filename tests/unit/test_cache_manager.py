@@ -15,7 +15,9 @@ from support import make_cache_configuration, make_source
 from golemcpp.golem.locator import Locator
 
 
-def make_resource(cache_root, subdir, name, *, manifest_kind=None, source=None, size=10):
+def make_resource(
+    cache_root, subdir, name, *, manifest_kind=None, source=None, size=10
+):
     resource_root = os.path.join(cache_root, subdir, name)
     os.makedirs(resource_root, exist_ok=True)
     with open(os.path.join(resource_root, 'payload'), 'w', encoding='utf-8') as fp:
@@ -25,7 +27,8 @@ def make_resource(cache_root, subdir, name, *, manifest_kind=None, source=None, 
             resource_root=resource_root,
             kind=manifest_kind,
             cache_key=name,
-            source=source or make_source())
+            source=source or make_source(),
+        )
     return resource_root
 
 
@@ -35,12 +38,20 @@ def make_manager(*cache_dirs):
 
 def test_scan_identifies_resources_and_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@nlohmann@github.com#abc',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
-                  source=make_source(reference='v3.12.0'))
-    make_resource(root, cache_configuration.COOKBOOKS_SUBDIR, '@mystery@@host#main')  # no manifest
+    make_resource(
+        root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@json@nlohmann@github.com#abc',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+        source=make_source(reference='v3.12.0'),
+    )
+    make_resource(
+        root, cache_configuration.COOKBOOKS_SUBDIR, '@mystery@@host#main'
+    )  # no manifest
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     resources = manager.scan()
 
     assert len(resources) == 2
@@ -60,12 +71,22 @@ def test_scan_identifies_resources_and_unidentified(tmp_path):
 
 def test_select_substring_and_regex(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@nlohmann@github.com#abc',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@fmt@fmtlib@github.com#def',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
+    make_resource(
+        root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@json@nlohmann@github.com#abc',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
+    make_resource(
+        root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@fmt@fmtlib@github.com#def',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     resources = manager.scan()
 
     substring = cache_manager.CacheManager.select(resources, 'nlohmann')
@@ -77,13 +98,23 @@ def test_select_substring_and_regex(tmp_path):
 
 def test_filter_kind(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@@h#abc',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
-    make_resource(root, cache_configuration.TOOLS_SUBDIR, 'cppfront',
-                  manifest_kind=resource_manifest.ResourceKind.TOOL,
-                  source=make_source(reference='v0.8.1'))
+    make_resource(
+        root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@json@@h#abc',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
+    make_resource(
+        root,
+        cache_configuration.TOOLS_SUBDIR,
+        'cppfront',
+        manifest_kind=resource_manifest.ResourceKind.TOOL,
+        source=make_source(reference='v0.8.1'),
+    )
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     resources = manager.scan()
 
     tools = cache_manager.CacheManager.filter_kind(resources, 'tool')
@@ -93,22 +124,35 @@ def test_filter_kind(tmp_path):
 def test_remove_resources_skips_read_only(tmp_path):
     writable_root = str(tmp_path / 'writable')
     read_only_root = str(tmp_path / 'readonly')
-    make_resource(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, '@a@@h#1',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
-    make_resource(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, '@b@@h#2',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
+    make_resource(
+        writable_root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@a@@h#1',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
+    make_resource(
+        read_only_root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@b@@h#2',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
 
     manager = make_manager(
         cache_directory.CacheDirectory(location=writable_root, is_read_only=False),
-        cache_directory.CacheDirectory(location=read_only_root, is_read_only=True))
+        cache_directory.CacheDirectory(location=read_only_root, is_read_only=True),
+    )
     resources = manager.scan()
 
     removed, skipped = cache_manager.CacheManager.remove_resources(resources)
 
     assert [r.cache_key for r in removed] == ['@a@@h#1']
     assert [r.cache_key for r in skipped] == ['@b@@h#2']
-    assert not os.path.exists(os.path.join(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, '@a@@h#1'))
-    assert os.path.exists(os.path.join(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, '@b@@h#2'))
+    assert not os.path.exists(
+        os.path.join(writable_root, cache_configuration.DEPENDENCIES_SUBDIR, '@a@@h#1')
+    )
+    assert os.path.exists(
+        os.path.join(read_only_root, cache_configuration.DEPENDENCIES_SUBDIR, '@b@@h#2')
+    )
 
 
 def test_list_cache_locations_reports_existence(tmp_path):
@@ -118,7 +162,10 @@ def test_list_cache_locations_reports_existence(tmp_path):
 
     manager = make_manager(
         cache_directory.CacheDirectory(location=existing, is_read_only=False),
-        cache_directory.CacheDirectory(location=missing, is_read_only=True, regex='github'))
+        cache_directory.CacheDirectory(
+            location=missing, is_read_only=True, regex='github'
+        ),
+    )
     summaries = manager.list_cache_locations()
 
     assert summaries[0].exists is True
@@ -131,13 +178,19 @@ def test_list_cache_locations_reports_existence(tmp_path):
 def test_scan_detects_legacy_flat_entries_as_unidentified(tmp_path):
     root = str(tmp_path / 'cache')
     # A normal resource under a known subdirectory.
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@@h#abc',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
+    make_resource(
+        root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@json@@h#abc',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
     # A legacy flat resource stored directly at the cache root, no manifest,
     # named the way the golem that wrote it spelled a key.
     make_resource(root, '', 'mylogger@fsys.home+-')
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     by_key = {resource.cache_key: resource for resource in manager.scan()}
 
     assert set(by_key) == {'@json@@h#abc', 'mylogger@fsys.home+-'}
@@ -159,9 +212,12 @@ def test_scan_identifies_top_level_entries_via_manifest(tmp_path):
         resource_root=resource_root,
         kind=resource_manifest.ResourceKind.DEPENDENCY,
         cache_key='@json@nlohmann@github.com#abc',
-        source=make_source())
+        source=make_source(),
+    )
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     resources = manager.scan()
 
     assert len(resources) == 1
@@ -174,13 +230,19 @@ def test_scan_identifies_top_level_entries_via_manifest(tmp_path):
 
 def test_scan_does_not_treat_known_subdirs_as_resources(tmp_path):
     root = str(tmp_path / 'cache')
-    make_resource(root, cache_configuration.DEPENDENCIES_SUBDIR, '@json@@h#abc',
-                  manifest_kind=resource_manifest.ResourceKind.DEPENDENCY)
+    make_resource(
+        root,
+        cache_configuration.DEPENDENCIES_SUBDIR,
+        '@json@@h#abc',
+        manifest_kind=resource_manifest.ResourceKind.DEPENDENCY,
+    )
     # Create empty known subdirs; none of them should show up as a resource.
     for subdir in cache_configuration.RESOURCE_SUBDIRS:
         os.makedirs(os.path.join(root, subdir), exist_ok=True)
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     keys = {resource.cache_key for resource in manager.scan()}
 
     assert keys == {'@json@@h#abc'}
@@ -193,7 +255,9 @@ def test_scan_ignores_stray_files_at_cache_root(tmp_path):
     with open(os.path.join(root, 'stray.txt'), 'w', encoding='utf-8') as fp:
         fp.write('junk')
 
-    manager = make_manager(cache_directory.CacheDirectory(location=root, is_read_only=False))
+    manager = make_manager(
+        cache_directory.CacheDirectory(location=root, is_read_only=False)
+    )
     assert manager.scan() == []
 
 
@@ -201,13 +265,16 @@ def test_scan_ignores_stray_files_at_cache_root(tmp_path):
 
 
 def make_tool_resource():
-    source = Source.for_repository('https://example.com/tool.git', ResolvedVersion(reference='v1', revision='v1'))
+    source = Source.for_repository(
+        'https://example.com/tool.git', ResolvedVersion(reference='v1', revision='v1')
+    )
     return Resource(kind=ResourceKind.TOOL, cache_key='demo', source=source)
 
 
 def make_classic_manager(*locations):
     return cache_manager.get_cache_manager(
-        make_cache_configuration(*locations, minimization_enabled=False))
+        make_cache_configuration(*locations, minimization_enabled=False)
+    )
 
 
 def test_resolve_and_locate(tmp_path):
@@ -217,7 +284,8 @@ def test_resolve_and_locate(tmp_path):
 
     assert manager.resolve_cache_directory(resource).location == str(tmp_path / 'cache')
     assert manager._get_resource_location(cache_dir, resource) == os.path.join(
-        str(tmp_path / 'cache'), cache_configuration.TOOLS_SUBDIR, 'demo')
+        str(tmp_path / 'cache'), cache_configuration.TOOLS_SUBDIR, 'demo'
+    )
     assert manager.resolve_cached_resource(resource).exists() is False
 
 
@@ -256,7 +324,9 @@ def test_resolve_cached_resource_reads_size_and_manifest_on_demand(tmp_path):
     assert plain.size_bytes == 0
     assert plain.manifest is None
 
-    detailed = manager.resolve_cached_resource(resource, compute_size=True, read_manifest=True)
+    detailed = manager.resolve_cached_resource(
+        resource, compute_size=True, read_manifest=True
+    )
     assert detailed.path == root
     assert detailed.cache_key == 'demo'
     assert detailed.kind == ResourceKind.TOOL.value
@@ -319,8 +389,9 @@ def test_guard_install_holds_the_root_while_it_stages_and_swaps(tmp_path):
     cached = manager.make_cached_resource(cache_dir, make_tool_resource())
 
     held = []
-    manager.guard_install(cached, lambda staging_root: held.append(
-        taken_by_somebody_else(cached)))
+    manager.guard_install(
+        cached, lambda staging_root: held.append(taken_by_somebody_else(cached))
+    )
 
     assert held == [True]
     # Let go of on the way out: the next golem does not wait for a finished one.
@@ -328,7 +399,9 @@ def test_guard_install_holds_the_root_while_it_stages_and_swaps(tmp_path):
     # The file it left behind is not a resource: what it holds is nothing, and
     # the inventory only looks at directories.
     assert os.path.isfile(cached.lock_path)
-    assert [scanned.path for scanned in manager.scan(compute_size=False)] == [cached.path]
+    assert [scanned.path for scanned in manager.scan(compute_size=False)] == [
+        cached.path
+    ]
 
 
 def test_guard_refresh_holds_the_root_while_it_is_brought_up_to_date(tmp_path):
@@ -337,8 +410,9 @@ def test_guard_refresh_holds_the_root_while_it_is_brought_up_to_date(tmp_path):
     manager, cached = make_installed_tool(tmp_path)
 
     held = []
-    manager.guard_refresh(cached, lambda path: held.append(
-        taken_by_somebody_else(cached)))
+    manager.guard_refresh(
+        cached, lambda path: held.append(taken_by_somebody_else(cached))
+    )
 
     assert held == [True]
     assert taken_by_somebody_else(cached) is False
@@ -346,10 +420,13 @@ def test_guard_refresh_holds_the_root_while_it_is_brought_up_to_date(tmp_path):
 
 def test_guard_install_refuses_a_scanned_resource(tmp_path):
     cache_root = str(tmp_path / 'cache')
-    make_resource(cache_root, cache_configuration.TOOLS_SUBDIR, 'demo',
-                  manifest_kind=ResourceKind.TOOL)
-    manager = make_classic_manager(
-        cache_directory.CacheDirectory(location=cache_root))
+    make_resource(
+        cache_root,
+        cache_configuration.TOOLS_SUBDIR,
+        'demo',
+        manifest_kind=ResourceKind.TOOL,
+    )
+    manager = make_classic_manager(cache_directory.CacheDirectory(location=cache_root))
 
     # A scanned entry names itself from its own manifest, so it has no resource
     # to write a fresh manifest from: installing through it is a programming error.
@@ -364,8 +441,13 @@ def make_installed_tool(tmp_path, reference='v1'):
     cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
     manager = make_classic_manager(cache_dir)
     resource = Resource(
-        kind=ResourceKind.TOOL, cache_key='demo',
-        source=Source.for_repository('https://example.com/tool.git', ResolvedVersion(reference=reference, revision=reference)))
+        kind=ResourceKind.TOOL,
+        cache_key='demo',
+        source=Source.for_repository(
+            'https://example.com/tool.git',
+            ResolvedVersion(reference=reference, revision=reference),
+        ),
+    )
     cached = manager.make_cached_resource(cache_dir, resource)
     os.makedirs(cached.path, exist_ok=True)
     return manager, cached
@@ -392,13 +474,19 @@ def test_guard_refresh_only_marks_an_unchanged_resource_as_used(tmp_path, monkey
     manager, cached = make_installed_tool(tmp_path)
     manager.write_manifest(cached)
     written = []
-    monkeypatch.setattr(manager, 'write_manifest',
-                        lambda cached_resource: written.append(cached_resource.path))
+    monkeypatch.setattr(
+        manager,
+        'write_manifest',
+        lambda cached_resource: written.append(cached_resource.path),
+    )
 
     manager.guard_refresh(cached, lambda path: None)
 
     assert written == []
-    assert ResourceManifest.read_from_root(cached.path).source['resolved']['reference'] == 'v1'
+    assert (
+        ResourceManifest.read_from_root(cached.path).source['resolved']['reference']
+        == 'v1'
+    )
 
 
 def test_guard_refresh_names_a_resource_that_lost_its_manifest(tmp_path):
@@ -426,7 +514,9 @@ def test_guard_refresh_records_only_once_the_refresh_ran(tmp_path):
 
 def test_remove_resources_honors_read_only_guard(tmp_path):
     writable = cache_directory.CacheDirectory(location=str(tmp_path / 'w'))
-    read_only = cache_directory.CacheDirectory(location=str(tmp_path / 'ro'), is_read_only=True)
+    read_only = cache_directory.CacheDirectory(
+        location=str(tmp_path / 'ro'), is_read_only=True
+    )
     resource = make_tool_resource()
 
     manager = make_classic_manager(writable)
@@ -452,7 +542,8 @@ def test_remove_resources_honors_read_only_guard(tmp_path):
 
 def test_remove_resources_skips_a_resource_that_is_already_gone(tmp_path):
     manager = make_classic_manager(
-        cache_directory.CacheDirectory(location=str(tmp_path / 'w')))
+        cache_directory.CacheDirectory(location=str(tmp_path / 'w'))
+    )
 
     cached = manager.resolve_cached_resource(make_tool_resource())
 

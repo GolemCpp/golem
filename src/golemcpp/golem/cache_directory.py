@@ -37,7 +37,8 @@ def parse_location(entry, context):
     '''
     return CacheDirectory(
         location=helpers.make_absolute_path(entry, context.project_dir),
-        is_read_only=False)
+        is_read_only=False,
+    )
 
 
 def parse_writable_entry(entry, context):
@@ -65,7 +66,8 @@ def _parse_entry(entry, context, is_read_only):
     return CacheDirectory(
         location=helpers.make_absolute_path(location, context.project_dir),
         is_read_only=is_read_only,
-        regex=regex)
+        regex=regex,
+    )
 
 
 def format_entry(cache_directory, context):

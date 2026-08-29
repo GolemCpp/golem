@@ -29,7 +29,8 @@ class Tool:
     def requested_source(self):
         # What this tool asks for.
         return RequestedSource.for_repository(
-            self.definition.repository, version=self.version)
+            self.definition.repository, version=self.version
+        )
 
     def resolved_version(self):
         return self.resolved

@@ -8,11 +8,19 @@ from waflib.Tools import msvc
 from golemcpp.golem.resource_manager import ResourceManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem import safe_part
-from golemcpp.golem import (context as golem_context, helpers, network,
-                            qt_discovery, target_platform)
+from golemcpp.golem import (
+    context as golem_context,
+    helpers,
+    network,
+    qt_discovery,
+    target_platform,
+)
 from golemcpp.golem.settings import get_settings
 from golemcpp.golem.cache_configuration import (
-    CacheConfiguration, DEPENDENCIES_SUBDIR, COOKBOOKS_SUBDIR)
+    CacheConfiguration,
+    DEPENDENCIES_SUBDIR,
+    COOKBOOKS_SUBDIR,
+)
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
@@ -114,20 +122,28 @@ def test_configure_settles_the_target_before_it_selects_tasks():
     assert seen['compiler'] == 'msvc'
 
 
-def test_configure_autodiscovers_qtdir_when_qt_is_enabled_and_other_sources_are_missing(monkeypatch):
+def test_configure_autodiscovers_qtdir_when_qt_is_enabled_and_other_sources_are_missing(
+    monkeypatch,
+):
     context = make_configure_context()
-    context.get_tasks_and_targets_to_process = lambda: [(
-        make_task_config(features=['QT6CORE']),
-        None,
-    )]
+    context.get_tasks_and_targets_to_process = lambda: [
+        (
+            make_task_config(features=['QT6CORE']),
+            None,
+        )
+    ]
 
     monkeypatch.delenv('QT5_ROOT', raising=False)
     monkeypatch.delenv('QT6_ROOT', raising=False)
-    monkeypatch.setattr(context, 'is_qmake_available_on_path', lambda wants_qt6=False: False)
+    monkeypatch.setattr(
+        context, 'is_qmake_available_on_path', lambda wants_qt6=False: False
+    )
     monkeypatch.setattr(
         qt_discovery,
         'search_for_qt_root_in_default_dirs',
-        lambda _, wants_qt6=False: '/opt/Qt/6.7.2/gcc_64' if wants_qt6 else '/opt/Qt/5.15.2/gcc_64',
+        lambda _, wants_qt6=False: (
+            '/opt/Qt/6.7.2/gcc_64' if wants_qt6 else '/opt/Qt/5.15.2/gcc_64'
+        ),
     )
 
     context.configure()
@@ -135,23 +151,35 @@ def test_configure_autodiscovers_qtdir_when_qt_is_enabled_and_other_sources_are_
     assert context.context.options.qtdir == '/opt/Qt/6.7.2/gcc_64'
 
 
-def test_configure_skips_qtdir_autodiscovery_when_qmake_or_qt_roots_are_available(monkeypatch):
+def test_configure_skips_qtdir_autodiscovery_when_qmake_or_qt_roots_are_available(
+    monkeypatch,
+):
     test_cases = [
-        {'env': {'QT5_ROOT': '/opt/Qt/5.15.2/gcc_64'}, 'qmake': False, 'wants_qt6': False},
-        {'env': {'QT6_ROOT': '/opt/Qt/6.7.2/gcc_64'}, 'qmake': False, 'wants_qt6': True},
+        {
+            'env': {'QT5_ROOT': '/opt/Qt/5.15.2/gcc_64'},
+            'qmake': False,
+            'wants_qt6': False,
+        },
+        {
+            'env': {'QT6_ROOT': '/opt/Qt/6.7.2/gcc_64'},
+            'qmake': False,
+            'wants_qt6': True,
+        },
         {'env': {}, 'qmake': True, 'wants_qt6': False},
     ]
 
     for test_case in test_cases:
         context = make_configure_context()
         called = {'search': False}
-        context.get_tasks_and_targets_to_process = lambda: [(
-            make_task_config(
-                features=['QT6CORE'] if test_case['wants_qt6'] else ['QT5CORE'],
-                wfeatures=['qt6'] if test_case['wants_qt6'] else [],
-            ),
-            None,
-        )]
+        context.get_tasks_and_targets_to_process = lambda: [
+            (
+                make_task_config(
+                    features=['QT6CORE'] if test_case['wants_qt6'] else ['QT5CORE'],
+                    wfeatures=['qt6'] if test_case['wants_qt6'] else [],
+                ),
+                None,
+            )
+        ]
 
         monkeypatch.delenv('QT5_ROOT', raising=False)
         monkeypatch.delenv('QT6_ROOT', raising=False)
@@ -168,7 +196,9 @@ def test_configure_skips_qtdir_autodiscovery_when_qmake_or_qt_roots_are_availabl
             called['search'] = True
             return '/opt/Qt/6.7.2/gcc_64' if wants_qt6 else '/opt/Qt/5.15.2/gcc_64'
 
-        monkeypatch.setattr(qt_discovery, 'search_for_qt_root_in_default_dirs', fake_search)
+        monkeypatch.setattr(
+            qt_discovery, 'search_for_qt_root_in_default_dirs', fake_search
+        )
 
         context.configure()
 
@@ -176,13 +206,17 @@ def test_configure_skips_qtdir_autodiscovery_when_qmake_or_qt_roots_are_availabl
         assert context.context.options.qtdir == ''
 
 
-def test_configure_autodiscovers_qtdir_when_only_other_qt_major_root_is_set(monkeypatch):
+def test_configure_autodiscovers_qtdir_when_only_other_qt_major_root_is_set(
+    monkeypatch,
+):
     context = make_configure_context()
 
     monkeypatch.delenv('QT5_ROOT', raising=False)
     monkeypatch.delenv('QT6_ROOT', raising=False)
     monkeypatch.setenv('QT6_ROOT', '/opt/Qt/6.7.2/gcc_64')
-    monkeypatch.setattr(context, 'is_qmake_available_on_path', lambda wants_qt6=False: False)
+    monkeypatch.setattr(
+        context, 'is_qmake_available_on_path', lambda wants_qt6=False: False
+    )
 
     called = {'search': False}
 
@@ -202,13 +236,15 @@ def test_configure_autodiscovers_qtdir_when_only_other_qt_major_root_is_set(monk
 UNSET = object()
 
 
-def make_runtime_context(*,
-                         variant='debug',
-                         runtime_link='shared',
-                         runtime_variant=None,
-                         link='shared',
-                         arch='x86_64',
-                         requested=UNSET):
+def make_runtime_context(
+    *,
+    variant='debug',
+    runtime_link='shared',
+    runtime_variant=None,
+    link='shared',
+    arch='x86_64',
+    requested=UNSET,
+):
     '''
     A context for a build that has already been configured.
 
@@ -274,12 +310,14 @@ def test_runtime_link_requires_normalized_dependency():
 def test_restore_options_env_upgrades_legacy_runtime_option():
     context = make_runtime_context()
     context.context.env = SimpleNamespace(
-        OPTIONS=json.dumps({
-            'runtime': 'static',
-            'targets': '',
-            'only_update_dependencies_regex': '',
-            'output_file': '',
-        })
+        OPTIONS=json.dumps(
+            {
+                'runtime': 'static',
+                'targets': '',
+                'only_update_dependencies_regex': '',
+                'output_file': '',
+            }
+        )
     )
     context.context.options.targets = ''
     context.context.options.output_file = ''
@@ -320,8 +358,12 @@ def test_a_dependency_gets_its_own_slug():
     # Every field but the toolchain's may differ per dependency, which is what
     # the dep argument threads through.
     context = make_runtime_context(variant='debug')
-    dep = SimpleNamespace(link=['static'], runtime_link=['static'],
-                          runtime_variant=['release'], variant=['release'])
+    dep = SimpleNamespace(
+        link=['static'],
+        runtime_link=['static'],
+        runtime_variant=['release'],
+        variant=['release'],
+    )
 
     assert context.build_path(dep) == 'windows~x86_64~msvc-19.44~st~r~st~r'
 
@@ -347,10 +389,10 @@ def test_a_target_artifact_sits_under_the_dependency_it_belongs_to():
     dep = SimpleNamespace(name='json')
     identity = generate_id(EXPORTED_FROM)
 
-    whole = context.make_dep_artifact_subpath(
-        dep, source_location=EXPORTED_FROM)
+    whole = context.make_dep_artifact_subpath(dep, source_location=EXPORTED_FROM)
     one_target = context.make_dep_artifact_subpath(
-        dep, target_name='parser', source_location=EXPORTED_FROM)
+        dep, target_name='parser', source_location=EXPORTED_FROM
+    )
 
     assert whole == os.path.join(identity, 'json.json')
     assert one_target == os.path.join(identity, 'json', 'parser.json')
@@ -364,7 +406,8 @@ def test_a_name_holding_an_at_sign_stays_in_its_own_component():
     dep = SimpleNamespace(name='a@b')
 
     subpath = context.make_dep_artifact_subpath(
-        dep, target_name='c@d', source_location=EXPORTED_FROM)
+        dep, target_name='c@d', source_location=EXPORTED_FROM
+    )
 
     assert subpath == os.path.join(generate_id(EXPORTED_FROM), 'a@b', 'c@d.json')
 
@@ -375,9 +418,9 @@ def test_an_artifact_subpath_falls_back_to_the_project_it_is_written_from():
     context = make_artifact_context(remote=EXPORTED_FROM)
     dep = SimpleNamespace(name='json')
 
-    assert (context.make_dep_artifact_subpath(dep)
-            == context.make_dep_artifact_subpath(
-                dep, source_location=EXPORTED_FROM))
+    assert context.make_dep_artifact_subpath(dep) == context.make_dep_artifact_subpath(
+        dep, source_location=EXPORTED_FROM
+    )
 
 
 def test_configure_debug_keeps_debug_flags_with_release_runtime_variant():
@@ -400,8 +443,10 @@ def test_make_default_build_flags_enables_utf8_for_msvc():
     assert '/utf-8' in flags['cxxflags']
 
 
-@pytest.mark.parametrize('arch, expected', [('x86_64', '-m64'), ('i686', '-m32'),
-                                            ('amd64', '-m64'), ('x86', '-m32')])
+@pytest.mark.parametrize(
+    'arch, expected',
+    [('x86_64', '-m64'), ('i686', '-m32'), ('amd64', '-m64'), ('x86', '-m32')],
+)
 def test_gnu_word_size_flag_reaches_the_linker_too(arch, expected):
     # waf's link rule expands LINKFLAGS and never CXXFLAGS, so a word-size flag
     # given only to the compiler produces objects the link step cannot use.
@@ -453,26 +498,32 @@ def test_unknown_arch_keeps_an_identity_and_gains_no_flags():
     assert context.make_default_build_flags(variant='release')['linkflags'] == []
 
 
-@pytest.mark.parametrize('arch, expected', [
-    ('x86_64', 'x64'),
-    ('amd64', 'x64'),
-    # The whole point: neither MSBuild nor CMake accepts 'x86', which is what
-    # both were handed before.
-    ('i686', 'Win32'),
-    ('x86', 'Win32'),
-    ('aarch64', 'ARM64'),
-    ('arm64', 'ARM64'),
-])
+@pytest.mark.parametrize(
+    'arch, expected',
+    [
+        ('x86_64', 'x64'),
+        ('amd64', 'x64'),
+        # The whole point: neither MSBuild nor CMake accepts 'x86', which is what
+        # both were handed before.
+        ('i686', 'Win32'),
+        ('x86', 'Win32'),
+        ('aarch64', 'ARM64'),
+        ('arm64', 'ARM64'),
+    ],
+)
 def test_vs_platform_uses_visual_studios_own_names(arch, expected):
     assert make_runtime_context(arch=arch).vs_platform() == expected
 
 
-@pytest.mark.parametrize('arch, msvc_target, vcvars', [
-    # waf's all_msvc_platforms pairs these, and they differ for x86_64.
-    ('x86_64', 'x64', 'amd64'),
-    ('i686', 'x86', 'x86'),
-    ('aarch64', 'arm64', 'arm64'),
-])
+@pytest.mark.parametrize(
+    'arch, msvc_target, vcvars',
+    [
+        # waf's all_msvc_platforms pairs these, and they differ for x86_64.
+        ('x86_64', 'x64', 'amd64'),
+        ('i686', 'x86', 'x86'),
+        ('aarch64', 'arm64', 'arm64'),
+    ],
+)
 def test_the_two_msvc_vocabularies_stay_apart(arch, msvc_target, vcvars):
     context = make_runtime_context(arch=arch)
 
@@ -553,12 +604,15 @@ def test_an_explicit_request_emits_them():
     assert '-m64' in flags['linkflags']
 
 
-@pytest.mark.parametrize('arch, expected', [
-    ('i686', 'x86'),
-    ('x86', 'x86'),
-    ('x86_64', 'x64'),
-    ('aarch64', 'arm64'),
-])
+@pytest.mark.parametrize(
+    'arch, expected',
+    [
+        ('i686', 'x86'),
+        ('x86', 'x86'),
+        ('x86_64', 'x64'),
+        ('aarch64', 'arm64'),
+    ],
+)
 def test_an_explicit_arch_narrows_the_msvc_search(arch, expected):
     # configure() writes this into MSVC_TARGETS before context.load(), which
     # is how a request reaches waf's msvc detection rather than only the
@@ -579,13 +633,16 @@ def test_an_absent_arch_leaves_the_msvc_search_alone():
 def test_restore_normalizes_both_the_request_and_the_resolved_identity():
     context = make_runtime_context()
     context.context.env = SimpleNamespace(
-        OPTIONS=json.dumps({
-            'arch': 'x64',
-            'resolved_arch': 'amd64',
-            'targets': '',
-            'only_update_dependencies_regex': '',
-            'output_file': '',
-        }))
+        OPTIONS=json.dumps(
+            {
+                'arch': 'x64',
+                'resolved_arch': 'amd64',
+                'targets': '',
+                'only_update_dependencies_regex': '',
+                'output_file': '',
+            }
+        )
+    )
     context.context.options.targets = ''
     context.context.options.output_file = ''
     context.context.options.only_update_dependencies_regex = ''
@@ -602,12 +659,15 @@ def test_an_env_with_no_resolved_identity_is_not_given_one():
     # architecture reaching a build slug.
     context = make_runtime_context()
     context.context.env = SimpleNamespace(
-        OPTIONS=json.dumps({
-            'arch': 'x64',
-            'targets': '',
-            'only_update_dependencies_regex': '',
-            'output_file': '',
-        }))
+        OPTIONS=json.dumps(
+            {
+                'arch': 'x64',
+                'targets': '',
+                'only_update_dependencies_regex': '',
+                'output_file': '',
+            }
+        )
+    )
     context.context.options.targets = ''
     context.context.options.output_file = ''
     context.context.options.only_update_dependencies_regex = ''
@@ -655,7 +715,9 @@ def make_build_target_context(*, variant='release', no_defaults=False):
         add_group=lambda: None,
     )
     context.context_tasks = []
-    context.make_decorated_target_list_from_context = lambda config, target_names: target_names
+    context.make_decorated_target_list_from_context = (
+        lambda config, target_names: target_names
+    )
     context.make_decorated_target_from_context = lambda config, target_name: target_name
     context.is_qt5_used = lambda config: False
     context.is_qt6_used = lambda config: False
@@ -701,7 +763,8 @@ def make_build_target_context(*, variant='release', no_defaults=False):
 
 def make_static_library_build_target_context(*, variant='release', no_defaults=False):
     context, task, config = make_build_target_context(
-        variant=variant, no_defaults=no_defaults)
+        variant=variant, no_defaults=no_defaults
+    )
     context.is_shared = lambda: False
     context.is_static = lambda: True
     task.type_unique = 'library'
@@ -721,7 +784,9 @@ def test_gather_build_arguments_applies_default_flags_per_target(monkeypatch):
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(
+        task=task, targets=['demo'], config=config
+    )
 
     assert 'UNICODE' in build_arguments.defines
     assert 'NDEBUG' in build_arguments.defines
@@ -733,7 +798,9 @@ def test_gather_build_arguments_applies_default_flags_per_target(monkeypatch):
     assert build_arguments.env_cxxflags == ['/env-cxx']
 
 
-def test_gather_build_arguments_skips_default_flags_when_no_defaults_is_enabled(monkeypatch):
+def test_gather_build_arguments_skips_default_flags_when_no_defaults_is_enabled(
+    monkeypatch,
+):
     context, task, config = make_build_target_context(no_defaults=True)
 
     monkeypatch.setattr(
@@ -742,7 +809,9 @@ def test_gather_build_arguments_skips_default_flags_when_no_defaults_is_enabled(
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(
+        task=task, targets=['demo'], config=config
+    )
 
     assert 'UNICODE' not in build_arguments.defines
     assert 'NDEBUG' not in build_arguments.defines
@@ -755,8 +824,7 @@ def test_gather_build_arguments_skips_default_flags_when_no_defaults_is_enabled(
 
 
 def test_gather_build_arguments_applies_default_arflags_per_target(monkeypatch):
-    context, task, config = make_static_library_build_target_context(
-        no_defaults=False)
+    context, task, config = make_static_library_build_target_context(no_defaults=False)
 
     monkeypatch.setattr(
         golem_context,
@@ -764,15 +832,16 @@ def test_gather_build_arguments_applies_default_arflags_per_target(monkeypatch):
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(
+        task=task, targets=['demo'], config=config
+    )
 
     assert '/MACHINE:X64' in build_arguments.arflags
     assert '/INCREMENTAL:NO' in build_arguments.arflags
 
 
 def test_gather_build_arguments_merges_config_arflags(monkeypatch):
-    context, task, config = make_static_library_build_target_context(
-        no_defaults=False)
+    context, task, config = make_static_library_build_target_context(no_defaults=False)
     config.arflags = ['/custom-arflag']
 
     monkeypatch.setattr(
@@ -781,16 +850,19 @@ def test_gather_build_arguments_merges_config_arflags(monkeypatch):
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(
+        task=task, targets=['demo'], config=config
+    )
 
     assert '/MACHINE:X64' in build_arguments.arflags
     assert '/INCREMENTAL:NO' in build_arguments.arflags
     assert '/custom-arflag' in build_arguments.arflags
 
 
-def test_gather_build_arguments_skips_default_arflags_when_no_defaults_is_enabled(monkeypatch):
-    context, task, config = make_static_library_build_target_context(
-        no_defaults=True)
+def test_gather_build_arguments_skips_default_arflags_when_no_defaults_is_enabled(
+    monkeypatch,
+):
+    context, task, config = make_static_library_build_target_context(no_defaults=True)
     config.arflags = ['/custom-arflag']
 
     monkeypatch.setattr(
@@ -799,16 +871,24 @@ def test_gather_build_arguments_skips_default_arflags_when_no_defaults_is_enable
         lambda working_dir, build_number: SimpleNamespace(semver_short='1.2.3'),
     )
 
-    build_arguments = context.gather_build_arguments(task=task, targets=['demo'], config=config)
+    build_arguments = context.gather_build_arguments(
+        task=task, targets=['demo'], config=config
+    )
 
     assert '/MACHINE:X64' not in build_arguments.arflags
     assert '/INCREMENTAL:NO' not in build_arguments.arflags
     assert build_arguments.arflags == ['/custom-arflag']
 
 
-def stub_dependency_manager(monkeypatch, context, *, is_read_only=False,
-                            cache_root='/tmp/cache', source_path='/tmp/repo',
-                            installs=None):
+def stub_dependency_manager(
+    monkeypatch,
+    context,
+    *,
+    is_read_only=False,
+    cache_root='/tmp/cache',
+    source_path='/tmp/repo',
+    installs=None,
+):
     '''Stands in for the real manager, so a fake dep needs no cache to resolve in.'''
     context.cache_configuration = None
     cached_dep = SimpleNamespace(is_read_only=is_read_only, cache_root=cache_root)
@@ -819,10 +899,12 @@ def stub_dependency_manager(monkeypatch, context, *, is_read_only=False,
         return SimpleNamespace(source_path=source_path)
 
     monkeypatch.setattr(
-        golem_context, 'get_dependency_manager',
+        golem_context,
+        'get_dependency_manager',
         lambda cache_configuration: SimpleNamespace(
-            get_cached_resource=lambda dep: cached_dep,
-            install=install))
+            get_cached_resource=lambda dep: cached_dep, install=install
+        ),
+    )
 
 
 def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
@@ -830,7 +912,9 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     context.resolved_overrides = '/tmp/overrides.json'
     context.get_dep_location = lambda dep: '/tmp/dep-export'
     context.get_dep_build_location = lambda dep: '/tmp/repo/build'
-    context.get_global_dependencies_configuration_file = lambda: '/tmp/global-dependencies.json'
+    context.get_global_dependencies_configuration_file = (
+        lambda: '/tmp/global-dependencies.json'
+    )
     context.get_only_update_dependencies_regex = lambda: ''
     # The cache options forwarded to the dependency sub-build are the flags the
     # settings spell, so the sub-build reaches the same caches with the same layout.
@@ -843,7 +927,8 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
             cache_minimization_enabled='off',
             cache_minimization_length=12,
             additional_cache_directory=['shared=github'],
-        ))
+        ),
+    )
 
     dep = SimpleNamespace(
         name='demo',
@@ -860,7 +945,9 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
 
     monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
     monkeypatch.setattr(helpers, 'make_golem_command', lambda command: [command])
-    monkeypatch.setattr(helpers, 'run_task', lambda args, cwd=None, stdout=None: calls.append(args))
+    monkeypatch.setattr(
+        helpers, 'run_task', lambda args, cwd=None, stdout=None: calls.append(args)
+    )
     stub_dependency_manager(monkeypatch, context)
 
     context.run_dep_command(dep=dep, command='resolve')
@@ -875,8 +962,12 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
     assert '--cache-minimization-length=12' in calls[0]
     # A relative cache directory is forwarded absolute: the sub-build runs
     # elsewhere and would otherwise resolve it against its own directory.
-    assert '--additional-cache-directory={}=github'.format(
-        os.path.join(project_dir, 'shared')) in calls[0]
+    assert (
+        '--additional-cache-directory={}=github'.format(
+            os.path.join(project_dir, 'shared')
+        )
+        in calls[0]
+    )
 
 
 def test_run_dep_command_refuses_a_read_only_cache_location(monkeypatch):
@@ -885,14 +976,18 @@ def test_run_dep_command_refuses_a_read_only_cache_location(monkeypatch):
     context = make_runtime_context(runtime_variant='release')
     monkeypatch.setattr(golem_context.Logs, 'info', lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        helpers, 'run_task',
-        lambda *args, **kwargs: pytest.fail('ran a command from a read-only cache'))
+        helpers,
+        'run_task',
+        lambda *args, **kwargs: pytest.fail('ran a command from a read-only cache'),
+    )
     stub_dependency_manager(
-        monkeypatch, context, is_read_only=True, cache_root='/shared/cache')
+        monkeypatch, context, is_read_only=True, cache_root='/shared/cache'
+    )
 
     with pytest.raises(RuntimeError, match='read-only cache location /shared/cache'):
         context.run_dep_command(
-            dep=SimpleNamespace(name='demo', version='1.0.0'), command='build')
+            dep=SimpleNamespace(name='demo', version='1.0.0'), command='build'
+        )
 
 
 def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch):
@@ -912,20 +1007,30 @@ def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch
         context.get_only_update_dependencies_regex = lambda: ''
         context.settings = get_settings(
             project_dir=absolute_path('tmp', 'project'),
-            options=SimpleNamespace(cache_directory=absolute_path('tmp', 'cache')))
+            options=SimpleNamespace(cache_directory=absolute_path('tmp', 'cache')),
+        )
         stub_dependency_manager(monkeypatch, context, installs=refreshed)
 
         context.run_dep_command(
             dep=SimpleNamespace(
-                name='demo', version='1.0.0', runtime_link=None, runtime_variant=None,
-                link=None, variant=None, shallow=False,
-                resolved=ResolvedVersion(reference='1.0.0', revision='cafebabe')),
-            command=command)
+                name='demo',
+                version='1.0.0',
+                runtime_link=None,
+                runtime_variant=None,
+                link=None,
+                variant=None,
+                shallow=False,
+                resolved=ResolvedVersion(reference='1.0.0', revision='cafebabe'),
+            ),
+            command=command,
+        )
 
     assert refreshed == [False, True]
 
 
-def make_repository_context(project_dir, *, deps_resolve=True, no_cookbooks_fetch=False):
+def make_repository_context(
+    project_dir, *, deps_resolve=True, no_cookbooks_fetch=False
+):
     context = Context.__new__(Context)
     context.project = SimpleNamespace()
     context.context = SimpleNamespace(
@@ -935,7 +1040,8 @@ def make_repository_context(project_dir, *, deps_resolve=True, no_cookbooks_fetc
             cache_resolution_policy='strict',
             cache_minimization_enabled='',
             cache_minimization_length=0,
-        ))
+        )
+    )
     context.deps_resolve = deps_resolve
     # Built lazily by Context.get_settings(), which __init__ would have reset.
     context.settings = None
@@ -944,6 +1050,7 @@ def make_repository_context(project_dir, *, deps_resolve=True, no_cookbooks_fetc
     # specific cache locations override context.cache_configuration explicitly.
     context.cache_configuration = make_cache_configuration()
     return context
+
 
 def test_directory_dependency_is_detected_as_non_git(tmp_path):
     directory = tmp_path / 'recipes'
@@ -999,12 +1106,19 @@ def test_a_dependency_location_resolves_to_the_kind_it_spells(tmp_path):
     assert cloned.directory == ''
 
 
-@pytest.mark.parametrize('sources', [
-    {'location': './mylib', 'repository': 'https://host/r.git'},
-    {'location': './mylib', 'directory': './mylib'},
-    {'repository': 'https://host/r.git', 'directory': './mylib'},
-    {'location': './mylib', 'repository': 'https://host/r.git', 'directory': './mylib'},
-])
+@pytest.mark.parametrize(
+    'sources',
+    [
+        {'location': './mylib', 'repository': 'https://host/r.git'},
+        {'location': './mylib', 'directory': './mylib'},
+        {'repository': 'https://host/r.git', 'directory': './mylib'},
+        {
+            'location': './mylib',
+            'repository': 'https://host/r.git',
+            'directory': './mylib',
+        },
+    ],
+)
 def test_a_dependency_declares_exactly_one_source(sources):
     with pytest.raises(ValueError, match='declares several sources'):
         Dependency(name='mylib', **sources)
@@ -1018,7 +1132,8 @@ def test_a_dependency_may_declare_no_source_yet():
 def test_several_sources_are_refused_when_read_from_a_configuration(tmp_path):
     # read_json writes the members straight in, so __init__ never sees them.
     override = Dependency.unserialize_from_json(
-        {'repository': 'https://host/r.git', 'directory': './mylib'})
+        {'repository': 'https://host/r.git', 'directory': './mylib'}
+    )
 
     with pytest.raises(ValueError, match='declares several sources'):
         override.update_source(str(tmp_path))
@@ -1033,7 +1148,9 @@ def test_get_cookbook_locations_normalizes_local_paths(monkeypatch, tmp_path):
 
     cookbooks = context.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
 
-    assert [cookbook.locator for cookbook in cookbooks] == [Locator(recipes_dir.resolve().as_uri())]
+    assert [cookbook.locator for cookbook in cookbooks] == [
+        Locator(recipes_dir.resolve().as_uri())
+    ]
 
 
 def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
@@ -1045,7 +1162,9 @@ def test_get_overlay_locations_normalizes_local_paths(monkeypatch, tmp_path):
 
     overlays = context.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
 
-    assert [overlay.locator for overlay in overlays] == [Locator(overrides_dir.resolve().as_uri())]
+    assert [overlay.locator for overlay in overlays] == [
+        Locator(overrides_dir.resolve().as_uri())
+    ]
 
 
 def test_normalize_repository_url_percent_encodes_local_paths(tmp_path):
@@ -1072,7 +1191,9 @@ def test_run_command_uses_subprocess_without_shell_on_windows(monkeypatch):
 
     monkeypatch.setattr(golem_context.subprocess, 'call', fake_call)
 
-    result = context.run_command(['git', 'status'], cwd='C:/tmp/project', env={'GOLEM_FLAG': '1'})
+    result = context.run_command(
+        ['git', 'status'], cwd='C:/tmp/project', env={'GOLEM_FLAG': '1'}
+    )
 
     assert result is None
     assert captured['command'] == ['git', 'status']
@@ -1095,14 +1216,18 @@ def test_run_command_with_msvisualcpp_uses_cmd_wrapper_without_shell(monkeypatch
 
     monkeypatch.setattr(golem_context.subprocess, 'call', fake_call)
 
-    result = context.run_command_with_msvisualcpp(['cl.exe', '/nologo'], cwd='C:/tmp/project')
+    result = context.run_command_with_msvisualcpp(
+        ['cl.exe', '/nologo'], cwd='C:/tmp/project'
+    )
 
     assert result is None
     assert captured['command'][:4] == ['cmd', '/d', '/s', '/c']
     assert captured['cwd'] == 'C:/tmp/project'
     assert captured['shell'] is False
     # amd64, not x64: vcvarsall takes the second member of waf's pair.
-    assert captured['command'][4].startswith('call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" amd64')
+    assert captured['command'][4].startswith(
+        'call "C:\\VS Path\\VC\\Auxiliary\\Build\\vcvarsall.bat" amd64'
+    )
     assert '&& cl.exe /nologo' in captured['command'][4]
 
 
@@ -1114,8 +1239,9 @@ def make_overrides_context(tmp_path, monkeypatch):
     project_dir.mkdir(exist_ok=True)
     context = make_repository_context(project_dir=project_dir, deps_resolve=False)
     context.resolved_overrides = ''
-    monkeypatch.setattr(context, 'make_build_path',
-                        lambda path: str(tmp_path / 'build' / path))
+    monkeypatch.setattr(
+        context, 'make_build_path', lambda path: str(tmp_path / 'build' / path)
+    )
     return context, project_dir
 
 
@@ -1123,10 +1249,13 @@ def test_an_explicit_configuration_stands_in_for_the_overlays(monkeypatch, tmp_p
     context, project_dir = make_overrides_context(tmp_path, monkeypatch)
     (project_dir / 'explicit.json').write_text(
         json.dumps([{'repository': 'https://host/fmt.git', 'version': '^10.0.0'}]),
-        encoding='utf-8')
+        encoding='utf-8',
+    )
     monkeypatch.setenv('GOLEM_OVERRIDES_CONFIGURATION', 'explicit.json')
     # Never consulted: the explicit file wins outright.
-    monkeypatch.setenv('GOLEM_OVERLAYS_LOCATIONS', 'directory+{}'.format(tmp_path / 'unused'))
+    monkeypatch.setenv(
+        'GOLEM_OVERLAYS_LOCATIONS', 'directory+{}'.format(tmp_path / 'unused')
+    )
 
     overrides = context.load_overrides_configuration()
 
@@ -1160,26 +1289,30 @@ def test_no_overrides_configured_at_all_resolves_to_nothing(monkeypatch, tmp_pat
 def test_make_basic_dependency_repo_path_uses_the_cache_key_with_branch(tmp_path):
     context = make_repository_context(project_dir=tmp_path)
     context.cache_configuration = make_cache_configuration(
-        CacheDirectory('/cache', is_read_only=False), minimization_enabled=False)
+        CacheDirectory('/cache', is_read_only=False), minimization_enabled=False
+    )
 
     requested = RequestedSource.for_repository(
-        'https://github.com/GolemCpp/recipes.git', version='main')
+        'https://github.com/GolemCpp/recipes.git', version='main'
+    )
 
     manager = get_cookbook_manager(context.cache_configuration)
-    repo_path = manager.resolve_cached_resource(
-        manager.get_cookbook(requested)).path
+    repo_path = manager.resolve_cached_resource(manager.get_cookbook(requested)).path
 
     assert repo_path == os.path.join(
-        '/cache', COOKBOOKS_SUBDIR,
+        '/cache',
+        COOKBOOKS_SUBDIR,
         get_cookbook_manager(context.cache_configuration).cache_key_for(
-            manager.get_cookbook(requested)))
+            manager.get_cookbook(requested)
+        ),
+    )
 
 
 def test_cache_minimization_length_and_toggle_resolution(tmp_path):
     options = SimpleNamespace(
-        cache_minimization_enabled='', cache_minimization_length=0)
-    settings = get_settings(
-        options=options, project_dir=str(tmp_path))
+        cache_minimization_enabled='', cache_minimization_length=0
+    )
+    settings = get_settings(options=options, project_dir=str(tmp_path))
 
     # Defaults: enabled, length 8.
     assert settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED') is True
@@ -1198,16 +1331,18 @@ def test_make_dependency_path_uses_shared_resource_location(tmp_path):
     context.cache_configuration = make_cache_configuration(cache_dir)
 
     dep = Dependency(
-        repository='https://github.com/nlohmann/json.git',
-        version='^3.0.0')
+        repository='https://github.com/nlohmann/json.git', version='^3.0.0'
+    )
     resolved_dependency(dep, revision='1234567890abcdef')
     # Primed the way configure does, so the path comes from that resolution.
     get_dependency_manager(context.cache_configuration).update_cached_resource(dep)
 
     assert context.make_dependency_path(dep, 'artifact') == os.path.join(
-        get_dependency_manager(
-            context.cache_configuration).resolve_cached_resource(dep).path,
-        'artifact')
+        get_dependency_manager(context.cache_configuration)
+        .resolve_cached_resource(dep)
+        .path,
+        'artifact',
+    )
 
 
 def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
@@ -1218,19 +1353,27 @@ def test_dependency_resolves_its_cached_resource_on_first_use(tmp_path):
     cache_dir = CacheDirectory(str(tmp_path / 'cache'), is_read_only=False)
     context.cache_configuration = make_cache_configuration(cache_dir)
 
-    dep = Dependency.unserialize_from_json({
-        'name': 'json',
-        'repository': 'https://github.com/nlohmann/json.git',
-        'resolved': {'locator': 'https://host/json.git', 'kind': 'git',
-                     'version': {'reference': '3.11.3',
-                                 'revision': '1234567890abcdef'}},
-    })
+    dep = Dependency.unserialize_from_json(
+        {
+            'name': 'json',
+            'repository': 'https://github.com/nlohmann/json.git',
+            'resolved': {
+                'locator': 'https://host/json.git',
+                'kind': 'git',
+                'version': {'reference': '3.11.3', 'revision': '1234567890abcdef'},
+            },
+        }
+    )
     assert dep.cached_resource is None
 
     location = context.get_dep_location(dep)
 
-    assert location == get_dependency_manager(
-        context.cache_configuration).resolve_cached_resource(dep).path
+    assert (
+        location
+        == get_dependency_manager(context.cache_configuration)
+        .resolve_cached_resource(dep)
+        .path
+    )
     # Resolved once and kept: the same cached resource answers every later path.
     assert dep.cached_resource.path == location
     assert context.get_dep_cached_resource(dep) is dep.cached_resource
@@ -1246,7 +1389,8 @@ def test_a_dependency_source_prefers_the_commit_whole():
     # Keyed on the commit, which is what the kind's Pinning names -- not the
     # Source's rule.
     assert DependencyManager.cache_key_for(dep).endswith(
-        safe_part.VERSION_SEPARATOR + make_revision_part('1234567890abcdef'))
+        safe_part.VERSION_SEPARATOR + make_revision_part('1234567890abcdef')
+    )
 
 
 def test_a_build_script_may_reach_a_remote():
@@ -1255,11 +1399,11 @@ def test_a_build_script_may_reach_a_remote():
     context = Context.__new__(Context)
     observed = []
 
-    context.run_build_script(lambda ctx: observed.append(
-        (ctx, network.is_allowed())))
+    context.run_build_script(lambda ctx: observed.append((ctx, network.is_allowed())))
 
     assert observed == [(context, True)]
     assert network.is_allowed() is False
+
 
 # --- Which Visual Studio toolchain waf reaches for first -----------------
 
@@ -1270,8 +1414,7 @@ def test_a_request_narrows_the_search_to_that_architecture(monkeypatch):
     context = make_runtime_context(arch='i686')
     monkeypatch.setattr(target_platform, 'host_arch', lambda: 'x86_64')
 
-    assert context.msvc_target_preference() == [
-        'amd64_x86', 'x86', 'arm64_x86']
+    assert context.msvc_target_preference() == ['amd64_x86', 'x86', 'arm64_x86']
 
 
 def test_a_request_prefers_the_toolchain_hosted_on_this_machine(monkeypatch):
@@ -1299,7 +1442,8 @@ def test_a_request_keeps_only_names_waf_lists_for_that_target():
     context = make_runtime_context(arch='aarch64')
 
     assert set(context.msvc_target_preference()) <= set(
-        name for name, _ in msvc.all_msvc_platforms)
+        name for name, _ in msvc.all_msvc_platforms
+    )
 
 
 def test_a_request_msvc_cannot_name_leaves_wafs_order_alone():
@@ -1308,7 +1452,8 @@ def test_a_request_msvc_cannot_name_leaves_wafs_order_alone():
     context = make_runtime_context(arch='i386')
 
     assert set(name for name, _ in msvc.all_msvc_platforms) <= set(
-        context.msvc_target_preference())
+        context.msvc_target_preference()
+    )
 
 
 def test_with_no_request_the_host_toolchain_comes_first(monkeypatch):
@@ -1337,8 +1482,8 @@ def test_a_host_with_no_toolchain_name_leaves_wafs_order_alone(monkeypatch):
     monkeypatch.setattr(target_platform, 'host_arch', lambda: 'riscv64-lp64d')
 
     assert context.msvc_target_preference() == [
-        name for name, _ in msvc.all_msvc_platforms]
-
+        name for name, _ in msvc.all_msvc_platforms
+    ]
 
 
 def make_loading_context(project_dir):
@@ -1347,7 +1492,8 @@ def make_loading_context(project_dir):
     context.project = None
     context.module = None
     context.context = SimpleNamespace(
-        options=SimpleNamespace(project_dir=str(project_dir)))
+        options=SimpleNamespace(project_dir=str(project_dir))
+    )
     return context
 
 
@@ -1358,8 +1504,9 @@ def test_a_project_file_read_out_of_a_recipe_anchors_on_the_project(tmp_path):
     # cookbook the recipe was found in.
     recipe = tmp_path / 'cookbook' / '@json'
     recipe.mkdir(parents=True)
-    (recipe / 'golemfile.json').write_text(json.dumps(
-        {'dependencies': [{'name': 'vendored', 'directory': 'third-party'}]}))
+    (recipe / 'golemfile.json').write_text(
+        json.dumps({'dependencies': [{'name': 'vendored', 'directory': 'third-party'}]})
+    )
 
     project_dir = tmp_path / 'source'
     project_dir.mkdir()

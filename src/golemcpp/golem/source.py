@@ -5,7 +5,6 @@ from golemcpp.golem import locator
 from golemcpp.golem.locator import Locator
 from golemcpp.golem.resolved_version import ResolvedVersion
 
-
 # A cached resource is obtained from a Source. Today a Source is one of two kinds:
 # a git repository (cloned) or a local directory (copied as-is).
 SOURCE_TYPE_GIT = 'git'
@@ -14,6 +13,7 @@ SOURCE_TYPE_DIRECTORY = 'directory'
 # Every kind a location may claim. A new kind (an archive, an SVN checkout) is one
 # entry here plus its branch in ResourceManager.populate.
 SOURCE_KINDS = (SOURCE_TYPE_GIT, SOURCE_TYPE_DIRECTORY)
+
 
 @dataclass(frozen=True)
 class Source:
@@ -37,15 +37,20 @@ class Source:
 
     @classmethod
     def for_repository(cls, locator, resolved=None):
-        return cls(locator=Locator(str(locator)),
-                   resolved=resolved if resolved is not None else ResolvedVersion(),
-                   type=SOURCE_TYPE_GIT)
+        return cls(
+            locator=Locator(str(locator)),
+            resolved=resolved if resolved is not None else ResolvedVersion(),
+            type=SOURCE_TYPE_GIT,
+        )
 
     @classmethod
     def for_directory(cls, locator):
         # A copied directory is whatever it holds now: nothing resolved it.
-        return cls(locator=Locator(str(locator)), resolved=ResolvedVersion(),
-                   type=SOURCE_TYPE_DIRECTORY)
+        return cls(
+            locator=Locator(str(locator)),
+            resolved=ResolvedVersion(),
+            type=SOURCE_TYPE_DIRECTORY,
+        )
 
     # -- identity serialization (recorded in a resource manifest) ---------
 
@@ -61,7 +66,8 @@ class Source:
         return cls(
             locator=Locator(helpers.first_non_empty_among_keys(source, 'locator')),
             resolved=ResolvedVersion.from_dict(source.get('resolved') or {}),
-            type=helpers.first_non_empty_among_keys(source, 'type') or SOURCE_TYPE_GIT)
+            type=helpers.first_non_empty_among_keys(source, 'type') or SOURCE_TYPE_GIT,
+        )
 
     @classmethod
     def from_manifest(cls, manifest) -> 'Source':
