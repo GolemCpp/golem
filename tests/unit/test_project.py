@@ -1,3 +1,5 @@
+import pytest
+
 import json
 from types import SimpleNamespace
 
@@ -274,3 +276,56 @@ def test_a_project_read_from_json_holds_its_definitions_and_exports():
     assert [export.name for export in project.exports] == ["mylib"]
     assert all(export.export for export in project.exports)
     assert not any(definition.export for definition in project.definitions)
+
+
+def test_a_project_defaults_to_every_export_it_declares():
+    project = Project(project_dir="/proj")
+    project.export(name="mylib")
+
+    assert project.default_exports == []
+
+
+def test_a_project_can_declare_the_exports_it_falls_back_to():
+    project = Project(project_dir="/proj")
+    project.export(name="mylib")
+    project.export(name="internal")
+    project.default(exports=["mylib"])
+
+    project.validate()
+
+    assert project.default_exports == ["mylib"]
+
+
+def test_a_default_may_be_declared_before_the_export_it_names():
+    # These calls declare a project functionally, so nothing fixes their order.
+    project = Project(project_dir="/proj")
+    project.default(exports=["mylib"])
+    project.export(name="mylib")
+
+    project.validate()
+
+
+def test_defaulting_to_an_export_the_project_lacks_is_refused():
+    project = Project(project_dir="/proj")
+    project.export(name="mylib")
+    project.default(exports=["mylibb"])
+
+    with pytest.raises(ValueError, match="exports it does not declare"):
+        project.validate()
+
+
+def test_declaring_the_defaults_twice_is_refused():
+    project = Project(project_dir="/proj")
+    project.default(exports=[])
+
+    with pytest.raises(ValueError, match="declares its defaults twice"):
+        project.default(exports=[])
+
+
+def test_a_default_set_read_from_json_is_checked_too():
+    # The JSON path never runs `configure`, so it needs the same refusal.
+    with pytest.raises(ValueError, match="exports it does not declare"):
+        Project.unserialize_from_json(
+            json_object={"exports": [{"name": "mylib"}], "default": {"exports": ["x"]}},
+            project_dir="/proj",
+        )

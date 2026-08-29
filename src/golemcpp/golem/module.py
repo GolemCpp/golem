@@ -39,4 +39,8 @@ class Module:
 
         project = Project(project_dir=self.project_dir)
         self.module.configure(project)
+
+        # The first point at which the project is fully declared.
+        project.validate()
+
         return project

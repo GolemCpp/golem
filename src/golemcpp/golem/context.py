@@ -1,3 +1,4 @@
+import argparse
 import os
 import io
 import re
@@ -963,6 +964,14 @@ class Context:
     def options(context):
         context.load("compiler_c compiler_cxx qt5 cppfront")
         context.add_option("--project-dir", action="store", help="Project location")
+        # How a parent asks a dependency for what are the default exports. Absence
+        # keeps meaning every definition, so a plain build is untouched.
+        context.add_option(
+            "--use-default-exports",
+            action="store_true",
+            default=False,
+            help=argparse.SUPPRESS,
+        )
         context.add_option("--build-dir", action="store", help="Build location")
         context.add_option(
             "--variant",
@@ -4558,11 +4567,30 @@ class Context:
                 else:
                     self.context(rule="touch ${TGT}", target=targetname)
 
+    def narrow_to_default_exports(self, names):
+        """
+        Narrow project's declared default exports when asking for the defaults.
+
+        Both passes come through here, over whichever list they work on:
+        - the exports themselves
+        - the definitions building them
+
+        One predicate over one set of names.
+        """
+        declared = self.project.default_exports
+
+        if not self.context.options.use_default_exports or not declared:
+            return names
+
+        return [name for name in names if name in declared]
+
     def get_asked_exports(self):
         return (
             self.context.options.targets.split(",")
             if self.context.options.targets
-            else [target.name for target in self.project.exports]
+            else self.narrow_to_default_exports(
+                [target.name for target in self.project.exports]
+            )
         )
 
     def merge_export_config_against_build_condition(self, export, exporting=False):
@@ -4709,7 +4737,7 @@ class Context:
             targets += [task.name]
 
         if not self.context.options.targets:
-            return targets
+            return self.narrow_to_default_exports(targets)
 
         # To check given targets are valid we add all possible targets to the list
 

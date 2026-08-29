@@ -25,6 +25,7 @@ from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.project import Project
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
 from golemcpp.golem.requested_source import RequestedSource
@@ -1526,3 +1527,47 @@ def test_a_project_file_read_out_of_a_recipe_anchors_on_the_project(tmp_path):
 
     assert str(resolved.identity) == generate_id(str(project_dir / "third-party"))
     assert str(resolved.identity) != generate_id(str(recipe / "third-party"))
+
+
+def make_defaults_context(*, declared, asked_for_defaults):
+    """A context that can resolve its project's default exports."""
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.export(name="mylib")
+    project.export(name="internal")
+    if declared is not None:
+        project.default(exports=declared)
+    context.project = project
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(targets="", use_default_exports=asked_for_defaults)
+    )
+    return context
+
+
+def test_the_defaults_are_every_export_when_the_project_declares_nothing():
+    context = make_defaults_context(declared=None, asked_for_defaults=True)
+
+    assert context.get_asked_exports() == ["mylib", "internal"]
+
+
+def test_nothing_narrows_when_the_defaults_were_not_asked_for():
+    # A plain `golem build` is untouched by a declaration.
+    context = make_defaults_context(declared=["mylib"], asked_for_defaults=False)
+
+    assert context.get_asked_exports() == ["mylib", "internal"]
+
+
+def test_the_declared_set_answers_when_the_defaults_are_asked_for():
+    context = make_defaults_context(declared=["mylib"], asked_for_defaults=True)
+
+    assert context.get_asked_exports() == ["mylib"]
+
+
+def test_both_passes_narrow_through_the_same_filter():
+    # An export takes its targets from the definition of the same name, so a
+    # selection the two passes disagreed on would publish what nobody built.
+    context = make_defaults_context(declared=["mylib"], asked_for_defaults=True)
+    definitions = [SimpleNamespace(name="mylib"), SimpleNamespace(name="internal")]
+
+    assert context.get_asked_exports() == ["mylib"]
+    assert context.resolve_asked_targets(tasks_source=definitions) == ["mylib"]
