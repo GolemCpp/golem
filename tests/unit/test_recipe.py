@@ -8,9 +8,9 @@ from golemcpp.golem.recipe_manifest import RecipeManifest
 from golemcpp.golem.source_id import SourceId
 
 
-def declaration(tmp_path, locator='', project=False, mirrors=()):
+def declaration(tmp_path, locator='', project=False, mirrors=(), name='@json'):
     '''Build a declaration on disk, since a project file is read off it.'''
-    directory = tmp_path / '@json'
+    directory = tmp_path / name
     directory.mkdir(exist_ok=True)
 
     if project:
@@ -24,8 +24,14 @@ def declaration(tmp_path, locator='', project=False, mirrors=()):
     )
 
 
+def layered(*declarations):
+    '''A recipe made of several declarations, most derived first.'''
+    return Recipe(chain=declarations)
+
+
 GITHUB = 'https://github.com/nlohmann/json.git'
 GITLAB = 'https://gitlab.com/nlohmann/json.git'
+FORK = 'https://git.corp/fork/json.git'
 
 
 def mirrored(tmp_path):
@@ -134,7 +140,7 @@ def test_a_mirror_written_relative_hangs_off_the_recipe_directory(tmp_path):
 
 
 def test_a_recipe_naming_only_mirrors_names_no_remote_to_clone(tmp_path):
-    # `locator` is the official remote and `mirrors` are a convenience, so a
+    # `locator` is the default source and `mirrors` are a convenience, so a
     # recipe declaring only mirrors advertises no remote of its own.
     recipe = Recipe.resolve(declaration(tmp_path, mirrors=(GITLAB, GITHUB)))
 
@@ -176,8 +182,55 @@ def test_a_mirror_is_read_before_the_locator(tmp_path):
 
 
 def test_a_mirror_is_never_served_to_an_identity_naming_the_recipe_alone(tmp_path):
-    # With an official remote, `@json` is served that one and never a mirror.
+    # With a default source, `@json` is served that one and never a mirror.
     recipe = Recipe.resolve(
         declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,)))
 
     assert recipe.locator_for(SourceId.parse('@json')) == GITHUB
+
+
+def test_the_most_derived_declaration_naming_a_field_wins(tmp_path):
+    recipe = layered(
+        declaration(tmp_path, locator=FORK, name='@delta'),
+        declaration(tmp_path, locator=GITHUB, project=True, name='@base'))
+
+    assert recipe.locator == FORK
+    assert recipe.project_directory == str(tmp_path / '@base')
+
+
+def test_a_delta_naming_mirrors_leaves_the_locator_to_the_layer_below(tmp_path):
+    # The two fields resolve independently, therefore naming one does not
+    # shadow the other and a mirrors-only delta keeps the default below it.
+    recipe = layered(
+        declaration(tmp_path, mirrors=(GITLAB,), name='@delta'),
+        declaration(tmp_path, locator=GITHUB, name='@base'))
+
+    assert recipe.locator == GITHUB
+    assert recipe.mirrors == (GITLAB,)
+    assert recipe.locators == (GITHUB, GITLAB)
+
+
+def test_a_delta_replacing_the_locator_keeps_the_mirrors_below_it(tmp_path):
+    # A mirror is only ever reached by an identity naming it exactly, so an
+    # inherited one reaches nobody who did not spell its full identity.
+    recipe = layered(
+        declaration(tmp_path, locator=FORK, name='@delta'),
+        declaration(tmp_path, locator=GITHUB, mirrors=(GITLAB,), name='@base'))
+
+    assert recipe.locator == FORK
+    assert recipe.mirrors == (GITLAB,)
+    assert recipe.locator_for(SourceId.parse('@json')) == FORK
+    assert recipe.locator_for(SourceId.parse('@json@nlohmann@gitlab.com')) == GITLAB
+
+
+def test_a_refusal_names_the_layers_a_recipe_was_made_of(tmp_path):
+    # Naming only the declaration the lookup landed on would hide the layer the
+    # missing field was expected from.
+    recipe = layered(
+        declaration(tmp_path, locator=FORK, name='@delta'),
+        declaration(tmp_path, locator=GITHUB, name='@base'))
+
+    with pytest.raises(RuntimeError) as refusal:
+        recipe.require_project_directory()
+
+    assert 'Inherited through @json (base) -> @json (base)' in str(refusal.value)

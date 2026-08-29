@@ -8,14 +8,15 @@ from golemcpp.golem.recipe_resolver import RecipeResolver
 from golemcpp.golem.source_id import SourceId
 
 
-def make_cookbook(tmp_path, name, recipes=(), bare=(), declaring=()):
+def make_cookbook(tmp_path, name, recipes=(), bare=(), declaring=(), manifests=()):
     '''
     Build a cookbook holding a recipe per name, and a bare directory per bare.
 
     A bare one is named like a recipe and holds nothing, which is what a
-    half-made cookbook looks like from outside. One in `declaring` says where
+    half-made cookbook looks like from outside. One in `declaring` names where
     its source is and holds no project file, which is what a recipe reachable
-    as a location but not loadable looks like.
+    as a location but not loadable looks like. One in `manifests` carries the
+    whole `recipe.json`, for the fields `declaring` does not reach.
     '''
     source = tmp_path / name / 'source'
     source.mkdir(parents=True, exist_ok=True)
@@ -31,6 +32,10 @@ def make_cookbook(tmp_path, name, recipes=(), bare=(), declaring=()):
         (source / recipe).mkdir(exist_ok=True)
         (source / recipe / 'recipe.json').write_text(
             json.dumps({'locator': locator}))
+
+    for recipe, manifest in manifests:
+        (source / recipe).mkdir(exist_ok=True)
+        (source / recipe / 'recipe.json').write_text(json.dumps(manifest))
 
     return SimpleNamespace(source_path=str(source), cache_key=name)
 
@@ -181,6 +186,207 @@ def test_no_recipe_anywhere_names_the_identity_and_what_was_searched(tmp_path):
     assert one.source_path in message and two.source_path in message
 
 
+def test_a_missing_recipe_names_no_project_file(tmp_path):
+    # The refusal reports the search and never what a caller wanted out of it.
+    # A dependency written as an identity asks for a locator, so a golemfile
+    # named here points at a file nobody was expected to write, and a
+    # `--recipe` given by hand may come from a project holding one already.
+    cookbook = make_cookbook(tmp_path, 'base', ['@boost'])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([cookbook], '@json')
+
+    assert 'golemfile' not in str(refusal.value)
+
+
 def test_searching_no_cookbook_at_all_still_says_so():
     with pytest.raises(RuntimeError, match=r'Searched 0 cookbook\(s\)'):
         resolve([], '@json')
+
+
+UPSTREAM = 'https://github.com/boostorg/boost.git'
+MIRROR = 'https://git.corp/mirror/boost.git'
+
+
+def in_cookbook(cookbook, recipe):
+    return os.path.join(cookbook.source_path, recipe)
+
+
+def test_a_delta_takes_over_the_recipe_of_the_same_name_below_it(tmp_path):
+    # The headline case: a private cookbook moves where boost comes from, and
+    # the recipe it overrides carries the same name it does.
+    base = make_cookbook(tmp_path, 'base', recipes=['@boost'],
+                         declaring=[('@boost', UPSTREAM)])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@boost', {'locator': MIRROR, 'overrides': '@boost'})])
+
+    recipe = resolve([base, mine], '@boost')
+
+    assert recipe.locator == MIRROR
+    assert recipe.served_by.directory == in_cookbook(mine, '@boost')
+
+
+def test_a_delta_inherits_a_project_file_it_does_not_restate(tmp_path):
+    base = make_cookbook(tmp_path, 'base', recipes=['@boost'],
+                         declaring=[('@boost', UPSTREAM)])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@boost', {'locator': MIRROR, 'overrides': '@boost'})])
+
+    recipe = resolve([base, mine], '@boost')
+
+    assert recipe.project_directory == in_cookbook(base, '@boost')
+
+
+def test_the_full_ladder_restarts_in_each_cookbook(tmp_path):
+    # `mine` runs its ladder down to nothing, and `base` is still asked for the
+    # long name first. A cookbook outranks a more specific name below it, so
+    # where the ladder stopped in one cookbook says nothing about the next.
+    base = make_cookbook(
+        tmp_path, 'base', recipes=['@json', '@json@nlohmann@github.com'])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@json@nlohmann@github.com',
+         {'overrides': '@json@nlohmann@github.com'})])
+
+    recipe = resolve([base, mine], '@json@nlohmann@github.com')
+
+    assert recipe.project_directory == in_cookbook(
+        base, '@json@nlohmann@github.com')
+
+
+def test_a_skipped_entry_falls_to_the_next_rung_before_descending(tmp_path):
+    # Inheritance inside one cookbook: the delta skips itself, drops a rung, and
+    # finds its base without ever leaving `mine`.
+    base = make_cookbook(tmp_path, 'base', recipes=['@json'])
+    mine = make_cookbook(
+        tmp_path, 'mine', recipes=['@json'],
+        manifests=[('@json@nlohmann@github.com',
+                    {'overrides': '@json@nlohmann@github.com'})])
+
+    recipe = resolve([base, mine], '@json@nlohmann@github.com')
+
+    assert [declaration.directory for declaration in recipe.chain] == [
+        in_cookbook(mine, '@json@nlohmann@github.com'),
+        in_cookbook(mine, '@json'),
+    ]
+
+
+def test_a_recipe_never_inherits_from_a_cookbook_above_it(tmp_path):
+    # Downward only, so a base cookbook's recipe means the same thing whatever
+    # is layered on top of it.
+    base = make_cookbook(tmp_path, 'base', manifests=[('@a', {'overrides': '@b'})])
+    mine = make_cookbook(tmp_path, 'mine', recipes=['@b'])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([base, mine], '@a')
+
+    message = str(refusal.value)
+    assert "recipe '@a' in cookbook 'base' overrides '@b'" in message
+    assert 'no cookbook at or below it holds one' in message
+    # One declaration was consumed, and the message already names it.
+    assert 'Inherited through' not in message
+
+
+def test_a_cycle_within_one_cookbook_is_refused_rather_than_looping(tmp_path):
+    cookbook = make_cookbook(tmp_path, 'base', manifests=[
+        ('@a', {'overrides': '@b'}),
+        ('@b', {'overrides': '@a'})])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([cookbook], '@a')
+
+    assert "cycle in cookbook 'base': @a -> @b -> @a" in str(refusal.value)
+
+
+def test_a_cycle_is_refused_rather_than_dropping_to_a_shorter_rung(tmp_path):
+    # `@a@b` names `@a@b@c`, which the chain already took. `@a` is free and the
+    # ladder could reach it, and taking it would record `@a@b` inheriting from a
+    # recipe it never named. A revisit is the fault, whatever else is reachable.
+    cookbook = make_cookbook(tmp_path, 'base', recipes=['@a'], manifests=[
+        ('@a@b@c', {'overrides': '@a@b'}),
+        ('@a@b', {'overrides': '@a@b@c'})])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([cookbook], '@a@b@c')
+
+    assert ("cycle in cookbook 'base': @a@b@c -> @a@b -> @a@b@c"
+            in str(refusal.value))
+
+
+def test_a_cycle_is_refused_though_a_cookbook_below_could_absorb_it(tmp_path):
+    # `mine` holds a loop and `base` holds a recipe the descent would land on.
+    # Letting it resolve would hide the same false record in a longer chain.
+    base = make_cookbook(tmp_path, 'base', recipes=['@a'])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@a', {'overrides': '@b'}),
+        ('@b', {'overrides': '@a'})])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([base, mine], '@a')
+
+    assert "cycle in cookbook 'mine': @a -> @b -> @a" in str(refusal.value)
+
+
+def test_a_cycle_reports_the_loop_and_not_what_led_into_it(tmp_path):
+    # The search never rises, so a recipe reached again sits no higher than the
+    # one overriding it and the loop is always inside one cookbook. `mine/@x` is
+    # how the chain got there and is no part of what has to be fixed.
+    base = make_cookbook(tmp_path, 'base', recipes=['@b'], manifests=[
+        ('@a', {'overrides': '@b'}),
+        ('@b', {'overrides': '@a'})])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[('@x', {'overrides': '@a'})])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([base, mine], '@x')
+
+    message = str(refusal.value)
+    assert "cycle in cookbook 'base': @a -> @b -> @a" in message
+    assert '@x' not in message
+
+
+def test_a_declaration_still_passes_over_itself(tmp_path):
+    # Self-reference is exclusion and never a revisit, which is what lets a
+    # recipe override the name it carries.
+    base = make_cookbook(tmp_path, 'base', recipes=['@boost'],
+                         declaring=[('@boost', UPSTREAM)])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@boost', {'locator': MIRROR, 'overrides': '@boost'})])
+
+    assert resolve([base, mine], '@boost').locator == MIRROR
+
+
+def test_a_chain_mixing_manifest_versions_is_not_an_error(tmp_path):
+    # Each declaration is read under its own version and nothing compares them.
+    # Only one version exists to write, so this pins the decision rather than
+    # exercising a real skew.
+    base = make_cookbook(tmp_path, 'base', recipes=['@boost'], manifests=[
+        ('@boost', {'locator': UPSTREAM, 'version': 1})])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@boost', {'overrides': '@boost'})])
+
+    assert resolve([base, mine], '@boost').locator == UPSTREAM
+
+
+def test_the_report_names_every_recipe_that_served(tmp_path, capsys):
+    base = make_cookbook(tmp_path, 'base', recipes=['@boost'],
+                         declaring=[('@boost', UPSTREAM)])
+    mine = make_cookbook(tmp_path, 'mine', manifests=[
+        ('@boost', {'locator': MIRROR, 'overrides': '@boost'})])
+
+    resolve([base, mine], '@boost')
+
+    assert ('@boost: served by @boost (mine) -> @boost (base)'
+            in capsys.readouterr().out)
+
+
+def test_a_chain_answering_nothing_names_what_it_was_made_of(tmp_path):
+    # Neither layer holds a project file or names a locator, and the refusal has
+    # to name both: the reader cannot see which one was expected to carry them.
+    cookbook = make_cookbook(tmp_path, 'base', manifests=[
+        ('@a', {'overrides': '@b'})], bare=['@b'])
+
+    with pytest.raises(RuntimeError) as refusal:
+        resolve([cookbook], '@a')
+
+    message = str(refusal.value)
+    assert 'holds no project file' in message and 'names no locator' in message
+    assert 'Inherited through @a (base) -> @b (base)' in message
