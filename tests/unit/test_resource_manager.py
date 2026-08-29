@@ -36,29 +36,38 @@ from support import STUB_HEAD
 
 @pytest.fixture
 def git_calls(monkeypatch):
-    '''Every git invocation the mechanism makes, in order.'''
+    """Every git invocation the mechanism makes, in order."""
     calls = []
     monkeypatch.setattr(
-        helpers, 'run_git',
-        lambda args, cwd=None, quiet=False: calls.append(args))
+        helpers, "run_git", lambda args, cwd=None, quiet=False: calls.append(args)
+    )
     stub_git_probes(monkeypatch)
     return calls
 
 
 def make_resource_manager(tmp_path):
-    '''The base manager over a real cache, since it reads the configured mode.'''
-    return ResourceManager(get_cache_manager(make_cache_configuration(
-        cache_directory.CacheDirectory(location=str(tmp_path / 'cache')))))
+    """The base manager over a real cache, since it reads the configured mode."""
+    return ResourceManager(
+        get_cache_manager(
+            make_cache_configuration(
+                cache_directory.CacheDirectory(location=str(tmp_path / "cache"))
+            )
+        )
+    )
 
 
 def make_manager(tmp_path, **configuration):
-    return get_cookbook_manager(make_cache_configuration(
-        cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
-        minimization_enabled=False, **configuration))
+    return get_cookbook_manager(
+        make_cache_configuration(
+            cache_directory.CacheDirectory(location=str(tmp_path / "cache")),
+            minimization_enabled=False,
+            **configuration,
+        )
+    )
 
 
 def test_a_manager_holds_its_cache_manager_and_exposes_its_locations(tmp_path):
-    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+    cache_dir = cache_directory.CacheDirectory(location=str(tmp_path / "cache"))
     cache_manager = get_cache_manager(make_cache_configuration(cache_dir))
 
     manager = ResourceManager(cache_manager)
@@ -76,11 +85,16 @@ def test_every_kind_keeps_its_content_under_source():
     from golemcpp.golem.overlay_manager import OverlayManager
     from golemcpp.golem.tool_manager import ToolManager
 
-    for kind in (ResourceManager, DependencyManager, CookbookManager,
-                 OverlayManager, ToolManager):
-        assert kind.source_path('/cache/r') == os.path.join(
-            '/cache/r', SOURCE_DIRNAME
-        ), '{} fetches outside source/'.format(kind.__name__)
+    for kind in (
+        ResourceManager,
+        DependencyManager,
+        CookbookManager,
+        OverlayManager,
+        ToolManager,
+    ):
+        assert kind.source_path("/cache/r") == os.path.join(
+            "/cache/r", SOURCE_DIRNAME
+        ), "{} fetches outside source/".format(kind.__name__)
 
 
 # -- the kind decides what to fetch; a fetcher decides how ------------------
@@ -89,7 +103,7 @@ def test_every_kind_keeps_its_content_under_source():
 def test_a_repository_source_is_handed_to_a_git_fetcher(tmp_path):
     manager = make_resource_manager(tmp_path)
 
-    assert isinstance(manager.fetcher_for('/cache/r', make_cookbook()), GitFetcher)
+    assert isinstance(manager.fetcher_for("/cache/r", make_cookbook()), GitFetcher)
 
 
 def test_a_directory_source_is_handed_to_a_directory_fetcher(tmp_path):
@@ -98,16 +112,16 @@ def test_a_directory_source_is_handed_to_a_directory_fetcher(tmp_path):
         source=RequestedSource.for_directory(tmp_path.resolve().as_uri())
     )
 
-    assert isinstance(manager.fetcher_for('/cache/r', cookbook), DirectoryFetcher)
+    assert isinstance(manager.fetcher_for("/cache/r", cookbook), DirectoryFetcher)
 
 
 def test_the_fetcher_works_where_the_manager_sends_it_under_the_kind_policy(tmp_path):
     manager = make_resource_manager(tmp_path)
     cookbook = make_cookbook()
 
-    fetcher = manager.fetcher_for('/cache/r', cookbook)
+    fetcher = manager.fetcher_for("/cache/r", cookbook)
 
-    assert fetcher.path == '/cache/r'
+    assert fetcher.path == "/cache/r"
     assert fetcher.source == ResourceManager.source_for(cookbook)
     assert fetcher.policy == manager.policy_for(cookbook)
 
@@ -116,11 +130,11 @@ def test_populate_and_refresh_hand_back_what_the_fetch_left(tmp_path, monkeypatc
     # The manager keeps no opinion about the fetch beyond passing its result on.
     manager = make_resource_manager(tmp_path)
     cookbook = make_cookbook()
-    monkeypatch.setattr(GitFetcher, 'populate', lambda self: Fetched(head='c10ned'))
-    monkeypatch.setattr(GitFetcher, 'refresh', lambda self: Fetched(head='refre5hed'))
+    monkeypatch.setattr(GitFetcher, "populate", lambda self: Fetched(head="c10ned"))
+    monkeypatch.setattr(GitFetcher, "refresh", lambda self: Fetched(head="refre5hed"))
 
-    assert manager.populate('/cache/r', cookbook) == Fetched(head='c10ned')
-    assert manager.refresh_source('/cache/r', cookbook) == Fetched(head='refre5hed')
+    assert manager.populate("/cache/r", cookbook) == Fetched(head="c10ned")
+    assert manager.refresh_source("/cache/r", cookbook) == Fetched(head="refre5hed")
 
 
 # -- install: what happens around the fetch ---------------------------------
@@ -128,18 +142,18 @@ def test_populate_and_refresh_hand_back_what_the_fetch_left(tmp_path, monkeypatc
 
 def make_cookbook():
     return Cookbook(
-        source=RequestedSource.for_repository('https://host/r.git', version='main')
+        source=RequestedSource.for_repository("https://host/r.git", version="main")
     )
 
 
 def make_recording_manager(tmp_path, recorded):
-    '''A cookbook manager whose whole lifecycle is recorded, in order.'''
+    """A cookbook manager whose whole lifecycle is recorded, in order."""
     manager = make_manager(tmp_path)
-    manager.pre_install = lambda item: recorded.append('pre_install')
+    manager.pre_install = lambda item: recorded.append("pre_install")
     manager.pre_install_refresh = lambda root, item: recorded.append(
-        'pre_install_refresh'
+        "pre_install_refresh"
     )
-    manager.post_install = lambda root, item: recorded.append('post_install')
+    manager.post_install = lambda root, item: recorded.append("post_install")
     return manager
 
 
@@ -147,7 +161,7 @@ def make_read_only_manager(tmp_path):
     return get_cookbook_manager(
         make_cache_configuration(
             cache_directory.CacheDirectory(
-                location=str(tmp_path / 'cache'), is_read_only=True
+                location=str(tmp_path / "cache"), is_read_only=True
             ),
             minimization_enabled=False,
         )
@@ -155,7 +169,7 @@ def make_read_only_manager(tmp_path):
 
 
 def install_on_disk(manager, cached_resource, mode=FetchMode.BLOBLESS):
-    '''A resource already in a cache: its fetched source, and the manifest naming it.'''
+    """A resource already in a cache: its fetched source, and the manifest naming it."""
     os.makedirs(manager.source_path(cached_resource.path), exist_ok=True)
     manager.cache_manager.write_manifest(
         cached_resource, fetched=Fetched(head=STUB_HEAD, mode=mode)
@@ -164,16 +178,16 @@ def install_on_disk(manager, cached_resource, mode=FetchMode.BLOBLESS):
 
 
 def record_the_fetch(monkeypatch, recorded):
-    '''
+    """
     The whole fetch as one entry in the lifecycle: what these tests watch is where
     it lands between the hooks, not how many git commands it takes.
-    '''
+    """
 
     def run_git(args, cwd=None, quiet=False):
-        if recorded[-1:] != ['fetch']:
-            recorded.append('fetch')
+        if recorded[-1:] != ["fetch"]:
+            recorded.append("fetch")
 
-    monkeypatch.setattr(helpers, 'run_git', run_git)
+    monkeypatch.setattr(helpers, "run_git", run_git)
     stub_git_probes(monkeypatch)
 
 
@@ -186,7 +200,7 @@ def test_a_version_is_resolved_inside_a_resolve_and_nowhere_else(
     item = make_cookbook()
 
     assert ResourceManager.resolve_version(item) is item
-    assert item.resolved == ResolvedVersion(reference='main', revision=STUB_HEAD)
+    assert item.resolved == ResolvedVersion(reference="main", revision=STUB_HEAD)
 
 
 def test_an_item_is_taken_as_it_stands_outside_a_resolve():
@@ -199,20 +213,20 @@ def test_an_item_is_taken_as_it_stands_outside_a_resolve():
 
 
 def test_a_commit_keyed_item_that_was_never_resolved_says_so():
-    dep = Dependency(name='json', repository='https://host/json.git')
-    dep.update_source('')
+    dep = Dependency(name="json", repository="https://host/json.git")
+    dep.update_source("")
 
-    with pytest.raises(RuntimeError, match='resolve'):
+    with pytest.raises(RuntimeError, match="resolve"):
         DependencyManager.resolve_version(dep)
 
 
 def test_a_commit_keyed_item_holding_only_a_reference_says_so_too():
     # A reference names no commit, so there is still no root to point at. What
     # the item carries is a version it asked for, not one it resolved.
-    dep = Dependency(name='json', repository='https://host/json.git')
-    resolved_dependency(dep, reference='v3.12.0')
+    dep = Dependency(name="json", repository="https://host/json.git")
+    resolved_dependency(dep, reference="v3.12.0")
 
-    with pytest.raises(RuntimeError, match='Run golem resolve first'):
+    with pytest.raises(RuntimeError, match="Run golem resolve first"):
         DependencyManager.resolve_version(dep)
 
 
@@ -221,22 +235,22 @@ def test_locating_a_resource_resolves_its_version_first(tmp_path):
     # worked out before it would name a different one.
     manager = make_manager(tmp_path)
     manager.resolve_version = lambda cookbook: Cookbook(
-        source=replace(cookbook.source, version='v3.12.0')
+        source=replace(cookbook.source, version="v3.12.0")
     )
 
     cached = manager.resolve_cached_resource(make_cookbook())
 
     assert cached.cache_key == manager.cache_key_for(
-        Cookbook(source=replace(make_cookbook().source, version='v3.12.0'))
+        Cookbook(source=replace(make_cookbook().source, version="v3.12.0"))
     )
 
 
 def test_the_lifecycle_hooks_do_nothing_by_default():
     # Every kind gets them; only the ones that make something from their source
     # fill them in.
-    assert ResourceManager.pre_install('item') is None
-    assert ResourceManager.pre_install_refresh('/cache/r', 'item') is None
-    assert ResourceManager.post_install('/cache/r', 'item') is None
+    assert ResourceManager.pre_install("item") is None
+    assert ResourceManager.pre_install_refresh("/cache/r", "item") is None
+    assert ResourceManager.post_install("/cache/r", "item") is None
 
 
 def test_a_fresh_install_prepares_then_fetches_then_makes(tmp_path, monkeypatch):
@@ -249,7 +263,7 @@ def test_a_fresh_install_prepares_then_fetches_then_makes(tmp_path, monkeypatch)
 
     # The fetch is guarded, so what it makes can only run once the source is in
     # place -- and pre_install runs before anything is written.
-    assert recorded == ['pre_install', 'fetch', 'post_install']
+    assert recorded == ["pre_install", "fetch", "post_install"]
 
 
 def test_a_refresh_discards_then_fetches_then_makes(tmp_path, monkeypatch):
@@ -263,7 +277,7 @@ def test_a_refresh_discards_then_fetches_then_makes(tmp_path, monkeypatch):
 
     # Nothing made from the previous source outlives it, and pre_install belongs
     # to a fresh fetch alone.
-    assert recorded == ['pre_install_refresh', 'fetch', 'post_install']
+    assert recorded == ["pre_install_refresh", "fetch", "post_install"]
 
 
 def test_a_resource_is_installed_once_its_source_is_there(tmp_path):
@@ -289,9 +303,9 @@ def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch
     # Stand in for the clone: the staging root is what populate is handed.
     monkeypatch.setattr(
         helpers,
-        'run_git',
+        "run_git",
         lambda args, cwd=None, quiet=False: open(
-            os.path.join(cwd, 'fetched.txt'), 'w'
+            os.path.join(cwd, "fetched.txt"), "w"
         ).close(),
     )
     stub_git_probes(monkeypatch)
@@ -300,8 +314,8 @@ def test_install_stages_a_fresh_resource_with_its_manifest(tmp_path, monkeypatch
 
     assert installed.path == cached.path
     # The content sits under source/; the root holds it and the manifest naming it.
-    assert os.path.isfile(os.path.join(installed.source_path, 'fetched.txt'))
-    assert not os.path.exists(installed.path + '.tmp')
+    assert os.path.isfile(os.path.join(installed.source_path, "fetched.txt"))
+    assert not os.path.exists(installed.path + ".tmp")
     manifest = resource_manifest.ResourceManifest.read_from_root(installed.path)
     assert manifest is not None
     # The manifest names what the fetch landed on, not just what was asked for.
@@ -320,15 +334,15 @@ def test_a_refresh_records_the_commit_even_when_the_source_is_unchanged(
     cookbook = make_cookbook()
     cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
     manager.cache_manager.write_manifest(
-        cached, fetched=Fetched(head='0ldc0mmit', mode=FetchMode.BLOBLESS)
+        cached, fetched=Fetched(head="0ldc0mmit", mode=FetchMode.BLOBLESS)
     )
-    stub_git_probes(monkeypatch, head='newc0mmit')
+    stub_git_probes(monkeypatch, head="newc0mmit")
 
     manager.install(cookbook)
 
     assert Fetched.from_manifest(
         resource_manifest.ResourceManifest.read_from_root(cached.path)
-    ) == Fetched(head='newc0mmit', mode=FetchMode.BLOBLESS)
+    ) == Fetched(head="newc0mmit", mode=FetchMode.BLOBLESS)
 
 
 def test_install_refreshes_an_existing_resource_in_place(
@@ -342,13 +356,13 @@ def test_install_refreshes_an_existing_resource_in_place(
 
     # Refreshed, not re-cloned: the cache root is kept.
     assert git_calls == [
-        ['clean', '-ffxd'],
-        ['submodule', 'foreach', '--recursive', 'git', 'clean', '-ffxd'],
-        ['fetch', '--prune', '--prune-tags', '--tags', 'origin'],
-        ['reset', '--hard', STUB_HEAD],
-        ['submodule', 'foreach', '--recursive', 'git', 'reset', '--hard'],
-        ['submodule', 'sync', '--recursive'],
-        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
+        ["clean", "-ffxd"],
+        ["submodule", "foreach", "--recursive", "git", "clean", "-ffxd"],
+        ["fetch", "--prune", "--prune-tags", "--tags", "origin"],
+        ["reset", "--hard", STUB_HEAD],
+        ["submodule", "foreach", "--recursive", "git", "reset", "--hard"],
+        ["submodule", "sync", "--recursive"],
+        ["submodule", "update", "--init", "--recursive", "--filter=blob:none"],
     ]
 
 
@@ -359,7 +373,7 @@ def test_install_can_leave_an_existing_resource_alone(tmp_path, git_calls, monke
     cached = install_on_disk(manager, manager.resolve_cached_resource(cookbook))
     touched = []
     monkeypatch.setattr(
-        resource_manifest.ResourceManifest, 'touch', staticmethod(touched.append)
+        resource_manifest.ResourceManifest, "touch", staticmethod(touched.append)
     )
 
     manager.install(cookbook, refresh=False)
@@ -381,9 +395,9 @@ def test_install_clones_a_resource_that_is_not_there(tmp_path, git_calls, resolv
     # root is named after `main`, and what `main` currently is was settled before
     # the clone rather than read off it afterwards.
     assert git_calls == [
-        ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
-        ['reset', '--hard', STUB_HEAD],
-        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
+        ["clone", "--filter=blob:none", "--", "https://host/r.git", "."],
+        ["reset", "--hard", STUB_HEAD],
+        ["submodule", "update", "--init", "--recursive", "--filter=blob:none"],
     ]
 
 
@@ -407,7 +421,7 @@ def test_install_reuses_a_cached_resource_the_caller_already_resolved(
 
 
 def install_in_another_mode(manager, cookbook):
-    '''A cached resource holding a full clone, where blobless is now configured.'''
+    """A cached resource holding a full clone, where blobless is now configured."""
     return install_on_disk(
         manager, manager.resolve_cached_resource(cookbook), mode=FetchMode.FULL
     )
@@ -430,8 +444,8 @@ def test_a_root_in_another_mode_is_converted_where_a_remote_may_be_reached(
         manager.install(cookbook, refresh=False)
 
     assert git_calls == [
-        ['config', 'remote.origin.promisor', 'true'],
-        ['config', 'remote.origin.partialclonefilter', 'blob:none'],
+        ["config", "remote.origin.promisor", "true"],
+        ["config", "remote.origin.partialclonefilter", "blob:none"],
     ]
     # Written back, so the conversion is done once rather than on every resolve.
     assert recorded_fetched(cached) == Fetched(head=STUB_HEAD, mode=FetchMode.BLOBLESS)
@@ -450,7 +464,7 @@ def test_a_root_in_another_mode_is_used_as_it_stands_anywhere_else(
 
     manager.install(cookbook)
 
-    assert ['config', 'remote.origin.promisor', 'true'] not in git_calls
+    assert ["config", "remote.origin.promisor", "true"] not in git_calls
     assert recorded_fetched(cached) == Fetched(head=STUB_HEAD, mode=FetchMode.FULL)
 
 
@@ -465,8 +479,8 @@ def test_a_root_that_cannot_be_converted_is_obtained_again(tmp_path, git_calls):
         manager.install(cookbook, refresh=False)
 
     assert git_calls[:2] == [
-        ['init'],
-        ['remote', 'add', 'origin', 'https://host/r.git'],
+        ["init"],
+        ["remote", "add", "origin", "https://host/r.git"],
     ]
 
 
@@ -489,7 +503,7 @@ def test_a_read_only_root_is_never_converted(tmp_path, git_calls):
 def test_populating_a_read_only_cache_is_refused(tmp_path):
     manager = make_read_only_manager(tmp_path)
 
-    with pytest.raises(RuntimeError, match='read-only cache location'):
+    with pytest.raises(RuntimeError, match="read-only cache location"):
         manager.install(make_cookbook())
 
 
@@ -499,7 +513,7 @@ def test_refreshing_a_read_only_cache_is_refused(tmp_path, git_calls):
     cookbook = make_cookbook()
     install_on_disk(manager, manager.resolve_cached_resource(cookbook))
 
-    with pytest.raises(RuntimeError, match='read-only cache location'):
+    with pytest.raises(RuntimeError, match="read-only cache location"):
         manager.install(cookbook)
 
     assert git_calls == []
@@ -528,9 +542,9 @@ def test_make_available_installs_into_a_writable_cache(tmp_path, git_calls, reso
     assert manager.is_installed(available)
     assert available.is_read_only is False
     assert git_calls == [
-        ['clone', '--filter=blob:none', '--', 'https://host/r.git', '.'],
-        ['reset', '--hard', STUB_HEAD],
-        ['submodule', 'update', '--init', '--recursive', '--filter=blob:none'],
+        ["clone", "--filter=blob:none", "--", "https://host/r.git", "."],
+        ["reset", "--hard", STUB_HEAD],
+        ["submodule", "update", "--init", "--recursive", "--filter=blob:none"],
     ]
 
 
@@ -550,7 +564,7 @@ def test_make_available_refuses_an_empty_read_only_cache(tmp_path):
     # Nothing to serve there, and nothing may be written.
     manager = make_read_only_manager(tmp_path)
 
-    with pytest.raises(RuntimeError, match='read-only cache location'):
+    with pytest.raises(RuntimeError, match="read-only cache location"):
         manager.make_available(make_cookbook())
 
 
@@ -572,10 +586,10 @@ def test_make_available_all_hands_back_a_resource_per_item_in_order(
     items = [
         Cookbook(
             source=RequestedSource.for_repository(
-                'https://host/{}.git'.format(name), version='main'
+                "https://host/{}.git".format(name), version="main"
             )
         )
-        for name in ('first', 'second')
+        for name in ("first", "second")
     ]
 
     cached_resources = manager.make_available_all(items, fetch=False)
@@ -594,7 +608,7 @@ def test_make_available_all_hands_back_a_resource_per_item_in_order(
 def test_fetching_a_resource_outside_a_network_scope_is_refused(tmp_path):
     manager = make_manager(tmp_path)
 
-    with pytest.raises(RuntimeError, match='Run golem resolve first'):
+    with pytest.raises(RuntimeError, match="Run golem resolve first"):
         manager.install(make_cookbook())
 
 
@@ -617,59 +631,59 @@ def test_a_cache_key_is_the_source_id_and_the_version_it_is_keyed_on():
     # decision rather than the source's.
     cookbook = Cookbook(
         source=RequestedSource.for_repository(
-            'https://github.com/GolemCpp/recipes.git', version='main'
+            "https://github.com/GolemCpp/recipes.git", version="main"
         )
     )
 
     assert (
         CookbookManager.cache_key_for(cookbook)
-        == '@recipes@golemcpp@github.com#main=0d6e4079'
+        == "@recipes@golemcpp@github.com#main=0d6e4079"
     )
 
 
 def test_a_source_with_no_version_is_keyed_by_the_repository_alone():
     # A copied directory has nothing to name, so there is nothing for the
     # separator to join and it is left off entirely.
-    cookbook = Cookbook(source=RequestedSource.for_directory('file:///tmp/mylib'))
+    cookbook = Cookbook(source=RequestedSource.for_directory("file:///tmp/mylib"))
 
     assert (
         CookbookManager.cache_key_for(cookbook)
         == ResourceManager.source_for(cookbook).locator.get_id()
     )
-    assert CookbookManager.cache_key_for(cookbook) == '@mylib@tmp@_local_'
+    assert CookbookManager.cache_key_for(cookbook) == "@mylib@tmp@_local_"
 
 
 def test_an_object_name_in_a_key_abbreviates_the_way_git_does():
     dep = resolved_dependency(
-        Dependency(name='json', repository='https://github.com/nlohmann/json.git'),
-        reference='v3.12.0',
-        revision='65ee68451d8eb2b5f3a30b410476ab83deb3289b',
+        Dependency(name="json", repository="https://github.com/nlohmann/json.git"),
+        reference="v3.12.0",
+        revision="65ee68451d8eb2b5f3a30b410476ab83deb3289b",
     )
 
     # No digest to disambiguate: an object name already identifies itself, and a
     # component without one is by construction a commit.
-    assert DependencyManager.cache_key_for(dep) == '@json@nlohmann@github.com#65ee684'
+    assert DependencyManager.cache_key_for(dep) == "@json@nlohmann@github.com#65ee684"
 
 
 def test_each_kind_keys_on_the_half_of_the_version_it_pins_to():
     # The divergence is deliberate, and is one Pinning declaration per kind: a
     # cookbook follows a reference as it moves, a dependency is pinned to an
     # immutable commit, a tool re-points one root.
-    resolved = ResolvedVersion(reference='v3.12.0', revision='cafebabe')
+    resolved = ResolvedVersion(reference="v3.12.0", revision="cafebabe")
 
-    cookbook = Cookbook(source=replace(make_cookbook().source, version='v3.12.0'))
+    cookbook = Cookbook(source=replace(make_cookbook().source, version="v3.12.0"))
     cookbook.resolved = resolved
-    dep = Dependency(name='json', repository='https://host/r.git')
-    dep.update_source('')
+    dep = Dependency(name="json", repository="https://host/r.git")
+    dep.update_source("")
     dep.resolved = dep.resolved.settle_version(resolved)
 
     assert CookbookManager.cache_key_for(cookbook).endswith(
-        make_revision_part('v3.12.0')
+        make_revision_part("v3.12.0")
     )
-    assert DependencyManager.cache_key_for(dep).endswith(make_revision_part('cafebabe'))
+    assert DependencyManager.cache_key_for(dep).endswith(make_revision_part("cafebabe"))
     assert (
-        ToolManager.cache_key_for(ToolManager.get_tool('cppfront', version='v0.8.1'))
-        == 'cppfront'
+        ToolManager.cache_key_for(ToolManager.get_tool("cppfront", version="v0.8.1"))
+        == "cppfront"
     )
 
 
@@ -701,16 +715,16 @@ def test_a_request_keyed_root_is_named_the_same_resolved_or_not(tmp_path):
     # The property the whole offline story rests on: what configure computes and
     # what resolve builds is one key, so no resolution is needed to find a root.
     cookbook = Cookbook(
-        source=RequestedSource.for_repository('https://host/r.git', version='^1.2.0')
+        source=RequestedSource.for_repository("https://host/r.git", version="^1.2.0")
     )
     unresolved = CookbookManager.cache_key_for(cookbook)
 
-    cookbook.resolved = ResolvedVersion(reference='v1.2.9', revision='cafebabe')
+    cookbook.resolved = ResolvedVersion(reference="v1.2.9", revision="cafebabe")
 
     assert CookbookManager.cache_key_for(cookbook) == unresolved
     # And it is the request that names it, not what the request resolved to.
     assert unresolved.endswith(
-        safe_part.VERSION_SEPARATOR + make_revision_part('^1.2.0')
+        safe_part.VERSION_SEPARATOR + make_revision_part("^1.2.0")
     )
 
 
@@ -722,7 +736,7 @@ def test_only_a_commit_keyed_kind_skips_the_remote_on_a_refresh(tmp_path):
             manager_class(
                 get_cache_manager(
                     make_cache_configuration(
-                        cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+                        cache_directory.CacheDirectory(location=str(tmp_path / "cache"))
                     )
                 )
             )
@@ -731,9 +745,9 @@ def test_only_a_commit_keyed_kind_skips_the_remote_on_a_refresh(tmp_path):
         )
 
     assert consults_the_remote(CookbookManager, make_cookbook())
-    assert consults_the_remote(ToolManager, ToolManager.get_tool('cppfront'))
-    unresolved = Dependency(name='json', repository='https://host/json.git')
-    unresolved.update_source('')
+    assert consults_the_remote(ToolManager, ToolManager.get_tool("cppfront"))
+    unresolved = Dependency(name="json", repository="https://host/json.git")
+    unresolved.update_source("")
 
     assert not consults_the_remote(DependencyManager, unresolved)
 
@@ -741,13 +755,13 @@ def test_only_a_commit_keyed_kind_skips_the_remote_on_a_refresh(tmp_path):
 def test_a_heavy_dependency_is_the_one_resource_that_picks_its_fetch_mode(tmp_path):
     manager = get_dependency_manager(
         make_cache_configuration(
-            cache_directory.CacheDirectory(location=str(tmp_path / 'cache'))
+            cache_directory.CacheDirectory(location=str(tmp_path / "cache"))
         )
     )
-    dep = Dependency(name='big', repository='https://host/big.git', shallow=True)
+    dep = Dependency(name="big", repository="https://host/big.git", shallow=True)
 
     assert manager.fetch_mode_for(dep) == FetchMode.SHALLOW
-    small = Dependency(name='small', repository='https://host/small.git')
+    small = Dependency(name="small", repository="https://host/small.git")
 
     assert manager.fetch_mode_for(small) == manager.fetch_mode
 
@@ -762,7 +776,7 @@ def test_every_kind_reports_what_its_version_resolved_to(
     ResourceManager.resolve_version(make_cookbook())
 
     reported = capsys.readouterr().out
-    assert 'main' in reported
+    assert "main" in reported
     assert STUB_HEAD in reported
 
 
@@ -771,48 +785,60 @@ def test_every_kind_reports_what_its_version_resolved_to(
 
 def test_make_revision_part_abbreviates_either_object_name_format():
     # 40 hex is SHA-1, 64 is SHA-256. Git is migrating, and both name a commit.
-    assert make_revision_part('a' * 40) == 'aaaaaaa'
-    assert make_revision_part('b' * 64) == 'bbbbbbb'
+    assert make_revision_part("a" * 40) == "aaaaaaa"
+    assert make_revision_part("b" * 64) == "bbbbbbb"
 
 
 def test_make_revision_part_abbreviates_nothing_of_another_length():
     # Neither is an object name, so neither may be silently cut down to one.
-    assert make_revision_part('c' * 39) == 'c' * 39 + '=' + \
-        hashlib.sha256(('c' * 39).encode('utf-8')).hexdigest()[:8]
-    assert make_revision_part('d' * 41).startswith('d' * 40 + '=')
+    assert (
+        make_revision_part("c" * 39)
+        == "c" * 39 + "=" + hashlib.sha256(("c" * 39).encode("utf-8")).hexdigest()[:8]
+    )
+    assert make_revision_part("d" * 41).startswith("d" * 40 + "=")
 
 
 def test_a_revision_that_looks_like_an_abbreviation_cannot_alias_a_commit():
     # A tag may be spelled like a short hash. It takes the other branch, so it
     # never collides with the commit whose object name starts the same way.
-    assert make_revision_part('deadbeef') == 'deadbeef=2baf1f40'
+    assert make_revision_part("deadbeef") == "deadbeef=2baf1f40"
 
 
 def test_a_namespaced_revision_stays_one_path_component():
-    component = make_revision_part('release/1.2.3')
+    component = make_revision_part("release/1.2.3")
 
-    assert component == 'release~1.2.3=88ded651'
-    assert '/' not in component and os.sep not in component
+    assert component == "release~1.2.3=88ded651"
+    assert "/" not in component and os.sep not in component
 
 
 def test_revisions_a_filesystem_would_confuse_stay_distinct():
     # Each pair is one directory on some platform golem runs on -- NTFS and APFS
     # fold case, Windows drops a trailing dot -- so the digest is what keeps them
     # apart, and it is taken over the name as written.
-    assert make_revision_part('V1.0') == 'v1.0=35a6fd96'
-    assert make_revision_part('v1.0') == 'v1.0=fa8b919c'
-    assert make_revision_part('v1.0.') == 'v1.0.=db5f409d'
+    assert make_revision_part("V1.0") == "v1.0=35a6fd96"
+    assert make_revision_part("v1.0") == "v1.0=fa8b919c"
+    assert make_revision_part("v1.0.") == "v1.0.=db5f409d"
     # And a name spelled with the substitute is not the name holding the original.
-    assert make_revision_part('release/1.2.3') != make_revision_part('release-1.2.3')
+    assert make_revision_part("release/1.2.3") != make_revision_part("release-1.2.3")
 
 
 def test_make_revision_part_is_always_a_usable_directory_name():
-    for revision in ['main', 'V1.0', 'release/1.2.3', 'feature:x', 'a b', '..',
-                     '...', 'café', 'x' * 200, 'a' * 40]:
+    for revision in [
+        "main",
+        "V1.0",
+        "release/1.2.3",
+        "feature:x",
+        "a b",
+        "..",
+        "...",
+        "café",
+        "x" * 200,
+        "a" * 40,
+    ]:
         component = make_revision_part(revision)
 
-        assert re.fullmatch(r'[0-9a-z._~-]*(=[0-9a-f]{8})?', component)
+        assert re.fullmatch(r"[0-9a-z._~-]*(=[0-9a-f]{8})?", component)
         # Ends in the digest or in an object name, so never in something Windows
         # would silently strip.
-        assert not component.endswith('.') and not component.endswith(' ')
-        assert component not in ('.', '..')
+        assert not component.endswith(".") and not component.endswith(" ")
+        assert component not in (".", "..")

@@ -1,10 +1,10 @@
-'''
+"""
 Shared version resolution for cached resources.
 
 A `RequestedSource` asks for a version (e.g. a semver  range, a branch, a tag,
 a commit) and `VersionResolver` resolves it against the remote to make it a
 `ResolvedVersion`, which is then used to make a `Source`.
-'''
+"""
 
 import os
 import re
@@ -18,38 +18,44 @@ from semver import max_satisfying
 
 # `advertisement` is the local name every resolution works from, therefore these
 # come in directly rather than through the module they would shadow.
-from golemcpp.golem.advertisement import (ADVERTISED_PREFIXES, Advertisement,
-                                          HEAD_VERSION, TAG_PREFIX)
+from golemcpp.golem.advertisement import (
+    ADVERTISED_PREFIXES,
+    Advertisement,
+    HEAD_VERSION,
+    TAG_PREFIX,
+)
 
 
 class VersionResolver:
     @staticmethod
     def advertised(url) -> Advertisement:
-        '''
+        """
         Ask the remote what it publishes. The one call a resolution makes, and
         none at all when a resolve already asked this remote.
-        '''
+        """
         listing = advertisement_store.read(url)
 
         if not listing:
             listing = helpers.read_git(
-                ['ls-remote', '--symref', url] + list(ADVERTISED_PREFIXES),
-                cwd=os.getcwd())
+                ["ls-remote", "--symref", url] + list(ADVERTISED_PREFIXES),
+                cwd=os.getcwd(),
+            )
             advertisement_store.write(url, listing)
 
         return Advertisement.parse(listing)
 
     @staticmethod
-    def resolve_requested(requested, resolved,
-                          require_revision=False) -> ResolvedVersion:
-        '''
+    def resolve_requested(
+        requested, resolved, require_revision=False
+    ) -> ResolvedVersion:
+        """
         Resolve the version of a `RequestedSource`, unless the resolution
         given already answers.
 
         With `require_revision`, a commit is mandatory: not finding one raises.
 
         A directory is returned as given: it names no remote to ask.
-        '''
+        """
         already = bool(resolved.revision) if require_revision else bool(resolved)
         if requested.type != source.SOURCE_TYPE_GIT or already:
             return resolved
@@ -58,13 +64,15 @@ class VersionResolver:
         if require_revision and not resolved.revision:
             raise RuntimeError(
                 "no commit of '{}' answers version '{}'".format(
-                    requested.locator, requested.version))
+                    requested.locator, requested.version
+                )
+            )
 
         return resolved
 
     @staticmethod
     def resolve(requested) -> ResolvedVersion:
-        '''
+        """
         Resolve what a `RequestedSource` asks for, returning a `ResolvedVersion`.
 
         The remote is asked once, then answers in five steps:
@@ -83,7 +91,7 @@ class VersionResolver:
 
         5. Nothing names it. Raise here, where the version asked for is
         still at hand, rather than hand git a value it cannot resolve either.
-        '''
+        """
         url = str(requested.locator)
         version = requested.version
         advertisement = VersionResolver.advertised(url)
@@ -92,34 +100,37 @@ class VersionResolver:
             revision = advertisement.revision_of(HEAD_VERSION)
             if not advertisement.head_reference or not revision:
                 raise RuntimeError(
-                    "nothing in '{}' answers version '{}'".format(url, version))
-            return ResolvedVersion(reference=advertisement.head_reference,
-                                   revision=revision)
+                    "nothing in '{}' answers version '{}'".format(url, version)
+                )
+            return ResolvedVersion(
+                reference=advertisement.head_reference, revision=revision
+            )
 
         revision = advertisement.revision_of(version)
         if revision:
             return ResolvedVersion(reference=version, revision=revision)
 
         found_version = VersionResolver.find_version(
-            advertisement.tags(requested.version_regex), version)
+            advertisement.tags(requested.version_regex), version
+        )
         if found_version:
             return ResolvedVersion(
                 reference=found_version,
-                revision=advertisement.revision_of(TAG_PREFIX + found_version))
+                revision=advertisement.revision_of(TAG_PREFIX + found_version),
+            )
 
         if Version.parse_git_hash(version):
             return ResolvedVersion(reference=version, revision=version)
 
-        raise RuntimeError(
-            "nothing in '{}' answers version '{}'".format(url, version))
+        raise RuntimeError("nothing in '{}' answers version '{}'".format(url, version))
 
     @staticmethod
     def find_version(versions, ver):
-        semver_regex = r'^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+        semver_regex = r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
 
-        semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._\-](?P<minor>0|[1-9]\d*)[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?'
+        semver_regex_like = r"(?P<major>0|[1-9]\d*)[\._\-](?P<minor>0|[1-9]\d*)[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?"
 
-        semver_short_regex_like = r'(?P<major>0|[1-9]\d*)(?:[\._\-](?P<minor>0|[1-9]\d*)(?:[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?)?)?'
+        semver_short_regex_like = r"(?P<major>0|[1-9]\d*)(?:[\._\-](?P<minor>0|[1-9]\d*)(?:[\._\-](?P<patch>0|[1-9]\d*)(?:[-\._\-](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._\-](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._\-][0-9a-zA-Z-]+)*))?)?)?"
 
         semver_list = []
 
@@ -133,13 +144,13 @@ class VersionResolver:
                     matches = re.search(semver_short_regex_like, v)
                     if not matches:
                         continue
-                new_version = matches.group('major')
-                new_version += '.' + (matches.group('minor') or '0')
-                new_version += '.' + (matches.group('patch') or '0')
-                if matches.group('prerelease'):
-                    new_version += '-' + matches.group('prerelease')
-                if matches.group('buildmetadata'):
-                    new_version += '+' + matches.group('buildmetadata')
+                new_version = matches.group("major")
+                new_version += "." + (matches.group("minor") or "0")
+                new_version += "." + (matches.group("patch") or "0")
+                if matches.group("prerelease"):
+                    new_version += "-" + matches.group("prerelease")
+                if matches.group("buildmetadata"):
+                    new_version += "+" + matches.group("buildmetadata")
 
                 if new_version not in semver_list:
                     semver_list.append(new_version)
@@ -177,8 +188,11 @@ class VersionResolver:
 
 
 def report_resolution(name, version, resolved):
-    '''Say what a version resolved to, under the name the resource goes by.'''
+    """Say what a version resolved to, under the name the resource goes by."""
     # Asking for nothing is asking for HEAD, so say that rather than leave a gap
     # where the question goes.
-    print("{}: {} -> {} ({})".format(
-        name, version or HEAD_VERSION, resolved.reference, resolved.revision))
+    print(
+        "{}: {} -> {} ({})".format(
+            name, version or HEAD_VERSION, resolved.reference, resolved.revision
+        )
+    )

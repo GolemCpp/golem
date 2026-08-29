@@ -1,13 +1,46 @@
 from golemcpp.golem import helpers
 
 
-class BuildTarget:
-    def __init__(self, config, defines, includes, isystems, source, target, name,
-                 cxxflags, cflags, linkflags, arflags, cpp2flags, ldflags, use, uselib, moc,
-                 features, install_path, vnum, depends_on, lib, libpath, stlib,
-                 stlibpath, cppflags, framework, frameworkpath, module_indices, rpath, cxxdeps,
-                 ccdeps, linkdeps, env_defines, env_cxxflags, env_includes,
-                 env_isystems):
+class BuildArguments:
+    def __init__(
+        self,
+        config,
+        defines,
+        includes,
+        isystems,
+        source,
+        target,
+        name,
+        cxxflags,
+        cflags,
+        linkflags,
+        arflags,
+        cpp2flags,
+        ldflags,
+        use,
+        uselib,
+        moc,
+        features,
+        install_path,
+        vnum,
+        depends_on,
+        lib,
+        libpath,
+        stlib,
+        stlibpath,
+        cppflags,
+        framework,
+        frameworkpath,
+        module_indices,
+        rpath,
+        cxxdeps,
+        ccdeps,
+        linkdeps,
+        env_defines,
+        env_cxxflags,
+        env_includes,
+        env_isystems,
+    ):
 
         self.config = config
 

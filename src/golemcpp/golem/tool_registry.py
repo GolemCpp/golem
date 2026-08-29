@@ -5,7 +5,8 @@ from golemcpp.golem import cppfront_tool
 
 @dataclass(frozen=True)
 class ToolDefinition:
-    '''What Golem knows how to install, as opposed to a Tool someone asked for.'''
+    """What Golem knows how to install, as opposed to a Tool someone asked for."""
+
     name: str
     description: str
     repository: str

@@ -15,7 +15,7 @@ def test_allowed_opens_the_scope_and_restores_it_on_the_way_out():
 def test_allowed_restores_the_scope_when_the_block_raises():
     try:
         with network.allowed():
-            raise RuntimeError('boom')
+            raise RuntimeError("boom")
     except RuntimeError:
         pass
 

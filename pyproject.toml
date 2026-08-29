@@ -25,6 +25,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  # Capped at the year, because Black's stable style may change with each
+  # calendar version.
+  "black>=26.0,<27",
   "node-semver==0.8.0",
   "pytest>=9.0,<10",
   "ruff>=0.16,<1"
@@ -65,10 +68,6 @@ markers = [
     "qt: needs a Qt 6 installation",
     "packaging: needs the platform's packaging tool",
 ]
-
-[tool.black]
-# Strings here are single-quoted, for now.
-skip-string-normalization = true
 
 [tool.ruff]
 line-length = 88

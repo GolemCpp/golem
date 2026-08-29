@@ -1,4 +1,4 @@
-'''
+"""
 What a resource kind asks of the fetch.
 
 The policy is the kind's opinion. How much to obtain? What to land on? Whether
@@ -11,7 +11,7 @@ The mode is the one part of it nobody has an opinion about: every kind fetches
 the same way, because every kind has to be refreshable in place and some follow
 a branch. Only a resource that says so for itself, like a heavy dependency asking
 to be shallow, departs from it.
-'''
+"""
 
 import os
 from dataclasses import dataclass
@@ -24,19 +24,19 @@ class FetchMode(Enum):
     # Everything the remote has. The only mode whose result is self-contained:
     # a cache populated this way keeps working on a machine that cannot reach
     # the remote at all.
-    FULL = 'full'
+    FULL = "full"
     # Every commit and every tag, without the content of the files no revision
     # in use needs. `git describe --tags` still works, which is what lets this
     # be the default where `shallow` never could.
-    BLOBLESS = 'blobless'
+    BLOBLESS = "blobless"
     # The requested commit and nothing else. The cheapest and the most fragile:
     # no history to describe from, and a refresh cannot simply move.
-    SHALLOW = 'shallow'
+    SHALLOW = "shallow"
 
 
 # What a blobless fetch leaves behind: every commit and tree, no file content
 # until something reads it.
-BLOBLESS_FILTER = 'blob:none'
+BLOBLESS_FILTER = "blob:none"
 
 # Blobless needs three things at once, and the last one is the binding
 # constraint: `clone --filter` (git 2.26), `submodule update --filter` (git
@@ -47,27 +47,27 @@ BLOBLESS_MINIMUM_GIT_VERSION = (2, 45)
 
 
 def supports_blobless() -> bool:
-    '''
+    """
     Whether this git can be trusted with a partial clone. Not only whether it can
     make one: a git that cannot be told to refuse a lazy fetch cannot keep the
     network boundary this cache is built on.
-    '''
+    """
     return helpers.git_version() >= BLOBLESS_MINIMUM_GIT_VERSION
 
 
 def default_fetch_jobs() -> int:
-    '''
+    """
     How many submodules to obtain at once when nobody says. One per processor,
     capped: past a point the remote is the bottleneck, not this machine.
-    '''
+    """
     return min(os.cpu_count() or 1, 8)
 
 
-def default_fetch_mode() -> 'FetchMode':
-    '''
+def default_fetch_mode() -> "FetchMode":
+    """
     What every kind fetches in unless told otherwise. Asked for explicitly, any
     mode is honoured; this is only what nobody asking gets.
-    '''
+    """
     return FetchMode.BLOBLESS if supports_blobless() else FetchMode.FULL
 
 
@@ -76,7 +76,7 @@ def default_fetch_mode() -> 'FetchMode':
 
 
 def parse_fetch_mode(text, context):
-    '''The mode a configured name stands for. Raises on an unknown name.'''
+    """The mode a configured name stands for. Raises on an unknown name."""
     return FetchMode(text)
 
 
@@ -86,9 +86,9 @@ def format_fetch_mode(fetch_mode, context):
 
 @dataclass(frozen=True)
 class FetchPolicy:
-    '''
+    """
     Describes the requirements for a resource kind to be fetched from its source.
-    '''
+    """
 
     # How much of the source to obtain. Every kind fetches the same way unless a
     # resource asks for something else of its own.
@@ -98,7 +98,7 @@ class FetchPolicy:
     fetch_jobs: int = 1
     # The commit to reset to. Resolution settles which one, so a fetcher is never
     # handed a name to interpret. Empty resets to the current HEAD.
-    revision: str = ''
+    revision: str = ""
     # Whether refreshing consults the remote. A pinned resource cannot move, so
     # it has nothing to fetch.
     fetch_remote: bool = True

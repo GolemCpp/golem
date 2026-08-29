@@ -12,70 +12,73 @@ from golemcpp.golem.overlay_manager import OverlayManager
 
 @pytest.fixture
 def resolutions(monkeypatch):
-    '''Every version resolution asked of a remote, in order.'''
+    """Every version resolution asked of a remote, in order."""
     asked = []
 
     def resolve(requested):
         asked.append((str(requested.locator), requested.version))
-        return ResolvedVersion(reference='v1.2.0', revision='deadbeef')
+        return ResolvedVersion(reference="v1.2.0", revision="deadbeef")
 
-    monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(resolve))
+    monkeypatch.setattr(VersionResolver, "resolve", staticmethod(resolve))
     return asked
 
 
-def make_source(version=''):
-    return RequestedSource.for_repository('https://host/overrides.git', version=version)
+def make_source(version=""):
+    return RequestedSource.for_repository("https://host/overrides.git", version=version)
 
 
 def test_an_overlay_asks_for_exactly_what_its_location_names():
     # Nothing of its own to reconcile: the location said it in full, and
     # naming no version is a question the resolver puts to the remote.
-    assert Overlay(source=make_source(version='v1.2.0')).requested_source() == \
-        make_source(version='v1.2.0')
-    assert Overlay(source=make_source()).requested_source().version == ''
+    assert Overlay(
+        source=make_source(version="v1.2.0")
+    ).requested_source() == make_source(version="v1.2.0")
+    assert Overlay(source=make_source()).requested_source().version == ""
 
 
 def test_an_overlay_resolves_the_way_every_other_kind_does(resolutions):
     # No resolution of its own: what an overlay is pinned to decides which half
     # of the answer names its root, not how the answer is arrived at.
-    overlay = Overlay(source=make_source(version='^1.2.0'))
+    overlay = Overlay(source=make_source(version="^1.2.0"))
 
-    assert overlay.resolve() == ResolvedVersion(reference='v1.2.0', revision='deadbeef')
-    assert resolutions == [('https://host/overrides.git', '^1.2.0')]
+    assert overlay.resolve() == ResolvedVersion(reference="v1.2.0", revision="deadbeef")
+    assert resolutions == [("https://host/overrides.git", "^1.2.0")]
 
 
 def test_a_resolved_overlay_is_not_resolved_again(resolutions):
-    overlay = Overlay(source=make_source(version='^1.2.0'))
+    overlay = Overlay(source=make_source(version="^1.2.0"))
     overlay.resolve()
 
-    assert overlay.resolve() == ResolvedVersion(reference='v1.2.0', revision='deadbeef')
+    assert overlay.resolve() == ResolvedVersion(reference="v1.2.0", revision="deadbeef")
     assert len(resolutions) == 1
 
 
 def test_the_source_carries_the_resolved_reference(resolutions):
-    overlay = Overlay(source=make_source(version='^1.2.0'))
+    overlay = Overlay(source=make_source(version="^1.2.0"))
     overlay.resolve()
 
     source = ResourceManager.source_for(overlay)
 
-    assert source.locator == Locator('https://host/overrides.git')
-    assert source.resolved.reference == 'v1.2.0'
+    assert source.locator == Locator("https://host/overrides.git")
+    assert source.resolved.reference == "v1.2.0"
 
 
 def test_an_overlay_is_named_the_same_before_and_after_being_resolved(resolutions):
     # An overlay root is named after the request. It matters more here than for a
     # cookbook: overlays are located on every run, not only inside a resolve.
-    overlay = Overlay(source=make_source(version='^1.2.0'))
+    overlay = Overlay(source=make_source(version="^1.2.0"))
     unresolved = OverlayManager.cache_key_for(overlay)
 
     overlay.resolve()
 
     assert OverlayManager.cache_key_for(overlay) == unresolved
-    assert ResourceManager.source_for(overlay).locator == Locator('https://host/overrides.git')
+    assert ResourceManager.source_for(overlay).locator == Locator(
+        "https://host/overrides.git"
+    )
 
 
 def test_a_directory_overlay_keeps_its_empty_reference(resolutions):
-    requested = RequestedSource.for_directory('file:///overlays/local')
+    requested = RequestedSource.for_directory("file:///overlays/local")
     overlay = Overlay(source=requested)
 
     overlay.resolve()
@@ -84,9 +87,9 @@ def test_a_directory_overlay_keeps_its_empty_reference(resolutions):
     # which for a `file://` locator would be asking git to ls-remote a path.
     assert resolutions == []
     # No default branch to fall back on: a copied directory is what it holds.
-    assert overlay.requested_source().version == ''
+    assert overlay.requested_source().version == ""
     source = ResourceManager.source_for(overlay)
-    assert source.type == 'directory'
+    assert source.type == "directory"
     assert source.locator == requested.locator
     assert not source.resolved
     # And with no version to name, the key is the source id alone.

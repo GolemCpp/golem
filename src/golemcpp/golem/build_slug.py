@@ -1,4 +1,4 @@
-'''
+"""
 The name a build's own configuration goes by.
 
 A slug names every input that decides whether one artifact can substitute for
@@ -11,22 +11,22 @@ It is written to be read. Someone looking at a cache directory should recognise
 their own configuration in its name, and get back to it from what they typed.
 So the name is *parseable*, and that is enforced rather than hoped for: a value
 that would render an unreadable name is refused at construction.
-'''
+"""
 
 from dataclasses import dataclass, fields
 
 # Legal in a filename on every platform Golem targets.
-SEPARATOR = '~'
+SEPARATOR = "~"
 
-LINKAGES = {'shared': 'sh', 'static': 'st'}
-VARIANTS = {'debug': 'd', 'release': 'r'}
+LINKAGES = {"shared": "sh", "static": "st"}
+VARIANTS = {"debug": "d", "release": "r"}
 
 # The fields with a closed vocabulary, which render short.
 FIELD_VOCABULARIES = {
-    'runtime_link': LINKAGES,
-    'runtime_variant': VARIANTS,
-    'link': LINKAGES,
-    'variant': VARIANTS,
+    "runtime_link": LINKAGES,
+    "runtime_variant": VARIANTS,
+    "link": LINKAGES,
+    "variant": VARIANTS,
 }
 
 FIELD_SPELLINGS = {
@@ -50,14 +50,14 @@ FIELD_SPELLINGS = {
 # proxy.
 @dataclass(frozen=True)
 class BuildSlug:
-    '''
+    """
     What a build was configured for, as one value.
 
     The constructor is the contract. Every field is something that decides
     whether an artifact can stand in for another, so adding an axis means
     changing this signature, and what a build's identity depends on can be read
     in one place.
-    '''
+    """
 
     osystem: str
     arch: str
@@ -76,41 +76,50 @@ class BuildSlug:
                 if value not in vocabulary:
                     raise ValueError(
                         "'{}' is not a {}: it is one of {}.".format(
-                            value, field.name.replace('_', ' '),
-                            ', '.join(sorted(vocabulary))))
+                            value,
+                            field.name.replace("_", " "),
+                            ", ".join(sorted(vocabulary)),
+                        )
+                    )
                 continue
 
             if not value:
                 raise ValueError(
-                    'A build slug needs {} to name what it was built for; '
-                    'leaving it out would name two different builds the '
-                    'same.'.format(field.name))
+                    "A build slug needs {} to name what it was built for; "
+                    "leaving it out would name two different builds the "
+                    "same.".format(field.name)
+                )
             if SEPARATOR in value:
                 raise ValueError(
                     "'{}' cannot be a {}: '{}' separates a slug's fields, so "
-                    'the name could not be read back.'.format(
-                        value, field.name, SEPARATOR))
+                    "the name could not be read back.".format(
+                        value, field.name, SEPARATOR
+                    )
+                )
 
     def __str__(self):
         return SEPARATOR.join(
             FIELD_VOCABULARIES.get(field.name, {}).get(
-                getattr(self, field.name), getattr(self, field.name))
-            for field in fields(self))
+                getattr(self, field.name), getattr(self, field.name)
+            )
+            for field in fields(self)
+        )
 
     @staticmethod
     def parse(name):
-        '''
+        """
         Read a slug back into the configuration it names.
 
         Refuses a name this format did not write, which is how a directory left
         behind by an earlier one is recognised.
-        '''
+        """
         names = [field.name for field in fields(BuildSlug)]
         values = str(name).split(SEPARATOR)
         if len(values) != len(names):
             raise ValueError(
                 "'{}' is not a build slug: {} fields where there are "
-                '{}.'.format(name, len(values), len(names)))
+                "{}.".format(name, len(values), len(names))
+            )
 
         settled = {}
         for field_name, value in zip(names, values):
@@ -121,7 +130,9 @@ class BuildSlug:
             if value not in spellings:
                 raise ValueError(
                     "'{}' is not a build slug: '{}' spells no {}.".format(
-                        name, value, field_name.replace('_', ' ')))
+                        name, value, field_name.replace("_", " ")
+                    )
+                )
             settled[field_name] = spellings[value]
 
         return BuildSlug(**settled)

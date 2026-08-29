@@ -15,65 +15,72 @@ from waflib import Context
 import inspect
 from pathlib import Path
 
+
 def main() -> int:
     print("=== Golem C++ Build System ===")
     sys.stdout.flush()
 
     golem_path = helpers.get_golemcpp_golem_dir()
-    golemcpp_data_path = Path(golem_path).parent.joinpath('data')
+    golemcpp_data_path = Path(golem_path).parent.joinpath("data")
 
-    global_args, command, command_args = cli_arguments.parse_cli_arguments(sys.argv, os.getcwd())
+    global_args, command, command_args = cli_arguments.parse_cli_arguments(
+        sys.argv, os.getcwd()
+    )
 
-    if '--version' in global_args:
+    if "--version" in global_args:
         command_version.handle_version_command()
         return 0
-    
+
     if command is None:
         command_help.handle_help_command()
         return 0
 
-    project_dir, build_dir = cli_arguments.parse_directories_from_arguments(command_args)
+    project_dir, build_dir = cli_arguments.parse_directories_from_arguments(
+        command_args
+    )
 
-    if command in ('init', 'initialize'):
-        return command_init.handle_init_command(project_dir=project_dir,
-                                                data_dir=golemcpp_data_path,
-                                                args=command_args)
+    if command in ("init", "initialize"):
+        return command_init.handle_init_command(
+            project_dir=project_dir, data_dir=golemcpp_data_path, args=command_args
+        )
 
-    if command == 'config':
-        return command_config.handle_config_command(project_dir=project_dir,
-                                                    args=command_args)
+    if command == "config":
+        return command_config.handle_config_command(
+            project_dir=project_dir, args=command_args
+        )
 
-    if command == 'tools':
-        return command_tools.handle_tools_command(project_dir=project_dir,
-                                                  args=command_args)
+    if command == "tools":
+        return command_tools.handle_tools_command(
+            project_dir=project_dir, args=command_args
+        )
 
-    if command == 'cache':
-        return command_cache.handle_cache_command(project_dir=project_dir,
-                                                  args=command_args)
+    if command == "cache":
+        return command_cache.handle_cache_command(
+            project_dir=project_dir, args=command_args
+        )
 
     # For other commands, we only keep the arguments that are relevant for waf, which are the ones after the command
     sys.argv = [sys.argv[0], command] + command_args
 
     golem_out = build_dir
-    build_dir = os.path.join(golem_out, 'golem')
+    build_dir = os.path.join(golem_out, "golem")
 
-    filein = open(os.path.join(golemcpp_data_path, 'wscript'), encoding='utf-8')
+    filein = open(os.path.join(golemcpp_data_path, "wscript"), encoding="utf-8")
     src = Template(filein.read())
     filein.close()
-    out = src.substitute(
-        builder_path=repr(os.path.join(golem_path, 'builder.py')))
+    out = src.substitute(builder_path=repr(os.path.join(golem_path, "builder.py")))
 
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
-    fileout = open(os.path.join(build_dir, 'wscript'), 'w+', encoding='utf-8')
+    fileout = open(os.path.join(build_dir, "wscript"), "w+", encoding="utf-8")
     fileout.write(out)
     fileout.close()
 
     wafdir = os.path.abspath(inspect.getfile(inspect.getmodule(Scripting)))
     wafdir = str(Path(wafdir).parent.parent.absolute())
 
-    if command == 'distclean':
+    if command == "distclean":
         path = golem_out
         helpers.remove_tree(path)
         return 0

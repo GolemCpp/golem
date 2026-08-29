@@ -8,15 +8,17 @@ from golemcpp.golem.template import Template
 import json
 
 
-class Target(Configuration):
-    def __init__(self,
-                 name=None,
-                 version_template=None,
-                 templates=None,
-                 export=False,
-                 args=None,
-                 **kwargs):
-        super(Target, self).__init__(**kwargs)
+class Definition(Configuration):
+    def __init__(
+        self,
+        name=None,
+        version_template=None,
+        templates=None,
+        export=False,
+        args=None,
+        **kwargs,
+    ):
+        super(Definition, self).__init__(**kwargs)
         self.name = name
         self.version_template = helpers.parameter_to_list(version_template)
         self.templates = helpers.parameter_to_list(templates)
@@ -28,18 +30,18 @@ class Target(Configuration):
 
     @staticmethod
     def serialized_members():
-        return ['name', 'version_template', 'templates']
+        return ["name", "version_template", "templates"]
 
     @staticmethod
     def serialize_to_json(o):
         json_obj = Configuration.serialize_to_json(o)
 
         for key in o.__dict__:
-            if key in Target.serialized_members():
+            if key in Definition.serialized_members():
                 value = o.__dict__[key]
                 if value:
-                    if (key == 'templates' or key == 'version_template'):
-                        array=[]
+                    if key == "templates" or key == "version_template":
+                        array = []
                         for item in value:
                             if isinstance(item, str):
                                 array.append(item)
@@ -55,9 +57,9 @@ class Target(Configuration):
         Configuration.read_json(self, o)
 
         for key, value in o.items():
-            if key in Target.serialized_members():
-                if key == 'templates' or key == 'version_template':
-                    array=[]
+            if key in Definition.serialized_members():
+                if key == "templates" or key == "version_template":
+                    array = []
                     for item in value:
                         if isinstance(item, str):
                             array.append(item)
@@ -69,19 +71,18 @@ class Target(Configuration):
 
     @staticmethod
     def unserialize_from_json(o):
-        target = Target()
-        target.read_json(o)
-        return target
+        definition = Definition()
+        definition.read_json(o)
+        return definition
 
 
-class TargetConfigurationFile(object):
+class ExportedConfiguration(object):
     def __init__(self, project=None, configuration=None):
         self.dependencies = []
         self.configuration = configuration
         if self.configuration and project:
             self.dependencies = [
-                obj for n in configuration.deps for obj in project.deps
-                if obj.name == n
+                obj for n in configuration.deps for obj in project.deps if obj.name == n
             ]
 
     @staticmethod
@@ -90,61 +91,74 @@ class TargetConfigurationFile(object):
             "dependencies": [
                 Dependency.serialize_to_json(dep) for dep in o.dependencies
             ],
-            "configuration": Configuration.serialize_to_json(o.configuration)
+            "configuration": Configuration.serialize_to_json(o.configuration),
         }
         return json_obj
 
     @staticmethod
     def unserialize_from_json(o):
-        target_configuration_file = TargetConfigurationFile()
+        exported_configuration = ExportedConfiguration()
         for key, value in o.items():
-            if key == 'dependencies':
+            if key == "dependencies":
                 for dep in value:
-                    target_configuration_file.dependencies.append(
-                        Dependency.unserialize_from_json(dep))
-            elif key == 'configuration':
-                target_configuration_file.configuration = Configuration.unserialize_from_json(
-                    value)
-        return target_configuration_file
+                    exported_configuration.dependencies.append(
+                        Dependency.unserialize_from_json(dep)
+                    )
+            elif key == "configuration":
+                exported_configuration.configuration = (
+                    Configuration.unserialize_from_json(value)
+                )
+        return exported_configuration
 
     @staticmethod
     def load_file(path, context):
 
         json_content = None
-        with open(path, 'r') as file_json:
+        with open(path, "r") as file_json:
             json_content = json.load(file_json)
 
-        conf_file = TargetConfigurationFile.unserialize_from_json(json_content)
+        conf_file = ExportedConfiguration.unserialize_from_json(json_content)
 
         manager = get_dependency_manager(context.cache_configuration)
         for dependency in conf_file.dependencies:
             manager.update_cached_resource(dependency)
 
         conf_file.configuration.artifacts_dev = context.translate_cache_dir_paths(
-            conf_file.configuration.artifacts_dev)
+            conf_file.configuration.artifacts_dev
+        )
         conf_file.configuration.artifacts_run = context.translate_cache_dir_paths(
-            conf_file.configuration.artifacts_run)
+            conf_file.configuration.artifacts_run
+        )
         conf_file.configuration.module_indices = context.translate_cache_dir_paths(
-            conf_file.configuration.module_indices)
+            conf_file.configuration.module_indices
+        )
         conf_file.configuration.licenses = context.translate_cache_dir_paths(
-            conf_file.configuration.licenses)
+            conf_file.configuration.licenses
+        )
         conf_file.configuration.rpath_link = context.translate_cache_dir_paths(
-            conf_file.configuration.rpath_link)
+            conf_file.configuration.rpath_link
+        )
         conf_file.configuration.lib = context.translate_cache_dir_paths(
-            conf_file.configuration.lib)
+            conf_file.configuration.lib
+        )
         conf_file.configuration.stlib = context.translate_cache_dir_paths(
-            conf_file.configuration.stlib)
+            conf_file.configuration.stlib
+        )
         conf_file.configuration.libpath = context.translate_cache_dir_paths(
-            conf_file.configuration.libpath)
+            conf_file.configuration.libpath
+        )
         conf_file.configuration.stlibpath = context.translate_cache_dir_paths(
-            conf_file.configuration.stlibpath)
+            conf_file.configuration.stlibpath
+        )
         conf_file.configuration.isystems = context.translate_cache_dir_paths(
-            conf_file.configuration.isystems)
+            conf_file.configuration.isystems
+        )
 
         artifacts = conf_file.configuration.artifacts.copy()
         for artifact in artifacts:
             artifact.location = context.translate_cache_dir_paths(
-                paths=[artifact.location])[0]
+                paths=[artifact.location]
+            )[0]
         conf_file.configuration.artifacts = artifacts
 
         return conf_file
@@ -152,40 +166,51 @@ class TargetConfigurationFile(object):
     @staticmethod
     def save_file(path, project, configuration, context):
 
-        conf_file = TargetConfigurationFile(project=project,
-                                            configuration=configuration)
+        conf_file = ExportedConfiguration(project=project, configuration=configuration)
 
         conf_file.configuration.artifacts_dev = context.make_cache_dir_paths(
-            conf_file.configuration.artifacts_dev)
+            conf_file.configuration.artifacts_dev
+        )
         conf_file.configuration.artifacts_run = context.make_cache_dir_paths(
-            conf_file.configuration.artifacts_run)
+            conf_file.configuration.artifacts_run
+        )
         conf_file.configuration.module_indices = context.make_cache_dir_paths(
-            conf_file.configuration.module_indices)
+            conf_file.configuration.module_indices
+        )
         conf_file.configuration.licenses = context.make_cache_dir_paths(
-            conf_file.configuration.licenses)
+            conf_file.configuration.licenses
+        )
         conf_file.configuration.rpath_link = context.make_cache_dir_paths(
-            conf_file.configuration.rpath_link)
+            conf_file.configuration.rpath_link
+        )
         conf_file.configuration.lib = context.make_cache_dir_paths(
-            conf_file.configuration.lib)
+            conf_file.configuration.lib
+        )
         conf_file.configuration.stlib = context.make_cache_dir_paths(
-            conf_file.configuration.stlib)
+            conf_file.configuration.stlib
+        )
         conf_file.configuration.libpath = context.make_cache_dir_paths(
-            conf_file.configuration.libpath)
+            conf_file.configuration.libpath
+        )
         conf_file.configuration.stlibpath = context.make_cache_dir_paths(
-            conf_file.configuration.stlibpath)
+            conf_file.configuration.stlibpath
+        )
         conf_file.configuration.isystems = context.make_cache_dir_paths(
-            conf_file.configuration.isystems)
+            conf_file.configuration.isystems
+        )
 
         artifacts = conf_file.configuration.artifacts.copy()
         for artifact in artifacts:
-            artifact.location = context.make_cache_dir_paths(
-                paths=[artifact.location])[0]
+            artifact.location = context.make_cache_dir_paths(paths=[artifact.location])[
+                0
+            ]
         conf_file.configuration.artifacts = artifacts
 
         json_content = json.dumps(
             conf_file,
-            default=TargetConfigurationFile.serialize_to_json,
+            default=ExportedConfiguration.serialize_to_json,
             sort_keys=True,
-            indent=4)
-        with open(path, 'w') as output:
+            indent=4,
+        )
+        with open(path, "w") as output:
             output.write(json_content)

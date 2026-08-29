@@ -12,7 +12,7 @@ class Template:
 
     @staticmethod
     def serialized_members():
-        return ['source', 'target', 'build']
+        return ["source", "target", "build"]
 
     @staticmethod
     def serialize_to_json(o):

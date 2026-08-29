@@ -16,27 +16,27 @@ from golemcpp.golem.tool import Tool
 class InstalledToolInfo:
     name: str
     version: str
-    cache_root: str = ''
+    cache_root: str = ""
     is_read_only: bool = False
 
 
 class ToolManager(ResourceManager):
-    '''
+    """
     Manages installable tools as ordinary cached resources.
 
     Tools are pinned in cache on their name, which means they update in place
     when asking for a different version. Said differently, asking for a different
     version replaces any existing one.
-    '''
+    """
 
     kind = ResourceKind.TOOL
     pinning = Pinning.NAME
 
     @staticmethod
-    def get_tool(tool_name: str, version: str = '') -> Tool:
+    def get_tool(tool_name: str, version: str = "") -> Tool:
         definition = tool_registry.get_tool(tool_name)
         if definition is None:
-            raise ValueError('unsupported tool: {}'.format(tool_name))
+            raise ValueError("unsupported tool: {}".format(tool_name))
         return Tool(definition=definition, version=version)
 
     @staticmethod
@@ -48,8 +48,10 @@ class ToolManager(ResourceManager):
         # A tool's root stores many things, only the manifest and the source
         # directory should remain before a refresh.
         for name in os.listdir(root):
-            if name in (cache_configuration.SOURCE_DIRNAME,
-                        resource_manifest.MANIFEST_FILENAME):
+            if name in (
+                cache_configuration.SOURCE_DIRNAME,
+                resource_manifest.MANIFEST_FILENAME,
+            ):
                 continue
             path = os.path.join(root, name)
             if os.path.isdir(path):
@@ -69,17 +71,21 @@ class ToolManager(ResourceManager):
             resource = self.resource_for(Tool(definition=definition))
             for cache_dir in self.cache_manager.locations:
                 source = self.cache_manager.read_manifest_source(
-                    self.cache_manager.make_cached_resource(cache_dir, resource))
+                    self.cache_manager.make_cached_resource(cache_dir, resource)
+                )
                 if source is None:
                     continue
-                installed_tools.append(InstalledToolInfo(
-                    name=definition.name,
-                    version=source.resolved.reference,
-                    cache_root=cache_dir.location,
-                    is_read_only=cache_dir.is_read_only))
+                installed_tools.append(
+                    InstalledToolInfo(
+                        name=definition.name,
+                        version=source.resolved.reference,
+                        cache_root=cache_dir.location,
+                        is_read_only=cache_dir.is_read_only,
+                    )
+                )
         return installed_tools
 
 
 def get_tool_manager(cache_configuration) -> ToolManager:
-    '''The single factory for the tool resource manager.'''
+    """The single factory for the tool resource manager."""
     return ToolManager(get_cache_manager(cache_configuration))

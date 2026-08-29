@@ -8,7 +8,7 @@ from golemcpp.golem.version_resolver import VersionResolver
 
 @dataclass
 class Overlay:
-    '''A configured overlay, at the version its location names.'''
+    """A configured overlay, at the version its location names."""
 
     source: RequestedSource
 
@@ -36,7 +36,6 @@ class Overlay:
 
         self.resolved = resolved
 
-        version_resolver.report_resolution(
-            self.name, self.source.version, resolved)
+        version_resolver.report_resolution(self.name, self.source.version, resolved)
 
         return self.resolved

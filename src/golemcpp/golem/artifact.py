@@ -4,15 +4,17 @@ from golemcpp.golem.resolved_version import ResolvedVersion
 
 
 class Artifact:
-    def __init__(self,
-                 path=None,
-                 location=None,
-                 type=None,
-                 scope=None,
-                 repository=None,
-                 target=None,
-                 decorated_target=None,
-                 resolved=None):
+    def __init__(
+        self,
+        path=None,
+        location=None,
+        type=None,
+        scope=None,
+        repository=None,
+        target=None,
+        decorated_target=None,
+        resolved=None,
+    ):
         self.path = path
         self.location = location
         self.type = type
@@ -33,13 +35,19 @@ class Artifact:
     def __eq__(self, other):
         return self.absolute_path == other.absolute_path
 
-    RESOLVED_MEMBER = 'resolved'
+    RESOLVED_MEMBER = "resolved"
 
     @staticmethod
     def serialized_members():
         return [
-            'path', 'location', 'type', 'scope', 'repository', 'target',
-            'decorated_target', 'resolved'
+            "path",
+            "location",
+            "type",
+            "scope",
+            "repository",
+            "target",
+            "decorated_target",
+            "resolved",
         ]
 
     @staticmethod
@@ -63,8 +71,9 @@ class Artifact:
 
         if key in Artifact.serialized_members():
             if not isinstance(value, str):
-                raise RuntimeError("Bad artifact member type: {}".format(
-                    str(type(value))))
+                raise RuntimeError(
+                    "Bad artifact member type: {}".format(str(type(value)))
+                )
             self.__dict__[key] = value
 
     def read_json(self, o):

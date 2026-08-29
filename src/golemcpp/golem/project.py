@@ -2,7 +2,7 @@ import os
 import sys
 from golemcpp.golem import helpers
 import json
-from golemcpp.golem.target import Target
+from golemcpp.golem.definition import Definition
 from golemcpp.golem.configuration import Configuration
 from golemcpp.golem.condition_expression import ConditionExpression
 from golemcpp.golem.template import Template
@@ -13,16 +13,15 @@ from golemcpp.golem.helpers import *
 from waflib import Logs
 import copy
 
-
 # The members used when working out a resolution (the source, and the asked version).
 # A cached entry differing in any of them was resolved from a different request.
 #
 # Compare the requests, not the resolved counterparts.
-STALENESS_MEMBERS = SOURCE_MEMBERS + ('version', 'version_regex')
+STALENESS_MEMBERS = SOURCE_MEMBERS + ("version", "version_regex")
 
 
 def is_stale_for(cached, dependency) -> bool:
-    '''Was a cached entry resolved from a different request?'''
+    """Was a cached entry resolved from a different request?"""
     return any(
         getattr(cached, member) != getattr(dependency, member)
         for member in STALENESS_MEMBERS
@@ -30,13 +29,13 @@ def is_stale_for(cached, dependency) -> bool:
 
 
 def resolution_key(dependency):
-    '''
+    """
     What a resolution is looked up by; source and version.
 
     `version_regex` belongs in it because it filters the candidate tags before
     the range is matched, therefore two requests differing only in it can land
     on different revisions.
-    '''
+    """
     return (dependency.resolved.locator, dependency.version, dependency.version_regex)
 
 
@@ -45,11 +44,11 @@ class Project:
         self.cache = []
         self.deps = []
 
-        self.targets = []
+        self.definitions = []
         self.exports = []
 
         self.qt = False
-        self.qtdir = ''
+        self.qtdir = ""
 
         self.packages = []
         self.configuration_paths = []
@@ -69,7 +68,7 @@ class Project:
 
         if global_config_file and os.path.exists(global_config_file):
             cache = None
-            with open(global_config_file, 'r') as fp:
+            with open(global_config_file, "r") as fp:
                 cache = json.load(fp)
             cached_dependencies = Dependency.load_cache(cache=cache)
 
@@ -88,8 +87,11 @@ class Project:
             ]
             if not cached_deps:
                 if not is_dependency_to_keep:
-                    Logs.debug("Querying Git for {} at {}".format(
-                        dependency.version, dependency.resolved.locator))
+                    Logs.debug(
+                        "Querying Git for {} at {}".format(
+                            dependency.version, dependency.resolved.locator
+                        )
+                    )
                     dependency.resolve()
 
                 cached_dep = copy.deepcopy(dependency)
@@ -97,21 +99,25 @@ class Project:
             else:
                 dependency.resolved = cached_deps[0].resolved
 
-            Logs.debug("Found {}: {} -> {} ({})".format(
-                dependency.name, dependency.version,
-                dependency.resolved.version.reference,
-                dependency.resolved.version.revision))
+            Logs.debug(
+                "Found {}: {} -> {} ({})".format(
+                    dependency.name,
+                    dependency.version,
+                    dependency.resolved.version.reference,
+                    dependency.resolved.version.revision,
+                )
+            )
 
         for dependency in cached_dependencies:
             dependency.name = None
 
         if global_config_file:
             cache = Dependency.save_cache(cached_dependencies)
-            with open(global_config_file, 'w') as fp:
+            with open(global_config_file, "w") as fp:
                 json.dump(cache, fp, indent=4)
 
     def record_recipes(self, global_config_file):
-        '''
+        """
         Write into the shared cache which recipes served this project's dependencies.
 
         The entries were written before anything was fetched, so they carry no recipe.
@@ -119,11 +125,11 @@ class Project:
         Reloaded rather than saved from what this project holds. Because every
         sub-invocation appends to the same file, and writing a stale list back would
         drop what they added.
-        '''
+        """
         if not global_config_file or not os.path.exists(global_config_file):
             return
 
-        with open(global_config_file, 'r') as fp:
+        with open(global_config_file, "r") as fp:
             cache = json.load(fp)
 
         cached_dependencies = Dependency.load_cache(cache=cache)
@@ -140,7 +146,7 @@ class Project:
             if key in resolved:
                 cached.resolved = resolved[key]
 
-        with open(global_config_file, 'w') as fp:
+        with open(global_config_file, "w") as fp:
             json.dump(Dependency.save_cache(cached_dependencies), fp, indent=4)
 
     def deps_resolve_json(self):
@@ -151,68 +157,79 @@ class Project:
 
         for i, dependency in enumerate(self.deps):
             for cached_dependency in cached_dependencies:
-                if (cached_dependency.name != dependency.name
-                        or is_stale_for(cached_dependency, dependency)):
+                if cached_dependency.name != dependency.name or is_stale_for(
+                    cached_dependency, dependency
+                ):
                     continue
 
-                print("{}: {} -> {} ({})".format(
-                    cached_dependency.name, cached_dependency.version,
-                    cached_dependency.resolved.version.reference,
-                    cached_dependency.resolved.version.revision))
+                print(
+                    "{}: {} -> {} ({})".format(
+                        cached_dependency.name,
+                        cached_dependency.version,
+                        cached_dependency.resolved.version.reference,
+                        cached_dependency.resolved.version.revision,
+                    )
+                )
                 self.deps[i].resolved = cached_dependency.resolved
                 break
             # A copied directory has no version to have cached, so saying so about
             # one would report a failure that cannot happen.
-            if (not self.deps[i].resolved.version
-                    and not dependency.is_non_git_directory()):
+            if (
+                not self.deps[i].resolved.version
+                and not dependency.is_non_git_directory()
+            ):
                 print("{} : no cached version".format(dependency.name))
 
         sys.stdout.flush()
 
-    def target(self,
-               type,
-               name,
-               link=None,
-               version_template=None,
-               templates=None,
-               args=None,
-               **kwargs):
-        new_target = Target(name=name,
-                            version_template=version_template,
-                            templates=templates,
-                            args=args,
-                            type=type,
-                            link=link,
-                            **kwargs)
+    def definition(
+        self,
+        type,
+        name,
+        link=None,
+        version_template=None,
+        templates=None,
+        args=None,
+        **kwargs,
+    ):
+        new_definition = Definition(
+            name=name,
+            version_template=version_template,
+            templates=templates,
+            args=args,
+            type=type,
+            link=link,
+            **kwargs,
+        )
 
-        self.targets.append(new_target)
-        return new_target
+        self.definitions.append(new_definition)
+        return new_definition
 
     def library(self, type=None, **kwargs):
-        return self.target(type='library', **kwargs)
+        return self.definition(type="library", **kwargs)
 
     def shared_library(self, type=None, link=None, **kwargs):
-        return self.target(type='library', link='shared', **kwargs)
+        return self.definition(type="library", link="shared", **kwargs)
 
     def static_library(self, type=None, link=None, **kwargs):
-        return self.target(type='library', link='static', **kwargs)
+        return self.definition(type="library", link="static", **kwargs)
 
     def program(self, type=None, **kwargs):
-        return self.target(type='program', **kwargs)
+        return self.definition(type="program", **kwargs)
 
     def objects(self, type=None, **kwargs):
-        return self.target(type='objects', **kwargs)
+        return self.definition(type="objects", **kwargs)
 
-    def task(self, name, **kwargs):
-        return self.target(type='task', name=name, args=kwargs)
+    def custom(self, name, **kwargs):
+        return self.definition(type="task", name=name, args=kwargs)
 
     def template(self, **kwargs):
         return Template(**kwargs)
 
     def export(self, type=None, **kwargs):
-        new_target = Target(type=None, export=True, **kwargs)
-        self.exports.append(new_target)
-        return new_target
+        new_definition = Definition(type=None, export=True, **kwargs)
+        self.exports.append(new_definition)
+        return new_definition
 
     def configuration(self, path):
         self.configuration_paths.append(path)
@@ -238,14 +255,13 @@ class Project:
         for path in self.configuration_paths:
             resolved_path = context.make_project_path(path)
             if not os.path.exists(resolved_path):
-                raise Exception("Can't find configuration file at " +
-                                resolved_path)
+                raise Exception("Can't find configuration file at " + resolved_path)
             resolved_paths.append(resolved_path)
 
         configs = []
         for path in resolved_paths:
             json_conf = None
-            with open(path, 'r') as fp:
+            with open(path, "r") as fp:
                 json_conf = json.load(fp)
             if not json_conf:
                 raise Exception("Failed at loading " + path)
@@ -259,9 +275,9 @@ class Project:
         for entry in json_object:
             key = ConditionExpression.clean(entry)
             value = json_object[entry]
-            if key == 'configurations':
+            if key == "configurations":
                 project.configuration_paths = value
-            elif key == 'dependencies':
+            elif key == "dependencies":
                 for json_obj in value:
                     # Through update_source like a dependency declared in a
                     # golemfile: a `location` reaches this path too, and left
@@ -269,21 +285,21 @@ class Project:
                     dependency = Dependency.unserialize_from_json(json_obj)
                     dependency.update_source(project_dir, identity_allowed=True)
                     project.deps.append(dependency)
-            elif key == 'targets':
+            elif key == "targets":
                 for json_obj in value:
-                    project.targets.append(
-                        Target.unserialize_from_json(json_obj))
-            elif key == 'exports':
+                    project.definitions.append(
+                        Definition.unserialize_from_json(json_obj)
+                    )
+            elif key == "exports":
                 for json_obj in value:
-                    target = Target.unserialize_from_json(json_obj)
+                    target = Definition.unserialize_from_json(json_obj)
                     target.export = True
                     project.exports.append(target)
-            elif key == 'packages':
+            elif key == "packages":
                 for json_obj in value:
-                    project.packages.append(
-                        Package.unserialize_from_json(json_obj))
-            elif key == 'qt_enabled':
+                    project.packages.append(Package.unserialize_from_json(json_obj))
+            elif key == "qt_enabled":
                 project.qt = value
-            elif key == 'qt_path':
+            elif key == "qt_path":
                 project.qtpath = value
         return project

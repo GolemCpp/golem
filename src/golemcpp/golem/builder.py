@@ -9,7 +9,7 @@ import sys
 
 def get_context(context):
     global global_context
-    if not 'global_context' in globals():
+    if not "global_context" in globals():
         global_context = Context(context)
 
     global_context.context = context
@@ -54,8 +54,12 @@ def resolve(context):
     # What the remotes advertise is kept for exactly as long, and shared with the
     # resolves this one spawns, so a repository two dependencies both need is
     # read once.
-    with network.allowed(), advertisement_store.shared(
-            ctx.make_golem_path(advertisement_store.DIRECTORY_NAME)):
+    with (
+        network.allowed(),
+        advertisement_store.shared(
+            ctx.make_golem_path(advertisement_store.DIRECTORY_NAME)
+        ),
+    ):
         ctx.environment(resolve_dependencies=True)
 
         # Disable targets as there is no task generator associated with this command for the moment
@@ -119,10 +123,10 @@ def clang_tidy(context):
     ctx.clang_tidy()
 
 
-@feature('*')
-@before_method('process_rule')
+@feature("*")
+@before_method("process_rule")
 def post_the_other(self):
-    deps = getattr(self, 'depends_on', [])
+    deps = getattr(self, "depends_on", [])
     for name in self.to_list(deps):
         other = self.bld.get_tgen_by_name(name)
         other.post()
