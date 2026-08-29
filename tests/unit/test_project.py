@@ -225,3 +225,23 @@ def test_a_request_already_answered_is_not_resolved_again(tmp_path, monkeypatch)
     assert resolved == []
     assert len(read_shared_cache(path)) == 1
     assert project.deps[0].resolved.version.reference == 'v3.12.0'
+
+
+def test_a_project_read_from_json_holds_its_definitions_and_exports():
+    # The golemfile.json path is exercised end to end by the integration suite
+    # alone, so a name gone wrong in it survives `pytest tests/unit` — which is
+    # the loop run while editing. `targets` and `exports` stay the written keys;
+    # only what a Project calls them changed.
+    project = Project.unserialize_from_json(
+        json_object={
+            'targets': [{'name': 'mylib', 'type': 'library'},
+                        {'name': 'hello', 'type': 'program'}],
+            'exports': [{'name': 'mylib'}],
+        },
+        project_dir='/proj')
+
+    assert [definition.name for definition in project.definitions] == [
+        'mylib', 'hello']
+    assert [export.name for export in project.exports] == ['mylib']
+    assert all(export.export for export in project.exports)
+    assert not any(definition.export for definition in project.definitions)
