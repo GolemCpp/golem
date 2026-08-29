@@ -1507,19 +1507,22 @@ class Context:
         path = self.get_dep_location(dep) if base is None else base
         return os.path.join(path, self.build_path(dep))
 
-    def make_dep_artifact_subpath(self, dep, target_name=None, source_location=None):
+    def make_dep_artifact_subpath(self, export, target_name=None, source_location=None):
         """
-        Where a dependency's configuration sits under `conf`, as a path.
+        Where an export's configuration sits under `conf`, as a path.
 
         One component per name, because the three are constrained differently.
 
-        The dependency names the directory its targets sit in, and the file
-        beside that directory is the dependency taken as a whole.
+        The export names a directory holding one file per target, and the file
+        beside that directory is the export taken as a whole.
+
+        Takes the name rather than whatever holds it: the writer has a
+        Definition and the reader a Dependency, and the name is all they share.
         """
         if source_location is None:
             source_location = self.load_git_remote_origin_url()
 
-        parts = [locator.generate_id(source_location), dep.name]
+        parts = [locator.generate_id(source_location), export]
 
         if target_name:
             parts.append(target_name)
@@ -1533,13 +1536,15 @@ class Context:
         return os.path.join(
             path,
             self.make_dep_artifact_subpath(
-                dep=dep,
+                export=dep.requested_imports()[0],
                 target_name=target_name,
                 source_location=dep.get_source_location(),
             ),
         )
 
     def get_dep_artifact_json_list(self, dep):
+        # Two ways to ask for the same artifacts: an import names an export of
+        # the dependency, and `targets` narrows to what that export builds.
         if dep.targets:
             return [
                 self.get_dep_artifact_json(dep=dep, target_name=target_name)
@@ -1760,7 +1765,7 @@ class Context:
             "--no-copy-artifacts",
             "--no-copy-licenses",
             "--no-cookbooks-fetch",
-            "--targets={}".format(dep.name),
+            "--targets={}".format(",".join(dep.requested_imports())),
             "--runtime-link={}".format(self.runtime_link(dep)),
             "--runtime-variant={}".format(self.runtime_variant(dep)),
             "--link={}".format(self.link(dep)),
@@ -5312,7 +5317,7 @@ class Context:
         )
 
         config_subpath = self.make_dep_artifact_subpath(
-            task, target, self.load_git_remote_origin_url()
+            task.name, target, self.load_git_remote_origin_url()
         )
 
         outpath_target = os.path.join(export_path_conf, config_subpath)

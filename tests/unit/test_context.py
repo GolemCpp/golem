@@ -386,12 +386,14 @@ def test_a_target_artifact_sits_under_the_dependency_it_belongs_to():
     # then one per target of that task, so the dependency contains its targets.
     # The file beside the directory is the dependency taken as a whole.
     context = make_artifact_context()
-    dep = SimpleNamespace(name="json")
+    dep = Dependency(name="json")
     identity = generate_id(EXPORTED_FROM)
 
-    whole = context.make_dep_artifact_subpath(dep, source_location=EXPORTED_FROM)
+    whole = context.make_dep_artifact_subpath(
+        dep.requested_imports()[0], source_location=EXPORTED_FROM
+    )
     one_target = context.make_dep_artifact_subpath(
-        dep, target_name="parser", source_location=EXPORTED_FROM
+        dep.requested_imports()[0], target_name="parser", source_location=EXPORTED_FROM
     )
 
     assert whole == os.path.join(identity, "json.json")
@@ -403,10 +405,10 @@ def test_a_name_holding_an_at_sign_stays_in_its_own_component():
     # read back: an id holds `@` as structure, and both names are golemfile
     # input. One component each leaves nothing to read back.
     context = make_artifact_context()
-    dep = SimpleNamespace(name="a@b")
+    dep = Dependency(name="a@b")
 
     subpath = context.make_dep_artifact_subpath(
-        dep, target_name="c@d", source_location=EXPORTED_FROM
+        dep.requested_imports()[0], target_name="c@d", source_location=EXPORTED_FROM
     )
 
     assert subpath == os.path.join(generate_id(EXPORTED_FROM), "a@b", "c@d.json")
@@ -416,10 +418,12 @@ def test_an_artifact_subpath_falls_back_to_the_project_it_is_written_from():
     # The writer names the project being exported and the reader names the
     # dependency's own source. They meet because those are the same project.
     context = make_artifact_context(remote=EXPORTED_FROM)
-    dep = SimpleNamespace(name="json")
+    dep = Dependency(name="json")
 
-    assert context.make_dep_artifact_subpath(dep) == context.make_dep_artifact_subpath(
-        dep, source_location=EXPORTED_FROM
+    assert context.make_dep_artifact_subpath(
+        dep.requested_imports()[0]
+    ) == context.make_dep_artifact_subpath(
+        dep.requested_imports()[0], source_location=EXPORTED_FROM
     )
 
 
@@ -939,6 +943,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
         variant=None,
         shallow=False,
         resolved=ResolvedVersion(reference="1.0.0", revision="cafebabe"),
+        requested_imports=lambda: ["demo"],
     )
 
     calls = []
@@ -986,7 +991,7 @@ def test_run_dep_command_refuses_a_read_only_cache_location(monkeypatch):
 
     with pytest.raises(RuntimeError, match="read-only cache location /shared/cache"):
         context.run_dep_command(
-            dep=SimpleNamespace(name="demo", version="1.0.0"), command="build"
+            dep=Dependency(name="demo", version="1.0.0"), command="build"
         )
 
 
@@ -1021,6 +1026,7 @@ def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch
                 variant=None,
                 shallow=False,
                 resolved=ResolvedVersion(reference="1.0.0", revision="cafebabe"),
+                requested_imports=lambda: ["demo"],
             ),
             command=command,
         )
