@@ -4,6 +4,9 @@ What one cookbook declares for one recipe name.
 A recipe is a directory, therefore what an author declares is everything in it:
 the manifest saying where the source is, and the project file saying how to
 build it. A Recipe is resolved from these, one per cookbook it was found in.
+
+A **base** is a `DeclaredRecipe` that declares no override, it is self-sufficient.
+A **delta** is a `DeclaredRecipe` that declares it overrides another recipe.
 '''
 
 import os

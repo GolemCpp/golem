@@ -1339,3 +1339,37 @@ def test_a_host_with_no_toolchain_name_leaves_wafs_order_alone(monkeypatch):
     assert context.msvc_target_preference() == [
         name for name, _ in msvc.all_msvc_platforms]
 
+
+
+def make_loading_context(project_dir):
+    '''A context that can load a project file, and nothing else.'''
+    context = Context.__new__(Context)
+    context.project = None
+    context.module = None
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(project_dir=str(project_dir)))
+    return context
+
+
+def test_a_project_file_read_out_of_a_recipe_anchors_on_the_project(tmp_path):
+    # A recipe's project file describes how to build the project directory, so
+    # a relative source in it hangs off the project rather than off the cookbook
+    # the file was read out of — which under inheritance is not even the
+    # cookbook the recipe was found in.
+    recipe = tmp_path / 'cookbook' / '@json'
+    recipe.mkdir(parents=True)
+    (recipe / 'golemfile.json').write_text(json.dumps(
+        {'dependencies': [{'name': 'vendored', 'directory': 'third-party'}]}))
+
+    project_dir = tmp_path / 'source'
+    project_dir.mkdir()
+
+    context = make_loading_context(project_dir)
+    context.load_project(str(recipe))
+
+    # Compared as identities, since a locator is spelled as a URL and a path is
+    # spelled differently on Windows.
+    resolved = context.project.deps[0].resolved
+
+    assert str(resolved.identity) == generate_id(str(project_dir / 'third-party'))
+    assert str(resolved.identity) != generate_id(str(recipe / 'third-party'))

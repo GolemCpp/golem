@@ -1,11 +1,14 @@
 '''
 The recipe serving an identity, resolved from what the cookbooks declare.
 
-A lookup answers with one of these rather than with a directory, because what a
-caller needs can differs. E.g. where the source is, or how to build it.
+A lookup returns one of these rather than a directory, because what a caller needs can
+differs. E.g. where the source is, or how to build it.
 
-Resolving once and asking afterwards is also what lets a recipe be assembled from
-several declarations, which is what `overrides` will do.
+Resoved once to allow asking for anything afterwards.
+
+It's a lazy view over one or more cookbooks, because it can hold a chain of overriding
+recipes. In such case, each declared recipe in the chain can be considered as a delta
+holding an answer to a query. The most derived recipe holding the answer always wins.
 '''
 
 from dataclasses import dataclass
@@ -16,10 +19,17 @@ from golemcpp.golem.source_id import SourceId
 
 @dataclass(frozen=True)
 class Recipe:
-    '''What the declarations answering an identity say, together.'''
+    '''
+    What the declarations serving an identity hold, together.
 
-    # Most derived first, the way the cookbooks were searched. One long until
-    # a recipe can be a delta on another.
+    What's declared in the most derived declaration always win:
+    - A field from the manifest (`locator`, `mirrors`)
+    - The project file
+
+    Fields from the manifest are independant and can be overriden individually.
+    '''
+
+    # Most derived first, the way the cookbooks were searched.
     chain: tuple = ()
 
     @classmethod
@@ -33,39 +43,27 @@ class Recipe:
         return self.chain[0]
 
     @property
-    def declaring(self):
-        '''
-        The declaration naming where the source is, None when none does.
-
-        The most derived one supplies the default locator and the mirrors together,
-        therefore a delta replacing a locator replaces the mirrors that came with it.
-        '''
-
-        return next(
-            (declaration for declaration in self.chain if declaration.locators),
-            None,
-        )
-
-    @property
     def locator(self) -> str:
         '''
-        The default locator to clone, empty when the recipe declares none.
+        The default locator to clone, empty when no declaration names one.
 
         A recipe declaring only mirrors has none. A mirror is a convenience and
         never stands in for it.
         '''
 
-        return self.declaring.locator if self.declaring else ''
+        return first(declaration.locator for declaration in self.chain)
 
     @property
     def mirrors(self) -> tuple:
         '''The other locators the source is reachable at.'''
-        return self.declaring.mirrors if self.declaring else ()
+        return first(
+            (declaration.mirrors for declaration in self.chain), default=())
 
     @property
     def locators(self) -> tuple:
         '''Every locator the recipe names, the default one first.'''
-        return self.declaring.locators if self.declaring else ()
+        return tuple(
+            locator for locator in (self.locator,) + self.mirrors if locator)
 
     def locator_for(self, identity) -> str:
         '''
@@ -96,6 +94,14 @@ class Recipe:
         '''Does this recipe answer anything a caller can use?'''
         return bool(self.locators or self.project_directory)
 
+    def describe_chain(self) -> str:
+        '''Name every declaration this recipe was made of, most derived first.'''
+        return describe_chain(self.chain)
+
+    def inherited_from(self) -> str:
+        '''Name the chain for a refusal, empty when one declaration made it.'''
+        return inherited_from(self.chain)
+
     def require_locators(self) -> tuple:
         '''
         Return every locator the recipe names, refusing one that names none.
@@ -109,8 +115,9 @@ class Recipe:
 
         raise RuntimeError(
             "ERROR: {} names no locator, therefore '{}' cannot be used as a "
-            "location:\n  {}".format(
-                self.served_by, self.served_by.rung, self.served_by.directory))
+            "location:\n  {}{}".format(
+                self.served_by, self.served_by.rung, self.served_by.directory,
+                self.inherited_from()))
 
     def require_project_directory(self) -> str:
         '''
@@ -123,15 +130,34 @@ class Recipe:
             return self.project_directory
 
         raise RuntimeError(
-            "ERROR: {} holds no project file ({}):\n  {}".format(
+            "ERROR: {} holds no project file ({}):\n  {}{}".format(
                 self.served_by,
                 project_file.PROJECT_FILE_NAMES_LISTED,
-                self.served_by.directory))
+                self.served_by.directory,
+                self.inherited_from()))
 
 
-def first(values) -> str:
-    '''The first value that says something, empty when none does.'''
-    return next((value for value in values if value), '')
+def describe_chain(chain) -> str:
+    '''Name every declaration in a chain, most derived first.'''
+    return ' -> '.join(
+        '{} ({})'.format(declaration.rung, declaration.cookbook.cache_key)
+        for declaration in chain
+    )
+
+
+def inherited_from(chain) -> str:
+    '''
+    Name a chain for a refusal, empty when one declaration makes it.
+    '''
+    if len(chain) < 2:
+        return ''
+
+    return '\nInherited through {}'.format(describe_chain(chain))
+
+
+def first(values, default=''):
+    '''The first value holding something, `default` when none does.'''
+    return next((value for value in values if value), default)
 
 
 def agrees_with(identity, locator) -> bool:

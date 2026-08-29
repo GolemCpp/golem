@@ -136,7 +136,12 @@ class Context:
             json_object = None
             with io.open(self.project_path, 'r') as file:
                 json_object = json.load(file)
-            self.project = Project.unserialize_from_json(json_object=json_object, project_dir=os.path.dirname(self.project_path))
+            # A project file describes how to build the project directory, and
+            # a recipe's is read out of a cookbook rather than out of the
+            # project. Anchoring on the file's own directory would resolve a
+            # relative source against the cookbook.
+            self.project = Project.unserialize_from_json(
+                json_object=json_object, project_dir=self.get_project_dir())
             self.module = None
 
     def get_dependencies_json_path(self):
