@@ -17,28 +17,28 @@ from collections import OrderedDict
 
 # The members naming where a dependency comes from, at most one of which a
 # dependency declares.
-SOURCE_MEMBERS = ('repository', 'directory', 'location')
+SOURCE_MEMBERS = ("repository", "directory", "location")
 
 
 def describe_locators(locators) -> str:
-    '''List locators with what each one composes, one per line.'''
+    """List locators with what each one composes, one per line."""
     # A reader comparing what was asked for against the identities is what makes
     # the refusal below readable, so the composition is spelled out.
-    return '\n'.join(
-        '  {}  ({})'.format(locator, SourceId.from_locator(locator))
+    return "\n".join(
+        "  {}  ({})".format(locator, SourceId.from_locator(locator))
         for locator in locators
     )
 
 
 def report_identity_resolution(identity, locator, recipe):
-    '''Say what an identity resolved to, and which cookbook answered.'''
+    """Say what an identity resolved to, and which cookbook answered."""
     # The only line naming the source of a dependency written as an identity:
     # a resolved version names the version and never where it came from.
     print(
         "{} -> {}\n{}({})".format(
             identity,
             locator,
-            ' ' * (len(str(identity)) + len(' -> ')),
+            " " * (len(str(identity)) + len(" -> ")),
             recipe.served_by.cookbook.cache_key,
         )
     )
@@ -56,18 +56,18 @@ class Dependency(Configuration):
         shallow=False,
         **kwargs,
     ):
-        super(Dependency, self).__init__(type='library', **kwargs)
-        self.name = '' if name is None else name
+        super(Dependency, self).__init__(type="library", **kwargs)
+        self.name = "" if name is None else name
         # A dependency comes from one of three mutually-exclusive sources: a
         # git `repository` (cloned), a local `directory` (copied as-is), or a
         # `location` naming either in one field, spelling its kind or leaving
         # it to detection.
-        self.location = '' if location is None else location
-        self.repository = '' if repository is None else repository
-        self.directory = '' if directory is None else directory
+        self.location = "" if location is None else location
+        self.repository = "" if repository is None else repository
+        self.directory = "" if directory is None else directory
         self.validate_source()
-        self.version = '' if version is None else version
-        self.version_regex = '' if version_regex is None else version_regex
+        self.version = "" if version is None else version
+        self.version_regex = "" if version_regex is None else version_regex
         self.resolved = DependencyResolution()
         self.shallow = shallow
         # Where this dependency lives in the caches, once a DependencyManager has
@@ -80,16 +80,16 @@ class Dependency(Configuration):
         return helpers.print_obj(self)
 
     def validate_source(self):
-        '''
+        """
         Refuse a dependency naming its source more than once: which one wins
         would be left to the order the readers happen to test them in. Naming
         none is allowed -- a project file declares one later.
-        '''
+        """
         declared = [member for member in SOURCE_MEMBERS if getattr(self, member)]
         if len(declared) > 1:
             raise ValueError(
                 "dependency '{}' declares several sources ({}); it comes from "
-                "exactly one".format(self.name, ', '.join(declared))
+                "exactly one".format(self.name, ", ".join(declared))
             )
 
     def get_source_location(self):
@@ -113,7 +113,7 @@ class Dependency(Configuration):
             locator=Locator(self.resolved.locator),
             # A copied directory is whatever it holds now, so there is no
             # version of it to ask for.
-            version='' if is_directory else self.version,
+            version="" if is_directory else self.version,
             type=self.resolved.kind,
             version_regex=self.version_regex,
         )
@@ -167,9 +167,9 @@ class Dependency(Configuration):
             )
 
     def declared_identity(self):
-        '''
+        """
         The identity this dependency's location names, None when it names none.
-        '''
+        """
         if not self.location:
             return None
 
@@ -182,9 +182,9 @@ class Dependency(Configuration):
         ).identity
 
     def settle_from_recipe(self, identity, recipe):
-        '''
+        """
         Settle the locator and kind from the recipe's manifest
-        '''
+        """
         # The view refuses a recipe naming no locator at all.
         recipe.require_locators()
 
@@ -212,10 +212,10 @@ class Dependency(Configuration):
         report_identity_resolution(identity, self.resolved.locator, recipe)
 
     def update_version(self, requested_version):
-        '''
+        """
         Take the version a location named, refusing one that contradicts a version
         the dependency also declares.
-        '''
+        """
         if not requested_version:
             return
 
@@ -252,26 +252,26 @@ class Dependency(Configuration):
         return self.resolved.version
 
     def build(self, context, config):
-        context.dep_command(config, self, 'build', False)
+        context.dep_command(config, self, "build", False)
 
     def configure(self, context, config):
-        context.dep_command(config, self, 'resolve', False)
+        context.dep_command(config, self, "resolve", False)
 
-    RESOLVED_MEMBER = 'resolved'
+    RESOLVED_MEMBER = "resolved"
 
     @staticmethod
     def serialized_members():
         # The first four are what a golemfile declared, kept as it wrote them.
         # What Golem worked out about them sits in `resolved`.
         return [
-            'name',
-            'repository',
-            'directory',
-            'location',
-            'version',
-            'version_regex',
-            'resolved',
-            'shallow',
+            "name",
+            "repository",
+            "directory",
+            "location",
+            "version",
+            "version_regex",
+            "resolved",
+            "shallow",
         ]
 
     @staticmethod

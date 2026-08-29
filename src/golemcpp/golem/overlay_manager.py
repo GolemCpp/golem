@@ -8,7 +8,7 @@ from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class OverlayManager(ResourceManager):
-    '''
+    """
     Manages overlays, which are repositories carrying project configuration
     layers to override a project configuration. Today, it only contributes
     `overrides.json` to control dependencies and manage conflicts.
@@ -17,7 +17,7 @@ class OverlayManager(ResourceManager):
     a branch on a overlay, it will update in place to follow this branch at resolve
     time. Same if asking for a Node-like version, it will update in place on
     the same asked version. E.g. "^1.0.0" will follow 1.1.0, then 1.2.0, etc.
-    '''
+    """
 
     kind = ResourceKind.OVERLAY
 
@@ -26,13 +26,13 @@ class OverlayManager(ResourceManager):
         return Overlay(source=source)
 
     def load_overrides(self, cached_overlays, project_dir, merged_path):
-        '''
+        """
         Merges the overrides the given overlays contribute, layered in the order
         they come in, and returns `merged_path` containing them. Reads them where
         they already are: installing the overlays is the caller's step.
 
         Returns an empty string when no overrides could be found.
-        '''
+        """
         contributions = []
         for cached_overlay in cached_overlays:
             overrides_path = os.path.join(
@@ -44,7 +44,7 @@ class OverlayManager(ResourceManager):
                 )
 
         if not contributions:
-            return ''
+            return ""
 
         return overrides.write_overrides(
             overrides.merge_overrides(contributions), merged_path
@@ -52,5 +52,5 @@ class OverlayManager(ResourceManager):
 
 
 def get_overlay_manager(cache_configuration) -> OverlayManager:
-    '''The single factory for the overlay resource manager.'''
+    """The single factory for the overlay resource manager."""
     return OverlayManager(get_cache_manager(cache_configuration))

@@ -1,4 +1,4 @@
-'''
+"""
 Getting a source into a directory, whichever way that source is obtained.
 
 A Fetcher is made for one source in one place: it holds the path it works in, the
@@ -10,7 +10,7 @@ the directory ended up with.
 Which Fetcher a source gets is the source's own business: `fetcher_for` reads its
 type. A source obtained some other way; another version control system, an
 archive to unpack, is a Fetcher beside these ones and one line here.
-'''
+"""
 
 import os
 
@@ -22,7 +22,7 @@ from golemcpp.golem.source import SOURCE_TYPE_DIRECTORY
 
 
 class Fetcher:
-    '''The shape every way of obtaining a source answers to.'''
+    """The shape every way of obtaining a source answers to."""
 
     def __init__(self, path, source, policy):
         self.path = path
@@ -30,18 +30,18 @@ class Fetcher:
         self.policy = policy
 
     def populate(self) -> Fetched:
-        '''Materialize the source freshly into a directory holding nothing yet.'''
+        """Materialize the source freshly into a directory holding nothing yet."""
         raise NotImplementedError
 
     def refresh(self) -> Fetched:
-        '''
+        """
         Bring a directory already holding this source back to what the policy
         names, without obtaining it from scratch.
-        '''
+        """
         raise NotImplementedError
 
     def migrate(self, recorded) -> Fetched | None:
-        '''
+        """
         A directory holding what `recorded` describes brought to what the policy
         now asks for, converting it in place if that takes anything.
 
@@ -50,15 +50,15 @@ class Fetcher:
 
         Nothing to do by default: a way of obtaining a source that has only one
         way of doing it can never be holding the wrong one.
-        '''
+        """
         return recorded
 
     @property
     def local_path(self):
-        '''
+        """
         The local path the source lives at, refused here rather than deep inside a
         copy or a clone. None when the source is not local.
-        '''
+        """
         local_path = self.source.locator.get_local_path()
         if local_path is None:
             return None
@@ -76,7 +76,7 @@ class Fetcher:
 
 
 def fetcher_for(path, source, policy) -> Fetcher:
-    '''The Fetcher that knows how to obtain this source.'''
+    """The Fetcher that knows how to obtain this source."""
     # Imported here: every Fetcher reads this module, so none of them can be read
     # from it at import time.
     from golemcpp.golem.directory_fetcher import DirectoryFetcher

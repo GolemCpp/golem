@@ -1,4 +1,4 @@
-'''
+"""
 What a requested version turned out to be.
 
 A request is a semver spec, a branch, a tag, or a commit. What it resolves to is
@@ -14,7 +14,7 @@ stands in for the other.
 
 It travels beside the location in a resource's manifest, and is serialized the
 same way: the manifest holds the dict, this holds what it means.
-'''
+"""
 
 from dataclasses import dataclass
 
@@ -23,29 +23,29 @@ from dataclasses import dataclass
 class ResolvedVersion:
     # The reference the request landed on: a tag, a branch, or the request itself
     # when it named neither.
-    reference: str = ''
+    reference: str = ""
     # The commit that reference points at, or the request as written when nothing
     # here names a commit.
     # Though, a directory has no commit, and an unreachable remote leaves the request
     # standing for itself.
-    revision: str = ''
+    revision: str = ""
 
     def __bool__(self) -> bool:
-        '''Whether anything was resolved at all, which is what callers test.'''
+        """Whether anything was resolved at all, which is what callers test."""
         return bool(self.reference or self.revision)
 
     def to_dict(self) -> dict:
-        return {'reference': self.reference, 'revision': self.revision}
+        return {"reference": self.reference, "revision": self.revision}
 
     @classmethod
-    def from_dict(cls, data) -> 'ResolvedVersion':
-        '''
+    def from_dict(cls, data) -> "ResolvedVersion":
+        """
         What a recorded resolution means. Anything absent reads as nothing
         resolved, which is what a manifest written before a field existed says.
-        '''
+        """
         if not data:
             return cls()
 
         return cls(
-            reference=data.get('reference', ''), revision=data.get('revision', '')
+            reference=data.get("reference", ""), revision=data.get("revision", "")
         )

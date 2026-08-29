@@ -17,11 +17,11 @@ import copy
 # A cached entry differing in any of them was resolved from a different request.
 #
 # Compare the requests, not the resolved counterparts.
-STALENESS_MEMBERS = SOURCE_MEMBERS + ('version', 'version_regex')
+STALENESS_MEMBERS = SOURCE_MEMBERS + ("version", "version_regex")
 
 
 def is_stale_for(cached, dependency) -> bool:
-    '''Was a cached entry resolved from a different request?'''
+    """Was a cached entry resolved from a different request?"""
     return any(
         getattr(cached, member) != getattr(dependency, member)
         for member in STALENESS_MEMBERS
@@ -29,13 +29,13 @@ def is_stale_for(cached, dependency) -> bool:
 
 
 def resolution_key(dependency):
-    '''
+    """
     What a resolution is looked up by; source and version.
 
     `version_regex` belongs in it because it filters the candidate tags before
     the range is matched, therefore two requests differing only in it can land
     on different revisions.
-    '''
+    """
     return (dependency.resolved.locator, dependency.version, dependency.version_regex)
 
 
@@ -48,7 +48,7 @@ class Project:
         self.exports = []
 
         self.qt = False
-        self.qtdir = ''
+        self.qtdir = ""
 
         self.packages = []
         self.configuration_paths = []
@@ -68,7 +68,7 @@ class Project:
 
         if global_config_file and os.path.exists(global_config_file):
             cache = None
-            with open(global_config_file, 'r') as fp:
+            with open(global_config_file, "r") as fp:
                 cache = json.load(fp)
             cached_dependencies = Dependency.load_cache(cache=cache)
 
@@ -113,11 +113,11 @@ class Project:
 
         if global_config_file:
             cache = Dependency.save_cache(cached_dependencies)
-            with open(global_config_file, 'w') as fp:
+            with open(global_config_file, "w") as fp:
                 json.dump(cache, fp, indent=4)
 
     def record_recipes(self, global_config_file):
-        '''
+        """
         Write into the shared cache which recipes served this project's dependencies.
 
         The entries were written before anything was fetched, so they carry no recipe.
@@ -125,11 +125,11 @@ class Project:
         Reloaded rather than saved from what this project holds. Because every
         sub-invocation appends to the same file, and writing a stale list back would
         drop what they added.
-        '''
+        """
         if not global_config_file or not os.path.exists(global_config_file):
             return
 
-        with open(global_config_file, 'r') as fp:
+        with open(global_config_file, "r") as fp:
             cache = json.load(fp)
 
         cached_dependencies = Dependency.load_cache(cache=cache)
@@ -146,7 +146,7 @@ class Project:
             if key in resolved:
                 cached.resolved = resolved[key]
 
-        with open(global_config_file, 'w') as fp:
+        with open(global_config_file, "w") as fp:
             json.dump(Dependency.save_cache(cached_dependencies), fp, indent=4)
 
     def deps_resolve_json(self):
@@ -206,22 +206,22 @@ class Project:
         return new_definition
 
     def library(self, type=None, **kwargs):
-        return self.definition(type='library', **kwargs)
+        return self.definition(type="library", **kwargs)
 
     def shared_library(self, type=None, link=None, **kwargs):
-        return self.definition(type='library', link='shared', **kwargs)
+        return self.definition(type="library", link="shared", **kwargs)
 
     def static_library(self, type=None, link=None, **kwargs):
-        return self.definition(type='library', link='static', **kwargs)
+        return self.definition(type="library", link="static", **kwargs)
 
     def program(self, type=None, **kwargs):
-        return self.definition(type='program', **kwargs)
+        return self.definition(type="program", **kwargs)
 
     def objects(self, type=None, **kwargs):
-        return self.definition(type='objects', **kwargs)
+        return self.definition(type="objects", **kwargs)
 
     def custom(self, name, **kwargs):
-        return self.definition(type='task', name=name, args=kwargs)
+        return self.definition(type="task", name=name, args=kwargs)
 
     def template(self, **kwargs):
         return Template(**kwargs)
@@ -261,7 +261,7 @@ class Project:
         configs = []
         for path in resolved_paths:
             json_conf = None
-            with open(path, 'r') as fp:
+            with open(path, "r") as fp:
                 json_conf = json.load(fp)
             if not json_conf:
                 raise Exception("Failed at loading " + path)
@@ -275,9 +275,9 @@ class Project:
         for entry in json_object:
             key = ConditionExpression.clean(entry)
             value = json_object[entry]
-            if key == 'configurations':
+            if key == "configurations":
                 project.configuration_paths = value
-            elif key == 'dependencies':
+            elif key == "dependencies":
                 for json_obj in value:
                     # Through update_source like a dependency declared in a
                     # golemfile: a `location` reaches this path too, and left
@@ -285,21 +285,21 @@ class Project:
                     dependency = Dependency.unserialize_from_json(json_obj)
                     dependency.update_source(project_dir, identity_allowed=True)
                     project.deps.append(dependency)
-            elif key == 'targets':
+            elif key == "targets":
                 for json_obj in value:
                     project.definitions.append(
                         Definition.unserialize_from_json(json_obj)
                     )
-            elif key == 'exports':
+            elif key == "exports":
                 for json_obj in value:
                     target = Definition.unserialize_from_json(json_obj)
                     target.export = True
                     project.exports.append(target)
-            elif key == 'packages':
+            elif key == "packages":
                 for json_obj in value:
                     project.packages.append(Package.unserialize_from_json(json_obj))
-            elif key == 'qt_enabled':
+            elif key == "qt_enabled":
                 project.qt = value
-            elif key == 'qt_path':
+            elif key == "qt_path":
                 project.qtpath = value
         return project

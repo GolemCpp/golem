@@ -1,4 +1,4 @@
-'''
+"""
 Where a source is, once it has been read.
 
 A locator is the middle of a location: `[<kind>+]<locator>[#<version>]`.
@@ -15,7 +15,7 @@ set is open: `<transport>::` dispatches to any `git-remote-<transport>` on PATH,
 and `url.<base>.insteadOf` lets a git configuration invent prefixes golem cannot
 know about. So golem recognises the one case it has to act on, a bare path, and
 passes the rest along.
-'''
+"""
 
 import os
 import re
@@ -28,16 +28,16 @@ from golemcpp.golem import helpers
 
 # What separates a scheme from the rest of a URL. A locator holding one names
 # nothing on this filesystem unless that scheme is `file`.
-URL_SCHEME_SEPARATOR = '://'
+URL_SCHEME_SEPARATOR = "://"
 
 # A single letter before the colon is a Windows drive, not a host: `C:/proj` is a
 # path where `host:proj` is an scp-style remote.
-DOS_DRIVE = re.compile(r'^[a-zA-Z]:[\\/]')
+DOS_DRIVE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 # Drive segment of a Windows path. E.g. C:
-DRIVE_SEGMENT = re.compile(r'^(?P<letter>[a-zA-Z]):$')
+DRIVE_SEGMENT = re.compile(r"^(?P<letter>[a-zA-Z]):$")
 
-FILE_SCHEME = 'file'
+FILE_SCHEME = "file"
 
 # `<transport>::<address>`, dispatched to a `git-remote-<transport>` helper. The
 # address is defined by that helper rather than by git, so golem has no grammar
@@ -48,39 +48,39 @@ FILE_SCHEME = 'file'
 #
 # Only an address that is itself a URL is read, see is_opaque for the rest.
 TRANSPORT_HELPER = re.compile(
-    r'^(?P<transport>[a-zA-Z][a-zA-Z0-9+.-]*)::(?P<address>.+)$'
+    r"^(?P<transport>[a-zA-Z][a-zA-Z0-9+.-]*)::(?P<address>.+)$"
 )
 
 # `[user@]host:path`, the ssh shorthand git accepts.
-SCP_STYLE = re.compile(r'^(?:(?P<user>[^/@]+)@)?(?P<host>[^/:]+):(?P<path>.+)$')
+SCP_STYLE = re.compile(r"^(?:(?P<user>[^/@]+)@)?(?P<host>[^/:]+):(?P<path>.+)$")
 
 # What scp-style is read under, so it cannot flatten onto `ssh://`.
 #
 # Note that `git@host:repo.git` and `ssh://host/repo.git` name two different
 # repositories. The former is relative to the user's home, the latter is
 # an asbolute path.
-SCP_IDENTITY_SCHEME = 'scp+ssh'
+SCP_IDENTITY_SCHEME = "scp+ssh"
 
 # The only two characters that cannot sit raw in a netloc: urlparse reads a
 # bracket as the start of an IPv6 literal and then refuses the whole locator.
-NETLOC_BREAKING = str.maketrans({'[': '%5B', ']': '%5D'})
+NETLOC_BREAKING = str.maketrans({"[": "%5B", "]": "%5D"})
 
 # The port each transport uses when none is written.
 DEFAULT_PORTS = {
     SCP_IDENTITY_SCHEME: 22,
-    'ssh': 22,
-    'git': 9418,
-    'http': 80,
-    'https': 443,
-    'ftp': 21,
-    'ftps': 990,
+    "ssh": 22,
+    "git": 9418,
+    "http": 80,
+    "https": 443,
+    "ftp": 21,
+    "ftps": 990,
 }
 
 
 def parse_url(value):
-    '''
+    """
     Parses the URL and raises a meaningful error message in case it fails.
-    '''
+    """
     try:
         return urlparse(value)
     except ValueError as error:
@@ -90,34 +90,34 @@ def parse_url(value):
 
 
 def is_bare_path(value):
-    '''
+    """
     Whether a locator is a path on this filesystem, written as one.
 
     Git's rule, taken as it stands so golem can never disagree with git about
     what a locator is: a `:` before the first `/` makes it a remote, which is why
     a path holding one has to be written `./weird:name`.
-    '''
+    """
     if URL_SCHEME_SEPARATOR in value:
         return False
     if DOS_DRIVE.match(value):
         return True
-    return ':' not in value.split('/', 1)[0]
+    return ":" not in value.split("/", 1)[0]
 
 
 def url_components(parsed):
-    '''
+    """
     The host and the path segments a parsed locator holds, both possibly empty.
 
     Segments come back decoded and the hostname is left exactly as it stands.
-    '''
+    """
     return (
-        parsed.hostname or '',
-        [unquote(segment) for segment in parsed.path.split('/') if segment],
+        parsed.hostname or "",
+        [unquote(segment) for segment in parsed.path.split("/") if segment],
     )
 
 
 def is_opaque(value):
-    '''
+    """
     Whether a locator holds no hierarchy golem is able to read.
 
     A transport helper hands its address to `git-remote-<transport>`, which is the
@@ -127,13 +127,13 @@ def is_opaque(value):
 
     An address that is itself a URL is the exception, and the documented common
     case: `hg::https://host/repo` names the repository the URL names.
-    '''
+    """
     match = TRANSPORT_HELPER.match(value)
-    return bool(match) and URL_SCHEME_SEPARATOR not in match.group('address')
+    return bool(match) and URL_SCHEME_SEPARATOR not in match.group("address")
 
 
 def as_url(value):
-    '''
+    """
     A locator in a shape urlparse can read.
 
     For identity only. What git is handed is always what was written.
@@ -146,16 +146,16 @@ def as_url(value):
     directory name, not a fragment. An authority is the exception and goes in as
     it stands, bar the two characters that would break the netloc: a host is not
     percent-encoded, so encoding one would leave no correct way to read it back.
-    '''
+    """
     match = TRANSPORT_HELPER.match(value)
-    if match and URL_SCHEME_SEPARATOR in match.group('address'):
+    if match and URL_SCHEME_SEPARATOR in match.group("address"):
         # Only process URL addresses.
         #
         # Any other address is opaque and must never reach here. See
         # generate_id for the details.
         #
         #   hg::https://hg.example.com/repo -> https://hg.example.com/repo
-        return as_url(match.group('address'))
+        return as_url(match.group("address"))
 
     if URL_SCHEME_SEPARATOR in value:
         # Already a URL, already properly encoded.
@@ -169,7 +169,7 @@ def as_url(value):
         #
         #   C:/proj/mylib      -> file:///C:/proj/mylib
         #   C:\proj\weird#name -> file:///C:/proj/weird%23name
-        return 'file:///' + quote(value.replace('\\', '/').lstrip('/'), safe='/:')
+        return "file:///" + quote(value.replace("\\", "/").lstrip("/"), safe="/:")
 
     if is_bare_path(value):
         # Make a path a URL and ensure it is absolute.
@@ -194,13 +194,13 @@ def as_url(value):
         #       -> scp+ssh://git@github.com/nlohmann/json.git
         #   host.xz:repo.git   -> scp+ssh://host.xz/repo.git
         #   git@wéird:repo.git -> scp+ssh://git@wéird/repo.git
-        authority = match.group('host').translate(NETLOC_BREAKING)
-        if match.group('user'):
-            authority = '{}@{}'.format(
-                match.group('user').translate(NETLOC_BREAKING), authority
+        authority = match.group("host").translate(NETLOC_BREAKING)
+        if match.group("user"):
+            authority = "{}@{}".format(
+                match.group("user").translate(NETLOC_BREAKING), authority
             )
-        return '{}://{}/{}'.format(
-            SCP_IDENTITY_SCHEME, authority, quote(match.group('path'))
+        return "{}://{}/{}".format(
+            SCP_IDENTITY_SCHEME, authority, quote(match.group("path"))
         )
 
     # What is left names neither a host nor a path.
@@ -214,13 +214,13 @@ def as_url(value):
 
 
 def generate_id(value):
-    '''
+    """
     The identity of the source a locator names, spelled.
 
     A thin reading of `SourceId`, kept here because every caller reaches it with
     a locator rather than with an identity. `source_id.SourceId.from_locator`
     is what to use when the fields themselves are wanted.
-    '''
+    """
     # Imported here rather than at the top: source_id reads a locator, so the
     # two modules would otherwise import each other.
     from golemcpp.golem.source_id import SourceId
@@ -230,12 +230,12 @@ def generate_id(value):
 
 @dataclass(frozen=True)
 class Locator:
-    '''
+    """
     A settled locator. Empty means a source names none, the way an empty
     ResolvedVersion means nothing was resolved.
-    '''
+    """
 
-    value: str = ''
+    value: str = ""
 
     def __post_init__(self):
 
@@ -264,11 +264,11 @@ class Locator:
         return self.value
 
     def is_local(self) -> bool:
-        '''Whether this names something on the filesystem golem is running on.'''
+        """Whether this names something on the filesystem golem is running on."""
         return parse_url(self.value).scheme == FILE_SCHEME
 
     def get_local_path(self):
-        '''The local path this names, or None when it names no local path.'''
+        """The local path this names, or None when it names no local path."""
         parsed = parse_url(self.value)
 
         if parsed.scheme != FILE_SCHEME:
@@ -284,12 +284,12 @@ class Locator:
         return path
 
     def is_existing_directory(self) -> bool:
-        '''Whether this names a directory that is there to read.'''
+        """Whether this names a directory that is there to read."""
         path = self.get_local_path()
         return path is not None and os.path.isdir(path)
 
     def is_git_repository(self) -> bool:
-        '''Whether this names a local repository git can clone from.'''
+        """Whether this names a local repository git can clone from."""
         path = self.get_local_path()
         return path is not None and helpers.is_git_repository(path=path)
 

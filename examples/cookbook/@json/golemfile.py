@@ -1,8 +1,8 @@
 def configure(project):
 
     project.export(
-        name='json',
-        includes=['single_include'],
+        name="json",
+        includes=["single_include"],
         header_only=True,
-        licenses=['LICENSE.MIT'],
+        licenses=["LICENSE.MIT"],
     )

@@ -9,7 +9,7 @@ import sys
 
 def get_context(context):
     global global_context
-    if not 'global_context' in globals():
+    if not "global_context" in globals():
         global_context = Context(context)
 
     global_context.context = context
@@ -123,10 +123,10 @@ def clang_tidy(context):
     ctx.clang_tidy()
 
 
-@feature('*')
-@before_method('process_rule')
+@feature("*")
+@before_method("process_rule")
 def post_the_other(self):
-    deps = getattr(self, 'depends_on', [])
+    deps = getattr(self, "depends_on", [])
     for name in self.to_list(deps):
         other = self.bld.get_tgen_by_name(name)
         other.post()

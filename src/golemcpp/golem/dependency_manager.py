@@ -6,11 +6,11 @@ from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class DependencyManager(ResourceManager):
-    '''
+    """
     Manages dependencies.
 
     Dependency are pinned in cache on the commit its version is resolved to.
-    '''
+    """
 
     kind = ResourceKind.DEPENDENCY
     pinning = Pinning.REVISION
@@ -23,20 +23,20 @@ class DependencyManager(ResourceManager):
         return FetchMode.SHALLOW if dep.shallow else self.fetch_mode
 
     def update_cached_resource(self, dep):
-        '''(Re)resolve where this dependency lives in the caches.'''
+        """(Re)resolve where this dependency lives in the caches."""
         dep.cached_resource = self.resolve_cached_resource(dep)
         return dep.cached_resource
 
     def get_cached_resource(self, dep):
-        '''
+        """
         Where a dependency lives in the caches, resolved on first use and kept on
         the dependency, so every path derived from it comes from one resolution.
-        '''
+        """
         if dep.cached_resource is None:
             return self.update_cached_resource(dep)
         return dep.cached_resource
 
 
 def get_dependency_manager(cache_configuration) -> DependencyManager:
-    '''The single factory for the dependency resource manager.'''
+    """The single factory for the dependency resource manager."""
     return DependencyManager(get_cache_manager(cache_configuration))

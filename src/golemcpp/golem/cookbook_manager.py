@@ -5,7 +5,7 @@ from golemcpp.golem.resource_manifest import ResourceKind
 
 
 class CookbookManager(ResourceManager):
-    '''
+    """
     Manages cookbooks, which are repositories containing recipes to help build
     a dependency that has no golemfile.
 
@@ -13,7 +13,7 @@ class CookbookManager(ResourceManager):
     a branch on a cookbook, it will update in place to follow this branch at resolve
     time. Same if asking for a Node-like version, it will update in place on
     the same asked version. E.g. "^1.0.0" will follow 1.1.0, then 1.2.0, etc.
-    '''
+    """
 
     kind = ResourceKind.COOKBOOK
 
@@ -23,5 +23,5 @@ class CookbookManager(ResourceManager):
 
 
 def get_cookbook_manager(cache_configuration) -> CookbookManager:
-    '''The single factory for the cookbook resource manager.'''
+    """The single factory for the cookbook resource manager."""
     return CookbookManager(get_cache_manager(cache_configuration))

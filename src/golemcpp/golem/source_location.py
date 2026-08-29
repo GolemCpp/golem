@@ -1,4 +1,4 @@
-'''
+"""
 What a configured location spells, before anything is resolved.
 
 A location takes one of two shapes:
@@ -13,7 +13,7 @@ is. What resolves it decides that, therefore the location carries no kind and no
 locator: both arrive with the lookup.
 
 For now, only a recipe is what resolves an identity, making it a sort of pacakge ID.
-'''
+"""
 
 import os
 import re
@@ -30,34 +30,34 @@ from golemcpp.golem.source_id import SourceId
 
 @dataclass(frozen=True)
 class SourceLocation:
-    '''One configured location, read.'''
+    """One configured location, read."""
 
     # Exactly one of these says which source is wanted. `locator` is what git
     # is handed; `identity` stands for one until something resolves it.
     locator: Locator = None
     identity: SourceId = None
     # Empty for an identity, since nothing is there to detect a kind from.
-    kind: str = ''
+    kind: str = ""
     # What was asked of the source, which may match no tag that exists yet.
-    version: str = ''
+    version: str = ""
 
     @classmethod
-    def for_identity(cls, identity: SourceId, version: str = ''):
+    def for_identity(cls, identity: SourceId, version: str = ""):
         return cls(identity=identity, version=version)
 
     @classmethod
-    def for_locator(cls, locator: Locator, kind: str, version: str = ''):
+    def for_locator(cls, locator: Locator, kind: str, version: str = ""):
         return cls(locator=locator, kind=kind, version=version)
 
     @property
     def names_an_identity(self) -> bool:
-        '''Does this location name a source indirectly, rather than say where it is?'''
+        """Does this location name a source indirectly, rather than say where it is?"""
 
         return self.identity is not None
 
 
 # A configured location may spell its kind: `<kind>+<locator>`.
-KIND_SEPARATOR = '+'
+KIND_SEPARATOR = "+"
 
 # A configured location may name the version to obtain: `<locator>#<version>`,
 # the same separator a cache key uses between an identity and its version.
@@ -65,16 +65,16 @@ VERSION_SEPARATOR = safe_part.VERSION_SEPARATOR
 
 # A leading bare word followed by the separator claims a kind. Kept narrow so a
 # real locator never matches: a URL has `:` after its scheme, a path has none.
-KIND_CLAIM = re.compile(r'^([a-z][a-z0-9]*)\{}'.format(KIND_SEPARATOR))
+KIND_CLAIM = re.compile(r"^([a-z][a-z0-9]*)\{}".format(KIND_SEPARATOR))
 
 
 def split_kind(location):
-    '''
+    """
     Extracts the explicit kind found on a location, if any. And returns
     what remains of the location.
 
     Finding an unkonwn kind raises an error.
-    '''
+    """
     match = KIND_CLAIM.match(location)
     if not match:
         return None, location
@@ -83,7 +83,7 @@ def split_kind(location):
     if kind not in source.SOURCE_KINDS:
         raise ValueError(
             "unknown source kind '{}': expected {}".format(
-                kind, ', '.join(name + KIND_SEPARATOR for name in source.SOURCE_KINDS)
+                kind, ", ".join(name + KIND_SEPARATOR for name in source.SOURCE_KINDS)
             )
         )
 
@@ -91,13 +91,13 @@ def split_kind(location):
 
 
 def split_version(location):
-    '''The locator and the version behind the first separator, if any.'''
+    """The locator and the version behind the first separator, if any."""
     location, _, version = location.partition(VERSION_SEPARATOR)
     return location, version
 
 
 def make_locator(locator, project_directory=None) -> Locator:
-    '''
+    """
     Makes a Locator from the raw locator string.
 
     A path is the only shape relative to anything, so it is the only one
@@ -105,7 +105,7 @@ def make_locator(locator, project_directory=None) -> Locator:
     `file://` URL.
 
     Everything else git accepts is kept exactly as it was written.
-    '''
+    """
     if not locator_module.is_bare_path(locator):
         return Locator(locator)
 
@@ -118,7 +118,7 @@ def make_locator(locator, project_directory=None) -> Locator:
 
 
 def detect_kind(locator: Locator):
-    '''Detects the kind from the locator's content.'''
+    """Detects the kind from the locator's content."""
     if not locator.is_existing_directory():
         return source.SOURCE_TYPE_GIT
     if locator.is_git_repository():
@@ -127,7 +127,7 @@ def detect_kind(locator: Locator):
 
 
 def is_path_locator_valid(locator: Locator, kind):
-    '''Is the path locator valid for the given kind?'''
+    """Is the path locator valid for the given kind?"""
 
     # If it is a directory, there is no version to expect, it is valid.
 
@@ -147,9 +147,9 @@ def is_path_locator_valid(locator: Locator, kind):
 
 
 def validate_locator_kind(locator: Locator, kind):
-    '''
+    """
     Refuses a locator the kind asked of it cannot be.
-    '''
+    """
     if kind != source.SOURCE_TYPE_GIT:
         return
 
@@ -161,9 +161,9 @@ def validate_locator_kind(locator: Locator, kind):
 
 
 def resolve_locator(locator, kind, project_directory) -> Locator:
-    '''
+    """
     Validates the locator corresponds to the kind and returns a resolved Locator.
-    '''
+    """
     refuse_an_identity(locator)
     locator = make_locator(locator, project_directory)
     validate_locator_kind(locator, kind)
@@ -171,14 +171,14 @@ def resolve_locator(locator, kind, project_directory) -> Locator:
 
 
 def names_an_identity(value) -> bool:
-    '''Does a location name an identity rather than say where it is?'''
+    """Does a location name an identity rather than say where it is?"""
     # The leading `@` is what selects the shape, so a directory named `@foo` is
     # written `./@foo`, the escape git already forces for a `:`.
     return value.startswith(source_id.FIELD_SEPARATOR)
 
 
 def refuse_an_identity(value):
-    '''Refuse an identity in a field taking a locator.'''
+    """Refuse an identity in a field taking a locator."""
 
     if not names_an_identity(value):
         return
@@ -189,14 +189,14 @@ def refuse_an_identity(value):
     )
 
 
-def resolve_identity(processed_location, kind) -> 'SourceLocation':
-    '''
+def resolve_identity(processed_location, kind) -> "SourceLocation":
+    """
     Read a location naming an identity, and the version asked of it.
 
     Nothing else about it is known here. E.g. a recipe settles what is the source of the
     package the identity is referring to, and therefore what kind of source it turns out
     to be.
-    '''
+    """
     if kind:
         raise ValueError(
             "location '{}{}{}' spells a kind on an identity, but only the source it "
@@ -212,18 +212,18 @@ def resolve_identity(processed_location, kind) -> 'SourceLocation':
     return SourceLocation.for_identity(SourceId.parse(identity), version)
 
 
-def parse(location, project_directory, identity_allowed=False) -> 'SourceLocation':
-    '''
+def parse(location, project_directory, identity_allowed=False) -> "SourceLocation":
+    """
     Read a location into what it names, whether that is a source or an identity
     referring to a source.
 
     `identity_allowed` is false unless a caller says otherwise. A cookbook, an
     overlay and an override are not resolved out of an identity today, therefore
     only a dependency reads one.
-    '''
+    """
 
     locator = None
-    version = ''
+    version = ""
     kind = source.SOURCE_TYPE_GIT
 
     # Extract any explicit kind defined

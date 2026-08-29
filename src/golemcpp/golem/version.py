@@ -8,26 +8,26 @@ from golemcpp.golem.resolved_version import ResolvedVersion
 class Version:
     def __init__(self, working_dir=None, build_number=None):
         if not working_dir:
-            self.gitlong = '0.0.0'
-            self.gitshort = '0.0.0'
-            self.githash = ''
-            self.gitmessage = ''
-            self.gitbranch = ''
+            self.gitlong = "0.0.0"
+            self.gitshort = "0.0.0"
+            self.githash = ""
+            self.gitmessage = ""
+            self.gitbranch = ""
             self.build_number = build_number
             self.update_semver()
             return
 
         self.gitlong = Version.retrieve_gitlong(
-            working_dir=working_dir, default='0.0.0'
+            working_dir=working_dir, default="0.0.0"
         )
         self.gitshort = Version.retrieve_gitshort(
-            working_dir=working_dir, default='0.0.0'
+            working_dir=working_dir, default="0.0.0"
         )
         self.githash = Version.retrieve_githash(working_dir=working_dir)
         self.gitmessage = Version.retrieve_gitmessage(
             working_dir=working_dir, commit_hash=self.githash
         )
-        self.gitbranch = Version.retrieve_gitbranch(working_dir=working_dir, default='')
+        self.gitbranch = Version.retrieve_gitbranch(working_dir=working_dir, default="")
         self.build_number = build_number
         self.update_semver()
 
@@ -36,10 +36,10 @@ class Version:
         self.gitshort = version
         self.update_semver()
 
-    def to_resolved_version(self, force_reference=''):
-        '''
+    def to_resolved_version(self, force_reference=""):
+        """
         This project's own version as the pair every resolved resource carries.
-        '''
+        """
         return ResolvedVersion(
             reference=force_reference or self.gitlong, revision=self.githash
         )
@@ -51,22 +51,22 @@ class Version:
             self.gitshort = git_hash[0]
             self.gitlong = git_hash[1]
 
-            self.gitlong_semver = '0.0.0'
-            self.semver = '0.0.0'
+            self.gitlong_semver = "0.0.0"
+            self.semver = "0.0.0"
         else:
             self.gitlong_semver = self.gitlong
             self.semver = self.gitshort
 
-        if self.gitlong_semver[0] == 'v':
+        if self.gitlong_semver[0] == "v":
             self.gitlong_semver = self.gitlong_semver[1:]
 
-        if self.semver[0] == 'v':
+        if self.semver[0] == "v":
             self.semver = self.semver[1:]
 
         pair = Version.parse_semver(self.semver)
 
         if not pair:
-            self.semver = '0.0.0'
+            self.semver = "0.0.0"
             version, matches = Version.parse_semver(self.semver)
         else:
             version = pair[0]
@@ -74,17 +74,17 @@ class Version:
 
         self.semver = version
 
-        self.major = int(matches.group('major'))
-        self.minor = int(matches.group('minor'))
-        self.patch = int(matches.group('patch'))
+        self.major = int(matches.group("major"))
+        self.minor = int(matches.group("minor"))
+        self.patch = int(matches.group("patch"))
         self.prerelease = (
-            matches.group('prerelease') if matches.group('prerelease') else ''
+            matches.group("prerelease") if matches.group("prerelease") else ""
         )
         self.buildmetadata = (
-            matches.group('buildmetadata') if matches.group('buildmetadata') else ''
+            matches.group("buildmetadata") if matches.group("buildmetadata") else ""
         )
         self.semver_short = (
-            str(self.major) + '.' + str(self.minor) + '.' + str(self.patch)
+            str(self.major) + "." + str(self.minor) + "." + str(self.patch)
         )
 
         if not self.buildmetadata and self.build_number:
@@ -116,54 +116,54 @@ class Version:
         if patch is None:
             patch = 0
         new_version = str(major)
-        new_version += '.' + str(minor)
-        new_version += '.' + str(patch)
+        new_version += "." + str(minor)
+        new_version += "." + str(patch)
         if prerelease:
-            new_version += '-' + prerelease
+            new_version += "-" + prerelease
         if buildmetadata:
-            new_version += '+' + buildmetadata
+            new_version += "+" + buildmetadata
         return new_version
 
     @staticmethod
     def parse_git_hash(version):
         # Up to 64: a SHA-256 object name is twice the length of a SHA-1 one, and
         # git is migrating to it.
-        hash_regex = r'^[0-9a-fA-F]{7,64}$'
+        hash_regex = r"^[0-9a-fA-F]{7,64}$"
         if re.fullmatch(hash_regex, version):
             return version[:7], version
         return None
 
     @staticmethod
     def parse_semver(version):
-        semver_regex = r'^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+        semver_regex = r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
         matches = re.search(semver_regex, version)
         if matches:
             return (version, matches)
 
         # Allow alternative separators,
         # but force having Major, Minor and Patch defined
-        semver_regex_like = r'(?P<major>0|[1-9]\d*)[\._](?P<minor>0|[1-9]\d*)[\._](?P<patch>0|[1-9]\d*)(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?'
+        semver_regex_like = r"(?P<major>0|[1-9]\d*)[\._](?P<minor>0|[1-9]\d*)[\._](?P<patch>0|[1-9]\d*)(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?"
         matches = re.search(semver_regex_like, version)
         if matches:
             new_version = Version.make_semver(
-                major=matches.group('major'),
-                minor=matches.group('minor'),
-                patch=matches.group('patch'),
-                prerelease=matches.group('prerelease'),
-                buildmetadata=matches.group('buildmetadata'),
+                major=matches.group("major"),
+                minor=matches.group("minor"),
+                patch=matches.group("patch"),
+                prerelease=matches.group("prerelease"),
+                buildmetadata=matches.group("buildmetadata"),
             )
             return (new_version, matches)
 
         # Allow alternative separators
-        semver_regex_like = r'(?P<major>0|[1-9]\d*)(?:[\._](?P<minor>0|[1-9]\d*))?(?:[\._](?P<patch>0|[1-9]\d*))?(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?'
+        semver_regex_like = r"(?P<major>0|[1-9]\d*)(?:[\._](?P<minor>0|[1-9]\d*))?(?:[\._](?P<patch>0|[1-9]\d*))?(?:[-\._](?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:[\._](?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:[\._][0-9a-zA-Z-]+)*))?"
         matches = re.search(semver_regex_like, version)
         if matches:
             new_version = Version.make_semver(
-                major=matches.group('major'),
-                minor=matches.group('minor'),
-                patch=matches.group('patch'),
-                prerelease=matches.group('prerelease'),
-                buildmetadata=matches.group('buildmetadata'),
+                major=matches.group("major"),
+                minor=matches.group("minor"),
+                patch=matches.group("patch"),
+                prerelease=matches.group("prerelease"),
+                buildmetadata=matches.group("buildmetadata"),
             )
             return (new_version, matches)
 
@@ -176,7 +176,7 @@ class Version:
 
         try:
             version_string = helpers.read_git(
-                ['describe', '--long', '--tags', '--dirty=-d'],
+                ["describe", "--long", "--tags", "--dirty=-d"],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL,
             )
@@ -193,7 +193,7 @@ class Version:
 
         try:
             version_string = helpers.read_git(
-                ['describe', '--abbrev=0', '--tags'],
+                ["describe", "--abbrev=0", "--tags"],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL,
             )
@@ -209,11 +209,11 @@ class Version:
 
         try:
             version_string = helpers.read_git(
-                ['rev-parse', 'HEAD'], cwd=working_dir, stderr=subprocess.DEVNULL
+                ["rev-parse", "HEAD"], cwd=working_dir, stderr=subprocess.DEVNULL
             )
             version_string = version_string.splitlines()[0]
         except:
-            version_string = ''
+            version_string = ""
 
         return version_string
 
@@ -223,17 +223,17 @@ class Version:
         message = None
 
         if not commit_hash:
-            return ''
+            return ""
 
         try:
             message = helpers.read_git(
-                ['log', '--format=%B', '-n', '1', commit_hash],
+                ["log", "--format=%B", "-n", "1", commit_hash],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL,
             )
             message = message.strip()
         except:
-            message = ''
+            message = ""
 
         return message
 
@@ -244,7 +244,7 @@ class Version:
 
         try:
             branch = helpers.read_git(
-                ['rev-parse', '--abbrev-ref', 'HEAD'],
+                ["rev-parse", "--abbrev-ref", "HEAD"],
                 cwd=working_dir,
                 stderr=subprocess.DEVNULL,
             )

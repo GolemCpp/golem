@@ -1,4 +1,4 @@
-'''
+"""
 What the remotes a resolve reached have advertised.
 
 A resolution costs one `ls-remote`, and every node of a dependency tree resolves
@@ -18,7 +18,7 @@ worth having when something has to be looked into.
 
 Nothing here may fail a resolve. What cannot be read or written costs the round
 trip it was there to save.
-'''
+"""
 
 import contextlib
 import os
@@ -28,24 +28,24 @@ from golemcpp.golem import locator
 from golemcpp.golem import safe_part
 
 # Where a resolve keeps them, under the build directory.
-DIRECTORY_NAME = 'resolve'
+DIRECTORY_NAME = "resolve"
 
 # What names that directory to the resolves a resolve spawns. Set means a resolve
 # is running above this one, which owns the directory. The path is read from here
 # rather than worked out again: a nested resolve is handed a build directory of
 # its own and would name a directory nobody else writes to.
-DIRECTORY_VARIABLE = 'GOLEM_RESOLVE_DIRECTORY'
+DIRECTORY_VARIABLE = "GOLEM_RESOLVE_DIRECTORY"
 
 
 @contextlib.contextmanager
 def shared(directory):
-    '''
+    """
     Open the store for a resolve and for every resolve it spawns.
 
     The outermost resolve is the one finding no directory named in the
     environment. It empties `directory` and names it for the others, which keep
     the one they were given so the whole tree writes to a single directory.
-    '''
+    """
     if directory_in_use():
         yield
         return
@@ -65,12 +65,12 @@ def shared(directory):
 
 
 def directory_in_use() -> str:
-    '''The directory a resolve running above this one opened, or empty.'''
-    return helpers.get_environ(DIRECTORY_VARIABLE) or ''
+    """The directory a resolve running above this one opened, or empty."""
+    return helpers.get_environ(DIRECTORY_VARIABLE) or ""
 
 
 def path_for(url) -> str:
-    '''
+    """
     Where what a remote advertised is kept, or empty when no resolve opened a
     store.
 
@@ -78,18 +78,18 @@ def path_for(url) -> str:
     file, the way they already share one cache root. A url naming no repository
     answers empty: resolving it fails on its own, and it fails the same either
     way.
-    '''
+    """
     directory = directory_in_use()
     if not directory:
-        return ''
+        return ""
 
     try:
         name = locator.generate_id(url)
     except ValueError:
-        return ''
+        return ""
 
     if not name:
-        return ''
+        return ""
 
     if len(name) > safe_part.READABLE_LENGTH:
         name = safe_part.with_digest(name[: safe_part.READABLE_LENGTH], of=name)
@@ -98,36 +98,36 @@ def path_for(url) -> str:
 
 
 def read(url) -> str:
-    '''
+    """
     Read what a remote advertised, or empty when this resolve has not asked it.
-    '''
+    """
     path = path_for(url)
     if not path:
-        return ''
+        return ""
 
     try:
-        with open(path, encoding='utf-8') as listing:
+        with open(path, encoding="utf-8") as listing:
             return listing.read()
     except OSError:
-        return ''
+        return ""
 
 
 def write(url, listing):
-    '''
+    """
     Keep what a remote advertised, for the resolves coming after this one.
 
     Written under a name of its own and renamed, so a reader never sees half a
     listing. Resolutions run one after another today, and the rename is what
     keeps that true if they stop.
-    '''
+    """
     path = path_for(url)
     if not path:
         return
 
-    pending = '{}.{}'.format(path, os.getpid())
+    pending = "{}.{}".format(path, os.getpid())
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(pending, 'w', encoding='utf-8') as file:
+        with open(pending, "w", encoding="utf-8") as file:
             file.write(listing)
         os.replace(pending, path)
     except OSError:

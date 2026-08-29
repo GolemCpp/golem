@@ -31,17 +31,17 @@ class Package:
                 self.__dict__[key] += value
                 self.__dict__[key] = helpers.filter_unique(self.__dict__[key])
 
-        if 'deb' in json_object:
+        if "deb" in json_object:
             self.deb_package = DEBPackage()
-            self.deb_package.read_json(json_object['deb'])
+            self.deb_package.read_json(json_object["deb"])
 
-        if 'msi' in json_object:
+        if "msi" in json_object:
             self.msi_package = MSIPackage()
-            self.msi_package.read_json(json_object['msi'])
+            self.msi_package.read_json(json_object["msi"])
 
-        if 'dmg' in json_object:
+        if "dmg" in json_object:
             self.dmg_package = DMGPackage()
-            self.dmg_package.read_json(json_object['dmg'])
+            self.dmg_package.read_json(json_object["dmg"])
 
     def dump_json(self):
         json_obj = {}
@@ -51,23 +51,23 @@ class Package:
                     json_obj[key] = self.__dict__[key]
 
         if self.deb_package:
-            json_obj['deb'] = self.deb_package.dump_json()
+            json_obj["deb"] = self.deb_package.dump_json()
 
         if self.msi_package:
-            json_obj['msi'] = self.msi_package.dump_json()
+            json_obj["msi"] = self.msi_package.dump_json()
 
         if self.dmg_package:
-            json_obj['dmg'] = self.dmg_package.dump_json()
+            json_obj["dmg"] = self.dmg_package.dump_json()
 
         return json_obj
 
     @staticmethod
     def serialized_members():
-        return ['name', 'stripping']
+        return ["name", "stripping"]
 
     @staticmethod
     def serialized_members_list():
-        return ['targets']
+        return ["targets"]
 
     @staticmethod
     def unserialize_from_json(o):
@@ -152,21 +152,21 @@ class DEBPackage:
     @staticmethod
     def serialized_members():
         return [
-            'prefix',
-            'subdirectory',
-            'skeleton',
-            'control',
-            'section',
-            'priority',
-            'maintainer',
-            'description',
-            'homepage',
-            'rpath',
+            "prefix",
+            "subdirectory",
+            "skeleton",
+            "control",
+            "section",
+            "priority",
+            "maintainer",
+            "description",
+            "homepage",
+            "rpath",
         ]
 
     @staticmethod
     def serialized_members_list():
-        return ['templates', 'depends', 'copy_skeleton']
+        return ["templates", "depends", "copy_skeleton"]
 
     @staticmethod
     def unserialize_from_json(o):
@@ -228,14 +228,14 @@ class MSIPackage:
     @staticmethod
     def serialized_members():
         return [
-            'skeleton',
-            'project',
-            'parameters',
-            'extensions',
-            'cultures',
-            'installdir_id',
-            'installdir_files_id',
-            'installdir_files_xslt',
+            "skeleton",
+            "project",
+            "parameters",
+            "extensions",
+            "cultures",
+            "installdir_id",
+            "installdir_files_id",
+            "installdir_files_xslt",
         ]
 
     @staticmethod
@@ -286,7 +286,7 @@ class DMGPackage:
 
     @staticmethod
     def serialized_members():
-        return ['name', 'skeleton', 'background']
+        return ["name", "skeleton", "background"]
 
     @staticmethod
     def serialized_members_list():

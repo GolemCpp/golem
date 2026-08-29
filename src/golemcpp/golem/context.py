@@ -80,7 +80,7 @@ class Context:
         self.built_tasks = []
         self.build_on = False
 
-        self.resolved_overrides = ''
+        self.resolved_overrides = ""
 
         self.cache_configuration = None
         self.repository = None
@@ -97,16 +97,16 @@ class Context:
             if default is not None:
                 return default
             return None
-        build_number_key = helpers.get_environ('BUILD_NUMBER')
+        build_number_key = helpers.get_environ("BUILD_NUMBER")
         if build_number_key:
             return int(build_number_key)
         return 0
 
     def get_settings(self):
-        '''
+        """
         The Settings of this build. No build directory is bound: the live
         options are exactly what `golem configure` would persist.
-        '''
+        """
         if self.settings is None:
             self.settings = settings.get_settings(
                 options=self.context.options, project_dir=self.get_project_dir()
@@ -135,7 +135,7 @@ class Context:
 
         if os.path.exists(self.project_path):
             json_object = None
-            with io.open(self.project_path, 'r') as file:
+            with io.open(self.project_path, "r") as file:
                 json_object = json.load(file)
             # A project file describes how to build the project directory, and
             # a recipe's is read out of a cookbook rather than out of the
@@ -150,19 +150,19 @@ class Context:
 
         # Beside all_dependencies.json, in the build directory: golem writes it
         # and golem reads it, so a project has no reason to carry it.
-        deps_cache_file_json = self.make_build_path('dependencies.json')
+        deps_cache_file_json = self.make_build_path("dependencies.json")
 
         if self.context.options.resolved_dependencies_directory:
             deps_cache_file_json = os.path.join(
                 self.context.options.resolved_dependencies_directory,
-                'dependencies.json',
+                "dependencies.json",
             )
 
         return deps_cache_file_json
 
     @staticmethod
     def make_dependency_unique_identifier(dependency):
-        return '{}_{}_{}_{}_{}'.format(
+        return "{}_{}_{}_{}_{}".format(
             dependency.resolved.locator,
             dependency.resolved.version.revision,
             dependency.link,
@@ -181,7 +181,7 @@ class Context:
         deps_cache_file_json = self.get_dependencies_json_path()
 
         if os.path.exists(deps_cache_file_json):
-            print('Found ' + str(deps_cache_file_json))
+            print("Found " + str(deps_cache_file_json))
             self.load_dependencies_json(deps_cache_file_json)
             self.resolved_dependencies_path = deps_cache_file_json
         else:
@@ -192,7 +192,7 @@ class Context:
         if not os.path.exists(deps_cache_file_json):
             return None
         cache = None
-        with open(deps_cache_file_json, 'r') as fp:
+        with open(deps_cache_file_json, "r") as fp:
             cache = json.load(fp)
         cached_dependencies = Dependency.load_cache(cache=cache)
         return cached_dependencies
@@ -216,13 +216,13 @@ class Context:
         return dependencies_to_keep
 
     def settle_dependency_identities(self):
-        '''
+        """
         Fill in where each dependency written as an identity comes from.
 
         Cookbooks are where the information is.
 
         `golem build` only reads the locator back out of the lock (dependencies.json).
-        '''
+        """
         resolver = RecipeResolver(self.cached_cookbooks)
 
         for dependency in self.project.deps:
@@ -238,7 +238,7 @@ class Context:
             )
 
     def resolve_dependencies(self):
-        deps_cache_file_json = self.make_build_path('dependencies.json')
+        deps_cache_file_json = self.make_build_path("dependencies.json")
         global_dependencies_configuration = (
             self.get_global_dependencies_configuration_file()
         )
@@ -247,7 +247,7 @@ class Context:
         if self.context.options.resolved_dependencies_directory:
             deps_cache_file_json_build = os.path.join(
                 self.context.options.resolved_dependencies_directory,
-                'dependencies.json',
+                "dependencies.json",
             )
 
         cached_dependencies_to_keep = self.load_cached_dependencies_to_keep()
@@ -286,7 +286,7 @@ class Context:
                 )
                 save_path = os.path.join(
                     self.context.options.resolved_dependencies_directory,
-                    'dependencies.json',
+                    "dependencies.json",
                 )
 
             Logs.info("Resolving versions of required dependencies")
@@ -301,12 +301,12 @@ class Context:
             self.resolved_dependencies_path = save_path
 
     def save_resolved_dependencies(self):
-        '''
+        """
         Write the lock, and the recipes into the shared cache.
 
         Called once the recursive resolve is over. The lock asserts that the
         resolution succeeded, therefore a resolve that failed leaves none.
-        '''
+        """
         if self.dependencies_save_path is None:
             return
 
@@ -315,7 +315,7 @@ class Context:
 
     def get_global_dependencies_configuration_file(self):
         global_dependencies_configuration = self.make_build_path(
-            'all_dependencies.json'
+            "all_dependencies.json"
         )
         if self.context.options.global_dependencies_configuration:
             global_dependencies_configuration = (
@@ -325,14 +325,14 @@ class Context:
 
     def load_dependencies_json(self, path):
         cache = None
-        with open(path, 'r') as fp:
+        with open(path, "r") as fp:
             cache = json.load(fp)
         self.project.deps_load_json(cache)
 
     def save_dependencies_json(self, path):
         Logs.info("Saving resolved dependencies " + str(path))
         cache = self.project.deps_resolve_json()
-        with open(path, 'w') as fp:
+        with open(path, "w") as fp:
             json.dump(cache, fp, indent=4)
 
     def get_project_dir(self):
@@ -344,7 +344,7 @@ class Context:
             # stands in for the whole overlay stack. The setting is declared a
             # path, so it already arrives absolute.
             self.resolved_overrides = (
-                self.get_settings().get('GOLEM_OVERRIDES_CONFIGURATION')
+                self.get_settings().get("GOLEM_OVERRIDES_CONFIGURATION")
                 or self.load_overlay_overrides()
             )
 
@@ -354,11 +354,11 @@ class Context:
         return overrides.read_overrides(self.resolved_overrides, self.get_project_dir())
 
     def load_overlay_overrides(self):
-        '''The overrides the configured overlays contribute, installed then read.'''
+        """The overrides the configured overlays contribute, installed then read."""
         manager = get_overlay_manager(self.cache_configuration)
         overlays = [
             manager.get_overlay(source)
-            for source in self.get_settings().get('GOLEM_OVERLAYS_LOCATIONS')
+            for source in self.get_settings().get("GOLEM_OVERLAYS_LOCATIONS")
         ]
         cached_overlays = manager.make_available_all(overlays, fetch=self.deps_resolve)
 
@@ -374,7 +374,7 @@ class Context:
     def make_project_path(self, path):
         return os.path.join(self.get_project_dir(), str(Path(path)))
 
-    def make_base_path(self, path, prefix_path=''):
+    def make_base_path(self, path, prefix_path=""):
         base_path = self.context.root
         if len(prefix_path) == 0:
             if os.path.isabs(path):
@@ -388,7 +388,7 @@ class Context:
                 base_path = self.context.srcnode.find_dir(prefix_path)
         return base_path
 
-    def list_include(self, includes, prefix_path=''):
+    def list_include(self, includes, prefix_path=""):
         file_nodes = []
         for x in includes:
             base_path = self.make_base_path(x, prefix_path)
@@ -400,29 +400,29 @@ class Context:
         result = []
         for x in source:
             if isinstance(x, tuple):
-                base_path = self.make_base_path('', prefix_path)
+                base_path = self.make_base_path("", prefix_path)
                 args = {}
                 if len(x) > 0:
-                    args['incl'] = x[0]
+                    args["incl"] = x[0]
                 if len(x) > 1:
-                    args['excl'] = x[1]
+                    args["excl"] = x[1]
                 if len(x) > 2:
-                    args['dir'] = x[2]
+                    args["dir"] = x[2]
                 if len(x) > 3:
-                    args['src'] = x[3]
+                    args["src"] = x[3]
                 if len(x) > 4:
-                    args['maxdepth'] = x[4]
+                    args["maxdepth"] = x[4]
                 if len(x) > 5:
-                    args['ignorecase'] = x[5]
+                    args["ignorecase"] = x[5]
                 if len(x) > 6:
-                    args['generator'] = x[6]
+                    args["generator"] = x[6]
                 if len(x) > 7:
-                    args['remove'] = x[7]
+                    args["remove"] = x[7]
                 if len(x) > 8:
-                    args['quiet'] = x[8]
+                    args["quiet"] = x[8]
                 result += base_path.ant_glob(**args)
             elif isinstance(x, dict):
-                base_path = self.make_base_path('', prefix_path)
+                base_path = self.make_base_path("", prefix_path)
                 result += base_path.ant_glob(**x)
             else:
                 base_path = self.make_base_path(x, prefix_path)
@@ -432,10 +432,10 @@ class Context:
                 elif os.path.isdir(str(x_path)):
                     file_nodes = []
                     for extention in extentions:
-                        file_nodes += x_path.ant_glob('**/*.' + extention)
+                        file_nodes += x_path.ant_glob("**/*." + extention)
                     result += file_nodes
                 else:
-                    base_path = self.make_base_path('', prefix_path)
+                    base_path = self.make_base_path("", prefix_path)
                     result += base_path.ant_glob(str(x))
 
         return result
@@ -444,23 +444,23 @@ class Context:
         return self.list_files(
             self.get_project_dir(),
             source,
-            ['cxx', 'cpp', 'c++', 'c', 'cc', 'C', 'ixx', 'cppm', 'cxxm', 'cpp2']
-            + (['mm'] if self.is_darwin() else []),
+            ["cxx", "cpp", "c++", "c", "cc", "C", "ixx", "cppm", "cxxm", "cpp2"]
+            + (["mm"] if self.is_darwin() else []),
         )
 
     def list_moc(self, source):
         return self.list_files(
-            self.get_project_dir(), source, ['hpp', 'h', 'hxx', 'hh']
+            self.get_project_dir(), source, ["hpp", "h", "hxx", "hh"]
         )
 
     def list_qt_qrc(self, source):
-        return self.list_files(self.get_project_dir(), source, ['qrc'])
+        return self.list_files(self.get_project_dir(), source, ["qrc"])
 
     def list_qt_ui(self, source):
-        return self.list_files(self.get_project_dir(), source, ['ui'])
+        return self.list_files(self.get_project_dir(), source, ["ui"])
 
     def list_template(self, source):
-        return self.list_files(self.get_project_dir(), source, ['template'])
+        return self.list_files(self.get_project_dir(), source, ["template"])
 
     @staticmethod
     def get_parent_directories(files):
@@ -469,33 +469,33 @@ class Context:
 
     @staticmethod
     def link_static():
-        return 'static'
+        return "static"
 
     @staticmethod
     def link_shared():
-        return 'shared'
+        return "shared"
 
     def link(self, dep=None):
         return self.context.options.link if dep is None or not dep.link else dep.link[0]
 
     def distribution(self):
         if self.is_linux():
-            if hasattr(platform, 'linux_distribution'):
+            if hasattr(platform, "linux_distribution"):
                 return platform.linux_distribution()[0].lower()
-            elif hasattr(platform, 'freedesktop_os_release'):
-                return platform.freedesktop_os_release()['ID'].lower()
+            elif hasattr(platform, "freedesktop_os_release"):
+                return platform.freedesktop_os_release()["ID"].lower()
             else:
                 raise RuntimeError("Not implemented yet")
         return None
 
     def release(self):
         if self.is_linux():
-            if hasattr(platform, 'linux_distribution'):
+            if hasattr(platform, "linux_distribution"):
                 import lsb_release
 
-                return lsb_release.get_distro_information()['CODENAME'].lower()
-            elif hasattr(platform, 'freedesktop_os_release'):
-                return platform.freedesktop_os_release()['VERSION_ID'].lower()
+                return lsb_release.get_distro_information()["CODENAME"].lower()
+            elif hasattr(platform, "freedesktop_os_release"):
+                return platform.freedesktop_os_release()["VERSION_ID"].lower()
             else:
                 raise RuntimeError("Not implemented yet")
         return None
@@ -537,11 +537,11 @@ class Context:
 
     @staticmethod
     def variant_debug():
-        return 'debug'
+        return "debug"
 
     @staticmethod
     def variant_release():
-        return 'release'
+        return "release"
 
     def variant(self, dep=None):
         return (
@@ -551,55 +551,55 @@ class Context:
         )
 
     def variant_suffix(self):
-        variant = ''
+        variant = ""
         if self.context.options.variant == self.variant_debug():
-            variant = '-' + self.variant_debug()
+            variant = "-" + self.variant_debug()
         return variant
 
     def artifact_suffix_mode(self, config, is_shared):
-        is_library = not config.type or config.type_unique == 'library'
+        is_library = not config.type or config.type_unique == "library"
 
         if is_library:
             if config.link:
-                if config.link_unique == 'shared':
+                if config.link_unique == "shared":
                     is_shared = True
-                elif config.link_unique == 'static':
+                elif config.link_unique == "static":
                     is_shared = False
 
             if is_shared:
                 if self.is_windows():
-                    return ['.dll', '.lib']
+                    return [".dll", ".lib"]
                 elif self.is_darwin():
-                    return ['.dylib']
+                    return [".dylib"]
                 else:
-                    return ['.so']
+                    return [".so"]
             else:
                 if self.is_windows():
-                    return ['.lib']
+                    return [".lib"]
                 else:
-                    return ['.a']
-        elif config.type_unique == 'program':
+                    return [".a"]
+        elif config.type_unique == "program":
             if self.is_windows():
-                return ['.exe']
+                return [".exe"]
             else:
-                return ['']
-        elif config.type_unique == 'objects':
-            return ['.o']
+                return [""]
+        elif config.type_unique == "objects":
+            return [".o"]
         else:
             return []
 
     def artifact_suffix(self, config):
         is_shared = (
-            self.is_shared() if not config.link else config.link_unique == 'shared'
+            self.is_shared() if not config.link else config.link_unique == "shared"
         )
         return self.artifact_suffix_mode(config, is_shared)
 
     def is_config_shared(self, config):
-        return self.is_shared() if not config.link else config.link_unique == 'shared'
+        return self.is_shared() if not config.link else config.link_unique == "shared"
 
     def artifact_prefix(self, config):
-        is_program = config.type_unique == 'program'
-        return '' if (self.is_windows() or is_program) else 'lib'
+        is_program = config.type_unique == "program"
+        return "" if (self.is_windows() or is_program) else "lib"
 
     def dev_artifact_suffix(self, is_shared=None):
         if is_shared is None:
@@ -607,20 +607,20 @@ class Context:
 
         if is_shared:
             if self.is_windows():
-                return '.lib'
+                return ".lib"
             elif self.is_darwin():
-                return '.dylib'
+                return ".dylib"
             else:
-                return '.so'
+                return ".so"
         else:
             if self.is_windows():
-                return '.lib'
+                return ".lib"
             else:
-                return '.a'
+                return ".a"
 
     def artifact_suffix_dev(self, target):
         is_shared = (
-            self.is_shared() if not target.link else target.link_unique == 'shared'
+            self.is_shared() if not target.link else target.link_unique == "shared"
         )
         return self.dev_artifact_suffix(is_shared)
 
@@ -644,37 +644,37 @@ class Context:
 
     @staticmethod
     def is_windows():
-        return sys.platform.startswith('win32')
+        return sys.platform.startswith("win32")
 
     @staticmethod
     def is_linux():
-        return sys.platform.startswith('linux')
+        return sys.platform.startswith("linux")
 
     @staticmethod
     def is_flatpak():
         return (
             Context.is_linux()
-            and hasattr(platform, 'freedesktop_os_release')
-            and (shutil.which('flatpak-spawn') is not None)
+            and hasattr(platform, "freedesktop_os_release")
+            and (shutil.which("flatpak-spawn") is not None)
         )
 
     @staticmethod
     def is_darwin():
-        return sys.platform.startswith('darwin')
+        return sys.platform.startswith("darwin")
 
     def arch_request(self):
-        '''The architecture that was asked for, or '' when none was.'''
+        """The architecture that was asked for, or '' when none was."""
         return target_resolver.arch_request(self.context.options)
 
     def target(self):
-        '''
+        """
         What this build is for. Only available once a compiler has answered.
 
         The alternative is to fall back to the request or the host, and both
         are provisional values that would flow into a build slug and an
         advertisement and be wrong there, silently.
-        '''
-        resolved = getattr(self.context.options, 'resolved_arch', None)
+        """
+        resolved = getattr(self.context.options, "resolved_arch", None)
         if not resolved:
             raise RuntimeError(
                 "The target architecture is not resolved yet. It is settled "
@@ -688,25 +688,25 @@ class Context:
         return self.target().osystem
 
     def compiler(self):
-        return self.context.env.CXX_NAME + '-' + '.'.join(self.context.env.CC_VERSION)
+        return self.context.env.CXX_NAME + "-" + ".".join(self.context.env.CC_VERSION)
 
     def compiler_name(self):
         return self.context.env.CXX_NAME
 
     def compiler_version(self):
-        return '.'.join(self.context.env.CC_VERSION)
+        return ".".join(self.context.env.CC_VERSION)
 
     def is_msvc_like(self):
-        return self.compiler_name() == 'msvc' or self.compiler_name() == 'clang-cl'
+        return self.compiler_name() == "msvc" or self.compiler_name() == "clang-cl"
 
     def is_isystem_supported(self):
-        return getattr(self.context.env, 'ISYSTEM_AVAILABLE', 0) != 0
+        return getattr(self.context.env, "ISYSTEM_AVAILABLE", 0) != 0
 
     @staticmethod
     def strip_language_standard_flags(flags, language):
         patterns = {
-            'c': [r'^-std=(?:gnu|iso)?c(?!\+\+)', r'^/std:c(?!\+\+)'],
-            'cxx': [r'^-std=(?:gnu\+\+|c\+\+)', r'^/std:c\+\+'],
+            "c": [r"^-std=(?:gnu|iso)?c(?!\+\+)", r"^/std:c(?!\+\+)"],
+            "cxx": [r"^-std=(?:gnu\+\+|c\+\+)", r"^/std:c\+\+"],
         }
 
         filtered_flags = []
@@ -725,20 +725,20 @@ class Context:
         if not standard:
             return None
 
-        if standard.startswith('-std=') or standard.startswith('/std:'):
+        if standard.startswith("-std=") or standard.startswith("/std:"):
             return standard
 
-        normalized = standard.lower().replace(' ', '')
+        normalized = standard.lower().replace(" ", "")
 
-        if compiler_name in ['msvc', 'clang-cl']:
-            normalized = normalized.replace('gnu', 'c', 1)
+        if compiler_name in ["msvc", "clang-cl"]:
+            normalized = normalized.replace("gnu", "c", 1)
             mapping = {
-                '11': '/std:c11',
-                'c11': '/std:c11',
-                '17': '/std:c17',
-                'c17': '/std:c17',
-                'latest': '/std:clatest',
-                'clatest': '/std:clatest',
+                "11": "/std:c11",
+                "c11": "/std:c11",
+                "17": "/std:c17",
+                "c17": "/std:c17",
+                "latest": "/std:clatest",
+                "clatest": "/std:clatest",
             }
             if normalized in mapping:
                 return mapping[normalized]
@@ -749,15 +749,15 @@ class Context:
             )
 
         if normalized.isdigit():
-            normalized = 'c{}'.format(normalized)
-        elif not normalized.startswith('c') and not normalized.startswith('gnu'):
+            normalized = "c{}".format(normalized)
+        elif not normalized.startswith("c") and not normalized.startswith("gnu"):
             raise RuntimeError(
                 "Unsupported C standard '{}' for compiler '{}'".format(
                     standard, compiler_name
                 )
             )
 
-        return '-std={}'.format(normalized)
+        return "-std={}".format(normalized)
 
     @staticmethod
     def make_cxx_standard_flag(standard, compiler_name):
@@ -768,28 +768,28 @@ class Context:
         if not standard:
             return None
 
-        if standard.startswith('-std=') or standard.startswith('/std:'):
+        if standard.startswith("-std=") or standard.startswith("/std:"):
             return standard
 
-        normalized = standard.lower().replace(' ', '')
+        normalized = standard.lower().replace(" ", "")
 
-        if compiler_name in ['msvc', 'clang-cl']:
-            normalized = normalized.replace('gnu++', 'c++', 1)
+        if compiler_name in ["msvc", "clang-cl"]:
+            normalized = normalized.replace("gnu++", "c++", 1)
             mapping = {
-                '11': '/std:c++11',
-                'c++11': '/std:c++11',
-                '14': '/std:c++14',
-                'c++14': '/std:c++14',
-                '17': '/std:c++17',
-                'c++17': '/std:c++17',
-                '20': '/std:c++20',
-                'c++20': '/std:c++20',
-                '23': '/std:c++latest',
-                '26': '/std:c++latest',
-                'c++23': '/std:c++latest',
-                'c++26': '/std:c++latest',
-                'latest': '/std:c++latest',
-                'c++latest': '/std:c++latest',
+                "11": "/std:c++11",
+                "c++11": "/std:c++11",
+                "14": "/std:c++14",
+                "c++14": "/std:c++14",
+                "17": "/std:c++17",
+                "c++17": "/std:c++17",
+                "20": "/std:c++20",
+                "c++20": "/std:c++20",
+                "23": "/std:c++latest",
+                "26": "/std:c++latest",
+                "c++23": "/std:c++latest",
+                "c++26": "/std:c++latest",
+                "latest": "/std:c++latest",
+                "c++latest": "/std:c++latest",
             }
             if normalized in mapping:
                 return mapping[normalized]
@@ -800,15 +800,15 @@ class Context:
             )
 
         if normalized.isdigit():
-            normalized = 'c++{}'.format(normalized)
-        elif not normalized.startswith('c++') and not normalized.startswith('gnu++'):
+            normalized = "c++{}".format(normalized)
+        elif not normalized.startswith("c++") and not normalized.startswith("gnu++"):
             raise RuntimeError(
                 "Unsupported C++ standard '{}' for compiler '{}'".format(
                     standard, compiler_name
                 )
             )
 
-        return '-std={}'.format(normalized)
+        return "-std={}".format(normalized)
 
     @staticmethod
     def machine():
@@ -821,7 +821,7 @@ class Context:
         return self.target().capability
 
     def selecting_capability(self):
-        '''
+        """
         The capability allowed to emit flags that *select* a target.
 
         The target is what the build turned out to be; this is what was asked
@@ -830,17 +830,17 @@ class Context:
         Empty when nothing was asked. There is then nothing to select and no
         flag to emit: whatever the compiler builds by default is the answer,
         and it gets recorded rather than overridden.
-        '''
+        """
         return target_platform.arch_capability(self.arch_request())
 
     def msvc_target_preference(self):
-        '''
+        """
         The order waf tries Visual Studio's toolchains in.
 
         A request narrows it to the toolchains that build that architecture,
         the one hosted on this machine first. Otherwise the host's own
         toolchain goes first, and waf's order follows.
-        '''
+        """
         host = target_platform.arch_capability(target_platform.host_arch())
         requested = self.selecting_capability()
 
@@ -866,7 +866,7 @@ class Context:
             preferred = (
                 requested.msvc_target
                 if host.vcvars_arg == requested.vcvars_arg
-                else '{}_{}'.format(host.vcvars_arg, requested.vcvars_arg)
+                else "{}_{}".format(host.vcvars_arg, requested.vcvars_arg)
             )
 
             # Every candidate builds the requested architecture, therefore
@@ -885,9 +885,9 @@ class Context:
         return [host.msvc_target] + order if host.msvc_target else order
 
     def vcvars_arg(self):
-        '''
+        """
         The argument vcvarsall.bat wants for this target.
-        '''
+        """
         vcvars_arg = self.arch_capability().vcvars_arg
         if not vcvars_arg:
             raise RuntimeError(
@@ -897,10 +897,10 @@ class Context:
         return vcvars_arg
 
     def vs_platform(self, arch=None):
-        '''
+        """
         Visual Studio's name for the target, for MSBuild's /p:Platform and
         CMake's -A.
-        '''
+        """
         capability = (
             self.arch_capability()
             if arch is None
@@ -912,7 +912,7 @@ class Context:
                 "No Visual Studio platform for architecture '{}'. Visual "
                 "Studio builds for {}.".format(
                     target_platform.normalize_arch(arch) if arch else self.get_arch(),
-                    ', '.join(
+                    ", ".join(
                         arch
                         for arch, capability in target_platform.ARCH_CAPABILITIES.items()
                         if capability.vs_platform
@@ -931,14 +931,14 @@ class Context:
 
     def get_build_runtime(self):
         if self.context.env.MSVC_VERSION:
-            return 'msvc'
+            return "msvc"
         elif self.is_darwin():
             if self.context.env.MACOSX_DEPLOYMENT_TARGET:
-                return 'macosx'
+                return "macosx"
             elif self.context.env.IPHONEOS_DEPLOYMENT_TARGET:
-                return 'iphoneos'
+                return "iphoneos"
             else:
-                return 'macosx'
+                return "macosx"
         else:
             return str(platform.libc_ver()[0])
 
@@ -961,21 +961,21 @@ class Context:
 
     @staticmethod
     def options(context):
-        context.load('compiler_c compiler_cxx qt5 cppfront')
+        context.load("compiler_c compiler_cxx qt5 cppfront")
         context.add_option("--project-dir", action="store", help="Project location")
         context.add_option("--build-dir", action="store", help="Build location")
         context.add_option(
             "--variant",
             action="store",
-            default='debug',
+            default="debug",
             help="Variant (debug, release)",
         )
         context.add_option(
             "--runtime-link",
             "--runtime",  # Deprecated
-            dest='runtime_link',
+            dest="runtime_link",
             action="store",
-            default='shared',
+            default="shared",
             help="Runtime Linking (shared, static)",
         )
         context.add_option(
@@ -987,7 +987,7 @@ class Context:
         context.add_option(
             "--link",
             action="store",
-            default='shared',
+            default="shared",
             help="Library Linking (shared, static)",
         )
         context.add_option(
@@ -1007,9 +1007,9 @@ class Context:
             "--patch", action="store_true", default=False, help="Release patch version"
         )
 
-        context.add_option("--export", action="store", default='', help="Export folder")
+        context.add_option("--export", action="store", default="", help="Export folder")
         context.add_option(
-            "--packages", action="store", default='', help="Packages to process"
+            "--packages", action="store", default="", help="Packages to process"
         )
 
         context.add_option(
@@ -1055,21 +1055,21 @@ class Context:
         context.add_option(
             "--resolved-dependencies-directory",
             action="store",
-            default='',
+            default="",
             help="Resolved dependencies directory path",
         )
 
         context.add_option(
             "--global-dependencies-configuration",
             action="store",
-            default='',
+            default="",
             help="Configuration file of all required dependencies for the build",
         )
 
         context.add_option(
             "--overrides-configuration",
             action="store",
-            default='',
+            default="",
             help="Overrides configuration file to resolve dependencies for the build",
         )
 
@@ -1092,7 +1092,7 @@ class Context:
         context.add_option(
             "--recipe",
             action="store",
-            default='',
+            default="",
             help="Identity to look a recipe up by, as "
             "@NAME[@OWNER[@HOST[@ROOTING]]]; defaults to "
             "the identity of the project's own remote",
@@ -1106,7 +1106,7 @@ class Context:
         )
 
         context.add_option(
-            "--force-version", action="store", default='', help="Force version"
+            "--force-version", action="store", default="", help="Force version"
         )
 
         context.add_option(
@@ -1126,14 +1126,14 @@ class Context:
         context.add_option(
             "--only-update-dependencies-regex",
             action="store",
-            default='',
+            default="",
             help="Select only dependencies with an URL matching the regex to resolve new versions",
         )
 
         context.add_option(
             "--cache-directory",
             action="store",
-            default='',
+            default="",
             help="Default cache directory location (default is resolved to ~/.cache/golem)",
         )
 
@@ -1154,15 +1154,15 @@ class Context:
         context.add_option(
             "--cache-resolution-policy",
             action="store",
-            default='',
+            default="",
             help="Cache resolution policy controls how dependencies are found (default strict: Only the first valid cache candidate is considered, weak: All valid cache candidates are considered)",
         )
 
         context.add_option(
             "--cache-minimization-enabled",
-            nargs='?',
-            const='on',
-            default='',
+            nargs="?",
+            const="on",
+            default="",
             help="Store cached resources under short hashed flat paths to avoid long-path limits (e.g. Windows CL.exe). Omit for the automatic default; pass the bare flag for on; or =on/=off to force (default on)",
         )
 
@@ -1177,7 +1177,7 @@ class Context:
         context.add_option(
             "--output-file",
             action="store",
-            default='',
+            default="",
             help="Output file for static analysis results (e.g. cppcheck)",
         )
 
@@ -1200,45 +1200,45 @@ class Context:
             self.context.env.MSVC_MANIFEST = False  # disable waf manifest behavior
 
         if self.is_darwin():
-            self.context.env.CXX = ['clang++']
+            self.context.env.CXX = ["clang++"]
 
     def make_default_build_flags(self, variant=None):
         flags = {
-            'defines': [],
-            'cflags': [],
-            'cxxflags': [],
-            'linkflags': [],
-            'arflags': [],
-            'cpp2flags': [],
+            "defines": [],
+            "cflags": [],
+            "cxxflags": [],
+            "linkflags": [],
+            "arflags": [],
+            "cpp2flags": [],
         }
 
         if not self.context.options.nounicode:
-            flags['defines'].append('UNICODE')
+            flags["defines"].append("UNICODE")
 
         capability = self.selecting_capability()
 
         if self.is_msvc_like():
             if capability.msvc_machine:
-                machine_flag = '/MACHINE:' + capability.msvc_machine
-                flags['linkflags'].append(machine_flag)
-                flags['arflags'].append(machine_flag)
+                machine_flag = "/MACHINE:" + capability.msvc_machine
+                flags["linkflags"].append(machine_flag)
+                flags["arflags"].append(machine_flag)
 
-            default_flags = ['/DWIN32', '/D_WINDOWS', '/GR', '/EHsc']
-            flags['cflags'] += default_flags
-            flags['cxxflags'] += default_flags
+            default_flags = ["/DWIN32", "/D_WINDOWS", "/GR", "/EHsc"]
+            flags["cflags"] += default_flags
+            flags["cxxflags"] += default_flags
 
             # Set /external flags if supported
 
             if self.is_isystem_supported():
-                default_flags = ['/external:W0']
-                flags['cflags'] += default_flags
-                flags['cxxflags'] += default_flags
+                default_flags = ["/external:W0"]
+                flags["cflags"] += default_flags
+                flags["cxxflags"] += default_flags
 
             # Serialized writes to the program database (PDB) to avoid fatal error C1041
 
-            default_flags = ['/FS', '/utf-8']
-            flags['cflags'] += default_flags
-            flags['cxxflags'] += default_flags
+            default_flags = ["/FS", "/utf-8"]
+            flags["cflags"] += default_flags
+            flags["cxxflags"] += default_flags
 
             # Compiler Options https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
             # Linker Options https://msdn.microsoft.com/en-us/library/y0zzbyt4.aspx
@@ -1288,30 +1288,30 @@ class Context:
 
         else:
             for arch_flag in capability.gnu_flags:
-                flags['cflags'].append(arch_flag)
-                flags['cxxflags'].append(arch_flag)
-                flags['linkflags'].append(arch_flag)
+                flags["cflags"].append(arch_flag)
+                flags["cxxflags"].append(arch_flag)
+                flags["linkflags"].append(arch_flag)
 
         variant = self.variant() if variant is None else variant
 
-        if variant == 'debug':
+        if variant == "debug":
             if self.is_msvc_like():
                 if self.is_runtime_static():
-                    runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
-                    flags['cflags'].append(runtime_flag)
-                    flags['cxxflags'].append(runtime_flag)
+                    runtime_flag = "/MTd" if self.is_runtime_variant_debug() else "/MT"
+                    flags["cflags"].append(runtime_flag)
+                    flags["cxxflags"].append(runtime_flag)
                 elif self.is_runtime_shared():
-                    runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
-                    flags['cflags'].append(runtime_flag)
-                    flags['cxxflags'].append(runtime_flag)
+                    runtime_flag = "/MDd" if self.is_runtime_variant_debug() else "/MD"
+                    flags["cflags"].append(runtime_flag)
+                    flags["cxxflags"].append(runtime_flag)
 
-                default_flags = ['/Zi', '/Ob0', '/Od', '/RTC1']
-                flags['cflags'] += default_flags
-                flags['cxxflags'] += default_flags
+                default_flags = ["/Zi", "/Ob0", "/Od", "/RTC1"]
+                flags["cflags"] += default_flags
+                flags["cxxflags"] += default_flags
 
-                default_flags = ['/debug', '/INCREMENTAL']
-                flags['linkflags'] += default_flags
-                flags['arflags'] += default_flags
+                default_flags = ["/debug", "/INCREMENTAL"]
+                flags["linkflags"] += default_flags
+                flags["arflags"] += default_flags
 
             # Some compilation flags (self.context.env.CXXFLAGS)
 
@@ -1329,29 +1329,29 @@ class Context:
             # '/INCREMENTAL'        # incremental linking
 
             else:
-                default_flags = ['-O0', '-g']
-                flags['cflags'] += default_flags
-                flags['cxxflags'] += default_flags
-        elif variant == 'release':
-            flags['defines'].append('NDEBUG')
+                default_flags = ["-O0", "-g"]
+                flags["cflags"] += default_flags
+                flags["cxxflags"] += default_flags
+        elif variant == "release":
+            flags["defines"].append("NDEBUG")
 
             if self.is_msvc_like():
                 if self.is_runtime_static():
-                    runtime_flag = '/MTd' if self.is_runtime_variant_debug() else '/MT'
-                    flags['cflags'].append(runtime_flag)
-                    flags['cxxflags'].append(runtime_flag)
+                    runtime_flag = "/MTd" if self.is_runtime_variant_debug() else "/MT"
+                    flags["cflags"].append(runtime_flag)
+                    flags["cxxflags"].append(runtime_flag)
                 elif self.is_runtime_shared():
-                    runtime_flag = '/MDd' if self.is_runtime_variant_debug() else '/MD'
-                    flags['cflags'].append(runtime_flag)
-                    flags['cxxflags'].append(runtime_flag)
+                    runtime_flag = "/MDd" if self.is_runtime_variant_debug() else "/MD"
+                    flags["cflags"].append(runtime_flag)
+                    flags["cxxflags"].append(runtime_flag)
 
-                default_flags = ['/O2', '/Ob2']
-                flags['cflags'] += default_flags
-                flags['cxxflags'] += default_flags
+                default_flags = ["/O2", "/Ob2"]
+                flags["cflags"] += default_flags
+                flags["cxxflags"] += default_flags
 
-                default_flags = ['/INCREMENTAL:NO']
-                flags['linkflags'] += default_flags
-                flags['arflags'] += default_flags
+                default_flags = ["/INCREMENTAL:NO"]
+                flags["linkflags"] += default_flags
+                flags["arflags"] += default_flags
 
             # Some compilation flags (self.context.env.CXXFLAGS)
 
@@ -1374,9 +1374,9 @@ class Context:
             # '/SAFESEH'            # image will contain a table of safe exception handlers
 
             else:
-                default_flags = ['-O2']
-                flags['cflags'] += default_flags
-                flags['cxxflags'] += default_flags
+                default_flags = ["-O2"]
+                flags["cflags"] += default_flags
+                flags["cxxflags"] += default_flags
 
         return flags
 
@@ -1385,8 +1385,8 @@ class Context:
         # load all environment variables
         self.context.load_envs()
 
-        _ = self.restore_options_env(self.context.all_envs['main'])
-        self.context.env = self.context.all_envs['main'].derive()
+        _ = self.restore_options_env(self.context.all_envs["main"])
+        self.context.env = self.context.all_envs["main"].derive()
 
         # Restore options
         self.restore_options()
@@ -1411,39 +1411,39 @@ class Context:
             manager.update_cached_resource(dependency)
 
     def dep_system(self, context, libs):
-        context.env['LIB'] += libs
+        context.env["LIB"] += libs
 
     def dep_static_release(self, name, fullname, lib):
 
-        self.context.env['INCLUDES_' + name] = self.list_include(['includes'])
-        self.context.env['STLIBPATH_' + name] = self.list_include(['libpath'])
-        self.context.env['STLIB_' + name] = lib
+        self.context.env["INCLUDES_" + name] = self.list_include(["includes"])
+        self.context.env["STLIBPATH_" + name] = self.list_include(["libpath"])
+        self.context.env["STLIB_" + name] = lib
 
     def dep_static(self, name, fullname, lib, libdebug):
 
-        self.context.env['INCLUDES_' + name] = self.list_include(['includes'])
-        self.context.env['STLIBPATH_' + name] = self.list_include(['libpath'])
+        self.context.env["INCLUDES_" + name] = self.list_include(["includes"])
+        self.context.env["STLIBPATH_" + name] = self.list_include(["libpath"])
 
         if self.is_debug():
-            self.context.env['STLIB_' + name] = libdebug
+            self.context.env["STLIB_" + name] = libdebug
         else:
-            self.context.env['STLIB_' + name] = lib
+            self.context.env["STLIB_" + name] = lib
 
     def dep_shared_release(self, name, fullname, lib):
 
-        self.context.env['INCLUDES_' + name] = self.list_include(['includes'])
-        self.context.env['LIBPATH_' + name] = self.list_include(['libpath'])
-        self.context.env['LIB_' + name] = lib
+        self.context.env["INCLUDES_" + name] = self.list_include(["includes"])
+        self.context.env["LIBPATH_" + name] = self.list_include(["libpath"])
+        self.context.env["LIB_" + name] = lib
 
     def dep_shared(self, name, fullname, lib, libdebug):
 
-        self.context.env['INCLUDES_' + name] = self.list_include(['includes'])
-        self.context.env['LIBPATH_' + name] = self.list_include(['libpath'])
+        self.context.env["INCLUDES_" + name] = self.list_include(["includes"])
+        self.context.env["LIBPATH_" + name] = self.list_include(["libpath"])
 
         if self.is_debug():
-            self.context.env['LIB_' + name] = libdebug
+            self.context.env["LIB_" + name] = libdebug
         else:
-            self.context.env['LIB_' + name] = lib
+            self.context.env["LIB_" + name] = lib
 
     def make_cache_configuration(self):
         # The single cache-configuration factory, fed this build's Settings.
@@ -1452,10 +1452,10 @@ class Context:
         return get_cache_configuration(self.get_settings())
 
     def get_dep_cached_resource(self, dep):
-        '''
+        """
         Where the dependency lives in the caches. It is resolved once and kept on
         the dependency, so every path below is derived from the same resolution.
-        '''
+        """
         return get_dependency_manager(self.cache_configuration).get_cached_resource(dep)
 
     def get_dep_location(self, dep):
@@ -1463,7 +1463,7 @@ class Context:
 
     def get_dep_include_location(self, dep, base=None):
         path = self.get_dep_location(dep) if base is None else base
-        return os.path.join(path, 'include')
+        return os.path.join(path, "include")
 
     def make_dependency_path(self, dependency, path):
         return os.path.join(self.get_dep_location(dependency), path)
@@ -1476,20 +1476,20 @@ class Context:
 
     def get_dependency_dependencies_json_path(self, dependency):
         return self.make_dependency_build_path(
-            dependency=dependency, path='dependencies.json'
+            dependency=dependency, path="dependencies.json"
         )
 
     def load_dependency_dependencies_json(self, dependency):
         path = self.get_dependency_dependencies_json_path(dependency=dependency)
         cache = None
-        with open(path, 'r') as fp:
+        with open(path, "r") as fp:
             cache = json.load(fp)
         return Dependency.load_cache(cache)
 
     def save_dep_dependencies_json(self, dependency):
         path = self.get_dependency_dependencies_json_path(dependency=dependency)
         cache = self.project.deps_resolve_json()
-        with open(path, 'w') as fp:
+        with open(path, "w") as fp:
             json.dump(cache, fp, indent=4)
 
     def get_dep_artifact_location(self, dependency, base=None):
@@ -1508,14 +1508,14 @@ class Context:
         return os.path.join(path, self.build_path(dep))
 
     def make_dep_artifact_subpath(self, dep, target_name=None, source_location=None):
-        '''
+        """
         Where a dependency's configuration sits under `conf`, as a path.
 
         One component per name, because the three are constrained differently.
 
         The dependency names the directory its targets sit in, and the file
         beside that directory is the dependency taken as a whole.
-        '''
+        """
         if source_location is None:
             source_location = self.load_git_remote_origin_url()
 
@@ -1524,12 +1524,12 @@ class Context:
         if target_name:
             parts.append(target_name)
 
-        parts[-1] += '.json'
+        parts[-1] += ".json"
 
         return os.path.join(*parts)
 
     def get_dep_artifact_json(self, dep, target_name=None):
-        path = os.path.join(self.get_dep_build_location(dep), 'conf')
+        path = os.path.join(self.get_dep_build_location(dep), "conf")
         return os.path.join(
             path,
             self.make_dep_artifact_subpath(
@@ -1606,7 +1606,7 @@ class Context:
                 for artifact_binary in dependency_configuration.artifacts:
                     if not os.path.exists(artifact_binary.absolute_path):
                         continue
-                    if artifact_binary.type not in ['library', 'program']:
+                    if artifact_binary.type not in ["library", "program"]:
                         continue
                     artifact_path_dir = os.path.dirname(artifact_binary.path)
                     dest_dir = os.path.join(self.make_out_path(), artifact_path_dir)
@@ -1620,13 +1620,13 @@ class Context:
 
             if not self.context.options.no_copy_licenses and self.deps_build:
                 for artifact_license in dependency_configuration.artifacts:
-                    if artifact_license.type != 'license':
+                    if artifact_license.type != "license":
                         continue
                     dep_id = self.find_dependency_id(artifact_license.location)
                     helpers.copy_file_if_recent(
                         source_path=artifact_license.absolute_path,
                         destination_directory=self.make_output_path(
-                            os.path.join('licenses', dep_id)
+                            os.path.join("licenses", dep_id)
                         ),
                         callback=lambda filename: print(
                             "Copy license {}".format(os.path.join(dep_id, filename))
@@ -1670,8 +1670,8 @@ class Context:
             artifacts_list.append(
                 Artifact(os.path.abspath(src_file_path), file, dep_path_build)
             )
-            if self.is_linux() and file.endswith('.so'):
-                src_file_path_glob = glob.glob(src_file_path + '.*')
+            if self.is_linux() and file.endswith(".so"):
+                src_file_path_glob = glob.glob(src_file_path + ".*")
                 for other_file_path in src_file_path_glob:
                     abspath = os.path.abspath(other_file_path)
                     relpath = os.path.relpath(other_file_path, dep_path_build)
@@ -1690,8 +1690,8 @@ class Context:
             artifacts_list.append(
                 Artifact(os.path.abspath(src_file_path), file, path_build)
             )
-            if self.is_linux() and file.endswith('.so'):
-                src_file_path_glob = glob.glob(src_file_path + '.*')
+            if self.is_linux() and file.endswith(".so"):
+                src_file_path_glob = glob.glob(src_file_path + ".*")
                 for other_file_path in src_file_path_glob:
                     abspath = os.path.abspath(other_file_path)
                     relpath = os.path.relpath(other_file_path, path_build)
@@ -1699,12 +1699,12 @@ class Context:
         return artifacts_list
 
     def record_dependency_recipe(self, dep, source_path):
-        '''
+        """
         Record which recipes serve a dependency, in what it resolved to.
 
         Raise when there is no project file and no recipe, because a successful resolve
         must mean everything needed to build is in hand.
-        '''
+        """
         # Only a resolve makes the cookbooks available.
         if not self.deps_resolve:
             return
@@ -1723,9 +1723,9 @@ class Context:
     def run_dep_command(self, dep, command):
 
         should_clean_repo = False
-        if command == 'resolve':
+        if command == "resolve":
             Logs.info("Resolving {} ({})...".format(dep.name, dep.version))
-        elif command == 'build':
+        elif command == "build":
             Logs.info("Building {} ({})...".format(dep.name, dep.version))
             should_clean_repo = True
         else:
@@ -1752,33 +1752,33 @@ class Context:
         )
 
         path_options = [
-            '--project-dir={}'.format(repo_path),
-            '--build-dir={}'.format(build_path),
+            "--project-dir={}".format(repo_path),
+            "--build-dir={}".format(build_path),
         ]
 
         configure_options = path_options + [
-            '--no-copy-artifacts',
-            '--no-copy-licenses',
-            '--no-cookbooks-fetch',
-            '--targets={}'.format(dep.name),
-            '--runtime-link={}'.format(self.runtime_link(dep)),
-            '--runtime-variant={}'.format(self.runtime_variant(dep)),
-            '--link={}'.format(self.link(dep)),
+            "--no-copy-artifacts",
+            "--no-copy-licenses",
+            "--no-cookbooks-fetch",
+            "--targets={}".format(dep.name),
+            "--runtime-link={}".format(self.runtime_link(dep)),
+            "--runtime-variant={}".format(self.runtime_variant(dep)),
+            "--link={}".format(self.link(dep)),
             # The resolved identity, not the request: this build has already
             # observed what its compiler produces, so the dependency is told
             # rather than left to observe independently. It also means a child
             # whose compiler disagrees fails instead of building something the
             # parent cannot link.
-            '--arch={}'.format(self.get_arch()),
-            '--variant={}'.format(
+            "--arch={}".format(self.get_arch()),
+            "--variant={}".format(
                 self.context.options.variant if not dep.variant else dep.variant[0]
             ),
-            '--export={}'.format(dep_path),
-            '--resolved-dependencies-directory={}'.format(build_path),
-            '--only-update-dependencies-regex={}'.format(
+            "--export={}".format(dep_path),
+            "--resolved-dependencies-directory={}".format(build_path),
+            "--only-update-dependencies-regex={}".format(
                 self.get_only_update_dependencies_regex()
             ),
-            '--global-dependencies-configuration={}'.format(
+            "--global-dependencies-configuration={}".format(
                 global_dependencies_configuration
             ),
         ]
@@ -1786,8 +1786,8 @@ class Context:
         # The overlays are already layered into one file here; the sub-build gets
         # that result rather than the overlays, so it does not re-resolve them.
         configure_options.append(
-            '{}={}'.format(
-                settings.get_setting('overrides.configuration').option_flag,
+            "{}={}".format(
+                settings.get_setting("overrides.configuration").option_flag,
                 self.resolved_overrides,
             )
         )
@@ -1799,45 +1799,45 @@ class Context:
 
         # A cookbook passed on the command line would not reach the sub-build
         # otherwise, where an environment variable or a stored key would.
-        configure_options += self.get_settings().make_flag('GOLEM_COOKBOOKS_LOCATIONS')
+        configure_options += self.get_settings().make_flag("GOLEM_COOKBOOKS_LOCATIONS")
 
         if (
-            hasattr(self.context.options, 'check_c_compiler')
+            hasattr(self.context.options, "check_c_compiler")
             and self.context.options.check_c_compiler
         ):
             configure_options += [
-                '--check-c-compiler={}'.format(self.context.options.check_c_compiler)
+                "--check-c-compiler={}".format(self.context.options.check_c_compiler)
             ]
 
         if (
-            hasattr(self.context.options, 'check_cxx_compiler')
+            hasattr(self.context.options, "check_cxx_compiler")
             and self.context.options.check_c_compiler
         ):
             configure_options += [
-                '--check-cxx-compiler={}'.format(
+                "--check-cxx-compiler={}".format(
                     self.context.options.check_cxx_compiler
                 )
             ]
 
         if (
-            hasattr(self.context.options, 'msvc_version')
+            hasattr(self.context.options, "msvc_version")
             and self.context.options.msvc_version
         ):
             configure_options += [
-                '--msvc_version={}'.format(self.context.options.msvc_version)
+                "--msvc_version={}".format(self.context.options.msvc_version)
             ]
 
         if (
-            hasattr(self.context.options, 'msvc_targets')
+            hasattr(self.context.options, "msvc_targets")
             and self.context.options.msvc_targets
         ):
             configure_options += [
-                '--msvc_targets={}'.format(self.context.options.msvc_targets)
+                "--msvc_targets={}".format(self.context.options.msvc_targets)
             ]
 
-        if hasattr(self.context.options, 'no_msvc_lazy'):
+        if hasattr(self.context.options, "no_msvc_lazy"):
             configure_options += [
-                '--no-msvc-lazy={}'.format(self.context.options.no_msvc_lazy)
+                "--no-msvc-lazy={}".format(self.context.options.no_msvc_lazy)
             ]
 
         if dep.shallow:
@@ -1852,12 +1852,12 @@ class Context:
         export_options = path_options + []
 
         helpers.run_task(
-            helpers.make_golem_command('configure') + configure_options, cwd=repo_path
+            helpers.make_golem_command("configure") + configure_options, cwd=repo_path
         )
 
-        if command == 'build':
+        if command == "build":
             helpers.run_task(
-                helpers.make_golem_command('dependencies') + dependencies_options,
+                helpers.make_golem_command("dependencies") + dependencies_options,
                 cwd=repo_path,
             )
 
@@ -1865,9 +1865,9 @@ class Context:
             helpers.make_golem_command(command) + command_options, cwd=repo_path
         )
 
-        if command == 'build':
+        if command == "build":
             helpers.run_task(
-                helpers.make_golem_command('export') + export_options,
+                helpers.make_golem_command("export") + export_options,
                 cwd=repo_path,
                 stdout=subprocess.DEVNULL,
             )
@@ -1878,7 +1878,7 @@ class Context:
 
     def open_json(self, dep, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep, target_name=target_name)
-        return open(json_path, 'r')
+        return open(json_path, "r")
 
     def read_json(self, dep, target_name=None):
         json_path = self.get_dep_artifact_json(dep=dep, target_name=target_name)
@@ -1930,7 +1930,7 @@ class Context:
         else:
             target_name = target.name + self.variant_suffix()
 
-            if target.type_unique == 'library':
+            if target.type_unique == "library":
                 if self.is_windows():
                     target_name = Context.make_windows_target_name(target_name)
 
@@ -1944,17 +1944,17 @@ class Context:
         self, config, target, allow_executable=False, only_dlls=False
     ):
         target_name = self.make_target_name_from_context(config, target)
-        is_program = config.type_unique == 'program'
+        is_program = config.type_unique == "program"
         if not self.is_windows() and not is_program:
             target_name = [Context.make_windows_target_name(t) for t in target_name]
 
         result = list()
         for filename in target_name:
             for suffix in self.artifact_suffix(config):
-                if (suffix != '.dll' or not config.dlls) and not is_program:
+                if (suffix != ".dll" or not config.dlls) and not is_program:
                     result.append(filename + suffix)
-        if '.dll' in self.artifact_suffix(config) and config.dlls:
-            result += [dll + '.dll' for dll in config.dlls]
+        if ".dll" in self.artifact_suffix(config) and config.dlls:
+            result += [dll + ".dll" for dll in config.dlls]
 
         for filename in config.static_targets:
             for suffix in self.artifact_suffix_mode(config=config, is_shared=False):
@@ -1965,7 +1965,7 @@ class Context:
             for suffix in self.artifact_suffix_mode(config=config, is_shared=True):
                 if not self.is_windows() and not is_program:
                     filename = Context.make_windows_target_name(filename)
-                if suffix != '.dll' or not config.dlls:
+                if suffix != ".dll" or not config.dlls:
                     result.append(filename + suffix)
 
         if allow_executable and is_program:
@@ -1974,14 +1974,14 @@ class Context:
                     result.append(filename + suffix)
 
         if only_dlls:
-            result = [r for r in result if os.path.splitext(r)[1] != 'lib']
+            result = [r for r in result if os.path.splitext(r)[1] != "lib"]
         return result
 
     @staticmethod
     def default_target_decorator(target_name, config, context):
         target_name = target_name + context.variant_suffix()
 
-        if config.type_unique == 'library' and context.is_windows():
+        if config.type_unique == "library" and context.is_windows():
             target_name = Context.make_windows_target_name(target_name)
 
         return target_name
@@ -2034,7 +2034,7 @@ class Context:
         return decorated_targets
 
     def make_module_index_path(self, path, decorated_target):
-        return os.path.join(path, decorated_target + '.modules.json')
+        return os.path.join(path, decorated_target + ".modules.json")
 
     def make_module_index_artifact_from_context(self, config, decorated_target):
 
@@ -2064,9 +2064,9 @@ class Context:
         for suffix in context.artifact_suffix(config):
             artifact = context.artifact_prefix(config) + decorated_target + suffix
             artifacts.append(artifact)
-            if suffix == '.so':
-                artifacts.append(artifact + '.' + str(context.version.major))
-                artifacts.append(artifact + '.' + context.version.semver_short)
+            if suffix == ".so":
+                artifacts.append(artifact + "." + str(context.version.major))
+                artifacts.append(artifact + "." + context.version.semver_short)
         return artifacts
 
     def make_binary_artifact_from_context(
@@ -2081,10 +2081,10 @@ class Context:
         decorated_target_path = os.path.dirname(decorated_target)
         decorated_target_base = os.path.basename(decorated_target)
 
-        if not enable_exes and config.type_unique == 'program':
+        if not enable_exes and config.type_unique == "program":
             return []
 
-        if config.type_unique == 'library' and config.header_only:
+        if config.type_unique == "library" and config.header_only:
             return []
 
         if not enable_run_libs and not enable_dev_libs:
@@ -2110,14 +2110,14 @@ class Context:
             filtered_artifacts = []
             for artifact in artifacts:
                 extension = os.path.splitext(artifact)[1]
-                if not extension or extension not in ['.a', '.lib', '.pdb']:
+                if not extension or extension not in [".a", ".lib", ".pdb"]:
                     filtered_artifacts.append(artifact)
             artifacts = filtered_artifacts.copy()
         if not enable_run_libs:
             filtered_artifacts = []
             for artifact in artifacts:
                 extension = os.path.splitext(artifact)[1]
-                if not extension or extension not in ['.dll']:
+                if not extension or extension not in [".dll"]:
                     filtered_artifacts.append(artifact)
             artifacts = filtered_artifacts.copy()
 
@@ -2248,7 +2248,7 @@ class Context:
         return dep_configs.header_only
 
     def has_artifacts(self, command):
-        return command in ['build', 'export']
+        return command in ["build", "export"]
 
     def dep_command(self, config, dep, command, enable_env):
         dep.resolve()
@@ -2285,11 +2285,11 @@ class Context:
             are_artifacts_availables = False
 
         is_resolving = (
-            command == 'resolve'
+            command == "resolve"
             and dep.name not in self.deps_to_resolve
             and self.deps_resolve
         )
-        is_building = command == 'build' and (
+        is_building = command == "build" and (
             not are_headers_available or not are_artifacts_availables
         )
 
@@ -2314,14 +2314,14 @@ class Context:
         self.use_dep(config, dep)
 
     def export_dependency(self, config, dep):
-        self.dep_command(config, dep, 'export', True)
+        self.dep_command(config, dep, "export", True)
 
     def link_dependency(self, config, dep):
-        self.dep_command(config, dep, 'build', True)
+        self.dep_command(config, dep, "build", True)
 
     def get_build_path(self):
         # return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
-        return self.make_golem_path('obj')
+        return self.make_golem_path("obj")
 
     def make_golem_path(self, path):
         return os.path.join(os.getcwd(), path)
@@ -2330,7 +2330,7 @@ class Context:
         return os.path.realpath(os.path.join(self.get_build_path(), path))
 
     def make_dependencies_slug(self, dependencies):
-        string = ''
+        string = ""
         for dependency in dependencies:
             string += json.dumps(
                 Dependency.serialize_to_json(dependency), sort_keys=True
@@ -2338,19 +2338,19 @@ class Context:
         return safe_part.digest(string)
 
     def make_binary_foldername(self, dependencies=None):
-        foldername = 'bin'
+        foldername = "bin"
 
         if dependencies is not None:
             return (
                 foldername
-                + '-'
+                + "-"
                 + self.make_dependencies_slug(dependencies=dependencies)
             )
 
         if self.context.options.export:
             return (
                 foldername
-                + '-'
+                + "-"
                 + self.make_dependencies_slug(dependencies=self.project.deps)
             )
 
@@ -2363,13 +2363,13 @@ class Context:
         return foldername
 
     def make_target_out(self):
-        return os.path.join('..', '..', self.make_binary_foldername())
+        return os.path.join("..", "..", self.make_binary_foldername())
 
     def make_out_path(self):
         return self.make_build_path(self.make_target_out())
 
     def make_output_path(self, path):
-        return self.make_build_path(os.path.join('..', '..', path))
+        return self.make_build_path(os.path.join("..", "..", path))
 
     def get_output_path(self):
         return self.make_output_path(".")
@@ -2406,11 +2406,11 @@ class Context:
 
         wfeatures = []
 
-        if self.is_qt5_used(config) and 'qt5' not in config.wfeatures:
-            wfeatures.append('qt5')
+        if self.is_qt5_used(config) and "qt5" not in config.wfeatures:
+            wfeatures.append("qt5")
 
-        if self.is_qt6_used(config) and 'qt6' not in config.wfeatures:
-            wfeatures.append('qt6')
+        if self.is_qt6_used(config) and "qt6" not in config.wfeatures:
+            wfeatures.append("qt6")
 
         filtered_wfeatures = helpers.filter_unique(config.wfeatures + wfeatures)
         is_qt_on = self.is_qt_enabled(config)
@@ -2450,7 +2450,7 @@ class Context:
             if os.path.basename(path.abspath()) == "qmldir.template":
                 qmldir_template_path = path
                 qmldir_path = self.context.root.find_or_declare(
-                    os.path.join(os.path.dirname(path.abspath()), 'qmldir')
+                    os.path.join(os.path.dirname(path.abspath()), "qmldir")
                 )
 
                 if str(qmldir_template_path) in self.context_tasks:
@@ -2462,7 +2462,7 @@ class Context:
 
                 self.context(
                     name=qmldir_path,
-                    features='subst',
+                    features="subst",
                     source=qmldir_template_path,
                     target=qmldir_path,
                     PLUGIN_NAME=str(decorated_targets[0]),
@@ -2473,7 +2473,7 @@ class Context:
 
         listmoc = []
         for moc_candidate in moc_candidates:
-            with open(str(moc_candidate), 'r') as file:
+            with open(str(moc_candidate), "r") as file:
                 for line in file:
                     if re.search("Q_OBJECT", line):
                         listmoc.append(moc_candidate)
@@ -2505,8 +2505,8 @@ class Context:
                 filename, filename_ext = os.path.splitext(
                     os.path.basename(template_to_process.source)
                 )
-                if filename_ext not in ['.template', '.in']:
-                    filename = os.path.basename(template_to_process.source) + '.cpp'
+                if filename_ext not in [".template", ".in"]:
+                    filename = os.path.basename(template_to_process.source) + ".cpp"
                 version_template_dst = self.context.root.find_or_declare(
                     self.make_build_path(filename)
                 )
@@ -2521,7 +2521,7 @@ class Context:
             )
 
             def escape_string_for_macro_names(value):
-                return re.sub('[^0-9a-zA-Z]+', '_', value)
+                return re.sub("[^0-9a-zA-Z]+", "_", value)
 
             _, _, target_artifact_basename = self.make_target_artifact(
                 config=config, decorated_target=decorated_targets[0]
@@ -2529,7 +2529,7 @@ class Context:
 
             self.context(
                 name=version_template_dst,
-                features='subst',
+                features="subst",
                 source=version_template_src,
                 target=version_template_dst,
                 VERSION_SEMVER=str(version.semver),
@@ -2601,7 +2601,7 @@ class Context:
                 GOLEM_TMPL_DATE_UTC_ISO8601=datetime.now()
                 .replace(microsecond=0)
                 .isoformat()
-                + 'Z',
+                + "Z",
                 GOLEM_TMPL_PLATFORM=self.osname(),
                 GOLEM_TMPL_RUNTIME=self.get_build_runtime(),
                 GOLEM_TMPL_RUNTIME_VERSION=self.get_build_runtime_version(),
@@ -2613,18 +2613,18 @@ class Context:
 
             include_path = None
             source_extensions = [
-                '.cxx',
-                '.cpp',
-                '.c++',
-                '.c',
-                '.cc',
-                '.C',
-                '.ixx',
-                '.cppm',
-                '.cxxm',
-                '.cpp2',
+                ".cxx",
+                ".cpp",
+                ".c++",
+                ".c",
+                ".cc",
+                ".C",
+                ".ixx",
+                ".cppm",
+                ".cxxm",
+                ".cpp2",
             ]
-            header_extensions = ['.hpp', '.h', '.hxx', '.hh']
+            header_extensions = [".hpp", ".h", ".hxx", ".hh"]
 
             is_build_default = template_to_process.build is None
             is_build_enabled = template_to_process.build == True
@@ -2643,7 +2643,7 @@ class Context:
                 if filename_ext in source_extensions:
                     version_source.append(version_template_dst)
                 elif filename_ext in header_extensions:
-                    include_path = self.make_build_path('.')
+                    include_path = self.make_build_path(".")
             elif is_build_scenario_build_only:
                 version_source.append(version_template_dst)
 
@@ -2670,12 +2670,12 @@ class Context:
                 and not key.startswith("INCLUDES_QT6")
             ):
                 for path in self.context.env[key]:
-                    if path.startswith('/usr'):
+                    if path.startswith("/usr"):
                         isystems.append(str(Path(str(path))))
 
         config_all_use = helpers.filter_unique(config.use + config.features)
         for config_use in config_all_use:
-            if config_use.startswith('QT5') or config_use.startswith('QT6'):
+            if config_use.startswith("QT5") or config_use.startswith("QT6"):
                 for key in list(self.context.env.keys()):
                     if (
                         key.startswith("INCLUDES_QT5") or key.startswith("INCLUDES_QT6")
@@ -2690,33 +2690,33 @@ class Context:
 
         target_cxxflags = (
             config.program_cxxflags
-            if target_type == 'program'
+            if target_type == "program"
             else config.library_cxxflags
         )
         target_linkflags = (
             config.program_linkflags
-            if target_type == 'program'
+            if target_type == "program"
             else config.library_linkflags
         )
 
         default_flags = self.make_default_build_flags()
-        default_defines = [] if config.no_defaults else default_flags['defines'].copy()
+        default_defines = [] if config.no_defaults else default_flags["defines"].copy()
         default_cxxflags = (
-            [] if config.no_defaults else default_flags['cxxflags'].copy()
+            [] if config.no_defaults else default_flags["cxxflags"].copy()
         )
-        default_cflags = [] if config.no_defaults else default_flags['cflags'].copy()
+        default_cflags = [] if config.no_defaults else default_flags["cflags"].copy()
         default_linkflags = (
-            [] if config.no_defaults else default_flags['linkflags'].copy()
+            [] if config.no_defaults else default_flags["linkflags"].copy()
         )
-        default_arflags = [] if config.no_defaults else default_flags['arflags'].copy()
+        default_arflags = [] if config.no_defaults else default_flags["arflags"].copy()
         default_cpp2flags = (
-            [] if config.no_defaults else default_flags['cpp2flags'].copy()
+            [] if config.no_defaults else default_flags["cpp2flags"].copy()
         )
 
         env_cxxflags = self.context.env.CXXFLAGS.copy()
         env_defines = self.context.env.DEFINES.copy()
         for config_use in config_all_use:
-            if config_use.startswith('QT5') or config_use.startswith('QT6'):
+            if config_use.startswith("QT5") or config_use.startswith("QT6"):
                 for key in list(self.context.env.keys()):
                     if (
                         key.startswith("DEFINES_QT5") or key.startswith("DEFINES_QT6")
@@ -2727,14 +2727,14 @@ class Context:
         rpath_link = []
         if not self.is_windows() and not self.is_darwin():
             rpath_links = config.rpath_link.copy()
-            if 'QTLIBS' in self.context.env:
+            if "QTLIBS" in self.context.env:
                 rpath_links.append(self.context.env.QTLIBS)
             if rpath_links:
-                rpath_link += ['-Wl,-rpath-link,{}'.format(':'.join(rpath_links))]
+                rpath_link += ["-Wl,-rpath-link,{}".format(":".join(rpath_links))]
 
-        if self.is_darwin() and 'QTLIBS' in self.context.env:
+        if self.is_darwin() and "QTLIBS" in self.context.env:
             if self.context.env.QTLIBS:
-                rpath_link += ['-Wl,-rpath,{}'.format(self.context.env.QTLIBS)]
+                rpath_link += ["-Wl,-rpath,{}".format(self.context.env.QTLIBS)]
 
         # TODO: Should link static library with absolute path on macOS
         # if self.is_darwin():
@@ -2747,7 +2747,7 @@ class Context:
 
         qt_cxxflags = []
         if is_qt_on and self.is_msvc_like():
-            qt_cxxflags += ['/Zc:__cplusplus', '/permissive-']
+            qt_cxxflags += ["/Zc:__cplusplus", "/permissive-"]
 
         c_standard_flag = self.make_c_standard_flag(
             config.c_standard, self.compiler_name()
@@ -2761,7 +2761,7 @@ class Context:
         final_cxxflags = default_cxxflags + config.cxxflags + target_cxxflags
         if cxx_standard_flag:
             final_cxxflags = self.strip_language_standard_flags(
-                final_cxxflags, language='cxx'
+                final_cxxflags, language="cxx"
             )
             final_cxxflags = [cxx_standard_flag] + final_cxxflags
         final_cxxflags = helpers.filter_unique(final_cxxflags + qt_cxxflags)
@@ -2769,7 +2769,7 @@ class Context:
         final_cflags = default_cflags + config.cflags + target_cxxflags
         if c_standard_flag:
             final_cflags = self.strip_language_standard_flags(
-                final_cflags, language='c'
+                final_cflags, language="c"
             )
             final_cflags = [c_standard_flag] + final_cflags
         final_cflags = helpers.filter_unique(final_cflags + qt_cxxflags)
@@ -2788,41 +2788,41 @@ class Context:
         # stripping /FS from the default flags disables this too) and when no
         # explicit /Fd was already provided.
         if self.is_msvc_like() and decorated_targets:
-            target_pdb_flag = '/Fd:' + decorated_targets[0] + '.pdb'
+            target_pdb_flag = "/Fd:" + decorated_targets[0] + ".pdb"
             for target_flags in (final_cxxflags, final_cflags):
-                has_fs = any(flag[1:].lower() == 'fs' for flag in target_flags)
-                has_fd = any(flag[1:3].lower() == 'fd' for flag in target_flags)
+                has_fs = any(flag[1:].lower() == "fs" for flag in target_flags)
+                has_fd = any(flag[1:3].lower() == "fd" for flag in target_flags)
                 if has_fs and not has_fd:
                     target_flags.append(target_pdb_flag)
 
         for flag in final_cxxflags:
-            if flag.startswith('-std=c++') or flag.startswith('/std:c++'):
-                if 'CXXFLAGS_qt5' in self.context.env:
+            if flag.startswith("-std=c++") or flag.startswith("/std:c++"):
+                if "CXXFLAGS_qt5" in self.context.env:
                     copy_flags = self.context.env.CXXFLAGS_qt5.copy()
                     copy_flags = [
                         f
                         for f in copy_flags
                         if (
-                            not f.startswith('-std=c++')
-                            and not f.startswith('/std:c++')
+                            not f.startswith("-std=c++")
+                            and not f.startswith("/std:c++")
                         )
                     ]
                     self.context.env.CXXFLAGS_qt5 = copy_flags
-                if 'CXXFLAGS_qt6' in self.context.env:
+                if "CXXFLAGS_qt6" in self.context.env:
                     copy_flags = self.context.env.CXXFLAGS_qt6.copy()
                     copy_flags = [
                         f
                         for f in copy_flags
                         if (
-                            not f.startswith('-std=c++')
-                            and not f.startswith('/std:c++')
+                            not f.startswith("-std=c++")
+                            and not f.startswith("/std:c++")
                         )
                     ]
                     self.context.env.CXXFLAGS_qt6 = copy_flags
                 break
 
         if is_qt_on and self.is_darwin():
-            env_cxxflags += ['-iframework{}'.format(self.context.env.QTLIBS)]
+            env_cxxflags += ["-iframework{}".format(self.context.env.QTLIBS)]
 
         rpath_option = config.rpath
         arflags_option = helpers.filter_unique(default_arflags + config.arflags)
@@ -2853,7 +2853,7 @@ class Context:
         if self.is_linux():
             if not config.rpath:
                 lib_paths = list()
-                lib_paths.append('$ORIGIN')
+                lib_paths.append("$ORIGIN")
                 if is_qt_on:
                     lib_paths.append(self.context.env.QTLIBS)
 
@@ -2870,7 +2870,7 @@ class Context:
                             self.create_artifact(
                                 path=artifact,
                                 location=self.make_out_path(),
-                                type='library',
+                                type="library",
                                 scope=None,
                                 target=target_name,
                                 decorated_target=decorated_target,
@@ -2880,14 +2880,14 @@ class Context:
                 libraries_list = [
                     os.path.basename(artifact.path)
                     for artifact in config.artifacts
-                    if artifact.type in ['library'] and not artifact.path.endswith('.a')
+                    if artifact.type in ["library"] and not artifact.path.endswith(".a")
                 ]
                 local_artifacts = config.artifacts.copy()
                 for local_artifact in local_artifacts:
                     local_artifact.location = self.make_out_path()
                 lib_paths += self.patch_linux_binary_artifacts(
                     binary_artifacts=lib_artifacts,
-                    prefix_path='$ORIGIN',
+                    prefix_path="$ORIGIN",
                     source_artifacts=local_artifacts,
                     libraries=libraries_list,
                     simulate=True,
@@ -2960,25 +2960,25 @@ class Context:
     def make_compiler_commands(self, build_arguments):
         compiler_commands = []
 
-        isystem_f = '-isystem'
+        isystem_f = "-isystem"
         if self.is_msvc_like():
-            isystem_f = '/external:I'
+            isystem_f = "/external:I"
         if not self.is_isystem_supported():
-            isystem_f = '-I'
+            isystem_f = "-I"
 
         for source in build_arguments.source:
             file = {
                 "directory": self.get_build_path(),
-                "arguments": [self.context.env.get_flat('CXX')]
+                "arguments": [self.context.env.get_flat("CXX")]
                 + build_arguments.env_cxxflags
                 + build_arguments.cxxflags
-                + ['-I' + str(d) for d in build_arguments.env_includes]
-                + ['-I' + str(d) for d in build_arguments.includes]
+                + ["-I" + str(d) for d in build_arguments.env_includes]
+                + ["-I" + str(d) for d in build_arguments.includes]
                 + [isystem_f + str(d) for d in build_arguments.env_isystems]
                 + [isystem_f + str(d) for d in build_arguments.isystems]
-                + ['-D' + d for d in build_arguments.env_defines]
-                + ['-D' + d for d in build_arguments.defines]
-                + [str(source), '-c']
+                + ["-D" + d for d in build_arguments.env_defines]
+                + ["-D" + d for d in build_arguments.defines]
+                + [str(source), "-c"]
                 + build_arguments.cppflags,
                 "file": str(source),
             }
@@ -2987,7 +2987,7 @@ class Context:
         return compiler_commands
 
     def save_compiler_commands_list(self, path, compiler_commands):
-        with open(path, 'w') as fp:
+        with open(path, "w") as fp:
             json.dump(compiler_commands, fp, indent=4)
 
     def save_compiler_commands(self, path):
@@ -3046,7 +3046,7 @@ class Context:
         if self.is_darwin():
             vscode_config.update(
                 {
-                    'macFrameworkPath': [
+                    "macFrameworkPath": [
                         "/System/Library/Frameworks",
                         "/Library/Frameworks",
                     ]
@@ -3058,10 +3058,10 @@ class Context:
                 }
             )
 
-        cxx_standard = ''
+        cxx_standard = ""
         for cxxflag in config.cxxflags:
-            if cxxflag.startswith('-std=') or (
-                cxxflag.startswith('/std:') and cxxflag != '/std:c++latest'
+            if cxxflag.startswith("-std=") or (
+                cxxflag.startswith("/std:") and cxxflag != "/std:c++latest"
             ):
                 cxx_standard = cxxflag[5:]
                 break
@@ -3154,7 +3154,7 @@ class Context:
         if self.is_darwin():
             vscode_config.update(
                 {
-                    'macFrameworkPath': [
+                    "macFrameworkPath": [
                         "/System/Library/Frameworks",
                         "/Library/Frameworks",
                     ]
@@ -3168,10 +3168,10 @@ class Context:
                 }
             )
 
-        cxx_standard = ''
+        cxx_standard = ""
         for cxxflag in targets_cxxflags:
-            if cxxflag.startswith('-std=') or (
-                cxxflag.startswith('/std:') and cxxflag != '/std:c++latest'
+            if cxxflag.startswith("-std=") or (
+                cxxflag.startswith("/std:") and cxxflag != "/std:c++latest"
             ):
                 cxx_standard = cxxflag[5:]
                 break
@@ -3186,13 +3186,13 @@ class Context:
 
         data = OrderedDict({"configurations": [vscode_config] + self.vscode_configs})
         properties_path = os.path.join(
-            self.get_project_dir(), '.vscode', 'c_cpp_properties.json'
+            self.get_project_dir(), ".vscode", "c_cpp_properties.json"
         )
-        with open(properties_path, 'w') as outfile:
+        with open(properties_path, "w") as outfile:
             json.dump(data, outfile, indent=4, sort_keys=True)
 
     def get_vscode_path(self):
-        return self.make_golem_path('vscode')
+        return self.make_golem_path("vscode")
 
     def make_vscode_path(self, path):
         return os.path.join(self.get_vscode_path(), path)
@@ -3233,7 +3233,7 @@ class Context:
             return
 
         # TODO: Continue clangd support for C++ Modules commands by using the compile_commands.json generated by Waf
-        compile_command_json_from_waf = self.make_build_path('compile_commands.json')
+        compile_command_json_from_waf = self.make_build_path("compile_commands.json")
 
         targets_cxxflags = []
         targets_includes = []
@@ -3279,24 +3279,24 @@ class Context:
         targets_includes = helpers.filter_unique(targets_includes)
 
         data = {
-            'compilation_database_path': os.path.abspath(
+            "compilation_database_path": os.path.abspath(
                 os.path.dirname(compile_command_json_from_waf)
             )
         }
 
         config_file_template_path = os.path.join(
-            helpers.get_golemcpp_data_dir(), 'clangd.template'
+            helpers.get_golemcpp_data_dir(), "clangd.template"
         )
-        with open(config_file_template_path, 'r') as config_file_template:
+        with open(config_file_template_path, "r") as config_file_template:
             config_file_template_src = string.Template(config_file_template.read())
             config_file_src = config_file_template_src.safe_substitute(data)
 
-            config_file_path = os.path.join(self.get_project_dir(), '.clangd')
-            with open(config_file_path, 'w') as outfile:
+            config_file_path = os.path.join(self.get_project_dir(), ".clangd")
+            with open(config_file_path, "w") as outfile:
                 outfile.write(config_file_src)
 
     def get_clangd_path(self):
-        return self.make_golem_path('clangd')
+        return self.make_golem_path("clangd")
 
     def make_clangd_path(self, path):
         return os.path.join(self.get_clangd_path(), path)
@@ -3378,16 +3378,16 @@ class Context:
         )
 
     def get_compile_commands_path(self):
-        return self.make_golem_path('compile_commands')
+        return self.make_golem_path("compile_commands")
 
     def make_compile_commands_path(self, path):
         return os.path.join(self.get_compile_commands_path(), path)
 
     def run_build_script(self, callback):
-        '''
+        """
         A script the project declared for one of its targets. It is not golem
         fetching a resource, so whatever it reaches is its own business.
-        '''
+        """
         with network.allowed():
             callback(self)
 
@@ -3403,7 +3403,7 @@ class Context:
 
             vscode_dir = self.get_vscode_path()
             compiler_commands_path = self.make_vscode_path(
-                task.name + '_compile_commands.json'
+                task.name + "_compile_commands.json"
             )
 
             if not os.path.exists(vscode_dir):
@@ -3424,7 +3424,7 @@ class Context:
             compiler_commands_list = self.make_compiler_commands(build_arguments)
 
             clangd_dir = self.make_clangd_path(task.name)
-            compiler_commands_path = os.path.join(clangd_dir, 'compile_commands.json')
+            compiler_commands_path = os.path.join(clangd_dir, "compile_commands.json")
 
             if not os.path.exists(clangd_dir):
                 helpers.make_directory(clangd_dir)
@@ -3445,7 +3445,7 @@ class Context:
 
             compile_commands_dir = self.make_compile_commands_path(task.name)
             compiler_commands_path = os.path.join(
-                compile_commands_dir, 'compile_commands.json'
+                compile_commands_dir, "compile_commands.json"
             )
 
             if not os.path.exists(compile_commands_dir):
@@ -3464,11 +3464,11 @@ class Context:
 
         build_fun = None
 
-        if task.type_unique == 'library':
+        if task.type_unique == "library":
             if task.link:
-                if task.link_unique == 'shared':
+                if task.link_unique == "shared":
                     build_fun = self.context.shlib
-                elif task.link_unique == 'static':
+                elif task.link_unique == "static":
                     build_fun = self.context.stlib
                 else:
                     raise Exception(
@@ -3482,20 +3482,20 @@ class Context:
                 raise Exception(
                     "ERROR: Bad link option {}".format(self.context.options.link)
                 )
-        elif task.type_unique == 'program':
+        elif task.type_unique == "program":
             build_fun = self.context.program
-        elif task.type_unique == 'objects':
+        elif task.type_unique == "objects":
             build_fun = self.context.objects
-        elif task.type_unique == 'task':
+        elif task.type_unique == "task":
             for arg in task.args:
-                if arg in ['source', 'target']:
+                if arg in ["source", "target"]:
                     nodes = helpers.filter_unique(
                         helpers.parameter_to_list(task.args[arg])
                     )
                     for i, _ in enumerate(nodes):
-                        if arg in ['source']:
+                        if arg in ["source"]:
                             nodes[i] = self.make_project_path(nodes[i])
-                        if arg in ['target']:
+                        if arg in ["target"]:
                             nodes[i] = os.path.join(self.make_target_out(), nodes[i])
                         nodes[i] = (
                             self.context.root.find_or_declare(str(nodes[i]))
@@ -3515,7 +3515,7 @@ class Context:
                 if self.is_windows():
                     continue
 
-                if config.type[0] not in ['library']:
+                if config.type[0] not in ["library"]:
                     continue
 
                 if self.is_darwin():
@@ -3532,7 +3532,7 @@ class Context:
                                 self.create_artifact(
                                     path=artifact,
                                     location=self.make_out_path(),
-                                    type='library',
+                                    type="library",
                                     scope=None,
                                     target=target_name,
                                     decorated_target=decorated_target,
@@ -3581,7 +3581,7 @@ class Context:
     def find_dylibs(self, paths):
         result = list()
         for path in paths:
-            pattern = re.compile(r'.*\.dylib([\.].*)*$')
+            pattern = re.compile(r".*\.dylib([\.].*)*$")
             path_basename = os.path.basename(path)
             if pattern.match(path_basename):
                 result.append(path)
@@ -3618,10 +3618,10 @@ class Context:
             + build_arguments.env_includes
             + build_arguments.includes
         )
-        all_includes = ['-I' + str(d) for d in all_includes]
+        all_includes = ["-I" + str(d) for d in all_includes]
 
         all_defines = build_arguments.env_defines + build_arguments.defines
-        all_defines = ['-D' + str(d) for d in all_defines]
+        all_defines = ["-D" + str(d) for d in all_defines]
 
         all_sources = build_arguments.source
         all_sources = [str(d) for d in all_sources]
@@ -3629,24 +3629,24 @@ class Context:
         cppcheck_dir = self.make_build_path("cppcheck")
         helpers.make_directory(cppcheck_dir)
 
-        enable = 'all'
+        enable = "all"
         if self.project.cppcheck_enable:
-            enable = ','.join(self.project.cppcheck_enable)
+            enable = ",".join(self.project.cppcheck_enable)
 
         options = []
         if self.context.options.output_file:
             output_path = os.path.join(
                 self.get_project_dir(), self.context.options.output_file
             )
-            options += ['--xml', '--xml-version=2', '--output-file=' + output_path]
+            options += ["--xml", "--xml-version=2", "--output-file=" + output_path]
 
         command = (
             [
-                'cppcheck',
-                '--enable=' + enable,
-                '--suppress=missingIncludeSystem',
-                '--quiet',
-                '-v',
+                "cppcheck",
+                "--enable=" + enable,
+                "--suppress=missingIncludeSystem",
+                "--quiet",
+                "-v",
             ]
             + options
             + all_defines
@@ -3654,7 +3654,7 @@ class Context:
         )
 
         self.context(
-            rule=' '.join(command), always=True, name=task.name, cwd=cppcheck_dir
+            rule=" ".join(command), always=True, name=task.name, cwd=cppcheck_dir
         )
 
     def call_build_target(self, build_target_fun, build_recursively=False):
@@ -3694,29 +3694,29 @@ class Context:
             task=task, targets=targets, config=config
         )
 
-        clang_tidy_dir = self.make_golem_path('clang-tidy')
+        clang_tidy_dir = self.make_golem_path("clang-tidy")
 
         self.append_compiler_commands(build_arguments)
 
-        checks = '*'
+        checks = "*"
         if self.project.clang_tidy_checks:
-            checks = ','.join(self.project.clang_tidy_checks)
+            checks = ",".join(self.project.clang_tidy_checks)
 
         command = [
-            'clang-tidy',
-            '-quiet',
-            '-checks=' + checks,
-            '-p=' + str(clang_tidy_dir),
+            "clang-tidy",
+            "-quiet",
+            "-checks=" + checks,
+            "-p=" + str(clang_tidy_dir),
         ]
 
         command += [str(s) for s in build_arguments.source]
 
         self.context(
-            rule=' '.join(command), always=True, name=task.name, cwd=clang_tidy_dir
+            rule=" ".join(command), always=True, name=task.name, cwd=clang_tidy_dir
         )
 
     def clang_tidy(self):
-        clang_tidy_dir = self.make_golem_path('clang-tidy')
+        clang_tidy_dir = self.make_golem_path("clang-tidy")
         if os.path.exists(clang_tidy_dir):
             helpers.remove_tree(clang_tidy_dir)
         helpers.make_directory(clang_tidy_dir)
@@ -3725,35 +3725,35 @@ class Context:
 
         self.call_build_target(self.clang_tidy_target)
 
-        compiler_commands_path = os.path.join(clang_tidy_dir, 'compile_commands.json')
+        compiler_commands_path = os.path.join(clang_tidy_dir, "compile_commands.json")
         self.save_compiler_commands(compiler_commands_path)
 
     def vswhere_get_installation_path(self):
         cmd = [
-            'cmd',
-            '/c',
-            'vswhere',
-            '-latest',
-            '-products',
-            '*',
-            '-property',
-            'installationPath',
+            "cmd",
+            "/c",
+            "vswhere",
+            "-latest",
+            "-products",
+            "*",
+            "-property",
+            "installationPath",
         ]
-        print(' '.join(cmd))
+        print(" ".join(cmd))
         prg_path = os.environ.get(
-            'ProgramFiles(x86)',
-            os.environ.get('ProgramFiles', 'C:\\Program Files (x86)'),
+            "ProgramFiles(x86)",
+            os.environ.get("ProgramFiles", "C:\\Program Files (x86)"),
         )
 
         ret = subprocess.Popen(
             cmd,
-            cwd=os.path.join(prg_path, 'Microsoft Visual Studio', 'Installer'),
+            cwd=os.path.join(prg_path, "Microsoft Visual Studio", "Installer"),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         out, _ = ret.communicate()
         if ret.returncode:
-            raise RuntimeError("ERROR: " + ' '.join(cmd))
+            raise RuntimeError("ERROR: " + " ".join(cmd))
         lines = helpers.decode_output(out).splitlines()
         if not lines[0]:
             raise RuntimeError(
@@ -3765,10 +3765,10 @@ class Context:
     def run_command_with_msvisualcpp(self, command, cwd):
         msvc_path = self.vswhere_get_installation_path()
 
-        vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
-        call_msvc = 'call ' + subprocess.list2cmdline([vcvars, self.vcvars_arg()])
-        build_cmd = call_msvc + ' && ' + subprocess.list2cmdline(command)
-        if subprocess.call(['cmd', '/d', '/s', '/c', build_cmd], cwd=cwd, shell=False):
+        vcvars = msvc_path + "\\VC\\Auxiliary\\Build\\vcvarsall.bat"
+        call_msvc = "call " + subprocess.list2cmdline([vcvars, self.vcvars_arg()])
+        build_cmd = call_msvc + " && " + subprocess.list2cmdline(command)
+        if subprocess.call(["cmd", "/d", "/s", "/c", build_cmd], cwd=cwd, shell=False):
             return 1
 
     def run_command(self, command, cwd, env=None):
@@ -3789,11 +3789,11 @@ class Context:
             ret = self.run_command(command=command, cwd=cwd, env=env)
         if ret:
             print(
-                "Error when running command \""
-                + ' '.join(command)
-                + "\" in directory \""
+                'Error when running command "'
+                + " ".join(command)
+                + '" in directory "'
                 + str(cwd)
-                + "\""
+                + '"'
             )
             return 1
 
@@ -3831,7 +3831,7 @@ class Context:
         return toolsets[vs_version]
 
     def find_msvc_toolset(self, vs_version):
-        return 'v{}'.format(self.find_msvc_toolset_number(vs_version=vs_version))
+        return "v{}".format(self.find_msvc_toolset_number(vs_version=vs_version))
 
     def get_current_msvc_toolset(self):
         return self.find_msvc_toolset(vs_version=self.get_vs_version())
@@ -3841,7 +3841,7 @@ class Context:
         project_path,
         configuration=None,
         platform=None,
-        target='Rebuild',
+        target="Rebuild",
         toolset=None,
         build_path=None,
     ):
@@ -3852,41 +3852,41 @@ class Context:
             )
 
         if configuration is None:
-            configuration = 'Release' if self.is_release() else 'Debug'
+            configuration = "Release" if self.is_release() else "Debug"
         if platform is None:
             platform = self.vs_platform()
         if toolset is None:
             toolset = self.get_current_msvc_toolset()
 
         commands = [
-            'msbuild',
+            "msbuild",
             project_path,
-            '-p:Configuration={}'.format(configuration),
-            '-p:Platform={}'.format(platform),
-            '-p:PlatformToolset={}'.format(toolset),
-            '-t:{}'.format(target),
+            "-p:Configuration={}".format(configuration),
+            "-p:Platform={}".format(platform),
+            "-p:PlatformToolset={}".format(toolset),
+            "-t:{}".format(target),
         ]
 
         if build_path is None:
             build_path = self.get_build_path()
 
-        print("Run build command: " + ' '.join(commands))
+        print("Run build command: " + " ".join(commands))
 
         ret = self.run_build_command(command=commands, cwd=build_path)
         if ret:
-            raise RuntimeError("Error when msbuild command: " + ' '.join(commands))
+            raise RuntimeError("Error when msbuild command: " + " ".join(commands))
 
     def find_artifacts(self, path, recursively=False, types=None):
         files_grabbed = []
         file_types = [
-            '*.pdb',
-            '*.dll',
-            '*.lib',
-            '*.a',
-            '*.so',
-            '*.so.*',
-            '*.dylib',
-            '*.dylib.*',
+            "*.pdb",
+            "*.dll",
+            "*.lib",
+            "*.a",
+            "*.so",
+            "*.so.*",
+            "*.dylib",
+            "*.dylib.*",
         ]
         if types:
             file_types = types
@@ -3916,19 +3916,19 @@ class Context:
         artifact_types = None
         if self.is_windows():
             if self.is_static():
-                artifact_types = ['*.pdb', '*.lib']
+                artifact_types = ["*.pdb", "*.lib"]
             else:
-                artifact_types = ['*.pdb', '*.dll', '*.lib']
+                artifact_types = ["*.pdb", "*.dll", "*.lib"]
         elif self.is_darwin():
             if self.is_static():
-                artifact_types = ['*.a']
+                artifact_types = ["*.a"]
             else:
-                artifact_types = ['*.dylib', '*.dylib.*']
+                artifact_types = ["*.dylib", "*.dylib.*"]
         else:
             if self.is_static():
-                artifact_types = ['*.a']
+                artifact_types = ["*.a"]
             else:
-                artifact_types = ['*.so', '*.so.*']
+                artifact_types = ["*.so", "*.so.*"]
 
         files = self.find_artifacts(
             path=source_path, recursively=recursively, types=artifact_types
@@ -3956,7 +3956,7 @@ class Context:
 
     def prepare_include_export(self, include_path=None):
         if include_path is None:
-            include_path = 'include'
+            include_path = "include"
         include_dir = self.make_project_path(include_path)
         if not os.path.exists(include_dir):
             os.makedirs(include_dir)
@@ -4013,45 +4013,45 @@ class Context:
 
         if variant is None:
             if self.is_debug():
-                variant = 'Debug'
+                variant = "Debug"
             else:
-                variant = 'Release'
-        opt_variant = '-DCMAKE_BUILD_TYPE=' + variant
+                variant = "Release"
+        opt_variant = "-DCMAKE_BUILD_TYPE=" + variant
 
-        opt_link = '-DBUILD_SHARED_LIBS='
+        opt_link = "-DBUILD_SHARED_LIBS="
         if link is not None:
-            if link == 'shared':
-                opt_link += 'ON'
-            elif link == 'static':
-                opt_link += 'OFF'
+            if link == "shared":
+                opt_link += "ON"
+            elif link == "static":
+                opt_link += "OFF"
             else:
                 raise Exception("Error: Bad argument link=" + str(link))
         elif self.is_static():
-            opt_link += 'OFF'
+            opt_link += "OFF"
         else:
-            opt_link += 'ON'
+            opt_link += "ON"
 
         # -A is a Visual Studio generator option
-        opt_arch = ['-A', self.vs_platform(arch)] if self.is_windows() else []
+        opt_arch = ["-A", self.vs_platform(arch)] if self.is_windows() else []
 
-        prefix_dir = os.path.join(build_path, 'install')
+        prefix_dir = os.path.join(build_path, "install")
         if not os.path.exists(prefix_dir):
             os.makedirs(prefix_dir)
 
         opt_install_prefix = []
         if install_prefix is not None:
-            opt_install_prefix += ['-DCMAKE_INSTALL_PREFIX=' + install_prefix]
+            opt_install_prefix += ["-DCMAKE_INSTALL_PREFIX=" + install_prefix]
 
         opt_prefix_path = []
         if prefix_path is not None:
-            opt_prefix_path += ['-DCMAKE_PREFIX_PATH=' + prefix_path]
+            opt_prefix_path += ["-DCMAKE_PREFIX_PATH=" + prefix_path]
 
         opt_options = []
         if options is not None:
             opt_options += options
 
         cmake_command = (
-            ['cmake', source_path]
+            ["cmake", source_path]
             + opt_arch
             + [opt_variant, opt_link]
             + opt_install_prefix
@@ -4059,36 +4059,36 @@ class Context:
             + opt_options
         )
 
-        print("Run CMake command: " + ' '.join(cmake_command))
+        print("Run CMake command: " + " ".join(cmake_command))
 
         ret = self.run_build_command(command=cmake_command, cwd=build_path, env=env)
         if ret:
             raise RuntimeError(
-                "Error when running CMake command: " + ' '.join(cmake_command)
+                "Error when running CMake command: " + " ".join(cmake_command)
             )
 
         if targets is None:
             targets = []
         else:
-            targets = ['--target'] + targets
+            targets = ["--target"] + targets
 
-        cmake_command = ['cmake', '--build', '.', '--config', variant] + targets
-        print("Run build command: " + ' '.join(cmake_command))
+        cmake_command = ["cmake", "--build", ".", "--config", variant] + targets
+        print("Run build command: " + " ".join(cmake_command))
 
         ret = self.run_command(command=cmake_command, cwd=build_path, env=env)
         if ret:
             raise RuntimeError(
-                "Error when running CMake command: " + ' '.join(cmake_command)
+                "Error when running CMake command: " + " ".join(cmake_command)
             )
 
         if install_prefix is not None:
-            cmake_command = ['cmake', '--install']
-            print("Run install command: " + ' '.join(cmake_command))
+            cmake_command = ["cmake", "--install"]
+            print("Run install command: " + " ".join(cmake_command))
 
             ret = self.run_command(command=cmake_command, cwd=build_path, env=env)
             if ret:
                 raise RuntimeError(
-                    "Error when running CMake command: " + ' '.join(cmake_command)
+                    "Error when running CMake command: " + " ".join(cmake_command)
                 )
 
     def save_options(self):
@@ -4099,32 +4099,32 @@ class Context:
         options = json.loads(env.OPTIONS)
 
         # Backwards compatibility with old versions where runtime_link option was not available
-        if 'runtime_link' not in options and 'runtime' in options:
-            options['runtime_link'] = options['runtime']
-        if 'runtime_variant' not in options:
-            options['runtime_variant'] = None
+        if "runtime_link" not in options and "runtime" in options:
+            options["runtime_link"] = options["runtime"]
+        if "runtime_variant" not in options:
+            options["runtime_variant"] = None
 
         # An env saved by an older version carries the word-size vocabulary
         # ('x64', 'x86'). Normalizing on the way back in is what stops it
         # bypassing the canonical names, since nothing downstream parses arch
         # again.
-        for key in ('arch', 'resolved_arch'):
+        for key in ("arch", "resolved_arch"):
             if options.get(key):
                 options[key] = target_platform.normalize_arch(options[key])
 
         if not self.context.options.targets:
-            self.context.options.targets = options['targets']
+            self.context.options.targets = options["targets"]
         else:
-            options['targets'] = self.context.options.targets
+            options["targets"] = self.context.options.targets
 
-        options['output_file'] = self.context.options.output_file
+        options["output_file"] = self.context.options.output_file
 
         if not self.context.options.only_update_dependencies_regex:
             self.context.options.only_update_dependencies_regex = options[
-                'only_update_dependencies_regex'
+                "only_update_dependencies_regex"
             ]
         else:
-            options['only_update_dependencies_regex'] = (
+            options["only_update_dependencies_regex"] = (
                 self.context.options.only_update_dependencies_regex
             )
 
@@ -4137,26 +4137,26 @@ class Context:
         if (
             not self.context.options.qtdir
             and self.is_linux()
-            and self.distribution() == 'debian'
-            and self.release() == 'stretch'
+            and self.distribution() == "debian"
+            and self.release() == "stretch"
         ):
             self.requirements_debian_install(
                 [
-                    'qt5-default',
-                    'qtwebengine5-dev',
-                    'libqt5x11extras5-dev',
-                    'qtbase5-private-dev',
+                    "qt5-default",
+                    "qtwebengine5-dev",
+                    "libqt5x11extras5-dev",
+                    "qtbase5-private-dev",
                 ]
             )
 
     def configure_compiler(self):
-        if 'CXX' in os.environ and os.environ['CXX']:  # Pull in the compiler
-            self.context.env.CXX = os.environ['CXX']  # override default
+        if "CXX" in os.environ and os.environ["CXX"]:  # Pull in the compiler
+            self.context.env.CXX = os.environ["CXX"]  # override default
 
     def load_recipe(self):
         # Read rather than kept as text: the ladder below works on the fields,
         # and reading is what folds the case of an identity given by hand.
-        recipe_id = SourceId.parse(self.context.options.recipe or '')
+        recipe_id = SourceId.parse(self.context.options.recipe or "")
 
         # A project carrying its own golemfile deosn't need any recipe. Only
         # projects carrying no golemfile need to search for a recipe.
@@ -4185,7 +4185,7 @@ class Context:
         fetch = self.deps_resolve and not self.context.options.no_cookbooks_fetch
         cookbooks = [
             manager.get_cookbook(source)
-            for source in self.get_settings().get('GOLEM_COOKBOOKS_LOCATIONS')
+            for source in self.get_settings().get("GOLEM_COOKBOOKS_LOCATIONS")
         ]
         self.cached_cookbooks = manager.make_available_all(cookbooks, fetch=fetch)
 
@@ -4205,21 +4205,21 @@ class Context:
     def load_git_remote_origin_url(self):
         if self.repository is not None:
             return self.repository
-        self.repository = ''
+        self.repository = ""
         try:
             remote_url = helpers.read_git(
-                ['config', '--get', 'remote.origin.url'], cwd=self.get_project_dir()
+                ["config", "--get", "remote.origin.url"], cwd=self.get_project_dir()
             )
-            remote_url = remote_url.split('\n')
+            remote_url = remote_url.split("\n")
             self.repository = remote_url[0] if remote_url else None
         except Exception:
             pass
-        if self.repository == '':
+        if self.repository == "":
             repository_origin = os.path.join(
                 self.get_project_dir(), directory_fetcher.ORIGIN_FILENAME
             )
             if os.path.exists(repository_origin):
-                with open(repository_origin, 'r', encoding='utf-8') as f:
+                with open(repository_origin, "r", encoding="utf-8") as f:
                     for line in f.readlines():
                         self.repository = line
                         break
@@ -4227,25 +4227,25 @@ class Context:
 
     def msvc_vcvars_cmd(self):
         cmd = [
-            'cmd',
-            '/c',
-            'vswhere',
-            '-latest',
-            '-products',
-            '*',
-            '-property',
-            'installationPath',
+            "cmd",
+            "/c",
+            "vswhere",
+            "-latest",
+            "-products",
+            "*",
+            "-property",
+            "installationPath",
         ]
-        print(' '.join(cmd))
+        print(" ".join(cmd))
         ret = subprocess.Popen(
             cmd,
-            cwd='C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer',
+            cwd="C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         out, _ = ret.communicate()
         if ret.returncode:
-            print("ERROR: " + ' '.join(cmd))
+            print("ERROR: " + " ".join(cmd))
             return -1
         lines = helpers.decode_output(out).splitlines()
         if not lines[0]:
@@ -4253,8 +4253,8 @@ class Context:
         msvc_path = lines[0]
         print(msvc_path)
 
-        vcvars = msvc_path + '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
-        call_msvc = 'call "' + vcvars + '" ' + self.vcvars_arg() + ' && '
+        vcvars = msvc_path + "\\VC\\Auxiliary\\Build\\vcvarsall.bat"
+        call_msvc = 'call "' + vcvars + '" ' + self.vcvars_arg() + " && "
         print(call_msvc)
         return call_msvc
 
@@ -4278,7 +4278,7 @@ class Context:
             any([feature.startswith("QT5") for feature in features])
             if features
             else False
-        ) or ('qt5' in wfeatures if wfeatures else False)
+        ) or ("qt5" in wfeatures if wfeatures else False)
 
     def is_qt6_used(self, config):
         return self.is_qt6_used_in_params(
@@ -4290,13 +4290,13 @@ class Context:
             any([feature.startswith("QT6") for feature in features])
             if features
             else False
-        ) or ('qt6' in wfeatures if wfeatures else False)
+        ) or ("qt6" in wfeatures if wfeatures else False)
 
     def is_qmake_available_on_path(self, wants_qt6=False):
         qmake_names = (
-            ['qmake-qt6', 'qmake6', 'qmake']
+            ["qmake-qt6", "qmake6", "qmake"]
             if wants_qt6
-            else ['qmake-qt5', 'qmake5', 'qmake']
+            else ["qmake-qt5", "qmake5", "qmake"]
         )
         return any(shutil.which(qmake_name) is not None for qmake_name in qmake_names)
 
@@ -4304,7 +4304,7 @@ class Context:
         if self.context.options.qtdir or self.project.qtdir:
             return False
 
-        qt_root_variable = 'QT6_ROOT' if wants_qt6 else 'QT5_ROOT'
+        qt_root_variable = "QT6_ROOT" if wants_qt6 else "QT5_ROOT"
         if os.environ.get(qt_root_variable):
             return False
 
@@ -4315,7 +4315,7 @@ class Context:
 
     def is_cpp2_in_source_files(self, config):
         for source in self.list_source(config.source):
-            if source.suffix() in ['.cpp2']:
+            if source.suffix() in [".cpp2"]:
                 return True
         return False
 
@@ -4334,12 +4334,12 @@ class Context:
         if cppfront_cache_info is None:
             return
 
-        if not self.context.options.cppfront_path and 'CPPFRONT' not in os.environ:
+        if not self.context.options.cppfront_path and "CPPFRONT" not in os.environ:
             self.context.options.cppfront_path = cppfront_cache_info.executable_path
 
         if (
             not self.context.options.cppfront_include
-            and 'CPPFRONT_INCLUDE' not in os.environ
+            and "CPPFRONT_INCLUDE" not in os.environ
         ):
             self.context.options.cppfront_include = cppfront_cache_info.include_path
 
@@ -4355,11 +4355,11 @@ class Context:
         # compiler, and all three are answers only the chosen toolchain gives,
         # so selecting tasks before finding it would match them against a
         # target nobody had settled yet.
-        self.context.setenv('main')
+        self.context.setenv("main")
         self.configure_compiler()
         if self.is_windows():
             self.context.env.MSVC_TARGETS = self.msvc_target_preference()
-        self.context.load(['compiler_c', 'compiler_cxx'])
+        self.context.load(["compiler_c", "compiler_cxx"])
         self.context.options.resolved_arch = target_resolver.TargetResolver(
             self.context, msvc=self.is_msvc_like()
         ).resolve()
@@ -4383,12 +4383,12 @@ class Context:
             or self.context.options.vscode
             or self.context.options.clangd
         ):
-            features_to_load.append('clang_compilation_database')
+            features_to_load.append("clang_compilation_database")
 
         # qt check
         if self.project.qt:
             self.ensures_qt_is_installed()
-            features_to_load.append('qt5')
+            features_to_load.append("qt5")
             self.context.want_qt6 = is_qt6_used
             if os.path.exists(self.project.qtdir):
                 self.context.options.qtdir = self.project.qtdir
@@ -4409,7 +4409,7 @@ class Context:
 
         if is_cppfront_used:
             self.autodiscover_cppfront()
-            features_to_load.append('cppfront')
+            features_to_load.append("cppfront")
 
         if features_to_load:
             self.context.load(features_to_load)
@@ -4479,7 +4479,7 @@ class Context:
                     dep_name, target_name
                 )
             )
-        file_types = ['.lib', '.a', '.so', '.dylib']
+        file_types = [".lib", ".a", ".so", ".dylib"]
         for artifact in artifacts_dev:
             _, extension = os.path.splitext(artifact)
             if extension in file_types:
@@ -4494,7 +4494,7 @@ class Context:
 
     def build(self):
         vscode_dir = self.get_vscode_path()
-        vscode_compiler_commands_path = self.make_vscode_path('compile_commands.json')
+        vscode_compiler_commands_path = self.make_vscode_path("compile_commands.json")
 
         if self.context.options.vscode:
             if not os.path.exists(vscode_dir):
@@ -4505,7 +4505,7 @@ class Context:
             self.initialize_vscode_configs()
 
         clangd_dir = self.get_clangd_path()
-        clangd_compiler_commands_path = self.make_clangd_path('compile_commands.json')
+        clangd_compiler_commands_path = self.make_clangd_path("compile_commands.json")
 
         if self.context.options.clangd:
             if not os.path.exists(clangd_dir):
@@ -4517,7 +4517,7 @@ class Context:
 
         compile_commands_dir = self.get_compile_commands_path()
         compile_commands_compiler_commands_path = self.make_compile_commands_path(
-            'compile_commands.json'
+            "compile_commands.json"
         )
 
         if self.context.options.compile_commands:
@@ -4544,7 +4544,7 @@ class Context:
                 compile_commands_compiler_commands_path
             )
 
-        for targetname in self.context.options.targets.split(','):
+        for targetname in self.context.options.targets.split(","):
             if targetname and not targetname in [
                 target.name for target in self.project.definitions
             ]:
@@ -4555,7 +4555,7 @@ class Context:
 
     def get_asked_exports(self):
         return (
-            self.context.options.targets.split(',')
+            self.context.options.targets.split(",")
             if self.context.options.targets
             else [target.name for target in self.project.exports]
         )
@@ -4582,14 +4582,14 @@ class Context:
                 outpath = self.context.options.export
 
                 if not outpath:
-                    outpath = self.make_output_path('export')
+                    outpath = self.make_output_path("export")
 
                 if not os.path.exists(outpath):
                     os.makedirs(outpath)
 
                 includes = config.includes
 
-                outpath_include = os.path.join(outpath, 'include')
+                outpath_include = os.path.join(outpath, "include")
                 if not os.path.exists(outpath_include):
                     os.makedirs(outpath_include)
 
@@ -4716,7 +4716,7 @@ class Context:
         # Check all targets given in options exist
         # (Special case for header_only targets)
 
-        asked_targets = self.context.options.targets.split(',')
+        asked_targets = self.context.options.targets.split(",")
         for asked_target in asked_targets:
             found_target = asked_target not in targets
             is_header_only_target = asked_target in [
@@ -4824,7 +4824,7 @@ class Context:
 
     def make_outpath(self):
         if not self.context.options.export:
-            return ''
+            return ""
         outpath = self.context.options.export
         if not os.path.exists(outpath):
             os.makedirs(outpath)
@@ -4832,7 +4832,7 @@ class Context:
 
     def make_outpath_lib(self):
         if not self.context.options.export:
-            return ''
+            return ""
         outpath_lib = self.make_out_path()
 
         if not os.path.exists(outpath_lib):
@@ -4841,9 +4841,9 @@ class Context:
 
     def make_outpath_conf(self):
         if not self.context.options.export:
-            return ''
+            return ""
         outpath = self.context.options.export
-        outpath_conf = os.path.join(outpath, self.build_path(), 'conf')
+        outpath_conf = os.path.join(outpath, self.build_path(), "conf")
         if not os.path.exists(outpath_conf):
             os.makedirs(outpath_conf)
         return outpath_conf
@@ -4857,24 +4857,24 @@ class Context:
         else:
             target_path = decorated_target_path
 
-        if 'program' in config.type:
+        if "program" in config.type:
             if self.is_windows():
-                target_artifact = '{}.exe'.format(decorated_target_base)
+                target_artifact = "{}.exe".format(decorated_target_base)
             else:
                 target_artifact = decorated_target_base
         else:
             if self.is_windows():
-                target_artifact = '{}.lib'.format(decorated_target_base)
+                target_artifact = "{}.lib".format(decorated_target_base)
             elif self.is_darwin():
                 if self.is_config_shared(config):
-                    target_artifact = 'lib{}.dylib'.format(decorated_target_base)
+                    target_artifact = "lib{}.dylib".format(decorated_target_base)
                 else:
-                    target_artifact = 'lib{}.a'.format(decorated_target_base)
+                    target_artifact = "lib{}.a".format(decorated_target_base)
             else:
                 if self.is_config_shared(config):
-                    target_artifact = 'lib{}.so'.format(decorated_target_base)
+                    target_artifact = "lib{}.so".format(decorated_target_base)
                 else:
-                    target_artifact = 'lib{}.a'.format(decorated_target_base)
+                    target_artifact = "lib{}.a".format(decorated_target_base)
         target_artifact_path = os.path.join(target_path, target_artifact)
 
         return target_artifact_path, target_path, target_artifact
@@ -4920,7 +4920,7 @@ class Context:
             if not export_target_config.header_only:
                 export_target_config.rpath_link.append(target_path)
 
-            if not 'program' in export_target_config.type:
+            if not "program" in export_target_config.type:
                 if self.is_config_shared(export_target_config):
                     if target_artifact_path not in export_target_config.lib:
                         export_target_config.lib.append(target_artifact_path)
@@ -4957,9 +4957,9 @@ class Context:
                 export_target_config.artifacts.append(
                     self.create_artifact(
                         path=artifact,
-                        location='',
+                        location="",
                         type=build_config.type[0],
-                        scope='dev' if artifact not in artifacts_run else None,
+                        scope="dev" if artifact not in artifacts_run else None,
                         target=target_name,
                         decorated_target=decorated_target,
                     )
@@ -4973,9 +4973,9 @@ class Context:
                 export_target_config.artifacts.append(
                     self.create_artifact(
                         path=artifact,
-                        location='',
-                        type='module_index',
-                        scope='dev',
+                        location="",
+                        type="module_index",
+                        scope="dev",
                         target=target_name,
                         decorated_target=decorated_target,
                     )
@@ -5017,9 +5017,9 @@ class Context:
 
             wfeatures = []
             if self.is_qt5_used(build_config):
-                wfeatures.append('qt5')
+                wfeatures.append("qt5")
             if self.is_qt6_used(build_config):
-                wfeatures.append('qt6')
+                wfeatures.append("qt6")
 
             export_target_config.wfeatures = helpers.filter_unique(
                 build_config.wfeatures + export_target_config.wfeatures + wfeatures
@@ -5068,13 +5068,13 @@ class Context:
                 if template.target:
                     config.artifacts.append(
                         self.create_artifact(
-                            path=template.target, location='', type='file'
+                            path=template.target, location="", type="file"
                         )
                     )
 
         for license_path in config.licenses:
             license_artifact = self.create_artifact(
-                path=license_path, location='', type='license'
+                path=license_path, location="", type="license"
             )
             if license_artifact not in config.artifacts:
                 config.artifacts.append(license_artifact)
@@ -5142,11 +5142,11 @@ class Context:
             if task.args is not None:
                 config = self.generate_configuration(task=task, targets=targets)
                 targets = helpers.filter_unique(
-                    helpers.parameter_to_list(task.args['target'])
+                    helpers.parameter_to_list(task.args["target"])
                 )
                 for target in targets:
                     artifact_file = self.create_artifact(
-                        path=target, location='', type='file'
+                        path=target, location="", type="file"
                     )
                     if artifact_file not in config.artifacts:
                         config.artifacts.append(artifact_file)
@@ -5231,7 +5231,7 @@ class Context:
         results = []
         for artifact in artifacts:
             if not artifact.location:
-                if artifact.type == 'license':
+                if artifact.type == "license":
                     artifact.location = repo_path
                 else:
                     artifact.location = out_path
@@ -5285,7 +5285,7 @@ class Context:
         dirs_to_remove = []
         for dirpath, dirnames, _ in os.walk(export_path_build):
             for dirname in dirnames:
-                if not dirname.startswith('bin'):
+                if not dirname.startswith("bin"):
                     continue
                 path = os.path.join(dirpath, dirname)
                 path = os.path.realpath(path)
@@ -5304,7 +5304,7 @@ class Context:
         export_path_conf = self.make_outpath_conf()
 
         config.includes = []
-        config.isystems += [os.path.join(export_path, 'include')]
+        config.isystems += [os.path.join(export_path, "include")]
 
         out_path = self.make_out_path()
         self.make_config_absolute(
@@ -5369,7 +5369,7 @@ class Context:
                 ]
                 if not found_objects:
                     raise RuntimeError(
-                        "Can't find any {} configuration named \"{}\"".format(
+                        'Can\'t find any {} configuration named "{}"'.format(
                             object_name, name
                         )
                     )
@@ -5395,7 +5395,7 @@ class Context:
 
         while True:
             found_targets = self.map_name_to_objects(
-                targets_to_find, source_targets, 'target'
+                targets_to_find, source_targets, "target"
             )
 
             targets_to_find = []
@@ -5421,7 +5421,7 @@ class Context:
         if source_targets is None:
             source_targets = self.get_targets_or_exports()
         return (
-            self.context.options.targets.split(',')
+            self.context.options.targets.split(",")
             if self.context.options.targets
             else [target.name for target in source_targets]
         )
@@ -5521,7 +5521,7 @@ class Context:
 
     def get_asked_packages(self):
         return (
-            self.context.options.packages.split(',')
+            self.context.options.packages.split(",")
             if self.context.options.packages
             else [package.name for package in self.project.packages]
         )
@@ -5542,29 +5542,29 @@ class Context:
 
     def requirements_debian_install(self, packages):
         packages = list(sorted(set(packages)))
-        print('Packages required to be installed: {}'.format(packages))
-        print('Looking for installed packages...')
+        print("Packages required to be installed: {}".format(packages))
+        print("Looking for installed packages...")
 
         packages_to_install = []
         found_installed_packages = []
-        installed_packages = subprocess.check_output(['apt', 'list', '--installed'])
+        installed_packages = subprocess.check_output(["apt", "list", "--installed"])
         installed_packages = helpers.decode_output(installed_packages)
         for package in packages:
-            if installed_packages.find(package + '/') == -1:
+            if installed_packages.find(package + "/") == -1:
                 packages_to_install.append(package)
             else:
                 found_installed_packages.append(package)
 
         if len(found_installed_packages) > 0:
             print(
-                'Found already installed packages: {}'.format(found_installed_packages)
+                "Found already installed packages: {}".format(found_installed_packages)
             )
 
         if len(packages_to_install) > 0:
-            print('Install the following packages: {}'.format(packages_to_install))
-            helpers.run_task(['sudo', 'apt', 'install', '-y'] + packages_to_install)
+            print("Install the following packages: {}".format(packages_to_install))
+            helpers.run_task(["sudo", "apt", "install", "-y"] + packages_to_install)
         else:
-            print('Nothing to install')
+            print("Nothing to install")
 
     def requirements_debian(self):
         packages_dev = []
@@ -5580,7 +5580,7 @@ class Context:
 
         self.requirements_debian_install(packages)
 
-        print('Done')
+        print("Done")
 
     def dependencies(self):
         tasks_and_targets = self.get_tasks_and_targets_to_process()
@@ -5592,7 +5592,7 @@ class Context:
                 binary_artifacts = [
                     a
                     for a in config.artifacts.copy()
-                    if a.type in ['library', 'program']
+                    if a.type in ["library", "program"]
                 ]
 
                 for binary_artifact in binary_artifacts:
@@ -5601,12 +5601,12 @@ class Context:
                 if self.is_darwin():
                     self.patch_darwin_binary_artifacts(
                         binary_artifacts=binary_artifacts,
-                        prefix_path='@executable_path',
+                        prefix_path="@executable_path",
                     )
                 elif self.is_linux():
                     self.patch_linux_binary_artifacts(
                         binary_artifacts=binary_artifacts,
-                        prefix_path='$ORIGIN',
+                        prefix_path="$ORIGIN",
                         relative_path=True,
                     )
 
@@ -5635,24 +5635,24 @@ class Context:
 
             print("otool -L {}".format(binary_artifact.absolute_path))
             otool_infos = subprocess.check_output(
-                ['otool', '-L', binary_artifact.absolute_path],
+                ["otool", "-L", binary_artifact.absolute_path],
                 cwd=self.get_build_path(),
-            ).decode('utf-8')
-            paths = re.findall(r'^\s*(.*) \(', otool_infos, re.MULTILINE)
+            ).decode("utf-8")
+            paths = re.findall(r"^\s*(.*) \(", otool_infos, re.MULTILINE)
 
-            id_path = ''
-            lib_paths = ''
+            id_path = ""
+            lib_paths = ""
 
             if not paths:
                 continue
 
-            is_static_library = binary_artifact.type in ['library'] and extension in [
-                '.a'
+            is_static_library = binary_artifact.type in ["library"] and extension in [
+                ".a"
             ]
             is_shared_library = (
-                binary_artifact.type in ['library'] and not is_static_library
+                binary_artifact.type in ["library"] and not is_static_library
             )
-            is_program = binary_artifact.type in ['program']
+            is_program = binary_artifact.type in ["program"]
 
             if is_shared_library:
                 id_path = paths[0]
@@ -5679,8 +5679,8 @@ class Context:
                     print("Change ID to {}".format(expected_binary_artifact_id))
                     helpers.run_task(
                         [
-                            'install_name_tool',
-                            '-id',
+                            "install_name_tool",
+                            "-id",
                             expected_binary_artifact_id,
                             binary_artifact.absolute_path,
                         ],
@@ -5728,8 +5728,8 @@ class Context:
                 )
                 helpers.run_task(
                     [
-                        'install_name_tool',
-                        '-change',
+                        "install_name_tool",
+                        "-change",
                         lib_path,
                         expected_lib_path,
                         binary_artifact.absolute_path,
@@ -5751,9 +5751,9 @@ class Context:
         if not self.is_linux():
             raise RuntimeError("Patching binary artifacts only works on linux")
 
-        patchelf_command = ['patchelf']
+        patchelf_command = ["patchelf"]
         if self.is_flatpak():
-            patchelf_command = ['flatpak-spawn', '--host'] + patchelf_command
+            patchelf_command = ["flatpak-spawn", "--host"] + patchelf_command
 
         rpath_results = list()
         path_patched = list()
@@ -5768,8 +5768,8 @@ class Context:
             if not os.path.exists(binary_artifact.absolute_path) and not simulate:
                 continue
 
-            is_static_library = binary_artifact.type in ['library'] and extension in [
-                '.a'
+            is_static_library = binary_artifact.type in ["library"] and extension in [
+                ".a"
             ]
 
             if is_static_library:
@@ -5779,11 +5779,11 @@ class Context:
 
             if libraries is None and os.path.exists(binary_artifact.absolute_path):
                 readelf_infos = subprocess.check_output(
-                    ['readelf', '-d', binary_artifact.absolute_path],
+                    ["readelf", "-d", binary_artifact.absolute_path],
                     cwd=self.get_build_path(),
-                ).decode('utf-8')
+                ).decode("utf-8")
                 library_list = re.findall(
-                    r'^.*NEEDED\)\s*Shared library: \[([^\]]*)\]',
+                    r"^.*NEEDED\)\s*Shared library: \[([^\]]*)\]",
                     readelf_infos,
                     re.MULTILINE,
                 )
@@ -5795,7 +5795,7 @@ class Context:
 
             if search_paths is None:
                 search_paths = list()
-                if 'QTLIBS' in self.context.env and os.path.exists(
+                if "QTLIBS" in self.context.env and os.path.exists(
                     self.context.env.QTLIBS
                 ):
                     search_paths = [self.context.env.QTLIBS]
@@ -5806,7 +5806,7 @@ class Context:
 
                 found_artifact = None
                 for binary_artifact_bis in binary_artifacts + source_artifacts:
-                    if binary_artifact_bis.type not in ['library']:
+                    if binary_artifact_bis.type not in ["library"]:
                         continue
                     if os.path.basename(binary_artifact_bis.absolute_path) == library:
                         found_artifact = binary_artifact_bis
@@ -5843,21 +5843,21 @@ class Context:
                 current_rpath = (
                     subprocess.check_output(
                         patchelf_command
-                        + ['--print-rpath', binary_artifact.absolute_path],
+                        + ["--print-rpath", binary_artifact.absolute_path],
                         cwd=self.get_build_path(),
                     )
-                    .decode('utf-8')
+                    .decode("utf-8")
                     .splitlines()[0]
                 )
 
-                current_rpath = current_rpath.split(':') if current_rpath else []
+                current_rpath = current_rpath.split(":") if current_rpath else []
 
                 diff_list1_list2 = list(set(current_rpath) - set(lib_paths))
                 diff_list2_list1 = list(set(lib_paths) - set(current_rpath))
                 total_diff = diff_list1_list2 + diff_list2_list1
 
             if lib_paths:
-                rpath = ':'.join(lib_paths)
+                rpath = ":".join(lib_paths)
                 if not simulate and total_diff:
                     print(
                         "Set rpath {} to {}".format(
@@ -5866,7 +5866,7 @@ class Context:
                     )
                     helpers.run_task(
                         patchelf_command
-                        + ['--set-rpath', rpath, binary_artifact.absolute_path],
+                        + ["--set-rpath", rpath, binary_artifact.absolute_path],
                         cwd=self.get_build_path(),
                     )
                 rpath_results += lib_paths
@@ -5875,7 +5875,7 @@ class Context:
                     print("Remove rpath from {}".format(binary_artifact.absolute_path))
                     helpers.run_task(
                         patchelf_command
-                        + ['--remove-rpath', binary_artifact.absolute_path],
+                        + ["--remove-rpath", binary_artifact.absolute_path],
                         cwd=self.get_build_path(),
                     )
                 rpath_results += []
@@ -5922,9 +5922,9 @@ class Context:
 
         print("Check package's targets")
 
-        patchelf_command = ['patchelf']
+        patchelf_command = ["patchelf"]
         if self.is_flatpak():
-            patchelf_command = ['flatpak-spawn', '--host'] + patchelf_command
+            patchelf_command = ["flatpak-spawn", "--host"] + patchelf_command
 
         depends = package_build_context.configuration.packages.copy()
         depends = helpers.filter_unique(depends)
@@ -5957,10 +5957,10 @@ class Context:
         package_version = version.semver
 
         package_arch = self.get_arch_for_linux()
-        package_depends = ', '.join(depends)
+        package_depends = ", ".join(depends)
 
         print("Clean-up")
-        package_directory = self.make_output_path('dist')
+        package_directory = self.make_output_path("dist")
         helpers.remove_tree(package_directory)
 
         # Install documentation
@@ -5973,11 +5973,11 @@ class Context:
         package_directory = helpers.make_directory(package_directory)
 
         prefix_directory = os.path.realpath(
-            helpers.make_directory(package_directory, '.' + prefix)
+            helpers.make_directory(package_directory, "." + prefix)
         )
 
         subdirectory_directory = os.path.realpath(
-            helpers.make_directory(package_directory, '.' + subdirectory)
+            helpers.make_directory(package_directory, "." + subdirectory)
         )
 
         helpers.make_directory(subdirectory_directory)
@@ -6040,7 +6040,7 @@ class Context:
                 "Package control directory doesn't exist: {}".format(package_control)
             )
 
-        debian_directory = helpers.make_directory(package_directory, 'DEBIAN')
+        debian_directory = helpers.make_directory(package_directory, "DEBIAN")
 
         if package_control:
             helpers.copy_tree(package_control, debian_directory)
@@ -6051,32 +6051,32 @@ class Context:
         binary_artifacts = list()
 
         for artifact in artifacts:
-            local_dir = 'bin'
-            if artifact.type == 'library':
-                local_dir = 'lib'
-            elif artifact.type == 'program':
-                local_dir = 'bin'
-            elif artifact.type == 'license':
+            local_dir = "bin"
+            if artifact.type == "library":
+                local_dir = "lib"
+            elif artifact.type == "program":
+                local_dir = "bin"
+            elif artifact.type == "license":
                 if artifact.location != self.get_project_dir():
                     dep_id = self.find_dependency_id(artifact.location)
                     local_dir = os.path.join(
-                        'share',
-                        'doc',
+                        "share",
+                        "doc",
                         package_build_context.package.name,
-                        'licenses',
+                        "licenses",
                         dep_id,
                     )
                 else:
                     local_dir = os.path.join(
-                        'share', 'doc', package_build_context.package.name, 'licenses'
+                        "share", "doc", package_build_context.package.name, "licenses"
                     )
             else:
-                local_dir = 'share'
+                local_dir = "share"
 
             artifact_filename = os.path.basename(artifact.path)
             artifact_dirname = os.path.dirname(artifact.path)
             if artifact_dirname:
-                local_dir = ''
+                local_dir = ""
 
             dst_directory = os.path.realpath(
                 helpers.make_directory(
@@ -6094,7 +6094,7 @@ class Context:
             helpers.copy_file(src, dst)
             artifact.path = os.path.join(artifact_dirname, local_dir, artifact_filename)
             artifact.location = os.path.realpath(subdirectory_directory)
-            if artifact.type in ['library', 'program']:
+            if artifact.type in ["library", "program"]:
                 binary_artifacts.append(artifact)
 
         # Strip binaries, libraries, archives
@@ -6104,20 +6104,20 @@ class Context:
             and package_build_context.package.stripping
         ):
             for artifact in artifacts:
-                if artifact.type not in ['library', 'program']:
+                if artifact.type not in ["library", "program"]:
                     continue
                 print("Stripping {}".format(artifact.absolute_path))
                 helpers.run_task(
-                    ['strip', artifact.absolute_path], cwd=subdirectory_directory
+                    ["strip", artifact.absolute_path], cwd=subdirectory_directory
                 )
 
         repository = self.load_git_remote_origin_url()
         targets_binaries = []
-        targets_libpaths = ['lib']
+        targets_libpaths = ["lib"]
         target_programs = []
         qt_binaries = []
         for artifact in artifacts:
-            if artifact.type in ['library', 'program']:
+            if artifact.type in ["library", "program"]:
                 if (
                     artifact.target in package_build_context.package.targets
                     and artifact.repository == repository
@@ -6133,10 +6133,10 @@ class Context:
                     if target_config and self.is_qt_enabled(config=target_config):
                         qt_binaries.append(artifact.path)
 
-                    if artifact.type in ['program']:
+                    if artifact.type in ["program"]:
                         target_programs.append(artifact.path)
 
-            if artifact.type in ['library']:
+            if artifact.type in ["library"]:
                 target_path = os.path.dirname(artifact.path)
                 if target_path:
                     targets_libpaths.append(target_path)
@@ -6145,11 +6145,11 @@ class Context:
         targets_libpaths = helpers.filter_unique(targets_libpaths)
 
         for artifact in artifacts:
-            if artifact.type not in ['library', 'program']:
+            if artifact.type not in ["library", "program"]:
                 continue
             print("Remove rpath {}".format(artifact.absolute_path))
             helpers.run_task(
-                patchelf_command + ['--remove-rpath', artifact.absolute_path],
+                patchelf_command + ["--remove-rpath", artifact.absolute_path],
                 cwd=subdirectory_directory,
             )
 
@@ -6193,8 +6193,8 @@ class Context:
 
                 binary_dir = os.path.dirname(binary)
                 binary_filename = os.path.basename(binary)
-                if os.path.basename(binary_dir) not in ['bin', 'lib']:
-                    local_dir = ''
+                if os.path.basename(binary_dir) not in ["bin", "lib"]:
+                    local_dir = ""
                     found_artifact = None
                     for artifact in artifacts:
                         if artifact.path == binary:
@@ -6205,10 +6205,10 @@ class Context:
                             "Cannot find artifact corresponding to {}".format(binary)
                         )
 
-                    if found_artifact.type == 'library':
-                        local_dir = 'lib'
+                    if found_artifact.type == "library":
+                        local_dir = "lib"
                     else:
-                        local_dir = 'bin'
+                        local_dir = "bin"
 
                     symlink_path = os.path.join(
                         subdirectory_directory, local_dir, binary_filename
@@ -6220,21 +6220,21 @@ class Context:
                     binary = symlink_path
 
                 command_env = os.environ.copy()
-                ld_lib_path = 'LD_LIBRARY_PATH'
+                ld_lib_path = "LD_LIBRARY_PATH"
                 if ld_lib_path not in command_env:
-                    command_env[ld_lib_path] = ''
-                command_env[ld_lib_path] = ':'.join(
+                    command_env[ld_lib_path] = ""
+                command_env[ld_lib_path] = ":".join(
                     [
                         os.path.join(subdirectory_directory, path)
                         for path in targets_libpaths
                     ]
                     + [self.context.env.QTLIBS]
-                ) + (':' + command_env[ld_lib_path] if command_env[ld_lib_path] else '')
+                ) + (":" + command_env[ld_lib_path] if command_env[ld_lib_path] else "")
 
                 helpers.run_task(
-                    ['linuxdeployqt', binary, '-qmake=' + self.context.env.QMAKE[0]]
+                    ["linuxdeployqt", binary, "-qmake=" + self.context.env.QMAKE[0]]
                     + [
-                        '-qmldir={}'.format(
+                        "-qmldir={}".format(
                             os.path.realpath(
                                 os.path.join(self.get_project_dir(), qmldir)
                             )
@@ -6245,21 +6245,21 @@ class Context:
                     env=command_env,
                 )
 
-                app_run_binary_dir = os.path.join(os.path.dirname(binary), 'AppRun')
+                app_run_binary_dir = os.path.join(os.path.dirname(binary), "AppRun")
                 if os.path.exists(app_run_binary_dir):
                     os.remove(app_run_binary_dir)
 
-                app_run_root = os.path.join(subdirectory_directory, 'AppRun')
+                app_run_root = os.path.join(subdirectory_directory, "AppRun")
                 if os.path.exists(app_run_root):
                     os.remove(app_run_root)
 
-                app_run_parent = os.path.join(subdirectory_directory, '..', 'AppRun')
+                app_run_parent = os.path.join(subdirectory_directory, "..", "AppRun")
                 if os.path.exists(app_run_parent):
                     os.remove(app_run_parent)
 
-            qt_conf_path = os.path.join(subdirectory_directory, 'bin', 'qt.conf')
+            qt_conf_path = os.path.join(subdirectory_directory, "bin", "qt.conf")
             if not os.path.exists(qt_conf_path):
-                with open(qt_conf_path, 'w') as qt_conf_file:
+                with open(qt_conf_path, "w") as qt_conf_file:
                     qt_conf_file.writelines(
                         [
                             "[Paths]\n",  # Header
@@ -6273,7 +6273,7 @@ class Context:
         for symlink_path in targets_binaries_symlinks:
             os.remove(symlink_path)
 
-        rpath = ':'.join(
+        rpath = ":".join(
             [os.path.join(subdirectory, path) for path in targets_libpaths]
         )
 
@@ -6287,20 +6287,20 @@ class Context:
 
         if rpath:
             for artifact in artifacts:
-                if artifact.type not in ['library', 'program']:
+                if artifact.type not in ["library", "program"]:
                     continue
                 print("Set rpath on file {}".format(artifact.absolute_path))
                 helpers.run_task(
-                    patchelf_command + ['--set-rpath', rpath, artifact.absolute_path],
+                    patchelf_command + ["--set-rpath", rpath, artifact.absolute_path],
                     cwd=subdirectory_directory,
                 )
         else:
             for artifact in artifacts:
-                if artifact.type not in ['library', 'program']:
+                if artifact.type not in ["library", "program"]:
                     continue
                 print("Remove rpath {}".format(artifact.absolute_path))
                 helpers.run_task(
-                    patchelf_command + ['--remove-rpath', artifact.absolute_path],
+                    patchelf_command + ["--remove-rpath", artifact.absolute_path],
                     cwd=subdirectory_directory,
                 )
 
@@ -6313,7 +6313,7 @@ class Context:
                 ]
             )
 
-        template_tempoary_dir = self.make_build_path('dist_templates')
+        template_tempoary_dir = self.make_build_path("dist_templates")
         helpers.make_directory(template_tempoary_dir)
 
         for template in deb_package.templates:
@@ -6333,7 +6333,7 @@ class Context:
             template_dst = self.context.root.find_or_declare(template_path)
 
             self.context(
-                features='subst',
+                features="subst",
                 source=template_src,
                 target=template_dst,
                 LIBRARY_PATHS=str(rpath),
@@ -6345,24 +6345,24 @@ class Context:
 
         class make_executable(Task.Task):
             always_run = True
-            run_str = 'chmod +x ${SRC}'
+            run_str = "chmod +x ${SRC}"
 
         def create_task_make_executable(path):
             task = make_executable(env=self.context.env)
             task.set_inputs(path)
             self.context.add_to_group(task)
 
-        debian_template_tempoary_dir = self.make_build_path('dist_templates_debian')
+        debian_template_tempoary_dir = self.make_build_path("dist_templates_debian")
         helpers.make_directory(debian_template_tempoary_dir)
 
         for dirpath, dirnames, filenames in os.walk(debian_directory):
             for filename in filenames:
                 if filename not in [
-                    'conffiles',
-                    'postinst',
-                    'postrm',
-                    'preinst',
-                    'prerm',
+                    "conffiles",
+                    "postinst",
+                    "postrm",
+                    "preinst",
+                    "prerm",
                 ]:
                     continue
 
@@ -6376,7 +6376,7 @@ class Context:
                 template_dst = self.context.root.find_or_declare(template_path)
 
                 self.context(
-                    features='subst',
+                    features="subst",
                     source=template_src,
                     target=template_dst,
                     LIBRARY_PATHS=str(rpath),
@@ -6391,43 +6391,43 @@ class Context:
 
         self.context.add_group()
 
-        control_path = os.path.join(debian_directory, 'control')
-        with open(control_path, 'w') as control_file:
+        control_path = os.path.join(debian_directory, "control")
+        with open(control_path, "w") as control_file:
             control_file.writelines(
                 [
-                    "Package: " + package_name + '\n',  # Foo
-                    "Version: " + package_version + '\n',  # 0.1.2
-                    "Section: " + package_section + '\n',  # misc
-                    "Priority: " + package_priority + '\n',  # { optional | ... }
-                    "Architecture: " + package_arch + '\n',  # amd64, i386
+                    "Package: " + package_name + "\n",  # Foo
+                    "Version: " + package_version + "\n",  # 0.1.2
+                    "Section: " + package_section + "\n",  # misc
+                    "Priority: " + package_priority + "\n",  # { optional | ... }
+                    "Architecture: " + package_arch + "\n",  # amd64, i386
                     # list, of, dependencies, as, package, names
-                    "Depends: " + package_depends + '\n',
+                    "Depends: " + package_depends + "\n",
                     "Maintainer: "
                     + package_maintainer
-                    + '\n',  # { Company | Firstname LASTNAME }
+                    + "\n",  # { Company | Firstname LASTNAME }
                     "Description: "
                     + package_description
-                    + '\n',  # One sentence description
-                    "Homepage: " + package_homepage + '\n',  # https://company.com/
+                    + "\n",  # One sentence description
+                    "Homepage: " + package_homepage + "\n",  # https://company.com/
                 ]
             )
 
         print("Build package")
-        output_filename = package_name + '_' + package_version + "_" + package_arch
+        output_filename = package_name + "_" + package_version + "_" + package_arch
 
         class fakeroot(Task.Task):
             always_run = True
-            fakeroot_command = ['fakeroot']
+            fakeroot_command = ["fakeroot"]
             if self.is_flatpak():
-                fakeroot_command = ['flatpak-spawn', '--host'] + fakeroot_command
-            run_str = ' '.join(fakeroot_command) + ' dpkg-deb --build ${SRC} ${TGT}'
+                fakeroot_command = ["flatpak-spawn", "--host"] + fakeroot_command
+            run_str = " ".join(fakeroot_command) + " dpkg-deb --build ${SRC} ${TGT}"
 
         task = fakeroot(env=self.context.env)
         task.set_inputs(self.context.root.find_node(package_directory))
         task.set_outputs(
             self.context.root.find_or_declare(
                 os.path.realpath(
-                    os.path.join(self.get_output_path(), output_filename + '.deb')
+                    os.path.join(self.get_output_path(), output_filename + ".deb")
                 )
             )
         )
@@ -6441,10 +6441,10 @@ class Context:
                 if binary_artifact.path not in paths_done:
                     paths_done.append(binary_artifact.path)
 
-            lib_directory = os.path.join(subdirectory_directory, 'lib')
+            lib_directory = os.path.join(subdirectory_directory, "lib")
 
             libraries_list = self.find_artifacts(
-                path=lib_directory, recursively=True, types=('*.so', '*.so.*')
+                path=lib_directory, recursively=True, types=("*.so", "*.so.*")
             )
 
             found_lib_artifacts = []
@@ -6454,7 +6454,7 @@ class Context:
                 )
                 library_location = subdirectory_directory
                 library_artifact = self.create_artifact(
-                    path=library_path, location=library_location, type='library'
+                    path=library_path, location=library_location, type="library"
                 )
                 if library_artifact.path not in paths_done:
                     paths_done.append(library_artifact.path)
@@ -6464,7 +6464,7 @@ class Context:
             for binary_artifact in all_binary_artifacts:
                 self.patch_linux_binary_artifacts(
                     binary_artifacts=[binary_artifact],
-                    prefix_path='$ORIGIN',
+                    prefix_path="$ORIGIN",
                     source_artifacts=all_binary_artifacts,
                     relative_path=True,
                     search_paths=[],
@@ -6475,7 +6475,7 @@ class Context:
         release_name = self.release()
 
         class File:
-            def __init__(self, path, absolute_path, type='file'):
+            def __init__(self, path, absolute_path, type="file"):
                 self.path = path
                 self.absolute_path = absolute_path
                 self.type = type
@@ -6485,7 +6485,7 @@ class Context:
                 self.name = system_name
                 self.distribution = distribution_name
                 self.release = release_name
-                self.version = platform.platform() + '-' + '-'.join(platform.libc_ver())
+                self.version = platform.platform() + "-" + "-".join(platform.libc_ver())
                 self.architecture = package_arch
 
         files_absolute_paths = []
@@ -6499,31 +6499,31 @@ class Context:
             files_absolute_paths.append(os.path.realpath(artifact.absolute_path))
             files.append(artifact_file)
 
-        package_filename = output_filename + '.deb'
+        package_filename = output_filename + ".deb"
 
         package_path = os.path.realpath(
             os.path.join(self.get_output_path(), package_filename)
         )
 
         package_file = File(
-            path=package_filename, absolute_path=package_path, type='package'
+            path=package_filename, absolute_path=package_path, type="package"
         )
 
         libraries_list = self.find_artifacts(
             path=subdirectory_directory,
             recursively=True,
-            types=('*.so', '*.so.*', '*.dylib', '*.dylib.*'),
+            types=("*.so", "*.so.*", "*.dylib", "*.dylib.*"),
         )
 
         for file_path in all_prefix_files:
             if os.path.realpath(file_path) in files_absolute_paths:
                 continue
 
-            file_type = 'library' if file_path in libraries_list else 'file'
+            file_type = "library" if file_path in libraries_list else "file"
 
-            if file_type == 'library':
+            if file_type == "library":
                 is_executable = (os.stat(file_path).st_mode & stat.S_IXUSR) > 0
-                file_type = file_type if is_executable else 'file'
+                file_type = file_type if is_executable else "file"
 
             artifact_file = File(
                 path=os.path.relpath(path=file_path, start=subdirectory_directory),

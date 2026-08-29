@@ -8,7 +8,7 @@ from golemcpp.golem.version_resolver import VersionResolver
 
 @dataclass
 class Cookbook:
-    '''A configured cookbook of recipes, at the version its location names.'''
+    """A configured cookbook of recipes, at the version its location names."""
 
     source: RequestedSource
 

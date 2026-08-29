@@ -35,19 +35,19 @@ class Artifact:
     def __eq__(self, other):
         return self.absolute_path == other.absolute_path
 
-    RESOLVED_MEMBER = 'resolved'
+    RESOLVED_MEMBER = "resolved"
 
     @staticmethod
     def serialized_members():
         return [
-            'path',
-            'location',
-            'type',
-            'scope',
-            'repository',
-            'target',
-            'decorated_target',
-            'resolved',
+            "path",
+            "location",
+            "type",
+            "scope",
+            "repository",
+            "target",
+            "decorated_target",
+            "resolved",
         ]
 
     @staticmethod

@@ -16,7 +16,7 @@ from support import make_cache_configuration
 def make_manager(tmp_path):
     return get_overlay_manager(
         make_cache_configuration(
-            cache_directory.CacheDirectory(location=str(tmp_path / 'cache')),
+            cache_directory.CacheDirectory(location=str(tmp_path / "cache")),
             minimization_enabled=False,
         )
     )
@@ -24,7 +24,7 @@ def make_manager(tmp_path):
 
 def make_source():
     return RequestedSource.for_repository(
-        'https://example.com/overrides.git', version='main'
+        "https://example.com/overrides.git", version="main"
     )
 
 
@@ -59,9 +59,9 @@ def test_resolve_and_locate(tmp_path):
 
     cached_repository = manager.resolve_cached_resource(Overlay(source=source))
 
-    assert cached_repository.cache_root == str(tmp_path / 'cache')
+    assert cached_repository.cache_root == str(tmp_path / "cache")
     assert cached_repository.path == os.path.join(
-        str(tmp_path / 'cache'),
+        str(tmp_path / "cache"),
         cache_configuration.OVERLAYS_SUBDIR,
         OverlayManager.cache_key_for(Overlay(source=source)),
     )
@@ -74,22 +74,22 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
     def populate(staging_root):
         source_dir = manager.source_path(staging_root)
         os.makedirs(source_dir)
-        with open(os.path.join(source_dir, 'overrides.json'), 'w') as fileout:
-            fileout.write('[]')
+        with open(os.path.join(source_dir, "overrides.json"), "w") as fileout:
+            fileout.write("[]")
 
     item = Overlay(source=source)
-    item.resolved = ResolvedVersion(reference='main', revision=STUB_HEAD)
+    item.resolved = ResolvedVersion(reference="main", revision=STUB_HEAD)
     cached = manager.resolve_cached_resource(item)
     resource_root = manager.guard_install(cached, populate)
 
     assert os.path.isfile(
-        os.path.join(manager.source_path(resource_root), 'overrides.json')
+        os.path.join(manager.source_path(resource_root), "overrides.json")
     )
     assert not os.path.exists(cached.staging_path)
     manifest = ResourceManifest.read_from_root(resource_root)
     assert manifest.kind == ResourceKind.OVERLAY.value
     assert (
-        manager.cache_manager.read_manifest_source(cached).resolved.reference == 'main'
+        manager.cache_manager.read_manifest_source(cached).resolved.reference == "main"
     )
 
 
@@ -97,23 +97,23 @@ def test_guard_install_swaps_source_and_manifest(tmp_path):
 
 
 def make_overlay(tmp_path, name, entries):
-    '''An overlay directory carrying an overrides.json, as a directory source.'''
+    """An overlay directory carrying an overrides.json, as a directory source."""
     overlay_dir = tmp_path / name
     overlay_dir.mkdir(parents=True)
-    (overlay_dir / 'overrides.json').write_text(json.dumps(entries), encoding='utf-8')
+    (overlay_dir / "overrides.json").write_text(json.dumps(entries), encoding="utf-8")
     return RequestedSource.for_directory(overlay_dir.resolve().as_uri())
 
 
 def load_overrides(tmp_path, sources):
-    '''The layered result, read back from where the manager wrote it.'''
+    """The layered result, read back from where the manager wrote it."""
     manager = make_manager(tmp_path)
     cached_overlays = manager.make_available_all(
         [manager.get_overlay(source) for source in sources]
     )
     merged_path = manager.load_overrides(
         cached_overlays,
-        project_dir=str(tmp_path / 'project'),
-        merged_path=str(tmp_path / 'build' / 'overrides.json'),
+        project_dir=str(tmp_path / "project"),
+        merged_path=str(tmp_path / "build" / "overrides.json"),
     )
 
     if not merged_path:
@@ -125,7 +125,7 @@ def load_overrides(tmp_path, sources):
 
 def test_making_overlays_available_keeps_the_configured_order(tmp_path):
     manager = make_manager(tmp_path)
-    sources = [make_overlay(tmp_path, name, []) for name in ('first', 'second')]
+    sources = [make_overlay(tmp_path, name, []) for name in ("first", "second")]
 
     cached_overlays = manager.make_available_all(
         [manager.get_overlay(source) for source in sources], fetch=False
@@ -145,54 +145,54 @@ def test_a_later_overlay_overwrites_only_the_members_it_sets(tmp_path):
     sources = [
         make_overlay(
             tmp_path,
-            'first',
+            "first",
             [
                 {
-                    'repository': 'https://host/json.git',
-                    'version': '^3.0.0',
-                    'shallow': True,
+                    "repository": "https://host/json.git",
+                    "version": "^3.0.0",
+                    "shallow": True,
                 }
             ],
         ),
         make_overlay(
             tmp_path,
-            'second',
-            [{'repository': 'https://host/json.git', 'version': '^4.0.0'}],
+            "second",
+            [{"repository": "https://host/json.git", "version": "^4.0.0"}],
         ),
     ]
 
     _, entries = load_overrides(tmp_path, sources)
 
     assert len(entries) == 1
-    assert entries[0]['version'] == '^4.0.0'
+    assert entries[0]["version"] == "^4.0.0"
     # Untouched by the second overlay, so the first one still carries it.
-    assert entries[0]['shallow'] is True
+    assert entries[0]["shallow"] is True
 
 
 def test_layering_keeps_an_entry_only_one_overlay_defines(tmp_path):
     sources = [
         make_overlay(
             tmp_path,
-            'first',
-            [{'repository': 'https://host/json.git', 'version': '^3.0.0'}],
+            "first",
+            [{"repository": "https://host/json.git", "version": "^3.0.0"}],
         ),
         make_overlay(
             tmp_path,
-            'second',
-            [{'repository': 'https://host/fmt.git', 'version': '^10.0.0'}],
+            "second",
+            [{"repository": "https://host/fmt.git", "version": "^10.0.0"}],
         ),
     ]
 
     _, entries = load_overrides(tmp_path, sources)
 
-    assert [entry['repository'] for entry in entries] == [
-        'https://host/json.git',
-        'https://host/fmt.git',
+    assert [entry["repository"] for entry in entries] == [
+        "https://host/json.git",
+        "https://host/fmt.git",
     ]
 
 
 def test_an_overlay_carrying_nothing_contributes_nothing(tmp_path):
-    empty = tmp_path / 'empty'
+    empty = tmp_path / "empty"
     empty.mkdir()
 
     merged_path, entries = load_overrides(
@@ -200,12 +200,12 @@ def test_an_overlay_carrying_nothing_contributes_nothing(tmp_path):
     )
 
     # Nothing to write, so nothing to point at.
-    assert merged_path == ''
+    assert merged_path == ""
     assert entries == []
 
 
 def test_no_overlay_at_all_contributes_nothing(tmp_path):
-    assert load_overrides(tmp_path, [])[0] == ''
+    assert load_overrides(tmp_path, [])[0] == ""
 
 
 def test_the_two_repository_kinds_do_not_share_a_cache_location(tmp_path):

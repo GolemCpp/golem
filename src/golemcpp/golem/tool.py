@@ -9,18 +9,18 @@ from golemcpp.golem.version_resolver import VersionResolver
 
 @dataclass
 class Tool:
-    '''An installable tool and the version of it a command asked for.'''
+    """An installable tool and the version of it a command asked for."""
 
     definition: tool_registry.ToolDefinition
 
-    version: str = ''
+    version: str = ""
     resolved: ResolvedVersion = ResolvedVersion()
 
     def __post_init__(self):
         # A tool asked for without a version is asked for at the one its
         # definition names, so `version` always means what was requested.
         if not self.version:
-            self.version = self.definition.default_version or ''
+            self.version = self.definition.default_version or ""
 
     @property
     def name(self):

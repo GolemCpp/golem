@@ -9,32 +9,32 @@ from golemcpp.golem import helpers
 # about scopes and files, not about which settings exist.
 
 # Configuration scopes, mirroring `git config --global` / `--local`.
-GLOBAL_SCOPE = 'global'
-LOCAL_SCOPE = 'local'
+GLOBAL_SCOPE = "global"
+LOCAL_SCOPE = "local"
 SCOPES = (LOCAL_SCOPE, GLOBAL_SCOPE)
 
 
 def get_config_home():
     # Windows keeps per-user application data in %APPDATA%, unlike the
     # XDG-style location used on the other platforms.
-    if sys.platform.startswith('win32'):
-        appdata = helpers.get_environ('APPDATA')
+    if sys.platform.startswith("win32"):
+        appdata = helpers.get_environ("APPDATA")
         if appdata:
             return appdata
 
-    config_home = helpers.get_environ('XDG_CONFIG_HOME')
+    config_home = helpers.get_environ("XDG_CONFIG_HOME")
     if config_home:
         return config_home
-    home_directory = helpers.get_environ('HOME') or os.path.expanduser('~')
-    return os.path.join(home_directory, '.config')
+    home_directory = helpers.get_environ("HOME") or os.path.expanduser("~")
+    return os.path.join(home_directory, ".config")
 
 
 def get_global_config_path():
-    return os.path.join(get_config_home(), 'golem', 'config.json')
+    return os.path.join(get_config_home(), "golem", "config.json")
 
 
 def get_local_config_path(project_dir):
-    return os.path.join(project_dir, '.golem', 'config.json')
+    return os.path.join(project_dir, ".golem", "config.json")
 
 
 def get_config_path(scope, project_dir):
@@ -44,7 +44,7 @@ def get_config_path(scope, project_dir):
         if not project_dir:
             return None
         return get_local_config_path(project_dir)
-    raise ValueError('Unknown configuration scope: {}'.format(scope))
+    raise ValueError("Unknown configuration scope: {}".format(scope))
 
 
 def read_config(path):
@@ -52,7 +52,7 @@ def read_config(path):
         return {}
 
     try:
-        with open(path, 'r', encoding='utf-8') as fp:
+        with open(path, "r", encoding="utf-8") as fp:
             data = json.load(fp)
     except (ValueError, OSError):
         return {}
@@ -68,7 +68,7 @@ def write_config(path, data):
         directory = os.path.dirname(path)
         if directory:
             helpers.make_directory(directory)
-        with open(path, 'w', encoding='utf-8') as fp:
+        with open(path, "w", encoding="utf-8") as fp:
             json.dump(data, fp, indent=4)
     elif os.path.exists(path):
         os.remove(path)
@@ -94,7 +94,7 @@ def set_value(key, value, scope, project_dir):
     path = get_config_path(scope=scope, project_dir=project_dir)
     if path is None:
         raise ValueError(
-            'A project directory is required to set a local configuration value'
+            "A project directory is required to set a local configuration value"
         )
 
     data = read_config(path)
@@ -106,7 +106,7 @@ def unset_value(key, scope, project_dir):
     path = get_config_path(scope=scope, project_dir=project_dir)
     if path is None:
         raise ValueError(
-            'A project directory is required to unset a local configuration value'
+            "A project directory is required to unset a local configuration value"
         )
 
     data = read_config(path)

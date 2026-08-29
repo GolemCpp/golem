@@ -1,8 +1,8 @@
 def configure(project):
 
     project.export(
-        name='gsl',
-        includes=['include'],
+        name="gsl",
+        includes=["include"],
         header_only=True,
-        licenses=['LICENSE', 'ThirdPartyNotices.txt'],
+        licenses=["LICENSE", "ThirdPartyNotices.txt"],
     )

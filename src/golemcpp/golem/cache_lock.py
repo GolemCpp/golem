@@ -1,4 +1,4 @@
-'''
+"""
 One golem at a time in a resource root.
 
 Two golem processes sharing a cache reach the same root: one cleans and resets a
@@ -16,7 +16,7 @@ processes doing unrelated work, and there is nothing to protect them from.
 The lock file itself is never removed. Removing it is what makes a lock file racy;
 one process deleting what another has just opened. Leaving it costs an empty file
 that nothing reads: the cache inventory only looks at directories.
-'''
+"""
 
 import os
 import time
@@ -41,7 +41,7 @@ POLL_SECONDS = 0.5
 
 
 def try_lock(handle) -> bool:
-    '''Whether this process now holds the lock. False when somebody else does.'''
+    """Whether this process now holds the lock. False when somebody else does."""
     try:
         if fcntl is not None:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -54,7 +54,7 @@ def try_lock(handle) -> bool:
 
 
 def unlock(handle) -> None:
-    '''Released here rather than left to the process ending, which also would.'''
+    """Released here rather than left to the process ending, which also would."""
     if fcntl is not None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
     else:
@@ -64,28 +64,28 @@ def unlock(handle) -> None:
 
 @contextmanager
 def held(path, timeout=WAIT_TIMEOUT_SECONDS):
-    '''
+    """
     The lock at `path`, held for the block.
 
     Waits for whoever has it, saying so once rather than looking hung, and gives
     up naming the path: waiting this long is a golem that will not finish rather
     than one that is slow.
-    '''
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    with open(path, 'a+') as handle:
+    with open(path, "a+") as handle:
         give_up_at = time.monotonic() + timeout
         announced = False
 
         while not try_lock(handle):
             if not announced:
-                print('Waiting for another golem to be done with {}'.format(path))
+                print("Waiting for another golem to be done with {}".format(path))
                 announced = True
 
             if time.monotonic() >= give_up_at:
                 raise RuntimeError(
-                    'Gave up after {}s waiting for another golem to be done with '
-                    '{}. Nothing was changed there.'.format(timeout, path)
+                    "Gave up after {}s waiting for another golem to be done with "
+                    "{}. Nothing was changed there.".format(timeout, path)
                 )
 
             time.sleep(POLL_SECONDS)

@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 def initialize_project(project_dir: str, data_dir: Path, force: bool = False) -> int:
-    project_path = Path(project_dir).joinpath('golemfile.py')
-    alternate_project_path = Path(project_dir).joinpath('golemfile.json')
+    project_path = Path(project_dir).joinpath("golemfile.py")
+    alternate_project_path = Path(project_dir).joinpath("golemfile.json")
 
     if not force:
         project_file_found = False
@@ -33,11 +33,11 @@ def initialize_project(project_dir: str, data_dir: Path, force: bool = False) ->
             project_path.unlink()
             print("Removed {}".format(project_path))
 
-    template_path = data_dir.joinpath('golemfile.py.template')
-    with open(template_path, 'r', encoding='utf-8') as filein:
+    template_path = data_dir.joinpath("golemfile.py.template")
+    with open(template_path, "r", encoding="utf-8") as filein:
         content = filein.read()
 
-    with open(project_path, 'w', encoding='utf-8') as fileout:
+    with open(project_path, "w", encoding="utf-8") as fileout:
         fileout.write(content)
 
     print("Created {}".format(project_path))
@@ -51,15 +51,15 @@ def handle_init_command(project_dir: str, data_dir: Path, args: list[str]) -> in
     force = False
 
     for arg in args:
-        if arg.startswith('--project-dir='):
+        if arg.startswith("--project-dir="):
             continue
-        if arg.startswith('--build-dir='):
+        if arg.startswith("--build-dir="):
             continue
-        if arg in ('-h', '--help'):
+        if arg in ("-h", "--help"):
             print("Usage: golem init [--project-dir=<project_dir>] [--force]")
             print("Generate a commented golemfile.py in the current project directory.")
             return 0
-        if arg == '--force':
+        if arg == "--force":
             force = True
             continue
 

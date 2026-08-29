@@ -4,10 +4,10 @@ from golemcpp.golem import helpers
 
 # Canonical subdirectories carved out of a cache directory, one per resource
 # kind, so every consumer agrees on the on-disk layout.
-DEPENDENCIES_SUBDIR = 'dependencies'
-COOKBOOKS_SUBDIR = 'cookbooks'
-OVERLAYS_SUBDIR = 'overlays'
-TOOLS_SUBDIR = 'tools'
+DEPENDENCIES_SUBDIR = "dependencies"
+COOKBOOKS_SUBDIR = "cookbooks"
+OVERLAYS_SUBDIR = "overlays"
+TOOLS_SUBDIR = "tools"
 
 # All resource-kind subdirectories, for consumers iterating a cache directory.
 RESOURCE_SUBDIRS = (
@@ -19,35 +19,35 @@ RESOURCE_SUBDIRS = (
 
 # Subdirectory inside a cached resource root that holds the fetched source content
 # (a git clone or a copied directory).
-SOURCE_DIRNAME = 'source'
+SOURCE_DIRNAME = "source"
 
 
 def source_path(root):
-    '''
+    """
     Where a resource keeps its fetched content under its root. Never the root
     itself: that is the resource, and it also holds the manifest naming it and
     whatever gets built from the source.
-    '''
+    """
     return os.path.join(root, SOURCE_DIRNAME)
 
 
 # Every setting describing the cache. A dependency sub-build inherits all of
 # them, so it reaches the same caches with the same layout as its parent.
 CACHE_SETTINGS = (
-    'GOLEM_CACHE_DIRECTORY',
-    'GOLEM_ADDITIONAL_CACHE_DIRECTORIES',
-    'GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES',
-    'GOLEM_CACHE_RESOLUTION_POLICY',
-    'GOLEM_CACHE_MINIMIZATION_ENABLED',
-    'GOLEM_CACHE_MINIMIZATION_LENGTH',
+    "GOLEM_CACHE_DIRECTORY",
+    "GOLEM_ADDITIONAL_CACHE_DIRECTORIES",
+    "GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES",
+    "GOLEM_CACHE_RESOLUTION_POLICY",
+    "GOLEM_CACHE_MINIMIZATION_ENABLED",
+    "GOLEM_CACHE_MINIMIZATION_LENGTH",
 )
 
 
 class CacheConfiguration:
-    '''
+    """
     Cache settings shared by every class that touches the cache (the CacheManager, the per-kind
     resource managers) so those settings live in one place instead of being passed loose.
-    '''
+    """
 
     def __init__(
         self,
@@ -59,15 +59,15 @@ class CacheConfiguration:
         fetch_jobs,
     ):
         for name, value in (
-            ('locations', locations),
-            ('resolution_policy', resolution_policy),
-            ('minimization_enabled', minimization_enabled),
-            ('minimization_length', minimization_length),
-            ('fetch_mode', fetch_mode),
-            ('fetch_jobs', fetch_jobs),
+            ("locations", locations),
+            ("resolution_policy", resolution_policy),
+            ("minimization_enabled", minimization_enabled),
+            ("minimization_length", minimization_length),
+            ("fetch_mode", fetch_mode),
+            ("fetch_jobs", fetch_jobs),
         ):
             if value is None:
-                raise ValueError('CacheConfiguration requires {}'.format(name))
+                raise ValueError("CacheConfiguration requires {}".format(name))
 
         self.locations = list(locations)
         self.resolution_policy = resolution_policy
@@ -81,12 +81,12 @@ class CacheConfiguration:
 
 
 def resolve_cache_locations(settings):
-    '''
+    """
     Every cache location a project uses, in the order they are searched.
-    '''
-    locations = [settings.get('GOLEM_CACHE_DIRECTORY')]
-    locations += settings.get('GOLEM_ADDITIONAL_CACHE_DIRECTORIES')
-    locations += settings.get('GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES')
+    """
+    locations = [settings.get("GOLEM_CACHE_DIRECTORY")]
+    locations += settings.get("GOLEM_ADDITIONAL_CACHE_DIRECTORIES")
+    locations += settings.get("GOLEM_ADDITIONAL_READ_ONLY_CACHE_DIRECTORIES")
 
     return _deduplicate_locations(locations)
 
@@ -104,21 +104,21 @@ def _deduplicate_locations(locations):
 
 
 def get_cache_configuration(settings):
-    '''
+    """
     The single factory for a fully-populated CacheConfiguration, so the waf build Context
     and the native `golem cache` / `golem tools` commands resolve the cache the
     same way.
-    '''
+    """
     # Every command that goes on to run git comes through here, and this is the
     # last point where its settings are still in hand: what runs git afterwards is
     # handed a URL, not a configuration. See helpers.allow_git_prompt.
-    helpers.allow_git_prompt(settings.get('GOLEM_GIT_PROMPT_ENABLED'))
+    helpers.allow_git_prompt(settings.get("GOLEM_GIT_PROMPT_ENABLED"))
 
     return CacheConfiguration(
         locations=resolve_cache_locations(settings),
-        resolution_policy=settings.get('GOLEM_CACHE_RESOLUTION_POLICY'),
-        minimization_enabled=settings.get('GOLEM_CACHE_MINIMIZATION_ENABLED'),
-        minimization_length=settings.get('GOLEM_CACHE_MINIMIZATION_LENGTH'),
-        fetch_mode=settings.get('GOLEM_GIT_FETCH_MODE'),
-        fetch_jobs=settings.get('GOLEM_GIT_JOBS'),
+        resolution_policy=settings.get("GOLEM_CACHE_RESOLUTION_POLICY"),
+        minimization_enabled=settings.get("GOLEM_CACHE_MINIMIZATION_ENABLED"),
+        minimization_length=settings.get("GOLEM_CACHE_MINIMIZATION_LENGTH"),
+        fetch_mode=settings.get("GOLEM_GIT_FETCH_MODE"),
+        fetch_jobs=settings.get("GOLEM_GIT_JOBS"),
     )

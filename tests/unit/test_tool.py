@@ -10,42 +10,42 @@ from golemcpp.golem.locator import Locator
 
 @pytest.fixture
 def resolutions(monkeypatch):
-    '''Every version resolution asked of the remote, in order.'''
+    """Every version resolution asked of the remote, in order."""
     asked = []
 
     def resolve(requested):
         asked.append((str(requested.locator), requested.version))
-        return ResolvedVersion(reference='v0.8.1', revision='deadbeef')
+        return ResolvedVersion(reference="v0.8.1", revision="deadbeef")
 
-    monkeypatch.setattr(VersionResolver, 'resolve', staticmethod(resolve))
+    monkeypatch.setattr(VersionResolver, "resolve", staticmethod(resolve))
     return asked
 
 
-def make_definition(default_version='v0.8.1'):
+def make_definition(default_version="v0.8.1"):
     return tool_registry.ToolDefinition(
-        name='cppfront',
-        description='',
-        repository='https://host/cppfront.git',
+        name="cppfront",
+        description="",
+        repository="https://host/cppfront.git",
         default_version=default_version,
         build_handler=lambda resource_root: None,
     )
 
 
 def test_a_tool_asked_for_without_a_version_takes_its_definitions_default():
-    assert Tool(definition=make_definition()).version == 'v0.8.1'
-    assert Tool(definition=make_definition(), version='v0.8.0').version == 'v0.8.0'
+    assert Tool(definition=make_definition()).version == "v0.8.1"
+    assert Tool(definition=make_definition(), version="v0.8.0").version == "v0.8.0"
 
 
 def test_a_definition_naming_no_default_leaves_the_version_empty():
-    assert Tool(definition=make_definition(default_version=None)).version == ''
+    assert Tool(definition=make_definition(default_version=None)).version == ""
 
 
 def test_resolving_asks_the_remote_for_the_requested_version(resolutions):
-    tool = Tool(definition=make_definition(), version='^0.8.0')
+    tool = Tool(definition=make_definition(), version="^0.8.0")
 
-    assert tool.resolve() == ResolvedVersion(reference='v0.8.1', revision='deadbeef')
-    assert resolutions == [('https://host/cppfront.git', '^0.8.0')]
-    assert tool.resolved.reference == 'v0.8.1'
+    assert tool.resolve() == ResolvedVersion(reference="v0.8.1", revision="deadbeef")
+    assert resolutions == [("https://host/cppfront.git", "^0.8.0")]
+    assert tool.resolved.reference == "v0.8.1"
 
 
 def test_resolving_twice_asks_once(resolutions):
@@ -58,11 +58,11 @@ def test_resolving_twice_asks_once(resolutions):
 
 
 def test_the_source_carries_the_resolved_version(resolutions):
-    tool = Tool(definition=make_definition(), version='^0.8.0')
+    tool = Tool(definition=make_definition(), version="^0.8.0")
     tool.resolve()
 
     source = ResourceManager.source_for(tool)
 
-    assert source.locator == Locator('https://host/cppfront.git')
+    assert source.locator == Locator("https://host/cppfront.git")
     # What was resolved, not what was asked for.
-    assert source.resolved.reference == 'v0.8.1'
+    assert source.resolved.reference == "v0.8.1"

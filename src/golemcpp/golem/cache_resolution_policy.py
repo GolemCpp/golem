@@ -13,7 +13,7 @@ class CacheResolutionPolicy(Enum):
 
 
 def parse_policy(text, context):
-    '''The policy a configured name stands for. Raises on an unknown name.'''
+    """The policy a configured name stands for. Raises on an unknown name."""
     return CacheResolutionPolicy(text)
 
 

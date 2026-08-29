@@ -21,13 +21,13 @@ def main() -> int:
     sys.stdout.flush()
 
     golem_path = helpers.get_golemcpp_golem_dir()
-    golemcpp_data_path = Path(golem_path).parent.joinpath('data')
+    golemcpp_data_path = Path(golem_path).parent.joinpath("data")
 
     global_args, command, command_args = cli_arguments.parse_cli_arguments(
         sys.argv, os.getcwd()
     )
 
-    if '--version' in global_args:
+    if "--version" in global_args:
         command_version.handle_version_command()
         return 0
 
@@ -39,22 +39,22 @@ def main() -> int:
         command_args
     )
 
-    if command in ('init', 'initialize'):
+    if command in ("init", "initialize"):
         return command_init.handle_init_command(
             project_dir=project_dir, data_dir=golemcpp_data_path, args=command_args
         )
 
-    if command == 'config':
+    if command == "config":
         return command_config.handle_config_command(
             project_dir=project_dir, args=command_args
         )
 
-    if command == 'tools':
+    if command == "tools":
         return command_tools.handle_tools_command(
             project_dir=project_dir, args=command_args
         )
 
-    if command == 'cache':
+    if command == "cache":
         return command_cache.handle_cache_command(
             project_dir=project_dir, args=command_args
         )
@@ -63,24 +63,24 @@ def main() -> int:
     sys.argv = [sys.argv[0], command] + command_args
 
     golem_out = build_dir
-    build_dir = os.path.join(golem_out, 'golem')
+    build_dir = os.path.join(golem_out, "golem")
 
-    filein = open(os.path.join(golemcpp_data_path, 'wscript'), encoding='utf-8')
+    filein = open(os.path.join(golemcpp_data_path, "wscript"), encoding="utf-8")
     src = Template(filein.read())
     filein.close()
-    out = src.substitute(builder_path=repr(os.path.join(golem_path, 'builder.py')))
+    out = src.substitute(builder_path=repr(os.path.join(golem_path, "builder.py")))
 
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
-    fileout = open(os.path.join(build_dir, 'wscript'), 'w+', encoding='utf-8')
+    fileout = open(os.path.join(build_dir, "wscript"), "w+", encoding="utf-8")
     fileout.write(out)
     fileout.close()
 
     wafdir = os.path.abspath(inspect.getfile(inspect.getmodule(Scripting)))
     wafdir = str(Path(wafdir).parent.parent.absolute())
 
-    if command == 'distclean':
+    if command == "distclean":
         path = golem_out
         helpers.remove_tree(path)
         return 0

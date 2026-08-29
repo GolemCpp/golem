@@ -1,4 +1,4 @@
-'''
+"""
 Which recipes serve an identity, and which cookbook each one came from.
 
 A recipe is named after the identity it serves, therefore finding one is a probe
@@ -10,7 +10,7 @@ A recipe may be a delta on another one, and the search then continues from its
 `overrides`. A lookup therefore resolves to a chain of recipes, most derived
 first, and this module is what builds it. `Recipe` only reads it. One manifest
 is read per link, and still never before a rung matches.
-'''
+"""
 
 from golemcpp.golem import project_file
 from golemcpp.golem import recipe as recipe_module
@@ -20,19 +20,19 @@ from golemcpp.golem.source_id import SourceId
 
 
 class RecipeResolver:
-    '''The recipes a stack of cookbooks can serve, in the order they answer.'''
+    """The recipes a stack of cookbooks can serve, in the order they answer."""
 
     def __init__(self, cached_cookbooks):
         self.cached_cookbooks = cached_cookbooks
 
     def resolve(self, recipe_id, report=True) -> Recipe:
-        '''
+        """
         Return the recipe serving an identity.
 
         Raise when no match were found, or when the match contains nothing.
 
         What a caller then asks of the recipe is its own business.
-        '''
+        """
 
         stack = self.searched_cookbooks()
         layer, declared, _ = self.probe(stack, recipe_id)
@@ -49,12 +49,12 @@ class RecipeResolver:
         return recipe
 
     def searched_cookbooks(self) -> list:
-        '''List the cookbooks in the order they are asked, most derived first.'''
+        """List the cookbooks in the order they are asked, most derived first."""
         return list(reversed(self.cached_cookbooks))
 
     @staticmethod
-    def probe(stack, recipe_id, layer=0, skippable='', taken=frozenset()):
-        '''
+    def probe(stack, recipe_id, layer=0, skippable="", taken=frozenset()):
+        """
         Find the declaration serving an identity, from `layer` downward.
 
         Return...
@@ -72,7 +72,7 @@ class RecipeResolver:
 
         Ladder: If no recipe is found on a cookbook, the probing continues on the next
         cookbook in the stack.
-        '''
+        """
 
         for index in range(layer, len(stack)):
             for rung in recipe_id.rungs():
@@ -92,13 +92,13 @@ class RecipeResolver:
         return len(stack), None, None
 
     def chain_from(self, stack, layer, declared) -> tuple:
-        '''
+        """
         Follow `overrides` from a declaration, most derived first.
 
         Return a chain of `DeclaredRecipe`.
 
         Raise when a cycle is found, or when an overriding recipe points to nowhere.
-        '''
+        """
 
         chain = [declared]
         taken = {declared.directory}
@@ -123,7 +123,7 @@ class RecipeResolver:
 
     @staticmethod
     def require_an_answer(recipe):
-        '''Refuse a recipe that doesn't hold anything.'''
+        """Refuse a recipe that doesn't hold anything."""
 
         # A recipe directory named right and holding nothing is an error case.
         if recipe:
@@ -141,7 +141,7 @@ class RecipeResolver:
 
     @staticmethod
     def refuse_a_missing_override(overriding, target, chain):
-        '''Refuse an `overrides` no cookbook at or below it holds.'''
+        """Refuse an `overrides` no cookbook at or below it holds."""
 
         raise RuntimeError(
             "ERROR: {} overrides '{}', and no cookbook at or below it holds "
@@ -150,9 +150,9 @@ class RecipeResolver:
 
     @staticmethod
     def refuse_a_cycle(chain, revisited):
-        '''
+        """
         Refuse an `overrides` resolving to a recipe the chain already took.
-        '''
+        """
 
         closed_on = next(
             index
@@ -164,28 +164,28 @@ class RecipeResolver:
         raise RuntimeError(
             "ERROR: cycle in cookbook '{}': {}".format(
                 revisited.cookbook.cache_key,
-                ' -> '.join(str(link.rung) for link in loop),
+                " -> ".join(str(link.rung) for link in loop),
             )
         )
 
     @staticmethod
     def report(recipe_id, recipe):
-        '''Report every recipe serving an identity, and the cookbook each came from.'''
+        """Report every recipe serving an identity, and the cookbook each came from."""
 
         # In the shape a resolved version is reported in.
         print("{}: served by {}".format(recipe_id, recipe.describe_chain()))
 
     def refuse(self, recipe_id):
-        '''Report the recipe being looked for couldn't be found among the cookbooks.'''
+        """Report the recipe being looked for couldn't be found among the cookbooks."""
 
-        searched = '\n'.join(
-            '  {}'.format(cookbook.source_path) for cookbook in self.cached_cookbooks
+        searched = "\n".join(
+            "  {}".format(cookbook.source_path) for cookbook in self.cached_cookbooks
         )
 
         raise RuntimeError(
             "ERROR: no recipe '{}'.\nSearched {} cookbook(s):\n{}".format(
                 recipe_id,
                 len(self.cached_cookbooks),
-                searched or '  (none)',
+                searched or "  (none)",
             )
         )

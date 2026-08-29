@@ -30,7 +30,7 @@ class Definition(Configuration):
 
     @staticmethod
     def serialized_members():
-        return ['name', 'version_template', 'templates']
+        return ["name", "version_template", "templates"]
 
     @staticmethod
     def serialize_to_json(o):
@@ -40,7 +40,7 @@ class Definition(Configuration):
             if key in Definition.serialized_members():
                 value = o.__dict__[key]
                 if value:
-                    if key == 'templates' or key == 'version_template':
+                    if key == "templates" or key == "version_template":
                         array = []
                         for item in value:
                             if isinstance(item, str):
@@ -58,7 +58,7 @@ class Definition(Configuration):
 
         for key, value in o.items():
             if key in Definition.serialized_members():
-                if key == 'templates' or key == 'version_template':
+                if key == "templates" or key == "version_template":
                     array = []
                     for item in value:
                         if isinstance(item, str):
@@ -99,12 +99,12 @@ class ExportedConfiguration(object):
     def unserialize_from_json(o):
         exported_configuration = ExportedConfiguration()
         for key, value in o.items():
-            if key == 'dependencies':
+            if key == "dependencies":
                 for dep in value:
                     exported_configuration.dependencies.append(
                         Dependency.unserialize_from_json(dep)
                     )
-            elif key == 'configuration':
+            elif key == "configuration":
                 exported_configuration.configuration = (
                     Configuration.unserialize_from_json(value)
                 )
@@ -114,7 +114,7 @@ class ExportedConfiguration(object):
     def load_file(path, context):
 
         json_content = None
-        with open(path, 'r') as file_json:
+        with open(path, "r") as file_json:
             json_content = json.load(file_json)
 
         conf_file = ExportedConfiguration.unserialize_from_json(json_content)
@@ -212,5 +212,5 @@ class ExportedConfiguration(object):
             sort_keys=True,
             indent=4,
         )
-        with open(path, 'w') as output:
+        with open(path, "w") as output:
             output.write(json_content)

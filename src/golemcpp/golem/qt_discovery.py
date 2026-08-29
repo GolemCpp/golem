@@ -21,14 +21,14 @@ def extract_qt_version_from_path(path):
     for part in Path(path).parts:
         normalized_part = part.lower()
 
-        if re.fullmatch(r'\d+(?:\.\d+)+', normalized_part):
-            versions.append(tuple(int(value) for value in normalized_part.split('.')))
+        if re.fullmatch(r"\d+(?:\.\d+)+", normalized_part):
+            versions.append(tuple(int(value) for value in normalized_part.split(".")))
             continue
 
-        version_match = re.fullmatch(r'qt[-_]?(\d+(?:\.\d+)*)', normalized_part)
+        version_match = re.fullmatch(r"qt[-_]?(\d+(?:\.\d+)*)", normalized_part)
         if version_match:
             versions.append(
-                tuple(int(value) for value in version_match.group(1).split('.'))
+                tuple(int(value) for value in version_match.group(1).split("."))
             )
 
     if not versions:
@@ -47,7 +47,7 @@ def matches_required_qt_major_version(path, wants_qt6=False):
 
 
 def is_valid_qt_sdk_root(path, wants_qt6=False):
-    required_directories = ['bin', 'include', 'lib', 'mkspecs']
+    required_directories = ["bin", "include", "lib", "mkspecs"]
     required_paths = [
         os.path.join(path, directory) for directory in required_directories
     ]
@@ -55,20 +55,20 @@ def is_valid_qt_sdk_root(path, wants_qt6=False):
     if not all(os.path.isdir(required_path) for required_path in required_paths):
         return False
 
-    if not os.path.isdir(os.path.join(path, 'include', 'QtCore')):
+    if not os.path.isdir(os.path.join(path, "include", "QtCore")):
         return False
 
     if not matches_required_qt_major_version(path, wants_qt6=wants_qt6):
         return False
 
-    library_patterns = ['QtCore.framework']
+    library_patterns = ["QtCore.framework"]
     if wants_qt6:
-        library_patterns = ['Qt6Core*', 'libQt6Core*'] + library_patterns
+        library_patterns = ["Qt6Core*", "libQt6Core*"] + library_patterns
     else:
-        library_patterns = ['Qt5Core*', 'libQt5Core*'] + library_patterns
+        library_patterns = ["Qt5Core*", "libQt5Core*"] + library_patterns
 
     for pattern in library_patterns:
-        if glob.glob(os.path.join(path, 'lib', pattern)):
+        if glob.glob(os.path.join(path, "lib", pattern)):
             return True
 
     return False
@@ -77,29 +77,29 @@ def is_valid_qt_sdk_root(path, wants_qt6=False):
 def list_default_qt_root_installation_dirs(context):
     dirs = []
     if context.is_windows():
-        dirs += ['C:\\Qt', 'C:\\Program Files\\Qt', 'C:\\Program Files (x86)\\Qt']
+        dirs += ["C:\\Qt", "C:\\Program Files\\Qt", "C:\\Program Files (x86)\\Qt"]
     elif context.is_darwin():
         dirs += [
-            '/Applications/Qt',
-            '/usr/local/opt/qt',
-            '/usr/local/opt/qt5',
-            '/usr/local/opt/qt6',
-            '/opt/homebrew/opt/qt',
-            '/opt/homebrew/opt/qt5',
-            '/opt/homebrew/opt/qt6',
+            "/Applications/Qt",
+            "/usr/local/opt/qt",
+            "/usr/local/opt/qt5",
+            "/usr/local/opt/qt6",
+            "/opt/homebrew/opt/qt",
+            "/opt/homebrew/opt/qt5",
+            "/opt/homebrew/opt/qt6",
         ]
     elif context.is_linux():
         dirs += [
-            '/opt/Qt',
-            '/opt/qt',
-            '/usr/local/qt',
-            '/usr/local/qt5',
-            '/usr/local/qt6',
-            '/usr/local/opt/qt',
-            '/usr/local/opt/qt5',
-            '/usr/local/opt/qt6',
-            '/usr/lib/qt5',
-            '/usr/lib/qt6',
+            "/opt/Qt",
+            "/opt/qt",
+            "/usr/local/qt",
+            "/usr/local/qt5",
+            "/usr/local/qt6",
+            "/usr/local/opt/qt",
+            "/usr/local/opt/qt5",
+            "/usr/local/opt/qt6",
+            "/usr/lib/qt5",
+            "/usr/lib/qt6",
         ]
     return dirs
 

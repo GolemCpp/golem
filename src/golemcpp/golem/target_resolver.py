@@ -1,4 +1,4 @@
-'''
+"""
 Settling what a build is for, once a compiler has been chosen.
 
 Golem names no architecture nobody asked for, so the identity comes from the
@@ -15,7 +15,7 @@ questions and turns the answers into one of four outcomes.
 - They disagree and nothing bridges it, which is an error.
 - Nothing named a target at all, which is an error, since naming one here
   would be a guess and it would end up in a build slug.
-'''
+"""
 
 import os
 import subprocess
@@ -26,22 +26,22 @@ from golemcpp.golem import target_platform
 
 
 def arch_request(options):
-    '''
+    """
     The architecture that was asked for, or '' when none was.
 
     Distinct from what the build turns out to be: an absent request is not a
     request for the host, and only a request may emit selecting flags.
-    '''
-    return target_platform.normalize_arch(getattr(options, 'arch', None))
+    """
+    return target_platform.normalize_arch(getattr(options, "arch", None))
 
 
 def refusal_phrase(refusal, target):
-    '''
+    """
     Say what a compiler builds for instead, completing "the selected compiler".
 
     Each refusal is about one of the compiler's own answers, so the phrase
     names that answer and leaves the request to the sentence around it.
-    '''
+    """
     if refusal is target_platform.Refusal.ARCH:
         return "builds for '{}'".format(target.arch)
 
@@ -55,57 +55,57 @@ def refusal_phrase(refusal, target):
 
 
 class TargetResolver:
-    '''
+    """
     Asks the chosen compiler what it builds for, and settles it against --arch.
 
     Reads waf's configuration context directly, so `msvc` is the one fact it
     cannot work out for itself: which toolchain family this is decides both
     how the compiler is asked and whether a flag could reach a second target.
-    '''
+    """
 
     def __init__(self, conf, msvc=False):
         self.conf = conf
         self.msvc = msvc
 
     def compiler_triple(self):
-        '''
+        """
         The target triple the compiler waf selected reports, or '' for none.
 
         `-dumpmachine` is the portable form; `-print-multiarch` is empty
         outside Debian. MSVC answers neither and is asked through DEST_CPU.
-        '''
+        """
         if self.msvc:
-            return ''
+            return ""
 
         cxx = self.conf.env.CXX
         if not cxx:
-            return ''
+            return ""
 
-        command = (list(cxx) if isinstance(cxx, list) else [cxx]) + ['-dumpmachine']
+        command = (list(cxx) if isinstance(cxx, list) else [cxx]) + ["-dumpmachine"]
         try:
             return subprocess.check_output(
                 command, universal_newlines=True, stderr=subprocess.DEVNULL
             ).strip()
         except (OSError, ValueError, subprocess.SubprocessError):
-            return ''
+            return ""
 
     def compiler_macros(self):
-        '''
+        """
         Every macro the compiler predefines, as names to values.
 
         `-dumpmachine` reports the target a compiler was configured for. Its
         macros report the target it is building for, which is the finer answer
         wherever one triple covers several ABIs.
-        '''
+        """
         cxx = self.conf.env.CXX
         if self.msvc or not cxx:
             return {}
 
         command = (list(cxx) if isinstance(cxx, list) else [cxx]) + [
-            '-dM',
-            '-E',
-            '-x',
-            'c++',
+            "-dM",
+            "-E",
+            "-x",
+            "c++",
             os.devnull,
         ]
         try:
@@ -118,17 +118,17 @@ class TargetResolver:
         macros = {}
         for line in output.splitlines():
             parts = line.split(None, 2)
-            if len(parts) >= 2 and parts[0] == '#define':
-                macros[parts[1]] = parts[2] if len(parts) > 2 else ''
+            if len(parts) >= 2 and parts[0] == "#define":
+                macros[parts[1]] = parts[2] if len(parts) > 2 else ""
         return macros
 
     def compiler_target(self):
-        '''
+        """
         Everything the compiler waf selected said about what it builds for.
 
         MSVC is asked differently: waf's msvc detection records the target of
         the installation it found in DEST_CPU.
-        '''
+        """
         if self.msvc:
             return target_platform.CompilerTarget.from_arch(self.conf.env.DEST_CPU)
 
@@ -141,32 +141,32 @@ class TargetResolver:
         return target.completed_by(target_platform.macro_arch(self.compiler_macros()))
 
     def compiler_builds_with(self, flags):
-        '''
+        """
         Build a trivial program with `flags` and report whether that worked.
 
         The one question a compiler answers about a target it was not
         configured for. Multilib is why: the flag reaches a second target only
         where the platform ships a userland for it, and nothing short of
         linking says whether it does.
-        '''
+        """
         return bool(
             self.conf.check_cxx(
                 cxxflags=flags,
                 linkflags=flags,
                 mandatory=False,
-                msg='Checking whether the compiler builds with {}'.format(
-                    ' '.join(flags)
+                msg="Checking whether the compiler builds with {}".format(
+                    " ".join(flags)
                 ),
             )
         )
 
     def compiler_command(self):
-        '''The compiler as it was invoked, for a message that has to name it.'''
+        """The compiler as it was invoked, for a message that has to name it."""
         cxx = self.conf.env.CXX
-        return ' '.join(cxx) if isinstance(cxx, list) else cxx
+        return " ".join(cxx) if isinstance(cxx, list) else cxx
 
     def resolve(self):
-        '''
+        """
         Name the architecture this build is for, or raise saying why it cannot.
 
         Called once, after waf's compiler detection and before the options are
@@ -175,7 +175,7 @@ class TargetResolver:
 
         A request --arch= that the chosen compiler will not honour is an
         error. One that nothing could check is taken on trust, with a warning.
-        '''
+        """
         requested = arch_request(self.conf.options)
         target = self.compiler_target()
         resolved, refusal = target.settle(requested)
@@ -216,12 +216,12 @@ class TargetResolver:
         only_a_family = unnamed and bool(target.family)
 
         if refusal:
-            attempt = ''
+            attempt = ""
             if build_failed:
                 attempt = (
                     " Building with {} was tried as well and produced "
                     "nothing that links, so it has no multilib for that "
-                    "target either.".format(' '.join(attempted))
+                    "target either.".format(" ".join(attempted))
                 )
             raise RuntimeError(
                 "Requested architecture '{}' but the selected compiler ({}) "
@@ -240,7 +240,7 @@ class TargetResolver:
                 "The selected compiler ({}) does not say which {} it builds "
                 "for, and the choices are not interchangeable. Name one with "
                 "--arch: {}.".format(
-                    self.compiler_command(), target.family, ', '.join(target.admitted)
+                    self.compiler_command(), target.family, ", ".join(target.admitted)
                 )
             )
 
@@ -257,7 +257,7 @@ class TargetResolver:
                 "Requested architecture '{}' but the selected compiler ({}) "
                 "did not build for it: {} produced nothing that links, and it "
                 "reported no target of its own to fall back on.".format(
-                    requested, self.compiler_command(), ' '.join(attempted)
+                    requested, self.compiler_command(), " ".join(attempted)
                 )
             )
 
@@ -279,6 +279,6 @@ class TargetResolver:
             )
 
         # Log the resolved target architecture
-        self.conf.msg('Target architecture', resolved)
+        self.conf.msg("Target architecture", resolved)
 
         return resolved

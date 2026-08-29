@@ -67,11 +67,11 @@ class Configuration(Condition):
     ):
         super(Configuration, self).__init__(**kwargs)
 
-        self.packages_tool = '' if packages_tool is None else packages_tool
+        self.packages_tool = "" if packages_tool is None else packages_tool
         self.header_only = False if header_only is None else header_only
         self.no_defaults = False if no_defaults is None else no_defaults
-        self.c_standard = '' if c_standard is None else c_standard
-        self.cxx_standard = '' if cxx_standard is None else cxx_standard
+        self.c_standard = "" if c_standard is None else c_standard
+        self.cxx_standard = "" if cxx_standard is None else cxx_standard
 
         self.targets = helpers.parameter_to_list(targets)
 
@@ -148,93 +148,93 @@ class Configuration(Condition):
         if config.targets:
             self.targets = helpers.filter_unique(self.targets + config.targets)
 
-        if hasattr(config, 'dlls') and config.dlls:
+        if hasattr(config, "dlls") and config.dlls:
             self.dlls = helpers.filter_unique(self.dlls + config.dlls)
 
-        if hasattr(config, 'static_targets'):
+        if hasattr(config, "static_targets"):
             self.static_targets = helpers.filter_unique(
                 self.static_targets + config.static_targets
             )
 
-        if hasattr(config, 'shared_targets'):
+        if hasattr(config, "shared_targets"):
             self.shared_targets = helpers.filter_unique(
                 self.shared_targets + config.shared_targets
             )
 
-        if hasattr(config, 'ldflags'):
+        if hasattr(config, "ldflags"):
             self.ldflags = helpers.filter_unique(self.ldflags + config.ldflags)
 
-        if hasattr(config, 'no_defaults') and config.no_defaults:
+        if hasattr(config, "no_defaults") and config.no_defaults:
             self.no_defaults = True
 
-        if hasattr(config, 'c_standard') and config.c_standard:
+        if hasattr(config, "c_standard") and config.c_standard:
             self.c_standard = config.c_standard
-        if hasattr(config, 'cxx_standard') and config.cxx_standard:
+        if hasattr(config, "cxx_standard") and config.cxx_standard:
             self.cxx_standard = config.cxx_standard
 
         self.defines = helpers.filter_unique(self.defines + config.defines)
         self.includes = helpers.filter_unique(self.includes + config.includes)
-        if hasattr(config, 'isystems'):
+        if hasattr(config, "isystems"):
             self.isystems = helpers.filter_unique(self.isystems + config.isystems)
         self.source = helpers.filter_unique(self.source + config.source)
 
-        if hasattr(config, 'moc'):
+        if hasattr(config, "moc"):
             self.moc = helpers.filter_unique(self.moc + config.moc)
 
-        if hasattr(config, 'lib'):
+        if hasattr(config, "lib"):
             self.lib = helpers.filter_unique(self.lib + config.lib)
-        if hasattr(config, 'libpath'):
+        if hasattr(config, "libpath"):
             self.libpath = helpers.filter_unique(self.libpath + config.libpath)
-        if hasattr(config, 'stlib'):
+        if hasattr(config, "stlib"):
             self.stlib = helpers.filter_unique(self.stlib + config.stlib)
-        if hasattr(config, 'stlibpath'):
+        if hasattr(config, "stlibpath"):
             self.stlibpath = helpers.filter_unique(self.stlibpath + config.stlibpath)
-        if hasattr(config, 'rpath'):
+        if hasattr(config, "rpath"):
             self.rpath = helpers.filter_unique(self.rpath + config.rpath)
-        if hasattr(config, 'rpath_link'):
+        if hasattr(config, "rpath_link"):
             self.rpath_link = helpers.filter_unique(self.rpath_link + config.rpath_link)
-        if hasattr(config, 'cflags'):
+        if hasattr(config, "cflags"):
             self.cflags = helpers.filter_unique(self.cflags + config.cflags)
-        if hasattr(config, 'cppflags'):
+        if hasattr(config, "cppflags"):
             self.cppflags = helpers.filter_unique(self.cppflags + config.cppflags)
-        if hasattr(config, 'cxxdeps'):
+        if hasattr(config, "cxxdeps"):
             self.cxxdeps = helpers.filter_unique(self.cxxdeps + config.cxxdeps)
-        if hasattr(config, 'ccdeps'):
+        if hasattr(config, "ccdeps"):
             self.ccdeps = helpers.filter_unique(self.ccdeps + config.ccdeps)
-        if hasattr(config, 'linkdeps'):
+        if hasattr(config, "linkdeps"):
             self.linkdeps = helpers.filter_unique(self.linkdeps + config.linkdeps)
-        if hasattr(config, 'framework'):
+        if hasattr(config, "framework"):
             self.framework = helpers.filter_unique(self.framework + config.framework)
-        if hasattr(config, 'frameworkpath'):
+        if hasattr(config, "frameworkpath"):
             self.frameworkpath = helpers.filter_unique(
                 self.frameworkpath + config.frameworkpath
             )
 
-        if hasattr(config, 'program_cxxflags'):
+        if hasattr(config, "program_cxxflags"):
             self.program_cxxflags = helpers.filter_unique(
                 self.program_cxxflags + config.program_cxxflags
             )
-        if hasattr(config, 'program_linkflags'):
+        if hasattr(config, "program_linkflags"):
             self.program_linkflags = helpers.filter_unique(
                 self.program_linkflags + config.program_linkflags
             )
-        if hasattr(config, 'library_cxxflags'):
+        if hasattr(config, "library_cxxflags"):
             self.library_cxxflags = helpers.filter_unique(
                 self.library_cxxflags + config.library_cxxflags
             )
-        if hasattr(config, 'library_linkflags'):
+        if hasattr(config, "library_linkflags"):
             self.library_linkflags = helpers.filter_unique(
                 self.library_linkflags + config.library_linkflags
             )
 
-        if hasattr(config, 'module_indices'):
+        if hasattr(config, "module_indices"):
             self.module_indices = helpers.filter_unique(
                 self.module_indices + config.module_indices
             )
 
         self.cxxflags = helpers.filter_unique(self.cxxflags + config.cxxflags)
         self.linkflags = helpers.filter_unique(self.linkflags + config.linkflags)
-        if hasattr(config, 'arflags'):
+        if hasattr(config, "arflags"):
             self.arflags = helpers.filter_unique(self.arflags + config.arflags)
         self.system = helpers.filter_unique(self.system + config.system)
 
@@ -246,47 +246,47 @@ class Configuration(Condition):
         self.features = helpers.filter_unique(self.features + config.features)
         self.deps = helpers.filter_unique(self.deps + config.deps)
         self.use = helpers.filter_unique(self.use + config.use)
-        if hasattr(config, 'uselib'):
+        if hasattr(config, "uselib"):
             self.uselib = helpers.filter_unique(self.uselib + config.uselib)
-        if hasattr(config, 'wfeatures'):
+        if hasattr(config, "wfeatures"):
             self.wfeatures = helpers.filter_unique(self.wfeatures + config.wfeatures)
 
-        if hasattr(config, 'artifacts_dev'):
+        if hasattr(config, "artifacts_dev"):
             self.artifacts_dev = helpers.filter_unique(
                 self.artifacts_dev + config.artifacts_dev
             )
 
-        if hasattr(config, 'artifacts_run'):
+        if hasattr(config, "artifacts_run"):
             self.artifacts_run = helpers.filter_unique(
                 self.artifacts_run + config.artifacts_run
             )
 
-        if hasattr(config, 'licenses'):
+        if hasattr(config, "licenses"):
             self.licenses = helpers.filter_unique(self.licenses + config.licenses)
 
-        if hasattr(config, 'artifacts'):
+        if hasattr(config, "artifacts"):
             self.artifacts = helpers.filter_unique(self.artifacts + config.artifacts)
 
-        if hasattr(config, 'qmldirs'):
+        if hasattr(config, "qmldirs"):
             self.qmldirs = helpers.filter_unique(self.qmldirs + config.qmldirs)
 
-        if hasattr(config, 'cpp2flags'):
+        if hasattr(config, "cpp2flags"):
             self.cpp2flags = helpers.filter_unique(self.cpp2flags + config.cpp2flags)
 
-        if hasattr(config, 'artifacts_generators'):
+        if hasattr(config, "artifacts_generators"):
             self.artifacts_generators = (
                 self.artifacts_generators + config.artifacts_generators
             )
-        if hasattr(config, 'target_decorators'):
+        if hasattr(config, "target_decorators"):
             self.target_decorators = self.target_decorators + config.target_decorators
 
-        if hasattr(config, 'scripts'):
+        if hasattr(config, "scripts"):
             self.scripts = self.scripts + config.scripts
 
-        if hasattr(config, 'program'):
+        if hasattr(config, "program"):
             self.program = self.program + config.program
 
-        if hasattr(config, 'library'):
+        if hasattr(config, "library"):
             self.library = self.library + config.library
 
     def merge(self, context, configs, exporting=False, condition=None):
@@ -310,15 +310,15 @@ class Configuration(Condition):
                                 token = next(tokens)
                             except StopIteration:
                                 if level != 0:
-                                    raise Exception('missing closing paren')
+                                    raise Exception("missing closing paren")
                                 else:
                                     return []
-                            if token == ')':
+                            if token == ")":
                                 if level == 0:
-                                    raise Exception('missing opening paren')
+                                    raise Exception("missing opening paren")
                                 else:
                                     return []
-                            elif token == '(':
+                            elif token == "(":
                                 return [
                                     parse_paren_helper(level + 1)
                                 ] + parse_paren_helper(level)
@@ -533,33 +533,33 @@ class Configuration(Condition):
             elif target_platform.is_arch_name(raw_entry):
                 # Through parse_entry rather than straight onto the list, so
                 # the vocabulary is known in one place.
-                condition.parse_entry('arch', entry)
+                condition.parse_entry("arch", entry)
                 is_empty = False
-            elif raw_entry in ['debug', 'release']:
+            elif raw_entry in ["debug", "release"]:
                 condition.variant.append(entry)
                 is_empty = False
-            elif raw_entry in ['msvc', 'gcc', 'clang']:
+            elif raw_entry in ["msvc", "gcc", "clang"]:
                 condition.compiler.append(entry)
                 is_empty = False
             elif target_platform.is_osystem_name(raw_entry):
-                condition.parse_entry('osystem', entry)
+                condition.parse_entry("osystem", entry)
                 is_empty = False
-            elif raw_entry in ['shared', 'static']:
+            elif raw_entry in ["shared", "static"]:
                 condition.link.append(entry)
                 is_empty = False
-            elif raw_entry in ['rshared', 'rstatic']:
+            elif raw_entry in ["rshared", "rstatic"]:
                 condition.runtime_link.append(entry[1:])
                 is_empty = False
-            elif raw_entry in ['rdebug', 'rrelease']:
+            elif raw_entry in ["rdebug", "rrelease"]:
                 condition.runtime_variant.append(entry[1:])
                 is_empty = False
-            elif raw_entry in ['debian', 'opensuse', 'ubuntu', 'centos', 'redhat']:
+            elif raw_entry in ["debian", "opensuse", "ubuntu", "centos", "redhat"]:
                 condition.distribution.append(entry)
                 is_empty = False
-            elif raw_entry in ['jessie', 'stretch', 'buster']:
+            elif raw_entry in ["jessie", "stretch", "buster"]:
                 condition.release.append(entry)
                 is_empty = False
-            elif raw_entry in ['program', 'library']:
+            elif raw_entry in ["program", "library"]:
                 condition.type.append(entry)
                 is_empty = False
             else:
@@ -584,60 +584,60 @@ class Configuration(Condition):
     @staticmethod
     def serialized_members():
         return [
-            'packages_tool',
-            'header_only',
-            'no_defaults',
-            'c_standard',
-            'cxx_standard',
+            "packages_tool",
+            "header_only",
+            "no_defaults",
+            "c_standard",
+            "cxx_standard",
         ]
 
     @staticmethod
     def serialized_members_list():
         return [
-            'targets',
-            'static_targets',
-            'shared_targets',
-            'dlls',
-            'defines',
-            'includes',
-            'isystems',
-            'source',
-            'moc',
-            'lib',
-            'libpath',
-            'stlib',
-            'stlibpath',
-            'rpath',
-            'rpath_link',
-            'cflags',
-            'cppflags',
-            'cxxdeps',
-            'ccdeps',
-            'linkdeps',
-            'framework',
-            'frameworkpath',
-            'program_cxxflags',
-            'program_linkflags',
-            'library_cxxflags',
-            'library_linkflags',
-            'module_indices',
-            'cxxflags',
-            'linkflags',
-            'arflags',
-            'ldflags',
-            'system',
-            'packages',
-            'packages_dev',
-            'features',
-            'deps',
-            'use',
-            'uselib',
-            'wfeatures',
-            'artifacts_dev',
-            'artifacts_run',
-            'licenses',
-            'qmldirs',
-            'cpp2flags',
+            "targets",
+            "static_targets",
+            "shared_targets",
+            "dlls",
+            "defines",
+            "includes",
+            "isystems",
+            "source",
+            "moc",
+            "lib",
+            "libpath",
+            "stlib",
+            "stlibpath",
+            "rpath",
+            "rpath_link",
+            "cflags",
+            "cppflags",
+            "cxxdeps",
+            "ccdeps",
+            "linkdeps",
+            "framework",
+            "frameworkpath",
+            "program_cxxflags",
+            "program_linkflags",
+            "library_cxxflags",
+            "library_linkflags",
+            "module_indices",
+            "cxxflags",
+            "linkflags",
+            "arflags",
+            "ldflags",
+            "system",
+            "packages",
+            "packages_dev",
+            "features",
+            "deps",
+            "use",
+            "uselib",
+            "wfeatures",
+            "artifacts_dev",
+            "artifacts_run",
+            "licenses",
+            "qmldirs",
+            "cpp2flags",
         ]
 
     @staticmethod
@@ -666,12 +666,12 @@ class Configuration(Condition):
                         json_obj[key] = o.__dict__[key]
 
         if o.artifacts:
-            json_obj['artifacts'] = [
+            json_obj["artifacts"] = [
                 Artifact.serialize_to_json(obj) for obj in o.artifacts
             ]
 
         if o.when_configs:
-            json_obj['when'] = [
+            json_obj["when"] = [
                 Configuration.serialize_to_json(obj) for obj in o.when_configs
             ]
 

@@ -31,10 +31,10 @@ class CacheDirectory:
 
 
 def parse_location(entry, context):
-    '''
+    """
     The primary cache directory: the whole value is a path, never split, so a
     directory name may contain an `=`.
-    '''
+    """
     return CacheDirectory(
         location=helpers.make_absolute_path(entry, context.project_dir),
         is_read_only=False,
@@ -50,11 +50,11 @@ def parse_read_only_entry(entry, context):
 
 
 def _parse_entry(entry, context, is_read_only):
-    '''
+    """
     An additional cache directory, written `PATH[=URL_REGEX]` where the regex
     selects the resources the cache holds. Raises on an entry Golem cannot use.
-    '''
-    location, _, regex = entry.partition('=')
+    """
+    location, _, regex = entry.partition("=")
     if not location:
         raise RuntimeError("Bad cache definition: {}".format(entry))
 
@@ -71,7 +71,7 @@ def _parse_entry(entry, context, is_read_only):
 
 
 def format_entry(cache_directory, context):
-    '''The `PATH[=URL_REGEX]` spelling of a cache directory.'''
+    """The `PATH[=URL_REGEX]` spelling of a cache directory."""
     if cache_directory.regex:
-        return '{}={}'.format(cache_directory.location, cache_directory.regex)
+        return "{}={}".format(cache_directory.location, cache_directory.regex)
     return cache_directory.location

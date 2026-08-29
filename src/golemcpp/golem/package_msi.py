@@ -34,29 +34,29 @@ def package_msi(self, package_build_context):
     )
 
     build_number = self.get_build_number(default=0)
-    package_version = '{}.{}.{}.{}'.format(
+    package_version = "{}.{}.{}.{}".format(
         version.major, version.minor, version.patch, build_number
     )
 
     package_arch = self.get_arch_for_linux()
-    package_depends = ', '.join(depends)
+    package_depends = ", ".join(depends)
 
     print("Clean-up")
-    package_directory = self.make_output_path('dist')
+    package_directory = self.make_output_path("dist")
     helpers.remove_tree(package_directory)
-    files_directory = os.path.join(package_directory, 'files')
-    wix_directory = os.path.join(package_directory, 'wix')
+    files_directory = os.path.join(package_directory, "files")
+    wix_directory = os.path.join(package_directory, "wix")
 
     print("Prepare package")
     files_directory = helpers.make_directory(files_directory)
     wix_directory = helpers.make_directory(wix_directory)
 
     prefix_directory = os.path.realpath(
-        helpers.make_directory(files_directory, '.' + prefix)
+        helpers.make_directory(files_directory, "." + prefix)
     )
 
     subdirectory_directory = os.path.realpath(
-        helpers.make_directory(files_directory, '.' + subdirectory)
+        helpers.make_directory(files_directory, "." + subdirectory)
     )
 
     helpers.make_directory(subdirectory_directory)
@@ -93,32 +93,32 @@ def package_msi(self, package_build_context):
     artifacts = [artifact for artifact in artifacts if artifact.scope is None]
 
     for artifact in artifacts:
-        local_dir = ''
-        if artifact.type == 'library':
-            local_dir = ''
-        elif artifact.type == 'program':
-            local_dir = ''
-        elif artifact.type == 'license':
+        local_dir = ""
+        if artifact.type == "library":
+            local_dir = ""
+        elif artifact.type == "program":
+            local_dir = ""
+        elif artifact.type == "license":
             if artifact.location != self.get_project_dir():
                 dep_id = self.find_dependency_id(artifact.location)
                 local_dir = os.path.join(
-                    'share',
-                    'doc',
+                    "share",
+                    "doc",
                     package_build_context.package.name,
-                    'licenses',
+                    "licenses",
                     dep_id,
                 )
             else:
                 local_dir = os.path.join(
-                    'share', 'doc', package_build_context.package.name, 'licenses'
+                    "share", "doc", package_build_context.package.name, "licenses"
                 )
         else:
-            local_dir = 'share'
+            local_dir = "share"
 
         artifact_filename = os.path.basename(artifact.path)
         artifact_dirname = os.path.dirname(artifact.path)
         if artifact_dirname:
-            local_dir = ''
+            local_dir = ""
 
         dst_directory = os.path.realpath(
             helpers.make_directory(
@@ -139,11 +139,11 @@ def package_msi(self, package_build_context):
 
     repository = self.load_git_remote_origin_url()
     targets_binaries = []
-    targets_libpaths = ['lib']
+    targets_libpaths = ["lib"]
     target_programs = []
     qt_binaries = []
     for artifact in artifacts:
-        if artifact.type in ['library', 'program']:
+        if artifact.type in ["library", "program"]:
             if (
                 artifact.target in package_build_context.package.targets
                 and artifact.repository == repository
@@ -159,10 +159,10 @@ def package_msi(self, package_build_context):
                 if target_config and self.is_qt_enabled(config=target_config):
                     qt_binaries.append(artifact.path)
 
-                if artifact.type in ['program']:
+                if artifact.type in ["program"]:
                     target_programs.append(artifact.path)
 
-        if artifact.type in ['library']:
+        if artifact.type in ["library"]:
             target_path = os.path.dirname(artifact.path)
             if target_path:
                 targets_libpaths.append(target_path)
@@ -206,11 +206,11 @@ def package_msi(self, package_build_context):
             if not os.path.exists(real_path):
                 raise RuntimeError("Cannot find binary path {}".format(real_path))
 
-            deployqt_bin = os.path.join(self.context.env.QT_HOST_BINS, 'windeployqt')
+            deployqt_bin = os.path.join(self.context.env.QT_HOST_BINS, "windeployqt")
             helpers.run_task(
                 [deployqt_bin, binary]
                 + [
-                    '-qmldir={}'.format(
+                    "-qmldir={}".format(
                         os.path.realpath(os.path.join(self.get_project_dir(), qmldir))
                     )
                     for qmldir in package_build_context.configuration.qmldirs
@@ -230,11 +230,11 @@ def package_msi(self, package_build_context):
             ]
         )
 
-    template_tempoary_dir = self.make_build_path('dist_templates_wix')
+    template_tempoary_dir = self.make_build_path("dist_templates_wix")
     helpers.make_directory(template_tempoary_dir)
 
-    wxs_files = self.list_files('', [wix_directory], ['wxs'])
-    wxl_files = self.list_files('', [wix_directory], ['wxl'])
+    wxs_files = self.list_files("", [wix_directory], ["wxs"])
+    wxl_files = self.list_files("", [wix_directory], ["wxl"])
 
     component_list = list()
     component_ref_list = list()
@@ -242,20 +242,20 @@ def package_msi(self, package_build_context):
     for file_path in all_prefix_files:
         path = os.path.relpath(path=file_path, start=subdirectory_directory)
         print("Component: {}".format(path))
-        path_id = '_' + hashlib.md5(path.encode('utf-8')).hexdigest()
-        is_binary = os.path.splitext(file_path)[1] in ['.dll', '.exe']
+        path_id = "_" + hashlib.md5(path.encode("utf-8")).hexdigest()
+        is_binary = os.path.splitext(file_path)[1] in [".dll", ".exe"]
         # WiX's Win64 asks about pointer width, not about a specific ISA, so
         # arm64 answers yes here just as x64 does.
-        is_64bit = self.arch_capability().msvc_machine in ('X64', 'ARM64')
+        is_64bit = self.arch_capability().msvc_machine in ("X64", "ARM64")
         component = '<Component Id="{}" Guid="*" Win64="{}">\n'.format(
-            path_id, 'yes' if is_64bit else 'no'
+            path_id, "yes" if is_64bit else "no"
         )
         component = (
             '{}\t<File Source="{}" Id="{}" KeyPath="yes" Checksum="{}"/>\n'.format(
-                component, file_path, path_id, 'yes' if is_binary else 'no'
+                component, file_path, path_id, "yes" if is_binary else "no"
             )
         )
-        component = '{}</Component>'.format(component)
+        component = "{}</Component>".format(component)
         component_list.append(component)
         component = '<ComponentRef Id="{}"/>'.format(path_id)
         component_ref_list.append(component)
@@ -267,12 +267,12 @@ def package_msi(self, package_build_context):
     msvc_path = self.vswhere_get_installation_path()
     msvc_crt_path = os.path.join(
         msvc_path,
-        'VC',
-        'Redist',
-        'MSVC',
+        "VC",
+        "Redist",
+        "MSVC",
         msvc_toolset,
-        'MergeModules',
-        'Microsoft_VC{}_CRT_{}.msm'.format(msvc_toolset[1:], self.get_arch()),
+        "MergeModules",
+        "Microsoft_VC{}_CRT_{}.msm".format(msvc_toolset[1:], self.get_arch()),
     )
 
     if not os.path.exists(msvc_crt_path):
@@ -303,7 +303,7 @@ def package_msi(self, package_build_context):
         wix_file_dst = self.context.root.find_or_declare(wix_file)
 
         self.context(
-            features='subst',
+            features="subst",
             source=wix_file_src,
             target=wix_file_dst,
             GOLEM_PACKAGE_MSI_INSTALL_FILES_COMPONENTS=str(components_string),
@@ -319,55 +319,55 @@ def package_msi(self, package_build_context):
     self.context.add_group()
     self.context.execute_build()
 
-    harvested_files_wxs = 'golem_files.wxs'
+    harvested_files_wxs = "golem_files.wxs"
 
     helpers.run_task(
         [
-            'heat',
-            'dir',
+            "heat",
+            "dir",
             subdirectory_directory,
-            '-nologo',
-            '-var',
-            'var.GolemDistSourceDir',
-            '-ag',
-            '-cg',
+            "-nologo",
+            "-var",
+            "var.GolemDistSourceDir",
+            "-ag",
+            "-cg",
             msi_package.installdir_files_id,
-            '-dr',
+            "-dr",
             msi_package.installdir_id,
-            '-sreg',
-            '-srd',
-            '-sfrag',
-            '-platform',
+            "-sreg",
+            "-srd",
+            "-sfrag",
+            "-platform",
             self.get_arch(),
-            '-o',
+            "-o",
             harvested_files_wxs,
         ],
         cwd=wix_directory,
     )
 
-    wix_parameters = ['-d{}'.format(param) for param in msi_package.parameters] + [
-        '-dGolemDistSourceDir={}'.format(subdirectory_directory)
+    wix_parameters = ["-d{}".format(param) for param in msi_package.parameters] + [
+        "-dGolemDistSourceDir={}".format(subdirectory_directory)
     ]
 
     wix_extensions = []
     for extension in msi_package.extensions:
-        wix_extensions += ['-ext', extension]
+        wix_extensions += ["-ext", extension]
 
     wix_locales = []
     for path in wxl_files:
-        wix_locales += ['-loc', str(path)]
+        wix_locales += ["-loc", str(path)]
 
     wix_cultures = []
     if msi_package.cultures:
-        wix_cultures = ['-cultures:' + ';'.join(msi_package.cultures)]
+        wix_cultures = ["-cultures:" + ";".join(msi_package.cultures)]
 
     wix_declarations = [str(path) for path in wxs_files] + [harvested_files_wxs]
 
     wix_objfiles = []
     for path in wix_declarations:
-        objpath = path + '.wixobj'
+        objpath = path + ".wixobj"
         helpers.run_task(
-            ['candle', '-nologo', '-out', objpath, '-arch', self.get_arch()]
+            ["candle", "-nologo", "-out", objpath, "-arch", self.get_arch()]
             + wix_parameters
             + wix_extensions
             + [path],
@@ -375,15 +375,15 @@ def package_msi(self, package_build_context):
         )
         wix_objfiles.append(objpath)
 
-    output_filename = package_name + '_' + package_version + "_" + package_arch
-    output_filename_path = output_filename + '.msi'
+    output_filename = package_name + "_" + package_version + "_" + package_arch
+    output_filename_path = output_filename + ".msi"
     package_filename = output_filename_path
     package_path = os.path.realpath(
         os.path.join(self.get_output_path(), package_filename)
     )
 
     helpers.run_task(
-        ['light', '-nologo', '-o', package_path]
+        ["light", "-nologo", "-o", package_path]
         + wix_locales
         + wix_cultures
         + wix_extensions
@@ -396,7 +396,7 @@ def package_msi(self, package_build_context):
     release_name = self.release()
 
     class File:
-        def __init__(self, path, absolute_path, type='file'):
+        def __init__(self, path, absolute_path, type="file"):
             self.path = path
             self.absolute_path = absolute_path
             self.type = type
@@ -419,22 +419,22 @@ def package_msi(self, package_build_context):
         files.append(artifact_file)
 
     package_file = File(
-        path=package_filename, absolute_path=package_path, type='package'
+        path=package_filename, absolute_path=package_path, type="package"
     )
 
     libraries_list = self.find_artifacts(
-        path=subdirectory_directory, recursively=True, types=('*.dll')
+        path=subdirectory_directory, recursively=True, types=("*.dll")
     )
 
     for file_path in all_prefix_files:
         if os.path.realpath(file_path) in files_absolute_paths:
             continue
 
-        file_type = 'library' if file_path in libraries_list else 'file'
+        file_type = "library" if file_path in libraries_list else "file"
 
-        if file_type == 'library':
-            is_executable = os.path.splitext(file_path)[1] in ['.dll', '.exe']
-            file_type = file_type if is_executable else 'file'
+        if file_type == "library":
+            is_executable = os.path.splitext(file_path)[1] in [".dll", ".exe"]
+            file_type = file_type if is_executable else "file"
 
         artifact_file = File(
             path=os.path.relpath(path=file_path, start=subdirectory_directory),
