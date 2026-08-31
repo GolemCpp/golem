@@ -1571,3 +1571,60 @@ def test_both_passes_narrow_through_the_same_filter():
 
     assert context.get_asked_exports() == ["mylib"]
     assert context.resolve_asked_targets(tasks_source=definitions) == ["mylib"]
+
+
+def make_manifest_context(*, declared=None):
+    """A context whose project holds every shape an export comes in."""
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+
+    # A definition with targets of its own, one without, and an export with no
+    # definition at all -- the three the conf tree lays out differently.
+    project.library(name="multi", targets=["alpha", "beta"])
+    project.export(name="multi")
+    project.library(name="plain")
+    project.export(name="plain")
+    project.export(name="headers", header_only=True)
+
+    if declared is not None:
+        project.default(exports=declared)
+
+    context.project = project
+    context.context = SimpleNamespace(options=SimpleNamespace(export=""))
+    return context
+
+
+def test_an_export_is_named_against_the_targets_of_the_definition_building_it():
+    manifest = make_manifest_context().make_export_manifest()
+
+    assert manifest.exports["multi"] == ["alpha", "beta"]
+
+
+def test_a_definition_declaring_no_target_is_named_against_itself():
+    # What the conf tree does: `conf/<id>/plain/plain.json` is written for a
+    # definition that declares no target of its own.
+    manifest = make_manifest_context().make_export_manifest()
+
+    assert manifest.exports["plain"] == ["plain"]
+
+
+def test_an_export_no_definition_builds_is_named_against_nothing():
+    # It is filed as `conf/<id>/headers.json` alone, so naming a target here
+    # would put a file in the manifest that nothing ever writes.
+    manifest = make_manifest_context().make_export_manifest()
+
+    assert manifest.exports["headers"] == []
+
+
+def test_the_manifest_carries_the_declared_default_set():
+    manifest = make_manifest_context(declared=["plain"]).make_export_manifest()
+
+    assert manifest.default == ["plain"]
+
+
+def test_the_default_set_is_empty_where_the_project_declares_none():
+    # A transcript of the project file: every export answers, and the reader is
+    # what knows that empty means all.
+    manifest = make_manifest_context().make_export_manifest()
+
+    assert manifest.default == []

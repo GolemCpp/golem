@@ -49,6 +49,7 @@ from golemcpp.golem.recipe_resolver import RecipeResolver
 from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.template import Template
 from golemcpp.golem.definition import ExportedConfiguration
+from golemcpp.golem.export_manifest import ExportManifest
 from golemcpp.golem.version import Version
 from golemcpp.golem import qt_discovery
 from golemcpp.golem import cppfront_tool
@@ -1539,6 +1540,18 @@ class Context:
         parts[-1] += ".json"
 
         return os.path.join(*parts)
+
+    def make_dep_manifest_subpath(self, source_location=None):
+        """
+        Where a project's export manifest sits under `conf`, as a path.
+
+        Beside the directory holding the configurations, the way an export sits
+        beside the directory holding its targets.
+        """
+        if source_location is None:
+            source_location = self.load_git_remote_origin_url()
+
+        return locator.generate_id(source_location) + ".json"
 
     def get_dep_artifact_json(self, dep, target_name=None):
         path = os.path.join(self.get_dep_build_location(dep), "conf")
@@ -5382,6 +5395,37 @@ class Context:
                         task=task, config=config, target=config.targets[0]
                     )
             self.cleanup_old_build_files(config=config)
+
+        if self.context.options.export:
+            self.write_export_manifest()
+
+    def make_export_manifest(self):
+        """
+        Make a manifest containing all the exports and defaults.
+        
+        Useful to let a consumer project know what it can ask for.
+        """
+        exports = {}
+
+        for export in self.project.exports:
+            definition = self.find_related_build_task(task=export)
+            exports[export.name] = (
+                self.get_targets_from_task(definition) if definition else []
+            )
+
+        return ExportManifest(
+            exports=exports, default=list(self.project.default_exports)
+        )
+
+    def write_export_manifest(self):
+        """
+        Write the export manifest, beside the configurations.
+
+        It lists the exports and defaults defined in the project.
+        """
+        path = os.path.join(self.make_outpath_conf(), self.make_dep_manifest_subpath())
+
+        self.make_export_manifest().write(path)
 
     def get_targets_or_exports(self):
         return (
