@@ -1858,6 +1858,97 @@ def test_imports_and_targets_travel_in_options_of_their_own():
     ]
 
 
+def make_declared_dependency(name, locator, **kwargs):
+    """A dependency resolved far enough to be told from another source."""
+    dependency = Dependency(name=name, **kwargs)
+    dependency.resolved = dependency.resolved.settle_locator(
+        locator=locator, kind="directory"
+    )
+    return dependency
+
+
+def make_project_context(*dependencies):
+    """A context answering only what a project's dependencies are."""
+    context = Context.__new__(Context)
+    context.project = Project(project_dir="")
+    context.project.deps = list(dependencies)
+    return context
+
+
+def test_a_transitive_dependency_of_a_source_nobody_declared_is_added():
+    # The ordinary case: the project names a dependency, the dependency names
+    # one of its own, and the project has to fetch and link it too.
+    context = make_project_context(make_declared_dependency("a", "file:///a"))
+
+    context.fold_transitive_dependencies(
+        [make_declared_dependency("b", "file:///b", targets=["one"])]
+    )
+
+    added = context.project.deps[1]
+    assert [dep.name for dep in context.project.deps] == ["a", "b"]
+    assert added.targets == ["one"] and added.dynamically_added
+
+
+def test_a_transitive_dependency_of_a_declared_source_is_folded_into_it():
+    # The diamond: one entry, so one fetch, asking for what both wanted.
+    declared = make_declared_dependency("a", "file:///a", targets=["one"])
+    context = make_project_context(declared)
+
+    context.fold_transitive_dependencies(
+        [make_declared_dependency("their-a", "file:///a", targets=["two"])]
+    )
+
+    assert context.project.deps == [declared]
+    assert declared.targets == ["one", "two"]
+
+
+def test_two_declarations_naming_one_source_both_survive_a_fold():
+    # What tells them apart is the local name each was given, so neither is a
+    # duplicate of the other and a fold may not drop one.
+    first = make_declared_dependency("lib", "file:///a", imports=["mylib"])
+    second = make_declared_dependency("hdr", "file:///a", imports=["onlyheaders"])
+    context = make_project_context(first, second)
+
+    context.fold_transitive_dependencies(
+        [make_declared_dependency("their-a", "file:///a", targets=["one"])]
+    )
+
+    assert context.project.deps == [first, second]
+    assert second.imports == ["onlyheaders"] and second.targets == []
+
+
+def test_a_fold_asks_for_what_both_entries_asked_for():
+    kept = make_declared_dependency("a", "file:///a", imports=["x"], targets=["one"])
+
+    Context.merge_dependency_requests(
+        kept, make_declared_dependency("b", "file:///a", imports=["y"], targets=["two"])
+    )
+
+    assert kept.imports == ["x", "y"]
+    assert kept.targets == ["one", "two"]
+
+
+def test_folding_an_entry_asking_for_nothing_asks_for_the_defaults():
+    # No list spells "the defaults", so the merged entry names nothing either
+    # rather than keeping a narrowing the folded entry never asked for.
+    kept = make_declared_dependency("a", "file:///a", imports=["x"], targets=["one"])
+
+    Context.merge_dependency_requests(kept, make_declared_dependency("b", "file:///a"))
+
+    assert kept.imports == []
+    assert kept.targets == []
+
+
+def test_a_fold_keeps_a_full_clone_over_a_shallow_one():
+    kept = make_declared_dependency("a", "file:///a", shallow=True)
+
+    Context.merge_dependency_requests(
+        kept, make_declared_dependency("b", "file:///a", shallow=False)
+    )
+
+    assert kept.shallow is False
+
+
 def test_a_target_declared_by_two_exports_is_refused():
     # `find_owning_export` answers the first export declaring a target, so two
     # of them make the parent pick by the order they were written in.

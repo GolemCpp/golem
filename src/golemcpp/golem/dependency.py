@@ -64,7 +64,6 @@ class Dependency(Configuration):
         # declaration locally, where an import is spelled in the dependency's
         # own vocabulary and names something it exports.
         self.imports = helpers.parameter_to_list(imports)
-        self.validate_imports()
         # A dependency comes from one of three mutually-exclusive sources: a
         # git `repository` (cloned), a local `directory` (copied as-is), or a
         # `location` naming either in one field, spelling its kind or leaving
@@ -103,19 +102,6 @@ class Dependency(Configuration):
         # Where this dependency was found to come from.
         # Normalized, so two spellings of one place are one key.
         return self.resolved.locator
-
-    def validate_imports(self):
-        """
-        Refuse more than one import, until a dependency reports what it built.
-
-        The field is a list because `targets` is, and the two narrow the same
-        artifacts from different ends.
-        """
-        if len(self.imports) > 1:
-            raise ValueError(
-                "dependency '{}' imports {}; one is all Golem reads today "
-                "({})".format(self.name, len(self.imports), ", ".join(self.imports))
-            )
 
     def requested_source(self):
         # What this dependency asks for. The locator is the resolved one: a

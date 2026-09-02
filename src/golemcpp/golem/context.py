@@ -1692,6 +1692,58 @@ class Context:
             for export, target in target_requests
         ]
 
+    @staticmethod
+    def merge_dependency_requests(kept, folded):
+        """
+        Merge the folded dependency into the kept one.
+
+        The merge is about adding what the folded dependency declares into the kept
+        one.
+        """
+        # When the folded dependency declares no import/target, it expands to the default
+        # imports/targets. So the kept dependency must declare none too.
+        if not folded.imports and not folded.targets:
+            kept.imports = []
+            kept.targets = []
+        # Otherwise, it just adds.
+        elif kept.imports or kept.targets:
+            kept.imports = helpers.filter_unique(kept.imports + folded.imports)
+            kept.targets = helpers.filter_unique(kept.targets + folded.targets)
+
+        # A full clone serves a request for a shallow one, never the reverse.
+        if not folded.shallow:
+            kept.shallow = False
+
+    def fold_transitive_dependencies(self, dependencies):
+        """
+        Fold a dependency's own dependencies to the project's.
+
+        Dependencies have a unique identifier (source + revision + link-settings, for
+        now) to help identify when they are reusable because meet the same
+        requirements.
+
+        Dependencies with the same identifier can be folded into one.
+
+        Others are appended to the list.
+        """
+        for dependency in dependencies:
+            dependency.dynamically_added = True
+
+            identifier = Context.make_dependency_unique_identifier(dependency)
+            kept = next(
+                (
+                    held
+                    for held in self.project.deps
+                    if Context.make_dependency_unique_identifier(held) == identifier
+                ),
+                None,
+            )
+
+            if kept is None:
+                self.project.deps.append(dependency)
+            else:
+                Context.merge_dependency_requests(kept, dependency)
+
     def use_dep(self, config, dep):
         dep_configs = self.read_dep_config_file_list(dep=dep)
 
@@ -1712,29 +1764,7 @@ class Context:
                 config.targets = config_targets
 
                 if dependency_dependencies is not None:
-                    for dependency in dependency_dependencies:
-                        dependency.dynamically_added = True
-                    dependency_dict = dict()
-                    for dependency in self.project.deps + dependency_dependencies:
-                        dependency_id = Context.make_dependency_unique_identifier(
-                            dependency
-                        )
-                        if dependency_id not in dependency_dict:
-                            dependency_dict[dependency_id] = dependency
-                        else:
-                            if not dependency.targets:
-                                dependency_dict[dependency_id].targets = []
-                            elif dependency_dict[dependency_id].targets:
-                                dependency_dict[dependency_id].targets = (
-                                    helpers.filter_unique(
-                                        dependency_dict[dependency_id].targets
-                                        + dependency.targets
-                                    )
-                                )
-                            if not dependency.shallow:
-                                dependency_dict[dependency_id].shallow = False
-
-                    self.project.deps = list(dependency_dict.values())
+                    self.fold_transitive_dependencies(dependency_dependencies)
 
             if not self.context.options.no_copy_artifacts and self.deps_build:
                 for artifact_binary in dependency_configuration.artifacts:

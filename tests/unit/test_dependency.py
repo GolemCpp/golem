@@ -513,8 +513,9 @@ def test_an_import_nobody_declared_is_left_out_of_the_record():
     assert Dependency.unserialize_from_json(recorded).imports == []
 
 
-def test_importing_more_than_one_export_is_refused_for_now():
-    # The shape is plural so the limit lifts without a rename, but a consumer
-    # cannot yet know which import produces which target.
-    with pytest.raises(ValueError, match="one is all Golem reads today"):
-        Dependency(name="boost", imports=["boost", "boost-tools"])
+def test_a_dependency_imports_as_many_exports_as_it_names():
+    # The manifest says which export publishes which target, so a request made
+    # of several imports names files that exist.
+    dependency = Dependency(name="boost", imports=["boost", "boost-tools"])
+
+    assert dependency.imports == ["boost", "boost-tools"]
