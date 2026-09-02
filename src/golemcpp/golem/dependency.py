@@ -54,10 +54,16 @@ class Dependency(Configuration):
         version=None,
         version_regex=None,
         shallow=False,
+        imports=None,
         **kwargs,
     ):
         super(Dependency, self).__init__(type="library", **kwargs)
         self.name = "" if name is None else name
+        # Which of the dependency's exports are wanted, empty when the name
+        # says it. Only this leaves the project file: `name` labels the
+        # declaration locally, where an import is spelled in the dependency's
+        # own vocabulary and names something it exports.
+        self.imports = helpers.parameter_to_list(imports)
         # A dependency comes from one of three mutually-exclusive sources: a
         # git `repository` (cloned), a local `directory` (copied as-is), or a
         # `location` naming either in one field, spelling its kind or leaving
@@ -272,6 +278,7 @@ class Dependency(Configuration):
             "version_regex",
             "resolved",
             "shallow",
+            "imports",
         ]
 
     @staticmethod

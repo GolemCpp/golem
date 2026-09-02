@@ -29,6 +29,11 @@ def build(context):
     ctx = get_context(context)
     ctx.build_on = True
     ctx.environment()
+
+    # Waf doens't need to know what we are building because we are only creating the
+    # needed task generators for what is requested for build.
+    ctx.context.targets = None
+
     ctx.build()
 
 

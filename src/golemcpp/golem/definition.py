@@ -16,6 +16,7 @@ class Definition(Configuration):
         templates=None,
         export=False,
         args=None,
+        implicit=False,
         **kwargs,
     ):
         super(Definition, self).__init__(**kwargs)
@@ -24,6 +25,9 @@ class Definition(Configuration):
         self.templates = helpers.parameter_to_list(templates)
         self.export = export
         self.args = args
+
+        # Completed by the project in a normalization pass.
+        self.implicit = implicit
 
     def __str__(self):
         return helpers.print_obj(self)

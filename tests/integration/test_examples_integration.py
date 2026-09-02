@@ -407,6 +407,47 @@ def test_a_dependency_is_named_by_the_recipe_saying_where_it_is(example_tmp_path
     assert '"x": 1' in result.stdout
 
 
+def test_a_dependency_is_labelled_by_the_consumer_and_built_by_its_import(
+    example_tmp_path,
+):
+    require_cxx_compiler()
+    require_git_remote_access("https://github.com/nlohmann/json.git")
+
+    project_dir = copy_example_project("dependencies", example_tmp_path)
+    cache_dir = example_tmp_path / "cache"
+
+    # `name` is the consumer's own label, used in `deps=`, and json has never
+    # heard of it. The import is the only one spelled in json's vocabulary, so
+    # it is what the sub-invocation is asked to build.
+    (project_dir / "golemfile.py").write_text(
+        "def configure(project):\n"
+        "    project.dependency(name='blob', imports='json',\n"
+        "                       repository='https://github.com/nlohmann/json.git',\n"
+        "                       version='^3.0.0', shallow=True)\n"
+        "    project.program(name='hello-dependencies', source=['src'],\n"
+        "                    deps=['blob'])\n",
+        encoding="utf-8",
+    )
+
+    run_golem(project_dir, cache_dir, "configure", "--variant=debug")
+    run_golem(project_dir, cache_dir, "resolve")
+    run_golem(project_dir, cache_dir, "dependencies")
+    run_golem(project_dir, cache_dir, "build")
+
+    # The label is what the record is keyed by, and the import is what was
+    # declared beside it.
+    dependencies = read_dependencies_json(project_dir)
+    blob = next(dep for dep in dependencies if dep["name"] == "blob")
+
+    assert blob["imports"] == ["json"]
+
+    binary = program_path(project_dir, "hello-dependencies-debug")
+    result = run_binary(binary, project_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert '"x": 1' in result.stdout
+
+
 def test_dependencies_example_honors_overrides_configuration(example_tmp_path):
     require_cxx_compiler()
     require_git_remote_access("https://github.com/nlohmann/json.git")

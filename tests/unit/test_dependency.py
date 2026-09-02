@@ -477,3 +477,45 @@ def test_a_refusal_names_every_locator_the_recipe_was_asked_about():
     assert BOOST_LOCATOR in str(refusal.value)
     assert GITLAB_LOCATOR in str(refusal.value)
     assert "@boost@boostorg@gitlab.com" in str(refusal.value)
+
+
+def test_a_dependency_naming_no_import_names_none():
+    # `name` labels the declaration and stops at the project file, so it never
+    # stands in for an export: the parent asks the dependency for its defaults.
+    assert Dependency(name="boost").imports == []
+
+
+def test_a_declared_import_is_what_leaves_the_project_file():
+    # `name` labels the declaration locally; an import is spelled in the
+    # dependency's own vocabulary, so a consumer may call it what it likes.
+    dependency = Dependency(name="bst", location="@boost", imports="boost")
+
+    assert dependency.name == "bst"
+    assert dependency.imports == ["boost"]
+
+
+def test_a_declared_import_survives_a_round_trip():
+    dependency = Dependency(name="bst", location="@boost", imports=["boost"])
+
+    restored = Dependency.unserialize_from_json(
+        Dependency.serialize_to_json(dependency)
+    )
+
+    assert restored.imports == ["boost"]
+
+
+def test_an_import_nobody_declared_is_left_out_of_the_record():
+    # The rule every other empty member follows, so a lock records what the
+    # golemfile wrote and never what Golem filled in.
+    recorded = Dependency.serialize_to_json(Dependency(name="boost"))
+
+    assert "imports" not in recorded
+    assert Dependency.unserialize_from_json(recorded).imports == []
+
+
+def test_a_dependency_imports_as_many_exports_as_it_names():
+    # The manifest says which export publishes which target, so a request made
+    # of several imports names files that exist.
+    dependency = Dependency(name="boost", imports=["boost", "boost-tools"])
+
+    assert dependency.imports == ["boost", "boost-tools"]
