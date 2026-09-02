@@ -115,3 +115,29 @@ def test_a_default_written_as_something_else_reads_as_no_manifest(tmp_path):
     )
 
     assert ExportManifest.read(path) is None
+
+
+def test_the_defaults_are_the_declared_set():
+    manifest = ExportManifest(exports={"alpha": [], "extra": []}, default=["alpha"])
+
+    assert manifest.resolve_defaults() == ["alpha"]
+
+
+def test_the_defaults_are_every_export_where_none_are_declared():
+    # The one place an empty `default` is read as everything, so the manifest
+    # itself stays a transcript of the project file.
+    manifest = ExportManifest(exports={"alpha": [], "extra": []})
+
+    assert manifest.resolve_defaults() == ["alpha", "extra"]
+
+
+def test_a_target_names_the_export_filing_it():
+    manifest = ExportManifest(exports={"boost": ["boost_system", "boost_regex"]})
+
+    assert manifest.find_owning_export("boost_regex") == "boost"
+
+
+def test_a_target_no_export_files_names_none():
+    manifest = ExportManifest(exports={"boost": ["boost_system"]})
+
+    assert manifest.find_owning_export("nosuch") is None

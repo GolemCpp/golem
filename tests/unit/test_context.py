@@ -25,6 +25,7 @@ from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem.export_manifest import ExportManifest
 from golemcpp.golem.project import Project
 from golemcpp.golem.dependency_manager import get_dependency_manager
 from golemcpp.golem.cookbook_manager import get_cookbook_manager
@@ -383,21 +384,15 @@ def make_artifact_context(remote=""):
 
 
 def test_a_target_artifact_sits_under_the_dependency_it_belongs_to():
-    # `resolve_recursively` writes one file for the task with no target named,
-    # then one per target of that task, so the dependency contains its targets.
-    # The file beside the directory is the dependency taken as a whole.
+    # `resolve_recursively` writes one file per target of a task, so the
+    # dependency contains its exports and an export contains its targets.
     context = make_artifact_context()
-    dep = Dependency(name="json")
     identity = generate_id(EXPORTED_FROM)
 
-    whole = context.make_dep_artifact_subpath(
-        dep.requested_imports()[0], source_location=EXPORTED_FROM
-    )
     one_target = context.make_dep_artifact_subpath(
-        dep.requested_imports()[0], target_name="parser", source_location=EXPORTED_FROM
+        "json", target_name="parser", source_location=EXPORTED_FROM
     )
 
-    assert whole == os.path.join(identity, "json.json")
     assert one_target == os.path.join(identity, "json", "parser.json")
 
 
@@ -406,10 +401,9 @@ def test_a_name_holding_an_at_sign_stays_in_its_own_component():
     # read back: an id holds `@` as structure, and both names are golemfile
     # input. One component each leaves nothing to read back.
     context = make_artifact_context()
-    dep = Dependency(name="a@b")
 
     subpath = context.make_dep_artifact_subpath(
-        dep.requested_imports()[0], target_name="c@d", source_location=EXPORTED_FROM
+        "a@b", target_name="c@d", source_location=EXPORTED_FROM
     )
 
     assert subpath == os.path.join(generate_id(EXPORTED_FROM), "a@b", "c@d.json")
@@ -419,12 +413,11 @@ def test_an_artifact_subpath_falls_back_to_the_project_it_is_written_from():
     # The writer names the project being exported and the reader names the
     # dependency's own source. They meet because those are the same project.
     context = make_artifact_context(remote=EXPORTED_FROM)
-    dep = Dependency(name="json")
 
     assert context.make_dep_artifact_subpath(
-        dep.requested_imports()[0]
+        "json", target_name="parser"
     ) == context.make_dep_artifact_subpath(
-        dep.requested_imports()[0], source_location=EXPORTED_FROM
+        "json", target_name="parser", source_location=EXPORTED_FROM
     )
 
 
@@ -790,7 +783,7 @@ def test_gather_build_arguments_applies_default_flags_per_target(monkeypatch):
     )
 
     build_arguments = context.gather_build_arguments(
-        task=task, targets=["demo"], config=config
+        task=task, targets_to_process=["demo"], config=config
     )
 
     assert "UNICODE" in build_arguments.defines
@@ -815,7 +808,7 @@ def test_gather_build_arguments_skips_default_flags_when_no_defaults_is_enabled(
     )
 
     build_arguments = context.gather_build_arguments(
-        task=task, targets=["demo"], config=config
+        task=task, targets_to_process=["demo"], config=config
     )
 
     assert "UNICODE" not in build_arguments.defines
@@ -838,7 +831,7 @@ def test_gather_build_arguments_applies_default_arflags_per_target(monkeypatch):
     )
 
     build_arguments = context.gather_build_arguments(
-        task=task, targets=["demo"], config=config
+        task=task, targets_to_process=["demo"], config=config
     )
 
     assert "/MACHINE:X64" in build_arguments.arflags
@@ -856,7 +849,7 @@ def test_gather_build_arguments_merges_config_arflags(monkeypatch):
     )
 
     build_arguments = context.gather_build_arguments(
-        task=task, targets=["demo"], config=config
+        task=task, targets_to_process=["demo"], config=config
     )
 
     assert "/MACHINE:X64" in build_arguments.arflags
@@ -877,7 +870,7 @@ def test_gather_build_arguments_skips_default_arflags_when_no_defaults_is_enable
     )
 
     build_arguments = context.gather_build_arguments(
-        task=task, targets=["demo"], config=config
+        task=task, targets_to_process=["demo"], config=config
     )
 
     assert "/MACHINE:X64" not in build_arguments.arflags
@@ -944,7 +937,8 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
         variant=None,
         shallow=False,
         resolved=ResolvedVersion(reference="1.0.0", revision="cafebabe"),
-        requested_imports=lambda: ["demo"],
+        imports=["demo"],
+        targets=[],
     )
 
     calls = []
@@ -1027,7 +1021,8 @@ def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch
                 variant=None,
                 shallow=False,
                 resolved=ResolvedVersion(reference="1.0.0", revision="cafebabe"),
-                requested_imports=lambda: ["demo"],
+                imports=["demo"],
+                targets=[],
             ),
             command=command,
         )
@@ -1533,13 +1528,19 @@ def make_defaults_context(*, declared, asked_for_defaults):
     """A context that can resolve its project's default exports."""
     context = Context.__new__(Context)
     project = Project(project_dir="/proj")
+    # Each export publishes a library of its own name, which is what an export
+    # with no library and no headers is refused for.
+    project.library(name="mylib")
     project.export(name="mylib")
+    project.library(name="internal")
     project.export(name="internal")
     if declared is not None:
         project.default(exports=declared)
     context.project = project
     context.context = SimpleNamespace(
-        options=SimpleNamespace(targets="", use_default_exports=asked_for_defaults)
+        options=SimpleNamespace(
+            targets="", exports="", use_default_exports=asked_for_defaults
+        )
     )
     return context
 
@@ -1547,30 +1548,29 @@ def make_defaults_context(*, declared, asked_for_defaults):
 def test_the_defaults_are_every_export_when_the_project_declares_nothing():
     context = make_defaults_context(declared=None, asked_for_defaults=True)
 
-    assert context.get_asked_exports() == ["mylib", "internal"]
+    assert context.resolve_asked_exports() == ["mylib", "internal"]
 
 
 def test_nothing_narrows_when_the_defaults_were_not_asked_for():
     # A plain `golem build` is untouched by a declaration.
     context = make_defaults_context(declared=["mylib"], asked_for_defaults=False)
 
-    assert context.get_asked_exports() == ["mylib", "internal"]
+    assert context.resolve_asked_exports() == ["mylib", "internal"]
 
 
 def test_the_declared_set_answers_when_the_defaults_are_asked_for():
     context = make_defaults_context(declared=["mylib"], asked_for_defaults=True)
 
-    assert context.get_asked_exports() == ["mylib"]
+    assert context.resolve_asked_exports() == ["mylib"]
 
 
 def test_both_passes_narrow_through_the_same_filter():
     # An export takes its targets from the definition of the same name, so a
     # selection the two passes disagreed on would publish what nobody built.
     context = make_defaults_context(declared=["mylib"], asked_for_defaults=True)
-    definitions = [SimpleNamespace(name="mylib"), SimpleNamespace(name="internal")]
 
-    assert context.get_asked_exports() == ["mylib"]
-    assert context.resolve_asked_targets(tasks_source=definitions) == ["mylib"]
+    assert context.resolve_asked_exports() == ["mylib"]
+    assert context.resolve_asked_targets() == ["mylib"]
 
 
 def make_manifest_context(*, declared=None):
@@ -1589,8 +1589,11 @@ def make_manifest_context(*, declared=None):
     if declared is not None:
         project.default(exports=declared)
 
+    project.normalize()
     context.project = project
-    context.context = SimpleNamespace(options=SimpleNamespace(export=""))
+    # The manifest is written on the export pass alone, which is when an export
+    # borrows the targets of the library building it.
+    context.context = SimpleNamespace(options=SimpleNamespace(export="/out"))
     return context
 
 
@@ -1608,12 +1611,12 @@ def test_a_definition_declaring_no_target_is_named_against_itself():
     assert manifest.exports["plain"] == ["plain"]
 
 
-def test_an_export_no_definition_builds_is_named_against_nothing():
-    # It is filed as `conf/<id>/headers.json` alone, so naming a target here
-    # would put a file in the manifest that nothing ever writes.
+def test_an_export_no_library_builds_is_named_after_itself():
+    # Its header-only library is implicit, and so is the one target that library
+    # builds, which the export pass writes a configuration for.
     manifest = make_manifest_context().make_export_manifest()
 
-    assert manifest.exports["headers"] == []
+    assert manifest.exports["headers"] == ["headers"]
 
 
 def test_the_manifest_carries_the_declared_default_set():
@@ -1628,3 +1631,563 @@ def test_the_default_set_is_empty_where_the_project_declares_none():
     manifest = make_manifest_context().make_export_manifest()
 
     assert manifest.default == []
+
+
+BLOB_MANIFEST = ExportManifest(
+    exports={
+        "alpha": ["alpha"],
+        "extra": ["extra"],
+        # Its library is implicit and header-only, and normalisation is what
+        # gives it the one target it is named after.
+        "headers": ["headers"],
+        "multi": ["one", "two"],
+    },
+    default=["alpha"],
+)
+
+
+def make_request_context():
+    return Context.__new__(Context)
+
+
+def test_an_import_asks_for_the_targets_of_the_export_it_names():
+    dep = Dependency(name="blob", imports="extra")
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("extra", "extra")
+    ]
+
+
+def test_an_import_of_an_export_publishing_several_targets_asks_for_them_all():
+    # An export is a group, so naming it is naming its members; a request holds
+    # targets alone, and never a name standing for a group of them.
+    dep = Dependency(name="blob", imports="multi")
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("multi", "one"),
+        ("multi", "two"),
+    ]
+
+
+def test_a_target_asks_for_the_export_building_it():
+    # The consumer names no import, so the export comes from the manifest --
+    # which is what lets `name` be a label the dependency has never heard of.
+    dep = Dependency(name="blob", targets=["extra"])
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("extra", "extra")
+    ]
+
+
+def test_an_import_and_a_target_are_added_rather_than_one_narrowing_the_other():
+    # Each means the same thing whether or not the other is written: the import
+    # asks for every target of its export, the target asks for itself.
+    dep = Dependency(name="blob", imports="alpha", targets=["extra"])
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("alpha", "alpha"),
+        ("extra", "extra"),
+    ]
+
+
+def test_naming_neither_asks_for_the_declared_defaults():
+    dep = Dependency(name="blob")
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("alpha", "alpha")
+    ]
+
+
+def test_naming_neither_asks_for_every_export_where_none_are_declared():
+    manifest = ExportManifest(exports={"alpha": ["alpha"], "extra": ["extra"]})
+
+    assert make_request_context().make_target_requests(
+        Dependency(name="blob"), manifest
+    ) == [("alpha", "alpha"), ("extra", "extra")]
+
+
+def refuse_the_request(dep, manifest):
+    """Find what a manifest is missing of a declaration, and refuse it."""
+    context = make_request_context()
+
+    context.refuse_what_the_manifest_is_missing(
+        dep, manifest, context.find_what_the_manifest_is_missing(dep, manifest)
+    )
+
+
+def test_an_import_the_dependency_does_not_export_is_refused_by_name():
+    dep = Dependency(name="blob", imports="nope")
+
+    with pytest.raises(RuntimeError) as refusal:
+        refuse_the_request(dep, BLOB_MANIFEST)
+
+    assert "blob" in str(refusal.value)
+    assert "nope" in str(refusal.value)
+    assert "alpha, extra, headers" in str(refusal.value)
+
+
+def test_a_target_no_export_builds_is_refused_by_name():
+    dep = Dependency(name="blob", targets=["nosuch"])
+
+    with pytest.raises(RuntimeError) as refusal:
+        refuse_the_request(dep, BLOB_MANIFEST)
+
+    assert "nosuch" in str(refusal.value)
+    assert "alpha, extra, headers" in str(refusal.value)
+
+
+def test_no_manifest_sends_the_reader_to_a_resolve():
+    with pytest.raises(RuntimeError) as refusal:
+        refuse_the_request(Dependency(name="blob"), None)
+
+    assert "golem resolve" in str(refusal.value)
+
+
+def test_what_the_manifest_is_missing_is_found_without_refusing():
+    # The caller running ahead of the sub-invocation reads the fault as nothing
+    # being available: a directory dependency whose golemfile has gained an
+    # export must not be refused by the manifest of its last build.
+    context = make_request_context()
+
+    assert context.find_what_the_manifest_is_missing(Dependency(name="blob"), None) == (
+        "manifest",
+        "blob",
+    )
+    assert context.find_what_the_manifest_is_missing(
+        Dependency(name="blob", imports="nope"), BLOB_MANIFEST
+    ) == ("import", "nope")
+    assert context.find_what_the_manifest_is_missing(
+        Dependency(name="blob", targets=["nosuch"]), BLOB_MANIFEST
+    ) == ("target", "nosuch")
+
+
+def test_a_manifest_holding_the_whole_request_is_missing_nothing():
+    context = make_request_context()
+
+    assert (
+        context.find_what_the_manifest_is_missing(
+            Dependency(name="blob", imports="alpha", targets=["extra"]), BLOB_MANIFEST
+        )
+        is None
+    )
+
+
+def test_an_import_is_what_the_dependency_is_asked_to_build():
+    dep = Dependency(name="blob", imports="extra")
+
+    assert make_request_context().make_dep_request_options(dep) == ["--exports=extra"]
+
+
+def test_a_target_is_asked_for_by_name_because_the_child_finds_its_export():
+    dep = Dependency(name="blob", targets=["extra", "alpha"])
+
+    assert make_request_context().make_dep_request_options(dep) == [
+        "--targets=extra,alpha"
+    ]
+
+
+def test_naming_neither_asks_the_dependency_for_its_defaults():
+    assert make_request_context().make_dep_request_options(Dependency(name="blob")) == [
+        "--use-default-exports"
+    ]
+
+
+def make_build_arguments(*, name, targets):
+    """Assembled waf arguments for a definition declaring targets."""
+    return SimpleNamespace(
+        name=name,
+        target=[os.path.join("out", target) for target in targets],
+        config=SimpleNamespace(targets=targets, scripts=[]),
+    )
+
+
+def test_a_definition_building_several_targets_without_a_script_is_refused():
+    # Waf takes one target per task generator, so the rest would be names golem
+    # records and never builds, and a consumer would read a configuration
+    # naming an artifact nobody made.
+    context = Context.__new__(Context)
+    build_arguments = make_build_arguments(name="multi", targets=["alpha", "beta"])
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.refuse_several_targets_without_a_script(build_arguments)
+
+    assert "multi" in str(refusal.value)
+    assert "alpha, beta" in str(refusal.value)
+
+
+def test_a_definition_building_one_target_is_handed_to_waf():
+    context = Context.__new__(Context)
+
+    assert (
+        context.refuse_several_targets_without_a_script(
+            make_build_arguments(name="one", targets=["alpha"])
+        )
+        is None
+    )
+
+
+def test_a_target_of_the_imported_export_is_asked_for_once():
+    # The import expands to the same pair the target names, so the overlap
+    # collapses rather than reading one configuration twice.
+    dep = Dependency(name="blob", imports="alpha", targets=["alpha"])
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("alpha", "alpha")
+    ]
+
+
+def test_one_target_of_an_imported_export_does_not_narrow_the_import():
+    # The two halves are a union: what the import asks for is not reduced by a
+    # target of it being named beside it.
+    dep = Dependency(name="blob", imports="multi", targets=["one"])
+
+    assert make_request_context().make_target_requests(dep, BLOB_MANIFEST) == [
+        ("multi", "one"),
+        ("multi", "two"),
+    ]
+
+
+def test_imports_and_targets_travel_in_options_of_their_own():
+    # A script is handed the targets alone, so an export name among them would
+    # read as one more thing to build.
+    dep = Dependency(name="blob", imports="alpha", targets=["alpha"])
+
+    assert make_request_context().make_dep_request_options(dep) == [
+        "--exports=alpha",
+        "--targets=alpha",
+    ]
+
+
+def test_a_target_declared_by_two_exports_is_refused():
+    # `find_owning_export` answers the first export declaring a target, so two
+    # of them make the parent pick by the order they were written in.
+    with pytest.raises(RuntimeError) as refusal:
+        Context.refuse_duplicates_among_targets(
+            {"alpha": ["shared"], "extra": ["shared"]}
+        )
+
+    assert "shared" in str(refusal.value)
+
+
+def test_a_target_declared_twice_by_one_export_is_refused():
+    with pytest.raises(RuntimeError) as refusal:
+        Context.refuse_duplicates_among_targets({"alpha": ["one", "one"]})
+
+    assert "one" in str(refusal.value)
+
+
+def test_a_target_named_after_its_own_task_is_not_a_duplicate():
+    # A task naming no target is given one named after it, and the two live in
+    # namespaces of their own.
+    Context.refuse_duplicates_among_targets({"plain": ["plain"], "extra": ["extra"]})
+
+
+def test_a_task_named_after_another_task_target_is_not_a_duplicate():
+    # A task is a group of targets, so the two are asked for through options of
+    # their own and a shared name means two things reached two ways.
+    Context.refuse_duplicates_among_targets({"multi": ["alpha"], "other": ["multi"]})
+
+
+def test_a_target_is_looked_up_among_targets_and_never_among_task_names():
+    # Which option a name arrived in says where to look it up, and a search
+    # reading task names first would answer the task and narrow nothing.
+    context = make_asked_context(targets="multi")
+    context.project.library(name="other", targets=["multi"])
+
+    task = context.get_task_from_target("multi", context.project.definitions)
+
+    assert task.name == "other"
+
+
+def test_an_export_is_resolved_to_the_targets_it_publishes():
+    # An export name never reaches a lookup: the request is resolved to targets
+    # against the project, and only targets are looked up afterwards.
+    context = make_asked_context(exports="multi")
+
+    assert context.resolve_asked_targets() == ["alpha", "beta"]
+
+
+def make_asked_context(*, exports="", targets=""):
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.library(name="multi", targets=["alpha", "beta"])
+    project.export(name="multi")
+    project.export(name="headers", header_only=True)
+    project.normalize()
+    context.project = project
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(
+            exports=exports, targets=targets, export="", use_default_exports=False
+        )
+    )
+    return context
+
+
+def test_the_exports_asked_for_are_what_the_exports_option_names():
+    assert make_asked_context(exports="multi").resolve_asked_exports() == ["multi"]
+
+
+def test_a_request_of_targets_alone_names_the_exports_building_them():
+    assert make_asked_context(targets="beta").resolve_asked_exports() == ["multi"]
+
+
+def targets_to_process_by_task(context):
+    """What each task of the build pass is narrowed to, keyed by task name."""
+    return {
+        task.name: targets
+        for task, targets in context.get_tasks_and_targets_to_process(
+            available_tasks=context.project.definitions
+        )
+    }
+
+
+def test_an_export_carries_all_of_its_targets_to_the_pass():
+    # An export asks for all of its targets, so naming a target of another one
+    # beside it does not narrow this one.
+    context = make_asked_context(exports="multi", targets="headers")
+
+    assert targets_to_process_by_task(context) == {
+        "multi": ["alpha", "beta"],
+        "headers": ["headers"],
+    }
+
+
+def test_a_named_target_carries_itself_alone():
+    context = make_asked_context(targets="alpha")
+
+    assert targets_to_process_by_task(context) == {"multi": ["alpha"]}
+
+
+def test_a_request_naming_nothing_carries_every_target():
+    context = make_asked_context()
+
+    assert targets_to_process_by_task(context) == {
+        "multi": ["alpha", "beta"],
+        "headers": ["headers"],
+    }
+
+
+def test_a_script_is_told_which_targets_to_build():
+    context = make_asked_context(targets="alpha")
+    context.script_building_config = SimpleNamespace(targets=["alpha", "beta"])
+
+    assert context.get_targets_to_build() == ["alpha"]
+
+
+def test_a_script_told_no_target_builds_them_all():
+    context = make_asked_context(exports="multi")
+    context.script_building_config = SimpleNamespace(targets=["alpha", "beta"])
+
+    assert context.get_targets_to_build() == ["alpha", "beta"]
+
+
+def test_asking_which_targets_to_build_outside_a_script_is_refused():
+    context = make_asked_context()
+    context.script_building_config = None
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.get_targets_to_build()
+
+    assert "no script is running" in str(refusal.value)
+
+
+def make_view_context(*, exports, definitions=()):
+    """A context whose project declares exports viewing libraries."""
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    for name, targets in definitions:
+        project.library(name=name, targets=list(targets))
+    for name, targets in exports:
+        project.export(name=name, targets=list(targets))
+    project.normalize()
+    context.project = project
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(exports="", targets="", export="")
+    )
+    return context
+
+
+def test_an_export_with_no_library_may_name_its_implicit_target():
+    # Its implicit library builds the one target the export is named after, so
+    # naming it is a view of that library and not of nothing.
+    context = make_view_context(exports=[("hdr", ["hdr"])])
+
+    context.refuse_an_export_target_no_library_builds()
+
+
+def test_an_export_with_no_library_names_no_other_target():
+    # The implicit library builds that one target and no other.
+    context = make_view_context(exports=[("hdr", ["other"])])
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.refuse_an_export_target_no_library_builds()
+
+    assert "hdr" in str(refusal.value)
+    assert "other" in str(refusal.value)
+
+
+def test_an_export_naming_a_target_its_library_does_not_build_is_refused():
+    context = make_view_context(
+        exports=[("lib", ["bb"])], definitions=[("lib", ["aa"])]
+    )
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.refuse_an_export_target_no_library_builds()
+
+    assert "bb" in str(refusal.value)
+    assert "aa" in str(refusal.value)
+
+
+def test_an_export_may_narrow_its_library_targets():
+    context = make_view_context(
+        exports=[("lib", ["aa"])], definitions=[("lib", ["aa", "bb"])]
+    )
+
+    context.refuse_an_export_target_no_library_builds()
+
+
+def test_an_export_naming_no_target_takes_its_library_targets():
+    # Not a declaration, therefore nothing to check against the library.
+    context = make_view_context(exports=[("lib", [])], definitions=[("lib", ["aa"])])
+
+    context.refuse_an_export_target_no_library_builds()
+
+
+def test_a_header_only_export_naming_no_target_is_not_refused():
+    context = make_view_context(exports=[("hdr", [])])
+
+    context.refuse_an_export_target_no_library_builds()
+
+
+def test_an_export_with_no_library_and_no_headers_is_refused():
+    # An export publishes what a library built, so one naming a library the
+    # project does not declare publishes nothing.
+    context = make_view_context(exports=[("lib", [])])
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.refuse_an_export_with_no_declared_library()
+
+    assert "lib" in str(refusal.value)
+
+
+def test_a_header_only_export_needs_no_library():
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.export(name="hdr", header_only=True)
+    context.project = project
+
+    context.refuse_an_export_with_no_declared_library()
+
+
+def test_an_export_with_a_library_is_kept():
+    context = make_view_context(exports=[("lib", [])], definitions=[("lib", ["aa"])])
+
+    context.refuse_an_export_with_no_declared_library()
+
+
+def test_an_export_naming_a_program_is_refused():
+    # `find_related_build_task` answers a definition of any kind, and a program
+    # is not something an export can publish.
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.program(name="app")
+    project.export(name="app")
+    context.project = project
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.find_exported_library(project.exports[0])
+
+    assert "app" in str(refusal.value)
+    assert "program" in str(refusal.value)
+
+
+def test_an_export_naming_a_library_takes_it():
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.library(name="lib")
+    project.export(name="lib")
+    context.project = project
+
+    assert context.find_exported_library(project.exports[0]).name == "lib"
+
+
+def test_an_export_naming_no_declared_library_takes_the_implicit_one():
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.export(name="hdr", header_only=True)
+    project.normalize()
+    context.project = project
+
+    library_definition = context.find_exported_library(project.exports[0])
+
+    assert library_definition.implicit
+    assert library_definition.header_only
+
+
+def make_self_named_context(*, targets=""):
+    """A context whose definition declares a target named after itself."""
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.library(name="multi", targets=["multi", "beta"])
+    project.export(name="multi")
+    project.normalize()
+    context.project = project
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(exports="", targets=targets, export="")
+    )
+    return context
+
+
+def test_a_target_named_after_its_task_narrows_it():
+    # Every name reaching here is a target now, so one equal to its task's name
+    # is the task's implicit target and narrows like any other.
+    context = make_self_named_context(targets="multi")
+
+    assert context.get_tasks_from_targets(
+        ["multi"], available_tasks=context.project.definitions
+    ) == [(context.project.definitions[0], ["multi"])]
+
+
+def test_every_target_of_a_task_is_carried_when_all_are_named():
+    context = make_self_named_context()
+    definitions = context.project.definitions
+
+    assert context.get_tasks_from_targets(
+        ["multi", "beta"], available_tasks=definitions
+    ) == [(definitions[0], ["multi", "beta"])]
+
+
+def make_use_context(*, exporting):
+    """A context whose library builds a target not named after it."""
+    context = Context.__new__(Context)
+    project = Project(project_dir="/proj")
+    project.library(name="mylib", targets=["renamed"])
+    project.export(name="mylib")
+    project.normalize()
+    context.project = project
+    context.context = SimpleNamespace(
+        options=SimpleNamespace(
+            exports="", targets="", export="/out" if exporting else ""
+        )
+    )
+    return context
+
+
+def test_an_export_carries_its_library_targets_on_every_pass():
+    # `use=` hands an export to the build pass, where borrowing was once gated
+    # on --export, so a library whose target is not named after it was built
+    # under the wrong name and failed to link.
+    exported = make_use_context(exporting=True)
+    building = make_use_context(exporting=False)
+    export = building.project.exports[0]
+
+    assert building.get_targets_from_task(export) == ["renamed"]
+    assert exported.get_targets_from_task(exported.project.exports[0]) == ["renamed"]
+
+
+def test_an_import_and_a_target_both_publish_their_exports():
+    # Publishing only the named export loses the headers of the one a target
+    # named, and the consumer fails to compile against it.
+    context = make_asked_context(exports="multi", targets="headers")
+
+    assert context.resolve_asked_exports() == ["multi", "headers"]

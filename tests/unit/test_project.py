@@ -329,3 +329,16 @@ def test_a_default_set_read_from_json_is_checked_too():
             json_object={"exports": [{"name": "mylib"}], "default": {"exports": ["x"]}},
             project_dir="/proj",
         )
+
+
+def test_a_project_exporting_one_name_twice_is_refused():
+    # A manifest files an export under its name, so the second would replace the
+    # first. Refused here so it precedes the lookup it makes ambiguous.
+    project = Project(project_dir="/proj")
+    project.export(name="mylib")
+    project.export(name="mylib")
+
+    with pytest.raises(ValueError) as refusal:
+        project.validate()
+
+    assert "mylib" in str(refusal.value)

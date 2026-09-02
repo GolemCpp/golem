@@ -82,6 +82,10 @@ class Context:
         self.built_tasks = []
         self.build_on = False
 
+        # The definition configuration corresponding to what a script is building.
+        # Recorded here to let the script query through the context what is asked for.
+        self.script_building_config = None
+
         self.resolved_overrides = ""
 
         self.cache_configuration = None
@@ -973,6 +977,13 @@ class Context:
             default=False,
             help=argparse.SUPPRESS,
         )
+        # The export names requested to build a dependency
+        context.add_option(
+            "--exports",
+            action="store",
+            default="",
+            help=argparse.SUPPRESS,
+        )
         context.add_option("--build-dir", action="store", help="Build location")
         context.add_option(
             "--variant",
@@ -1517,14 +1528,12 @@ class Context:
         path = self.get_dep_location(dep) if base is None else base
         return os.path.join(path, self.build_path(dep))
 
-    def make_dep_artifact_subpath(self, export, target_name=None, source_location=None):
+    def make_dep_artifact_subpath(self, export, target_name, source_location=None):
         """
-        Where an export's configuration sits under `conf`, as a path.
+        Where a target's configuration sits under `conf`, as a path.
 
         One component per name, because the three are constrained differently.
-
-        The export names a directory holding one file per target, and the file
-        beside that directory is the export taken as a whole.
+        The export names a directory holding one file per target it publishes.
 
         Takes the name rather than whatever holds it: the writer has a
         Definition and the reader a Dependency, and the name is all they share.
@@ -1532,12 +1541,7 @@ class Context:
         if source_location is None:
             source_location = self.load_git_remote_origin_url()
 
-        parts = [locator.generate_id(source_location), export]
-
-        if target_name:
-            parts.append(target_name)
-
-        parts[-1] += ".json"
+        parts = [locator.generate_id(source_location), export, target_name + ".json"]
 
         return os.path.join(*parts)
 
@@ -1553,26 +1557,140 @@ class Context:
 
         return locator.generate_id(source_location) + ".json"
 
-    def get_dep_artifact_json(self, dep, target_name=None):
-        path = os.path.join(self.get_dep_build_location(dep), "conf")
+    def get_dep_conf_location(self, dep):
+        return os.path.join(self.get_dep_build_location(dep), "conf")
+
+    def get_dep_artifact_json(self, dep, export, target_name):
         return os.path.join(
-            path,
+            self.get_dep_conf_location(dep),
             self.make_dep_artifact_subpath(
-                export=dep.requested_imports()[0],
+                export=export,
                 target_name=target_name,
                 source_location=dep.get_source_location(),
             ),
         )
 
-    def get_dep_artifact_json_list(self, dep):
-        # Two ways to ask for the same artifacts: an import names an export of
-        # the dependency, and `targets` narrows to what that export builds.
-        if dep.targets:
-            return [
-                self.get_dep_artifact_json(dep=dep, target_name=target_name)
-                for target_name in dep.targets
-            ]
-        return [self.get_dep_artifact_json(dep=dep, target_name=None)]
+    def read_dep_export_manifest(self, dep):
+        """Read what a dependency published about its exports, None where none."""
+        return ExportManifest.read(
+            os.path.join(
+                self.get_dep_conf_location(dep),
+                self.make_dep_manifest_subpath(
+                    source_location=dep.get_source_location()
+                ),
+            )
+        )
+
+    def find_what_the_manifest_is_missing(self, dep, manifest):
+        """
+        Find what the manifest in cache is missing given what the project asks for.
+
+        A (kind, name) pair, or None where the manifest holds all of it.
+        """
+        if manifest is None:
+            return ("manifest", dep.name)
+
+        for name in dep.imports:
+            if name not in manifest.exports:
+                return ("import", name)
+
+        for target in dep.targets:
+            if manifest.find_owning_export(target) is None:
+                return ("target", target)
+
+        return None
+
+    def refuse_what_the_manifest_is_missing(self, dep, manifest, missing):
+        """Refuse what `find_what_the_manifest_is_missing` found, naming it."""
+        kind, name = missing
+
+        if kind == "manifest":
+            self.refuse_without_a_manifest(dep)
+        elif kind == "import":
+            self.refuse_unknown_imports(dep, manifest, [name])
+        else:
+            self.refuse_an_unknown_target(dep, manifest, name)
+
+    def make_target_requests(self, dep, manifest):
+        """
+        Pair every target a dependency asks for with the export publishing it.
+
+        The manifest must hold everything the declaration asks for by the time this
+        function is called.
+        """
+        # Asking nothing is asking for the defaults the manifest holds.
+        if not dep.imports and not dep.targets:
+            asked_exports = manifest.resolve_defaults()
+        else:
+            asked_exports = dep.imports
+
+        target_requests = [
+            (export, target)
+            for export in asked_exports
+            for target in manifest.exports[export]
+        ]
+
+        for target in dep.targets:
+            target_requests.append((manifest.find_owning_export(target), target))
+
+        return helpers.filter_unique(target_requests)
+
+    @staticmethod
+    def refuse_several_targets_without_a_script(build_arguments):
+        """
+        Refuse a definition handing Waf more than the one target.
+
+        Only a script can produce multiple targets for now.
+        """
+        if len(build_arguments.target) < 2:
+            return
+
+        raise RuntimeError(
+            "Definition '{}' declares {} targets ({}) and no script, and Golem "
+            "builds one target per definition. Declare a script producing "
+            "them, or one definition per target.".format(
+                build_arguments.name,
+                len(build_arguments.target),
+                ", ".join(build_arguments.config.targets),
+            )
+        )
+
+    @staticmethod
+    def refuse_without_a_manifest(dep):
+        raise RuntimeError(
+            "Error: run golem resolve first! {} published no export "
+            "manifest".format(dep.name)
+        )
+
+    @staticmethod
+    def refuse_unknown_imports(dep, manifest, unknown):
+        raise RuntimeError(
+            "Dependency '{}' imports {}, which {} does not export. "
+            "Available exports: {}".format(
+                dep.name,
+                ", ".join(unknown),
+                dep.get_source_location(),
+                ", ".join(manifest.exports) or "nothing",
+            )
+        )
+
+    @staticmethod
+    def refuse_an_unknown_target(dep, manifest, target):
+        raise RuntimeError(
+            "Dependency '{}' asks for target '{}', which no export of {} builds "
+            "Available exports: {}".format(
+                dep.name,
+                target,
+                dep.get_source_location(),
+                ", ".join(manifest.exports) or "nothing",
+            )
+        )
+
+    def get_dep_artifact_json_list(self, dep, target_requests):
+        return [
+            self.get_dep_artifact_json(dep=dep, export=export, target_name=target)
+            for export, target in target_requests
+        ]
 
     def use_dep(self, config, dep):
         dep_configs = self.read_dep_config_file_list(dep=dep)
@@ -1592,17 +1710,6 @@ class Context:
                 config_targets = copy.deepcopy(config.targets)
                 config.merge(self, [dependency_configuration])
                 config.targets = config_targets
-
-                target_name = dependency_configuration.targets[0]
-
-                if target_name and target_name not in dependency_configuration.targets:
-                    raise RuntimeError("Cannot find target: " + target_name)
-                for target in dep.targets:
-                    if (
-                        not target in dependency_configuration.targets
-                        and not target_name
-                    ):
-                        raise RuntimeError("Cannot find target: " + target)
 
                 if dependency_dependencies is not None:
                     for dependency in dependency_dependencies:
@@ -1747,6 +1854,28 @@ class Context:
 
         dep.resolved = dep.resolved.settle_recipe(recipe)
 
+    def make_dep_request_options(self, dep):
+        """
+        Make options for what a dependency is being asked to build.
+
+        Imports and targets travel in options of their own, because a script is handed
+        the targets alone and decides what to produce from them.
+
+        Naming neither asks the dependency for its own defaults.
+        """
+        if not dep.imports and not dep.targets:
+            return ["--use-default-exports"]
+
+        options = []
+
+        if dep.imports:
+            options.append("--exports={}".format(",".join(dep.imports)))
+
+        if dep.targets:
+            options.append("--targets={}".format(",".join(dep.targets)))
+
+        return options
+
     def run_dep_command(self, dep, command):
 
         should_clean_repo = False
@@ -1783,32 +1912,35 @@ class Context:
             "--build-dir={}".format(build_path),
         ]
 
-        configure_options = path_options + [
-            "--no-copy-artifacts",
-            "--no-copy-licenses",
-            "--no-cookbooks-fetch",
-            "--targets={}".format(",".join(dep.requested_imports())),
-            "--runtime-link={}".format(self.runtime_link(dep)),
-            "--runtime-variant={}".format(self.runtime_variant(dep)),
-            "--link={}".format(self.link(dep)),
-            # The resolved identity, not the request: this build has already
-            # observed what its compiler produces, so the dependency is told
-            # rather than left to observe independently. It also means a child
-            # whose compiler disagrees fails instead of building something the
-            # parent cannot link.
-            "--arch={}".format(self.get_arch()),
-            "--variant={}".format(
-                self.context.options.variant if not dep.variant else dep.variant[0]
-            ),
-            "--export={}".format(dep_path),
-            "--resolved-dependencies-directory={}".format(build_path),
-            "--only-update-dependencies-regex={}".format(
-                self.get_only_update_dependencies_regex()
-            ),
-            "--global-dependencies-configuration={}".format(
-                global_dependencies_configuration
-            ),
-        ]
+        configure_options = (
+            path_options
+            + self.make_dep_request_options(dep)
+            + [
+                "--no-copy-artifacts",
+                "--no-copy-licenses",
+                "--no-cookbooks-fetch",
+                "--runtime-link={}".format(self.runtime_link(dep)),
+                "--runtime-variant={}".format(self.runtime_variant(dep)),
+                "--link={}".format(self.link(dep)),
+                # The resolved identity, not the request: this build has already
+                # observed what its compiler produces, so the dependency is told
+                # rather than left to observe independently. It also means a child
+                # whose compiler disagrees fails instead of building something the
+                # parent cannot link.
+                "--arch={}".format(self.get_arch()),
+                "--variant={}".format(
+                    self.context.options.variant if not dep.variant else dep.variant[0]
+                ),
+                "--export={}".format(dep_path),
+                "--resolved-dependencies-directory={}".format(build_path),
+                "--only-update-dependencies-regex={}".format(
+                    self.get_only_update_dependencies_regex()
+                ),
+                "--global-dependencies-configuration={}".format(
+                    global_dependencies_configuration
+                ),
+            ]
+        )
 
         # The overlays are already layered into one file here; the sub-build gets
         # that result rather than the overlays, so it does not re-resolve them.
@@ -1899,56 +2031,36 @@ class Context:
                 stdout=subprocess.DEVNULL,
             )
 
-    def can_open_json(self, dep, target_name=None):
-        json_path = self.get_dep_artifact_json(dep=dep, target_name=target_name)
-        return os.path.exists(json_path)
+    def read_dep_config_file_list(self, dep, target_requests=None):
+        """
+        Read one exported configuration per artifact a dependency asks for.
+        """
+        if target_requests is None:
+            target_requests = self.make_target_requests(
+                dep, self.read_dep_export_manifest(dep)
+            )
 
-    def open_json(self, dep, target_name=None):
-        json_path = self.get_dep_artifact_json(dep=dep, target_name=target_name)
-        return open(json_path, "r")
+        config_files = []
 
-    def read_json(self, dep, target_name=None):
-        json_path = self.get_dep_artifact_json(dep=dep, target_name=target_name)
-        if not self.can_open_json(dep=dep, target_name=target_name):
-            raise RuntimeError("Can't read file {}".format(json_path))
-        with self.open_json(dep=dep, target_name=target_name) as file_json:
-            return json.load(file_json)
-        return None
+        for export, target in target_requests:
+            json_path = self.get_dep_artifact_json(
+                dep=dep, export=export, target_name=target
+            )
+            if not os.path.exists(json_path):
+                raise RuntimeError("Can't read file {}".format(json_path))
+            config_files.append(
+                ExportedConfiguration.load_file(path=json_path, context=self)
+            )
 
-    def read_dep_config_file(self, dep, target_name=None):
-        json_path = self.get_dep_artifact_json(dep=dep, target_name=target_name)
-        if not self.can_open_json(dep=dep, target_name=target_name):
-            raise RuntimeError("Can't read file {}".format(json_path))
+        return config_files
 
-        return ExportedConfiguration.load_file(path=json_path, context=self)
-
-    def read_dep_configs(self, dep, target_name=None):
-        config_file = self.read_dep_config_file(dep=dep, target_name=target_name)
-        if config_file is None:
-            return None
-        return config_file.configuration
-
-    def read_dep_config_file_list(self, dep):
-        dep_configs = []
-        if not dep.targets:
-            config = self.read_dep_config_file(dep=dep, target_name=None)
-            dep_configs.append(config)
-        else:
-            for target_name in dep.targets:
-                config = self.read_dep_config_file(dep=dep, target_name=target_name)
-                dep_configs.append(config)
-        return dep_configs
-
-    def read_dep_configs_list(self, dep):
-        dep_configs = []
-        if not dep.targets:
-            config = self.read_dep_configs(dep=dep, target_name=None)
-            dep_configs.append(config)
-        else:
-            for target_name in dep.targets:
-                config = self.read_dep_configs(dep=dep, target_name=target_name)
-                dep_configs.append(config)
-        return dep_configs
+    def read_dep_configs_list(self, dep, target_requests=None):
+        return [
+            config_file.configuration
+            for config_file in self.read_dep_config_file_list(
+                dep=dep, target_requests=target_requests
+            )
+        ]
 
     def make_target_name_from_context(self, config, target):
 
@@ -2209,48 +2321,28 @@ class Context:
 
         expected_files = []
 
-        for target in dep.targets:
+        target_requests = self.make_target_requests(
+            dep, self.read_dep_export_manifest(dep)
+        )
+        dep_configs_list = self.read_dep_configs_list(
+            dep=dep, target_requests=target_requests
+        )
+
+        for (export, target), dep_configs in zip(target_requests, dep_configs_list):
             if not only_binaries:
-                json_file_path = self.get_dep_artifact_json(dep=dep, target_name=target)
+                json_file_path = self.get_dep_artifact_json(
+                    dep=dep, export=export, target_name=target
+                )
                 expected_files.append(json_file_path)
 
             if not has_artifacts:
                 return expected_files
 
-            dep_configs = self.read_dep_configs(dep, target_name=target)
             if dep_configs is None or dep_configs.header_only:
                 return expected_files
 
             if not target in dep_configs.targets:
                 raise RuntimeError("Cannot find target: " + target)
-            dep_configs.targets = [target]
-
-            config = dep.merge_copy(self, [dep_configs])
-
-            artifacts = dep_configs.artifacts_run
-            for a in artifacts:
-                if a not in expected_files:
-                    expected_files.append(a)
-
-            artifacts = dep_configs.artifacts_dev
-            for a in artifacts:
-                if a not in expected_files:
-                    expected_files.append(a)
-
-            continue
-
-        if not dep.targets:
-
-            if not only_binaries:
-                json_file_path = self.get_dep_artifact_json(dep=dep)
-                expected_files.append(json_file_path)
-
-            if not has_artifacts:
-                return expected_files
-
-            dep_configs = self.read_dep_configs(dep)
-            if dep_configs is None or dep_configs.header_only:
-                return expected_files
 
             config = dep.merge_copy(self, [dep_configs])
 
@@ -2266,14 +2358,6 @@ class Context:
 
         return expected_files
 
-    def is_header_only(self, dep):
-
-        dep_configs = self.read_dep_configs(dep)
-        if dep_configs is None:
-            return False
-
-        return dep_configs.header_only
-
     def has_artifacts(self, command):
         return command in ["build", "export"]
 
@@ -2282,16 +2366,32 @@ class Context:
 
         cached_dep = self.get_dep_cached_resource(dep)
 
-        json_paths = self.get_dep_artifact_json_list(dep)
+        # Ensuring ahead of the sub-invocation if something is missing.
+        manifest = self.read_dep_export_manifest(dep)
+        missing_from_manifest = self.find_what_the_manifest_is_missing(dep, manifest)
 
-        all_json_paths_exists = True
-        for json_path in json_paths:
-            if not os.path.exists(json_path):
-                all_json_paths_exists = False
+        missing = None
 
-        if not all_json_paths_exists and not self.deps_resolve:
+        if missing_from_manifest is not None:
+            missing = "an export manifest for {}".format(dep.name)
+        else:
+            for json_path in self.get_dep_artifact_json_list(
+                dep, self.make_target_requests(dep, manifest)
+            ):
+                if not os.path.exists(json_path):
+                    missing = json_path
+                    break
+
+        all_json_paths_exists = missing is None
+
+        if missing and not self.deps_resolve:
+            # Tell the user what's missing.
+            if missing_from_manifest is not None:
+                self.refuse_what_the_manifest_is_missing(
+                    dep, manifest, missing_from_manifest
+                )
             raise RuntimeError(
-                "Error: run golem resolve first! Can't find {}".format(json_path)
+                "Error: run golem resolve first! Can't find {}".format(missing)
             )
 
         are_headers_available = os.path.exists(self.get_dep_include_location(dep=dep))
@@ -2421,12 +2521,12 @@ class Context:
                         callback(config, dep)
                         deps_linked.append(dep.name)
 
-    def gather_build_arguments(self, task, targets, config):
+    def gather_build_arguments(self, task, targets_to_process, config):
 
         config = config.copy()
 
         decorated_targets = self.make_decorated_target_list_from_context(
-            config=config, target_names=targets
+            config=config, target_names=targets_to_process
         )
 
         context_tasks_added = False
@@ -2885,7 +2985,7 @@ class Context:
                     lib_paths.append(self.context.env.QTLIBS)
 
                 lib_artifacts = list()
-                for target_name in targets:
+                for target_name in targets_to_process:
                     decorated_target = self.make_decorated_target_from_context(
                         config=config, target_name=target_name
                     )
@@ -3021,7 +3121,7 @@ class Context:
         self.save_compiler_commands_list(path, self.compiler_commands)
 
     def append_vscode_config_target(
-        self, compiler_commands_path, task, targets, config
+        self, compiler_commands_path, task, targets_to_process, config
     ):
         if not self.context.options.vscode:
             return
@@ -3029,7 +3129,7 @@ class Context:
         targets_includes = []
 
         build_arguments = self.gather_build_arguments(
-            task=task, targets=targets, config=config
+            task=task, targets_to_process=targets_to_process, config=config
         )
 
         targets_includes += [
@@ -3114,7 +3214,7 @@ class Context:
 
         def list_all_targets_includes(
             task,
-            targets,
+            targets_to_process,
             config,
             targets_includes,
             targets_cxxflags,
@@ -3122,7 +3222,7 @@ class Context:
             targets_wfeatures,
         ):
             build_arguments = self.gather_build_arguments(
-                task=task, targets=targets, config=config
+                task=task, targets_to_process=targets_to_process, config=config
             )
 
             targets_includes += [
@@ -3146,9 +3246,9 @@ class Context:
             targets_wfeatures += config.wfeatures
 
         self.call_build_target(
-            lambda task, targets, config: list_all_targets_includes(
+            lambda task, targets_to_process, config: list_all_targets_includes(
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 config=config,
                 targets_includes=targets_includes,
                 targets_cxxflags=targets_cxxflags,
@@ -3215,6 +3315,10 @@ class Context:
         properties_path = os.path.join(
             self.get_project_dir(), ".vscode", "c_cpp_properties.json"
         )
+
+        # Ensure the directory exists
+        helpers.make_directory(os.path.dirname(properties_path))
+
         with open(properties_path, "w") as outfile:
             json.dump(data, outfile, indent=4, sort_keys=True)
 
@@ -3225,7 +3329,7 @@ class Context:
         return os.path.join(self.get_vscode_path(), path)
 
     def append_clangd_config_target(
-        self, compiler_commands_path, task, targets, config
+        self, compiler_commands_path, task, targets_to_process, config
     ):
         if not self.context.options.clangd:
             return
@@ -3233,7 +3337,7 @@ class Context:
         targets_includes = []
 
         build_arguments = self.gather_build_arguments(
-            task=task, targets=targets, config=config
+            task=task, targets_to_process=targets_to_process, config=config
         )
 
         targets_includes += [
@@ -3267,10 +3371,15 @@ class Context:
         targets_wfeatures = []
 
         def list_all_targets_includes(
-            task, targets, config, targets_includes, targets_cxxflags, targets_wfeatures
+            task,
+            targets_to_process,
+            config,
+            targets_includes,
+            targets_cxxflags,
+            targets_wfeatures,
         ):
             build_arguments = self.gather_build_arguments(
-                task=task, targets=targets, config=config
+                task=task, targets_to_process=targets_to_process, config=config
             )
 
             targets_includes += [
@@ -3293,9 +3402,9 @@ class Context:
             targets_wfeatures += config.wfeatures
 
         self.call_build_target(
-            lambda task, targets, config: list_all_targets_includes(
+            lambda task, targets_to_process, config: list_all_targets_includes(
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 config=config,
                 targets_includes=targets_includes,
                 targets_cxxflags=targets_cxxflags,
@@ -3329,7 +3438,7 @@ class Context:
         return os.path.join(self.get_clangd_path(), path)
 
     def append_compile_commands_config_target(
-        self, compiler_commands_path, task, targets, config
+        self, compiler_commands_path, task, targets_to_process, config
     ):
         if not self.context.options.compile_commands:
             return
@@ -3337,7 +3446,7 @@ class Context:
         targets_includes = []
 
         build_arguments = self.gather_build_arguments(
-            task=task, targets=targets, config=config
+            task=task, targets_to_process=targets_to_process, config=config
         )
 
         targets_includes += [
@@ -3368,10 +3477,15 @@ class Context:
         targets_wfeatures = []
 
         def list_all_targets_includes(
-            task, targets, config, targets_includes, targets_cxxflags, targets_wfeatures
+            task,
+            targets_to_process,
+            config,
+            targets_includes,
+            targets_cxxflags,
+            targets_wfeatures,
         ):
             build_arguments = self.gather_build_arguments(
-                task=task, targets=targets, config=config
+                task=task, targets_to_process=targets_to_process, config=config
             )
 
             targets_includes += [
@@ -3394,9 +3508,9 @@ class Context:
             targets_wfeatures += config.wfeatures
 
         self.call_build_target(
-            lambda task, targets, config: list_all_targets_includes(
+            lambda task, targets_to_process, config: list_all_targets_includes(
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 config=config,
                 targets_includes=targets_includes,
                 targets_cxxflags=targets_cxxflags,
@@ -3410,17 +3524,43 @@ class Context:
     def make_compile_commands_path(self, path):
         return os.path.join(self.get_compile_commands_path(), path)
 
-    def run_build_script(self, callback):
+    def run_build_script(self, callback, config=None):
         """
-        A script the project declared for one of its targets. It is not golem
-        fetching a resource, so whatever it reaches is its own business.
-        """
-        with network.allowed():
-            callback(self)
+        A script the project declared for one of its definitions.
 
-    def build_arguments(self, task, targets, config):
+        The definition being built is recorded for the duration so that the script can
+        query it through the context.
+        """
+        self.script_building_config = config
+        try:
+            with network.allowed():
+                callback(self)
+        finally:
+            self.script_building_config = None
+
+    def get_targets_to_build(self):
+        """
+        Name the targets a script is being asked to produce, undecorated.
+
+        Every target of the definition being built when the request names none.
+        """
+        if self.script_building_config is None:
+            raise RuntimeError(
+                "get_targets_to_build() answers for the definition whose script "
+                "is running, and no script is running"
+            )
+
+        targets = self.script_building_config.targets
+        asked_targets = self.get_asked_targets()
+
+        if not asked_targets:
+            return list(targets)
+
+        return [target for target in targets if target in asked_targets]
+
+    def build_arguments(self, task, targets_to_process, config):
         build_arguments = self.gather_build_arguments(
-            task=task, targets=targets, config=config
+            task=task, targets_to_process=targets_to_process, config=config
         )
 
         self.append_compiler_commands(build_arguments)
@@ -3443,7 +3583,7 @@ class Context:
             self.append_vscode_config_target(
                 compiler_commands_path=compiler_commands_path,
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 config=config,
             )
 
@@ -3463,7 +3603,7 @@ class Context:
             self.append_clangd_config_target(
                 compiler_commands_path=compiler_commands_path,
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 config=config,
             )
 
@@ -3485,7 +3625,7 @@ class Context:
             self.append_compile_commands_config_target(
                 compiler_commands_path=compiler_commands_path,
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 config=config,
             )
 
@@ -3537,7 +3677,7 @@ class Context:
 
         if build_arguments.config.scripts:
             for callback in build_arguments.config.scripts:
-                self.run_build_script(callback)
+                self.run_build_script(callback, config=build_arguments.config)
 
                 if self.is_windows():
                     continue
@@ -3547,7 +3687,7 @@ class Context:
 
                 if self.is_darwin():
                     lib_artifacts = list()
-                    for target_name in targets:
+                    for target_name in targets_to_process:
                         decorated_target = self.make_decorated_target_from_context(
                             config=config, target_name=target_name
                         )
@@ -3570,6 +3710,8 @@ class Context:
                         source_artifacts=config.artifacts,
                     )
             return
+
+        self.refuse_several_targets_without_a_script(build_arguments)
 
         build_fun(
             defines=build_arguments.defines,
@@ -3633,10 +3775,10 @@ class Context:
 
         return helpers.filter_unique(artifacts_run + artifacts_dev)
 
-    def cppcheck_target(self, task, targets, config):
+    def cppcheck_target(self, task, targets_to_process, config):
 
         build_arguments = self.gather_build_arguments(
-            task=task, targets=targets, config=config
+            task=task, targets_to_process=targets_to_process, config=config
         )
 
         all_includes = (
@@ -3693,17 +3835,19 @@ class Context:
             # dependencies and help constructing the correct slug for the
             # binary folder name
             tasks_and_targets_bis = self.get_tasks_and_targets_to_process(
-                tasks_source=self.project.exports
+                available_tasks=self.project.exports
             )
-            for task, targets in tasks_and_targets_bis:
-                _, _ = self.iterate_over_task(task=task, targets=targets)
+            for task, targets_to_process in tasks_and_targets_bis:
+                _, _ = self.iterate_over_task(
+                    task=task, targets_to_process=targets_to_process
+                )
 
-        for task, targets in tasks_and_targets:
+        for task, targets_to_process in tasks_and_targets:
             if task.header_only:
                 continue
             _, _ = self.iterate_over_task(
                 task=task,
-                targets=targets,
+                targets_to_process=targets_to_process,
                 build_method=build_target_fun,
                 build_recursively=build_recursively,
             )
@@ -3715,10 +3859,10 @@ class Context:
 
         self.call_build_target(self.cppcheck_target)
 
-    def clang_tidy_target(self, task, targets, config):
+    def clang_tidy_target(self, task, targets_to_process, config):
 
         build_arguments = self.gather_build_arguments(
-            task=task, targets=targets, config=config
+            task=task, targets_to_process=targets_to_process, config=config
         )
 
         clang_tidy_dir = self.make_golem_path("clang-tidy")
@@ -4225,7 +4369,7 @@ class Context:
 
         if self.project is None:
             raise RuntimeError(
-                "ERROR: {} holds a project file Golem could not read:\n"
+                "Error: {} holds a project file Golem could not read:\n"
                 "  {}".format(recipe.served_by, recipe.project_directory)
             )
 
@@ -4484,16 +4628,48 @@ class Context:
         return dep_lib_paths
 
     def find_dependency_artifacts_dev(self, dep_name, target_name=None):
-        results = []
+        """
+        List the development artifacts of a dependency, for a golemfile.
+
+        A target names the export building it.
+        """
         for dep in self.project.deps:
-            if dep_name == dep.name:
-                dep_config = self.read_dep_configs(dep=dep, target_name=target_name)
-                results.append(dep_config.artifacts_dev)
+            if dep_name != dep.name:
+                continue
 
-        if not results:
-            return None
+            export_manifest = self.read_dep_export_manifest(dep)
 
-        return results[0]
+            if not target_name:
+                # The declaration is what is asked for, so it is what is checked.
+                missing = self.find_what_the_manifest_is_missing(dep, export_manifest)
+                if missing is not None:
+                    self.refuse_what_the_manifest_is_missing(
+                        dep, export_manifest, missing
+                    )
+
+                target_requests = self.make_target_requests(dep, export_manifest)
+            else:
+                # Export manifest must exist
+                if export_manifest is None:
+                    self.refuse_without_a_manifest(dep)
+
+                # Target must have an export in the export manifest
+                export = export_manifest.find_owning_export(target_name)
+                if export is None:
+                    self.refuse_an_unknown_target(dep, export_manifest, target_name)
+
+                target_requests = [(export, target_name)]
+
+            artifacts_dev = []
+            for config in self.read_dep_configs_list(
+                dep=dep, target_requests=target_requests
+            ):
+                for artifact in config.artifacts_dev:
+                    if artifact not in artifacts_dev:
+                        artifacts_dev.append(artifact)
+            return artifacts_dev
+
+        return None
 
     def find_dependency_libraries_files(self, dep_name, target_name=None):
         lib_paths = []
@@ -4571,15 +4747,6 @@ class Context:
                 compile_commands_compiler_commands_path
             )
 
-        for targetname in self.context.options.targets.split(","):
-            if targetname and not targetname in [
-                target.name for target in self.project.definitions
-            ]:
-                if self.is_windows():
-                    self.context(rule="type nul >> ${TGT}", target=targetname)
-                else:
-                    self.context(rule="touch ${TGT}", target=targetname)
-
     def narrow_to_default_exports(self, names):
         """
         Narrow project's declared default exports when asking for the defaults.
@@ -4598,13 +4765,63 @@ class Context:
         return [name for name in names if name in declared]
 
     def get_asked_exports(self):
-        return (
-            self.context.options.targets.split(",")
-            if self.context.options.targets
-            else self.narrow_to_default_exports(
-                [target.name for target in self.project.exports]
+        """Get the exports `--exports` asks for, empty when it asks for none."""
+        if not self.context.options.exports:
+            return []
+
+        return self.context.options.exports.split(",")
+
+    def get_asked_targets(self):
+        """Get the targets `--targets` asks for, empty when it asks for none."""
+        if not self.context.options.targets:
+            return []
+
+        return self.context.options.targets.split(",")
+
+    def find_exported_library(self, export):
+        """
+        Find the library an export publishes, None where the project declares none.
+        """
+        definition = self.find_related_build_task(task=export)
+
+        if definition is None:
+            return None
+
+        if definition.type_unique != "library":
+            raise RuntimeError(
+                "Export '{}' names a {}, and an export publishes a "
+                "library".format(export.name, definition.type_unique)
             )
-        )
+
+        return definition
+
+    def find_owning_export(self, target):
+        """Find the export the target belongs to, None where none does."""
+        for export in self.project.exports:
+            if target in self.get_targets_from_task(export):
+                return export.name
+
+        return None
+
+    def resolve_asked_exports(self):
+        """
+        Resolve the asked exports from both `--targets` and `--exports`.
+
+        Answers what the project holds.
+        """
+        asked_exports = self.get_asked_exports()
+        asked_targets = self.get_asked_targets()
+
+        if not asked_exports and not asked_targets:
+            return self.narrow_to_default_exports(
+                [export.name for export in self.project.exports]
+            )
+
+        owning_exports = [
+            export for export in map(self.find_owning_export, asked_targets) if export
+        ]
+
+        return helpers.filter_unique(asked_exports + owning_exports)
 
     def merge_export_config_against_build_condition(self, export, exporting=False):
         found_definition = None
@@ -4617,9 +4834,9 @@ class Context:
         )
 
     def export(self):
-        targets = self.get_asked_exports()
+        asked_exports = self.resolve_asked_exports()
         for export in self.project.exports:
-            if export.name in targets:
+            if export.name in asked_exports:
 
                 config = self.merge_export_config_against_build_condition(
                     export, exporting=True
@@ -4731,103 +4948,152 @@ class Context:
         return master_config
 
     def get_targets_from_task(self, task):
+        """
+        Get the targets a task carries.
+
+        Definitions declare targets, but when they don't a target is named after them.
+
+        Exports declare targets too, narrowing the targets of the library they refer to.
+        But when they declare no target, they get the library's targets.
+        """
         config = task.merge_configs(self)
-        if not config.targets and task.export and self.context.options.export:
+        if not config.targets and task.export:
             related_build_task = self.find_related_build_task(task=task)
             if related_build_task:
                 related_build_task_config = related_build_task.merge_configs(self)
                 config.targets = related_build_task_config.targets.copy()
         return self.list_target_names_from_context(config=config, target=task)
 
-    def resolve_asked_targets(self, tasks_source=None):
-        if tasks_source is None:
-            tasks_source = self.get_targets_or_exports()
+    def map_targets_by_definition(self):
+        """Map the targets by the definitions this project builds."""
+        return {
+            definition.name: self.get_targets_from_task(definition)
+            for definition in self.project.definitions
+        }
 
-        # Task names are virtual targets (referring to 0,n targets)
+    def resolve_asked_targets(self):
+        """
+        Resolve the asked targets from both `--targets` and `--exports`.
 
-        targets = []
-        for task in tasks_source:
-            targets += [task.name]
+        `--targets` names the targets directly
 
-        if not self.context.options.targets:
-            return self.narrow_to_default_exports(targets)
+        `--exports` names exports, each a group of 1..n targets
 
-        # To check given targets are valid we add all possible targets to the list
+        Answers what the project holds.
+        """
+        asked_exports = self.get_asked_exports()
+        asked_targets = self.get_asked_targets()
 
-        for task in tasks_source:
-            targets += self.get_targets_from_task(task)
+        targets_by_definition = self.map_targets_by_definition()
 
-        targets = helpers.filter_unique(targets)
+        # The targets are merged by the time anything asks, so this is where a
+        # project is held to its shape.
+        self.refuse_duplicates_among_targets(targets_by_definition)
+        self.refuse_an_export_with_no_declared_library()
+        self.refuse_an_export_target_no_library_builds()
 
-        # Check all targets given in options exist
-        # (Special case for header_only targets)
+        # When nothing is asked, the request is everything the project builds,
+        # narrowed by the defaults.
+        if not asked_exports and not asked_targets:
+            wanted = self.narrow_to_default_exports(
+                [definition.name for definition in self.project.definitions]
+            )
 
-        asked_targets = self.context.options.targets.split(",")
-        for asked_target in asked_targets:
-            found_target = asked_target not in targets
-            is_header_only_target = asked_target in [
-                t.name for t in self.project.exports if t.header_only
+            return helpers.filter_unique(
+                [
+                    target
+                    for definition in self.project.definitions
+                    if definition.name in wanted
+                    for target in self.get_targets_from_task(definition)
+                ]
+            )
+
+        self.refuse_unknown_names(
+            asked_exports, [export.name for export in self.project.exports], "export"
+        )
+        self.refuse_unknown_names(
+            asked_targets,
+            helpers.filter_unique(sum(targets_by_definition.values(), [])),
+            "target",
+        )
+
+        # The two halves are one request added together, so an export asks for
+        # every target it publishes and a target asks for itself.
+        return helpers.filter_unique(
+            list(asked_targets)
+            + [
+                target
+                for export in self.project.exports
+                if export.name in asked_exports
+                for target in self.get_targets_from_task(export)
             ]
-            if found_target and not is_header_only_target:
-                raise RuntimeError(
-                    "Cannot find any target named {} between {}".format(
-                        asked_target, targets
-                    )
-                )
+        )
 
-        return asked_targets
+    def narrow_to_the_targets_of_this_pass(self, targets, available_tasks):
+        """
+        Narrow the asked targets to what the available tasks allow.
+        """
+        of_this_pass = helpers.filter_unique(
+            [
+                target
+                for task in available_tasks
+                for target in self.get_targets_from_task(task)
+            ]
+        )
 
-    def get_task_from_target(self, target, tasks_source=None):
-        if tasks_source is None:
-            tasks_source = self.get_targets_or_exports()
+        return [target for target in targets if target in of_this_pass]
 
-        tasks = []
-        for task in tasks_source:
-            if target == task.name:
-                tasks.append(task)
-        if not tasks:
-            for task in tasks_source:
-                if target in self.get_targets_from_task(task):
-                    tasks.append(task)
+    @staticmethod
+    def refuse_unknown_names(asked, known, kind):
+        """Refuse an asked name this project does not know."""
+        for name in asked:
+            if name in known:
+                continue
+
+            raise RuntimeError(
+                "Cannot find any {} named {} between {}".format(kind, name, known)
+            )
+
+    @staticmethod
+    def require_one_task(tasks, name, kind):
+        """Require that a task name reaches exactly one task, and return it."""
         if len(tasks) > 1:
             raise RuntimeError(
-                "Ambiguous target name {} between tasks {}".format(
-                    target, [task.name for task in tasks]
+                "Ambiguous {} name {} between tasks {}".format(
+                    kind, name, [task.name for task in tasks]
                 )
             )
 
         if not tasks:
-            tasks = [
-                t for t in self.project.exports if (t.header_only and target == t.name)
-            ]
-
-        if len(tasks) > 1:
-            raise RuntimeError(
-                "Ambiguous target name {} between tasks {}".format(
-                    target, [task.name for task in tasks]
-                )
-            )
-
-        if not tasks:
-            raise RuntimeError("Can't find target name {}".format(target))
+            raise RuntimeError("Can't find {} name {}".format(kind, name))
 
         return tasks[0]
 
-    def get_tasks_from_targets(self, targets, tasks_source=None):
-        if tasks_source is None:
-            tasks_source = self.get_targets_or_exports()
+    def get_task_from_target(self, target, available_tasks):
+        """
+        Get the task building a target.
+        """
+        tasks = [
+            task
+            for task in available_tasks
+            if target in self.get_targets_from_task(task)
+        ]
 
+        return self.require_one_task(tasks, target, "target")
+
+    def get_tasks_from_targets(self, targets, available_tasks):
         result_tasks = dict()
         result_targets = dict()
         for target in targets:
-            task = self.get_task_from_target(target=target, tasks_source=tasks_source)
+            task = self.get_task_from_target(
+                target=target, available_tasks=available_tasks
+            )
 
             if task.name not in result_targets:
                 result_targets[task.name] = []
 
             result_tasks[task.name] = task
-            if target != task.name:
-                result_targets[task.name].append(target)
+            result_targets[task.name].append(target)
 
         result = []
         for key, value in result_targets.items():
@@ -4836,11 +5102,8 @@ class Context:
             result.append((current_task, current_targets))
         return result
 
-    def get_tasks_from_names(self, names, tasks_source=None):
-        if tasks_source is None:
-            tasks_source = self.get_targets_or_exports()
-
-        return [task for task in tasks_source if task.name in names]
+    def get_tasks_from_names(self, names, available_tasks):
+        return [task for task in available_tasks if task.name in names]
 
     def find_related_build_task(self, task):
         build_tasks = []
@@ -4855,12 +5118,12 @@ class Context:
 
     def process_internal_deps(self, config, build_method=None, build_recursively=False):
         tasks_use = self.get_tasks_from_names(
-            names=config.use, tasks_source=self.project.exports
+            names=config.use, available_tasks=self.project.exports
         )
         for export_task in tasks_use:
             export_task_config, _ = self.process_export_task(
                 task=export_task,
-                targets=None,
+                targets_to_process=None,
                 build_method=build_method,
                 build_recursively=build_recursively,
             )
@@ -4966,7 +5229,12 @@ class Context:
             if not export_target_config.header_only:
                 export_target_config.rpath_link.append(target_path)
 
-            if not "program" in export_target_config.type:
+            # Program are not meant to be exported.
+            # A header-only library builds no binary.
+            if (
+                not "program" in export_target_config.type
+                and not export_target_config.header_only
+            ):
                 if self.is_config_shared(export_target_config):
                     if target_artifact_path not in export_target_config.lib:
                         export_target_config.lib.append(target_artifact_path)
@@ -5103,7 +5371,7 @@ class Context:
             ),
         )
 
-    def generate_configuration(self, task, targets):
+    def generate_configuration(self, task):
         config = task.merge_configs(self)
         static_configs = self.project.read_configurations(self)
         config.merge(context=self, configs=static_configs)
@@ -5128,43 +5396,50 @@ class Context:
         return config
 
     def process_export_task(
-        self, task, targets=None, build_method=None, build_recursively=False
+        self,
+        task,
+        targets_to_process=None,
+        build_method=None,
+        build_recursively=False,
     ):
-        config = self.generate_configuration(task=task, targets=targets)
+        config = self.generate_configuration(task=task)
 
-        config_targets = []
+        target_configs = []
 
         related_build_task = self.find_related_build_task(task=task)
 
         if related_build_task:
-            required_targets = targets if targets else config.targets
             related_build_config = self.process_build_task(
                 task=related_build_task,
-                targets=required_targets,
+                targets_to_process=targets_to_process or config.targets,
                 build_method=build_method,
                 build_recursively=build_recursively,
             )
 
-            config, config_targets = self.update_export_config_from_build_config(
+            config, target_configs = self.update_export_config_from_build_config(
                 export_config=config, build_config=related_build_config
             )
 
-        for c in [config] + config_targets:
+        for c in [config] + target_configs:
             self.process_internal_deps(
                 config=c,
                 build_method=build_method if build_recursively else None,
                 build_recursively=build_recursively,
             )
 
-        for c in [config] + config_targets:
+        for c in [config] + target_configs:
             self.process_external_deps(config=c)
 
-        return config, config_targets
+        return config, target_configs
 
     def process_build_task(
-        self, task, targets=None, build_method=None, build_recursively=False
+        self,
+        task,
+        targets_to_process=None,
+        build_method=None,
+        build_recursively=False,
     ):
-        config = self.generate_configuration(task=task, targets=targets)
+        config = self.generate_configuration(task=task)
 
         self.process_internal_deps(
             config=config,
@@ -5176,17 +5451,24 @@ class Context:
 
         if build_method and task.name not in self.built_tasks:
             self.built_tasks.append(task.name)
-            asked_targets = targets if targets else config.targets
-            build_method(task=task, targets=asked_targets, config=config)
+            build_method(
+                task=task,
+                targets_to_process=targets_to_process or config.targets,
+                config=config,
+            )
 
         return config
 
     def iterate_over_task(
-        self, task, targets=None, build_method=None, build_recursively=False
+        self,
+        task,
+        targets_to_process=None,
+        build_method=None,
+        build_recursively=False,
     ):
         if task.export:
             if task.args is not None:
-                config = self.generate_configuration(task=task, targets=targets)
+                config = self.generate_configuration(task=task)
                 targets = helpers.filter_unique(
                     helpers.parameter_to_list(task.args["target"])
                 )
@@ -5200,7 +5482,7 @@ class Context:
             else:
                 return self.process_export_task(
                     task=task,
-                    targets=targets,
+                    targets_to_process=targets_to_process,
                     build_method=build_method,
                     build_recursively=build_recursively,
                 )
@@ -5208,7 +5490,7 @@ class Context:
             return (
                 self.process_build_task(
                     task=task,
-                    targets=targets,
+                    targets_to_process=targets_to_process,
                     build_method=build_method,
                     build_recursively=build_recursively,
                 ),
@@ -5344,7 +5626,7 @@ class Context:
             print("Remove {}".format(path))
             helpers.remove_tree(path)
 
-    def write_config_file(self, task, config, target=None):
+    def write_config_file(self, task, config, target):
         export_path = self.make_outpath()
         export_path_lib = self.make_outpath_lib()
         export_path_conf = self.make_outpath_conf()
@@ -5384,15 +5666,21 @@ class Context:
 
     def resolve_recursively(self):
         task_targets_list = self.get_tasks_and_targets_to_process()
-        for task, targets in task_targets_list:
-            config, config_targets = self.iterate_over_task(task=task, targets=targets)
+        for task, targets_to_process in task_targets_list:
+            config, target_configs = self.iterate_over_task(
+                task=task, targets_to_process=targets_to_process
+            )
 
             if self.context.options.export:
-                self.write_config_file(task=task, config=config, target=None)
-
-                for config in config_targets:
+                for target_config in target_configs:
+                    # The definition yields one configuration per target, for all the
+                    # targets. So this is where the narrowing is applied.
+                    if target_config.targets[0] not in targets_to_process:
+                        continue
                     self.write_config_file(
-                        task=task, config=config, target=config.targets[0]
+                        task=task,
+                        config=target_config,
+                        target=target_config.targets[0],
                     )
             self.cleanup_old_build_files(config=config)
 
@@ -5402,20 +5690,102 @@ class Context:
     def make_export_manifest(self):
         """
         Make a manifest containing all the exports and defaults.
-        
+
         Useful to let a consumer project know what it can ask for.
         """
-        exports = {}
-
-        for export in self.project.exports:
-            definition = self.find_related_build_task(task=export)
-            exports[export.name] = (
-                self.get_targets_from_task(definition) if definition else []
-            )
+        exports = {
+            export.name: self.get_targets_from_task(export)
+            for export in self.project.exports
+        }
 
         return ExportManifest(
             exports=exports, default=list(self.project.default_exports)
         )
+
+    def refuse_an_export_with_no_declared_library(self):
+        """
+        Refuse an export with no library to export, unless it is header-only.
+
+        An export publishes what a library built. But there is nothing to publish if
+        there isn't a library for the export. A header-only export is the exception,
+        since there is often nothing to build in this situation.
+        """
+        for export in self.project.exports:
+            if export.header_only:
+                continue
+
+            library_definition = self.find_exported_library(export)
+
+            # Normalising gave every export a library, so what is asked here is
+            # whether the project declared one, not whether there is one.
+            if library_definition is not None and not library_definition.implicit:
+                continue
+
+            raise RuntimeError(
+                "Export '{}' is not header-only, and the project declares no "
+                "library of that name for it to export".format(export.name)
+            )
+
+    def refuse_an_export_target_no_library_builds(self):
+        """
+        Refuse an export naming a target its library does not build.
+
+        An export's targets are a view of the library's, therefore they can only narrow
+        them. And an export naming no targets takes the library's.
+
+        But an export with no library explicitely declared, has an implicit library with
+        an implicit target. Therefore, an export is always a view on something.
+
+        It means that an export can define no targets. But if it does, the targets have
+        to be a subset of either the ones explicitely declared on the library, or the
+        implicit associated to the implicit library.
+        """
+        for export in self.project.exports:
+            declared_targets = export.merge_configs(self).targets
+
+            # An export can't disagree with its library if targets are left undeclared.
+            if not declared_targets:
+                continue
+
+            library_definition = self.find_exported_library(export)
+
+            # If the library isn't declared, the implicit library carries an implicit
+            # target that matches the name of the library, and therefore the name of the
+            # export since this is how an export is matched to its library.
+            built = (
+                self.get_targets_from_task(library_definition)
+                if library_definition is not None
+                else [export.name]
+            )
+            unbuilt = [target for target in declared_targets if target not in built]
+
+            if unbuilt:
+                raise RuntimeError(
+                    "Export '{}' names the targets {}, and the library it "
+                    "exports builds {}".format(
+                        export.name, ", ".join(unbuilt), ", ".join(built)
+                    )
+                )
+
+    @staticmethod
+    def refuse_duplicates_among_targets(targets_by_task):
+        """
+        Refuse a target declared twice accross tasks.
+
+        The check requires to merge the configurations, so two names a
+        condition keeps apart are not taken for one.
+        """
+        owners = {}
+
+        for task, targets in targets_by_task.items():
+            for target in targets:
+                if target in owners:
+                    raise RuntimeError(
+                        "target '{}' is declared by {} and by {}".format(
+                            target, owners[target], task
+                        )
+                    )
+                owners[target] = task
 
     def write_export_manifest(self):
         """
@@ -5427,7 +5797,14 @@ class Context:
 
         self.make_export_manifest().write(path)
 
-    def get_targets_or_exports(self):
+    def get_tasks_of_the_pass(self):
+        """
+        Name the tasks this run works on.
+
+        Definitions (non-export ones) by default.
+
+        Exports when told to produce an export tree and not to build.
+        """
         return (
             self.project.definitions
             if (not self.context.options.export or self.build_on)
@@ -5453,54 +5830,17 @@ class Context:
 
         return mapped_objects
 
-    def get_tasks_and_targets_to_process(self, tasks_source=None):
-        targets = self.resolve_asked_targets(tasks_source=tasks_source)
-        task_targets_list = self.get_tasks_from_targets(
-            targets, tasks_source=tasks_source
+    def get_tasks_and_targets_to_process(self, available_tasks=None):
+        if available_tasks is None:
+            available_tasks = self.get_tasks_of_the_pass()
+
+        targets_to_process = self.narrow_to_the_targets_of_this_pass(
+            self.resolve_asked_targets(), available_tasks
         )
-        return task_targets_list
 
-    def get_targets_to_process(self, asked_targets=None, source_targets=None):
-        if source_targets is None:
-            source_targets = self.get_targets_or_exports()
-
-        if asked_targets is None:
-            asked_targets = self.get_asked_targets(source_targets=source_targets)
-
-        targets_to_find = asked_targets
-        targets_to_process = []
-
-        while True:
-            found_targets = self.map_name_to_objects(
-                targets_to_find, source_targets, "target"
-            )
-
-            targets_to_find = []
-            targets_to_process = found_targets + targets_to_process
-
-            for target in found_targets:
-                for target_use in target.use:
-                    if target_use not in targets_to_find:
-                        already_in_process = False
-                        for t in targets_to_process:
-                            if target_use == t.name:
-                                already_in_process = True
-                                break
-                        if not already_in_process:
-                            targets_to_find.append(target_use)
-
-            if not targets_to_find:
-                break
-
-        return targets_to_process
-
-    def get_asked_targets(self, source_targets=None):
-        if source_targets is None:
-            source_targets = self.get_targets_or_exports()
-        return (
-            self.context.options.targets.split(",")
-            if self.context.options.targets
-            else [target.name for target in source_targets]
+        return self.get_tasks_from_targets(
+            targets=targets_to_process,
+            available_tasks=available_tasks,
         )
 
     class PackageTaskTargets:
@@ -5514,7 +5854,7 @@ class Context:
 
         def generate_config(self, context):
             config, _ = context.iterate_over_task(
-                task=self.export_task, targets=self.targets
+                task=self.export_task, targets_to_process=self.targets
             )
             config.artifacts = Context.make_absolute_artifacts(
                 artifacts=config.artifacts,
@@ -5566,7 +5906,7 @@ class Context:
 
         packages_to_process = dict()
         tasks_and_targets = self.get_tasks_and_targets_to_process(
-            tasks_source=self.project.definitions
+            available_tasks=self.project.definitions
         )
         for task, targets in tasks_and_targets:
             for package in self.project.packages:
@@ -5648,8 +5988,10 @@ class Context:
         packages = []
 
         tasks_and_targets = self.get_tasks_and_targets_to_process()
-        for task, targets in tasks_and_targets:
-            config, _ = self.iterate_over_task(task=task, targets=targets)
+        for task, targets_to_process in tasks_and_targets:
+            config, _ = self.iterate_over_task(
+                task=task, targets_to_process=targets_to_process
+            )
             packages_dev += config.packages_dev
             packages += config.packages
 
@@ -5661,8 +6003,10 @@ class Context:
 
     def dependencies(self):
         tasks_and_targets = self.get_tasks_and_targets_to_process()
-        for task, targets in tasks_and_targets:
-            config, _ = self.iterate_over_task(task=task, targets=targets)
+        for task, targets_to_process in tasks_and_targets:
+            config, _ = self.iterate_over_task(
+                task=task, targets_to_process=targets_to_process
+            )
             self.cleanup_old_build_files(config=config)
 
             if not self.context.options.no_copy_artifacts and self.deps_build:

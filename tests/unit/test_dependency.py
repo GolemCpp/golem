@@ -479,10 +479,10 @@ def test_a_refusal_names_every_locator_the_recipe_was_asked_about():
     assert "@boost@boostorg@gitlab.com" in str(refusal.value)
 
 
-def test_the_imports_fall_back_to_the_name():
-    # The two are one string until a consumer says otherwise, which is what
-    # keeps every existing golemfile working.
-    assert Dependency(name="boost").requested_imports() == ["boost"]
+def test_a_dependency_naming_no_import_names_none():
+    # `name` labels the declaration and stops at the project file, so it never
+    # stands in for an export: the parent asks the dependency for its defaults.
+    assert Dependency(name="boost").imports == []
 
 
 def test_a_declared_import_is_what_leaves_the_project_file():
@@ -491,7 +491,7 @@ def test_a_declared_import_is_what_leaves_the_project_file():
     dependency = Dependency(name="bst", location="@boost", imports="boost")
 
     assert dependency.name == "bst"
-    assert dependency.requested_imports() == ["boost"]
+    assert dependency.imports == ["boost"]
 
 
 def test_a_declared_import_survives_a_round_trip():
@@ -510,7 +510,7 @@ def test_an_import_nobody_declared_is_left_out_of_the_record():
     recorded = Dependency.serialize_to_json(Dependency(name="boost"))
 
     assert "imports" not in recorded
-    assert Dependency.unserialize_from_json(recorded).requested_imports() == ["boost"]
+    assert Dependency.unserialize_from_json(recorded).imports == []
 
 
 def test_importing_more_than_one_export_is_refused_for_now():

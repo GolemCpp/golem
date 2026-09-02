@@ -242,11 +242,61 @@ class Project:
         self.has_declared_defaults = True
         self.default_exports = helpers.parameter_to_list(exports)
 
+    def normalize(self):
+        """
+        Normalize the project by adding any implicit data.
+
+        A library publishes an export, and an export is built by a library, therefore a
+        project must hold both even where the project's author wrote one.
+
+        Run before the checks.
+
+        Idempotent.
+
+        Adding implicit libraries or exports doesn't mean the project becomes valid to
+        do anything. Normalization adds nothing to the initial intents of the author.
+        And if the author wrote an unbuildable project, this pass doesn't fix it.
+        """
+        # Implicit exports
+        for definition in list(self.definitions):
+            if definition.type_unique != "library":
+                continue
+            if any(export.name == definition.name for export in self.exports):
+                continue
+
+            # Naming no target of its own makes it a view of what the library builds.
+            self.exports.append(
+                Definition(type=None, export=True, implicit=True, name=definition.name)
+            )
+
+        # Implicit libraries
+        for export in list(self.exports):
+            if any(definition.name == export.name for definition in self.definitions):
+                continue
+
+            # Header-only where its export is, to skip the build.
+            self.definitions.append(
+                Definition(
+                    type="library",
+                    implicit=True,
+                    name=export.name,
+                    header_only=export.header_only,
+                )
+            )
+
     def validate(self):
         """
         Refuse what can only be checked once the project is fully declared.
         """
+        self.normalize()
+
         exported = [export.name for export in self.exports]
+
+        # Refuse duplicates among exports
+        for position, name in enumerate(exported):
+            if name in exported[:position]:
+                raise ValueError("the project exports '{}' twice".format(name))
+
         unknown = [name for name in self.default_exports if name not in exported]
 
         if unknown:

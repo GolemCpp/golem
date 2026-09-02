@@ -117,16 +117,6 @@ class Dependency(Configuration):
                 "({})".format(self.name, len(self.imports), ", ".join(self.imports))
             )
 
-    def requested_imports(self) -> list:
-        """
-        Return which of the dependency's exports are wanted.
-
-        `name` is a local label and stops at the project file; these are what
-        the sub-invocation is asked to build and what the dependency's records
-        are filed under, so each has to be a name the dependency itself knows.
-        """
-        return self.imports or [self.name]
-
     def requested_source(self):
         # What this dependency asks for. The locator is the resolved one: a
         # declaration may be relative, or an identity naming no locator at all.

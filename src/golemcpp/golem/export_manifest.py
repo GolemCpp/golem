@@ -27,6 +27,22 @@ class ExportManifest:
     exports: dict = field(default_factory=dict)
     default: list = field(default_factory=list)
 
+    def resolve_defaults(self) -> list:
+        """
+        Resolve the exports a consumer naming neither import nor target is given.
+
+        The declared set, or every export where the project declared none.
+        """
+        return self.default or list(self.exports)
+
+    def find_owning_export(self, target: str):
+        """Find the export owning a target, None where no export owns it."""
+        for name, targets in self.exports.items():
+            if target in targets:
+                return name
+
+        return None
+
     def write(self, path: str):
         """Write the manifest, replacing what an earlier run left there."""
         content = {
