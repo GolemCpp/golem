@@ -106,7 +106,7 @@ class Project:
 
             Logs.debug(
                 "Found {}: {} -> {} ({})".format(
-                    dependency.name,
+                    dependency.get_display_name(),
                     dependency.version,
                     dependency.resolved.version.reference,
                     dependency.resolved.version.revision,
@@ -162,14 +162,15 @@ class Project:
 
         for i, dependency in enumerate(self.deps):
             for cached_dependency in cached_dependencies:
-                if cached_dependency.name != dependency.name or is_stale_for(
-                    cached_dependency, dependency
-                ):
+                # No need to match by name if the goals it only to update a dependency's
+                # resolved members by the ones from a dependency that matches what's
+                # asked for. E.g. source, revision, etc.
+                if is_stale_for(cached_dependency, dependency):
                     continue
 
                 print(
                     "{}: {} -> {} ({})".format(
-                        cached_dependency.name,
+                        dependency.get_display_name(),
                         cached_dependency.version,
                         cached_dependency.resolved.version.reference,
                         cached_dependency.resolved.version.revision,
@@ -183,7 +184,7 @@ class Project:
                 not self.deps[i].resolved.version
                 and not dependency.is_non_git_directory()
             ):
-                print("{} : no cached version".format(dependency.name))
+                print("{} : no cached version".format(dependency.get_display_name()))
 
         sys.stdout.flush()
 
@@ -284,11 +285,37 @@ class Project:
                 )
             )
 
+    def refuse_duplicate_dependencies_by_name_or_identity(self):
+        """
+        Refuse two dependencies having the same name, or the same identity if no name.
+        """
+        seen = []
+
+        for dependency in self.deps:
+            name_or_identity = dependency.name or dependency.declared_identity()
+
+            # A dependency naming no source yet has neither to share.
+            if not name_or_identity:
+                continue
+
+            name_or_identity = str(name_or_identity)
+
+            if name_or_identity in seen:
+                raise ValueError(
+                    "The project declares the dependency '{}' twice.".format(
+                        name_or_identity
+                    )
+                )
+
+            seen.append(name_or_identity)
+
     def validate(self):
         """
         Refuse what can only be checked once the project is fully declared.
         """
         self.normalize()
+
+        self.refuse_duplicate_dependencies_by_name_or_identity()
 
         exported = [export.name for export in self.exports]
 

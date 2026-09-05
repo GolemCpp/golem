@@ -367,12 +367,17 @@ def test_an_identity_is_read_back_out_of_what_was_declared():
     assert str(dependency.declared_identity()) == "@boost"
 
 
-def test_a_dependency_naming_no_identity_has_none_to_look_up():
+def test_a_dependency_declared_by_its_locator_composes_an_identity():
+    # Every locator composes one, so a dependency is addressed by its identity
+    # whichever field named its source.
     dependency = Dependency(name="json", location="git+https://host/json.git")
     dependency.update_source("/proj", identity_allowed=True)
 
-    assert dependency.declared_identity() is None
-    assert Dependency(name="json", repository="x").declared_identity() is None
+    assert str(dependency.declared_identity()) == "@json@@host"
+
+
+def test_a_dependency_naming_no_source_has_no_identity():
+    assert Dependency(name="json").declared_identity() is None
 
 
 def test_a_recipe_says_where_a_dependency_written_as_an_identity_comes_from():
@@ -519,3 +524,53 @@ def test_a_dependency_imports_as_many_exports_as_it_names():
     dependency = Dependency(name="boost", imports=["boost", "boost-tools"])
 
     assert dependency.imports == ["boost", "boost-tools"]
+
+
+def declared(**fields):
+    """A dependency as a project file spells it, read against a project."""
+    dependency = Dependency(**fields)
+    dependency.update_source("/proj", identity_allowed=True)
+    return dependency
+
+
+def test_a_dependency_needs_no_name():
+    assert declared(location="@boost").name == ""
+    assert declared(repository="https://host/json.git").name == ""
+    assert declared(directory="./mylib").name == ""
+
+
+def test_an_unnamed_dependency_is_named_to_a_human_by_its_identity():
+    assert declared(location="@boost").get_display_name() == "@boost"
+    assert declared(name="bst", location="@boost").get_display_name() == "bst"
+
+
+def test_an_unnamed_dependency_answers_to_a_rung_of_its_identity():
+    dependency = declared(location="@boost@boostorg@github.com")
+
+    assert dependency.is_referred_to_by("@boost")
+    assert dependency.is_referred_to_by("@boost@boostorg")
+    assert dependency.is_referred_to_by("@boost@boostorg@github.com")
+
+
+def test_a_reference_qualified_further_than_the_declaration_reaches_nothing():
+    # The reference is a rung of the identity, never the other way round.
+    assert not declared(location="@boost").is_referred_to_by("@boost@boostorg")
+
+
+def test_a_dependency_declared_by_its_url_answers_to_its_identity():
+    dependency = declared(repository="https://github.com/nlohmann/json.git")
+
+    assert dependency.is_referred_to_by("@json")
+    assert dependency.is_referred_to_by("@json@nlohmann@github.com")
+
+
+def test_a_named_dependency_answers_to_its_name_and_to_nothing_else():
+    # Naming a declaration is choosing how it is referred to.
+    dependency = declared(name="bst", location="@boost")
+
+    assert dependency.is_referred_to_by("bst")
+    assert not dependency.is_referred_to_by("@boost")
+
+
+def test_an_unnamed_dependency_answers_to_no_plain_name():
+    assert not declared(location="@boost").is_referred_to_by("boost")

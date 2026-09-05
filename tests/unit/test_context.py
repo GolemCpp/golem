@@ -930,6 +930,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
 
     dep = SimpleNamespace(
         name="demo",
+        get_display_name=lambda: "demo",
         version="1.0.0",
         runtime_link=None,
         runtime_variant=None,
@@ -1014,6 +1015,7 @@ def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch
         context.run_dep_command(
             dep=SimpleNamespace(
                 name="demo",
+                get_display_name=lambda: "demo",
                 version="1.0.0",
                 runtime_link=None,
                 runtime_variant=None,
@@ -2282,3 +2284,77 @@ def test_an_import_and_a_target_both_publish_their_exports():
     context = make_asked_context(exports="multi", targets="headers")
 
     assert context.resolve_asked_exports() == ["multi", "headers"]
+
+
+def make_dependency_context(*dependencies):
+    """A context answering only which dependencies a project declares."""
+    context = Context.__new__(Context)
+    context.project = Project(project_dir="")
+    context.project.deps = list(dependencies)
+    return context
+
+
+def declare_dependency(**fields):
+    dependency = Dependency(**fields)
+    dependency.update_source("/proj", identity_allowed=True)
+    return dependency
+
+
+def test_a_reference_reaches_the_dependency_it_qualifies():
+    dependency = declare_dependency(location="@boost@boostorg@github.com")
+    context = make_dependency_context(dependency)
+
+    assert context.find_dependency("@boost") is dependency
+    assert context.find_dependency("@boost@boostorg@github.com") is dependency
+
+
+def test_a_reference_reaches_no_dependency_golem_added_itself():
+    # A reference names what a project file declared, and a transitive entry
+    # carries the local name of the project that declared it.
+    dependency = declare_dependency(name="boost", location="@boost")
+    dependency.dynamically_added = True
+
+    assert make_dependency_context(dependency).find_dependency("boost") is None
+
+
+def test_a_reference_naming_two_dependencies_is_refused():
+    context = make_dependency_context(
+        declare_dependency(location="@boost@boostorg"),
+        declare_dependency(location="@boost@myfork"),
+    )
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.find_dependency("@boost")
+
+    assert "@boost" in str(refusal.value)
+    assert "@boost@boostorg" in str(refusal.value)
+    assert "@boost@myfork" in str(refusal.value)
+
+
+def test_a_reference_naming_one_of_two_rung_sharing_dependencies_is_answered():
+    forked = declare_dependency(location="@boost@myfork")
+    context = make_dependency_context(
+        declare_dependency(location="@boost@boostorg"), forked
+    )
+
+    assert context.find_dependency("@boost@myfork") is forked
+
+
+def test_two_declarations_coming_to_one_invocation_are_one_key():
+    # What tells one sub-invocation from another is the source, how it is built
+    # and what is asked of it -- never the local name.
+    first = declare_dependency(name="lib", repository="https://host/json.git")
+    second = declare_dependency(name="hdr", repository="https://host/json.git")
+
+    assert Context.make_dep_invocation_key(first) == Context.make_dep_invocation_key(
+        second
+    )
+
+
+def test_two_declarations_asking_for_different_exports_are_two_keys():
+    first = declare_dependency(repository="https://host/json.git", imports="core")
+    second = declare_dependency(repository="https://host/json.git", imports="headers")
+
+    assert Context.make_dep_invocation_key(first) != Context.make_dep_invocation_key(
+        second
+    )
