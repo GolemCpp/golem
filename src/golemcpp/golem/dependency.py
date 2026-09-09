@@ -81,6 +81,9 @@ class Dependency(Configuration):
         # from a dependencies.json comes back without one.
         self.cached_resource = None
         self.dynamically_added = False
+        # Implied by a `deps=` entry that matches no dependency declaration in the
+        # project. Recomputed on every command rather than serialized.
+        self.implicit = False
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -207,14 +210,15 @@ class Dependency(Configuration):
 
     def is_referred_to_by(self, reference):
         """
-        Is this the dependency a referred to by the given reference? E.g deps= entries
+        Is this the dependency a `deps=` entry names, read as a source?
 
-        If the dependency has a name, attempt to match it first. Otherwise, walk the
-        rungs of its declared identity against the reference.
+        If the dependency has a name, attempt to match it first.
+
+        If the dependency is **implied**, attempt to match its identity and version to
+        the whole reference.
+
+        If the dependency is **declared**, test the reference is a rung of its identity.
         """
-        if not source_location.names_an_identity(reference):
-            return bool(self.name) and reference == self.name
-
         if self.name:
             return False
 
@@ -223,7 +227,10 @@ class Dependency(Configuration):
         if identity is None:
             return False
 
-        return any(reference == str(rung) for rung in identity.rungs())
+        if self.implicit:
+            return reference.identity == identity and reference.version == self.version
+
+        return reference.is_asking_for_the_source(identity)
 
     def settle_from_recipe(self, identity, recipe):
         """

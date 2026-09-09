@@ -39,6 +39,7 @@ from golemcpp.golem import project_file
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_arguments import BuildArguments
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import dependency_reference
 from golemcpp.golem import build_slug
 from golemcpp.golem import target_platform
 from golemcpp.golem import target_resolver
@@ -1432,6 +1433,11 @@ class Context:
 
         self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
+
+        # The second half of validating a project.
+        # Here, a `deps=` written inside a `when(...)` can be interpreted properly,
+        # before anything walks project.deps.
+        self.imply_dependencies_from_references()
 
         if resolve_dependencies:
             self.resolve_dependencies()
@@ -4654,39 +4660,40 @@ class Context:
             )
         )
 
-    @staticmethod
-    def refuse_an_ambiguous_reference(reference, matches):
-        raise RuntimeError(
-            "'{}' refers to {} dependencies ({}). Qualify it further, or give one "
-            "of them a name".format(
-                reference,
-                len(matches),
-                ", ".join(str(dep.declared_identity()) for dep in matches),
-            )
-        )
+    def gather_dependency_references(self):
+        """
+        Every `deps=` entry this project holds, once each.
+
+        Read from the merged configurations, so a reference written inside a
+        `when(...)` is seen exactly where that condition holds.
+        """
+        references = []
+
+        for definition in self.project.definitions + self.project.exports:
+            references += definition.merge_configs(self).deps
+
+        return helpers.filter_unique(references)
+
+    def imply_dependencies_from_references(self):
+        """
+        Declare a dependency for every `deps=` entry without a matching dependency.
+        """
+        for reference in dependency_reference.find_references_to_imply(
+            self.gather_dependency_references(),
+            self.project.deps,
+            self.get_project_dir(),
+        ):
+            implied = Dependency(location=reference.text)
+            implied.implicit = True
+            implied.update_source(self.get_project_dir(), identity_allowed=True)
+
+            self.project.deps.append(implied)
 
     def find_dependency(self, reference):
-        """
-        The dependency a reference names, None where the project declares none.
-
-        A reference with no leading `@` names a declared `name`, exactly. 
-        
-        A dependency with a leading `@` names an identity, and reaches a dependency
-        whose own identity matches. I.e. by walking the rungs of the dependency's
-        identity against the reference.
-
-        Transitive dependencies are excluded.
-        """
-        matches = [
-            dep
-            for dep in self.project.deps
-            if not dep.dynamically_added and dep.is_referred_to_by(reference)
-        ]
-
-        if len(matches) > 1:
-            Context.refuse_an_ambiguous_reference(reference, matches)
-
-        return matches[0] if matches else None
+        """The dependency a `deps=` entry names, None where the project holds none."""
+        return dependency_reference.find_dependency_referred_to(
+            reference, self.project.deps, self.get_project_dir()
+        )
 
     def find_dependency_includes(self, reference):
         dep = self.find_dependency(reference)

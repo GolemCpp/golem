@@ -13,6 +13,7 @@ from golemcpp.golem.dependency_manager import DependencyManager
 from golemcpp.golem.resolved_version import ResolvedVersion
 from golemcpp.golem.source_id import SourceId
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import dependency_reference
 from golemcpp.golem.locator import Locator
 from golemcpp.golem import safe_part
 from golemcpp.golem.resource_manager import make_revision_part
@@ -526,6 +527,11 @@ def test_a_dependency_imports_as_many_exports_as_it_names():
     assert dependency.imports == ["boost", "boost-tools"]
 
 
+def refer(text):
+    """A `deps=` entry read as a source."""
+    return dependency_reference.read(text, "/proj")
+
+
 def declared(**fields):
     """A dependency as a project file spells it, read against a project."""
     dependency = Dependency(**fields)
@@ -547,30 +553,37 @@ def test_an_unnamed_dependency_is_named_to_a_human_by_its_identity():
 def test_an_unnamed_dependency_answers_to_a_rung_of_its_identity():
     dependency = declared(location="@boost@boostorg@github.com")
 
-    assert dependency.is_referred_to_by("@boost")
-    assert dependency.is_referred_to_by("@boost@boostorg")
-    assert dependency.is_referred_to_by("@boost@boostorg@github.com")
+    assert dependency.is_referred_to_by(refer("@boost"))
+    assert dependency.is_referred_to_by(refer("@boost@boostorg"))
+    assert dependency.is_referred_to_by(refer("@boost@boostorg@github.com"))
 
 
 def test_a_reference_qualified_further_than_the_declaration_reaches_nothing():
     # The reference is a rung of the identity, never the other way round.
-    assert not declared(location="@boost").is_referred_to_by("@boost@boostorg")
+    assert not declared(location="@boost").is_referred_to_by(refer("@boost@boostorg"))
 
 
 def test_a_dependency_declared_by_its_url_answers_to_its_identity():
     dependency = declared(repository="https://github.com/nlohmann/json.git")
 
-    assert dependency.is_referred_to_by("@json")
-    assert dependency.is_referred_to_by("@json@nlohmann@github.com")
+    assert dependency.is_referred_to_by(refer("@json"))
+    assert dependency.is_referred_to_by(refer("@json@nlohmann@github.com"))
 
 
-def test_a_named_dependency_answers_to_its_name_and_to_nothing_else():
-    # Naming a declaration is choosing how it is referred to.
+def test_a_named_dependency_answers_to_no_source():
+    # Naming a declaration is choosing how it is referred to, and the name is
+    # matched before this, so one reaching here answers to nothing.
     dependency = declared(name="bst", location="@boost")
 
-    assert dependency.is_referred_to_by("bst")
-    assert not dependency.is_referred_to_by("@boost")
+    assert not dependency.is_referred_to_by(refer("@boost"))
+    assert not dependency.is_referred_to_by(refer("bst"))
 
 
-def test_an_unnamed_dependency_answers_to_no_plain_name():
-    assert not declared(location="@boost").is_referred_to_by("boost")
+def test_an_implied_dependency_answers_to_the_whole_reference():
+    # It is exactly its reference, so a version is part of what reaches it.
+    implied = declared(location="@boost#^1.87.0")
+    implied.implicit = True
+
+    assert implied.is_referred_to_by(refer("@boost#^1.87.0"))
+    assert not implied.is_referred_to_by(refer("@boost"))
+    assert not implied.is_referred_to_by(refer("@boost#^1.80.0"))

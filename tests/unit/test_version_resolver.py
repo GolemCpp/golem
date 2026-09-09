@@ -352,3 +352,62 @@ def test_a_remote_that_could_not_be_reached_is_asked_again(monkeypatch, tmp_path
         assert VersionResolver.resolve(requested).revision == "abc123"
 
     assert len(calls) == 2
+
+
+def test_naming_no_version_takes_the_newest_release(monkeypatch):
+    # A project asking for nothing wants what a project usually wants, and
+    # `HEAD` is how the default branch is asked for outright.
+    monkeypatch.setattr(
+        version_resolver.helpers,
+        "read_git",
+        lambda args, cwd: (
+            "831b49bc\tHEAD\n"
+            "831b49bc\trefs/heads/master\n"
+            "aaaaaaaa\trefs/tags/v1.0.0\n"
+            "bbbbbbbb\trefs/tags/v2.1.0\n"
+            "ref: refs/heads/master\tHEAD\n"
+        ),
+    )
+
+    assert VersionResolver.resolve(
+        RequestedSource.for_repository("https://host/r.git", "")
+    ) == ResolvedVersion(reference="v2.1.0", revision="bbbbbbbb")
+
+
+def test_naming_no_version_falls_back_to_the_default_branch(monkeypatch):
+    # A repository publishing no release has nothing to be newest, so what a
+    # plain `git clone` gives stands.
+    monkeypatch.setattr(
+        version_resolver.helpers,
+        "read_git",
+        lambda args, cwd: (
+            "831b49bc\tHEAD\n"
+            "831b49bc\trefs/heads/master\n"
+            "ref: refs/heads/master\tHEAD\n"
+        ),
+    )
+
+    assert VersionResolver.resolve(
+        RequestedSource.for_repository("https://host/r.git", "")
+    ) == ResolvedVersion(reference="master", revision="831b49bc")
+
+
+def test_asking_for_any_release_requires_one_to_exist(monkeypatch):
+    # `*` differs from naming nothing deliberately: it is how a project says a
+    # release must exist rather than taking a branch.
+    monkeypatch.setattr(
+        version_resolver.helpers,
+        "read_git",
+        lambda args, cwd: (
+            "831b49bc\tHEAD\n"
+            "831b49bc\trefs/heads/master\n"
+            "ref: refs/heads/master\tHEAD\n"
+        ),
+    )
+
+    with pytest.raises(RuntimeError) as error:
+        VersionResolver.resolve(
+            RequestedSource.for_repository("https://host/r.git", "*")
+        )
+
+    assert "answers version '*'" in str(error.value)

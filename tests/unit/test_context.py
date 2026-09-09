@@ -24,6 +24,7 @@ from golemcpp.golem.cache_configuration import (
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
+from golemcpp.golem.definition import Definition
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.export_manifest import ExportManifest
 from golemcpp.golem.project import Project
@@ -2289,8 +2290,9 @@ def test_an_import_and_a_target_both_publish_their_exports():
 def make_dependency_context(*dependencies):
     """A context answering only which dependencies a project declares."""
     context = Context.__new__(Context)
-    context.project = Project(project_dir="")
+    context.project = Project(project_dir="/proj")
     context.project.deps = list(dependencies)
+    context.get_project_dir = lambda: "/proj"
     return context
 
 
@@ -2298,46 +2300,6 @@ def declare_dependency(**fields):
     dependency = Dependency(**fields)
     dependency.update_source("/proj", identity_allowed=True)
     return dependency
-
-
-def test_a_reference_reaches_the_dependency_it_qualifies():
-    dependency = declare_dependency(location="@boost@boostorg@github.com")
-    context = make_dependency_context(dependency)
-
-    assert context.find_dependency("@boost") is dependency
-    assert context.find_dependency("@boost@boostorg@github.com") is dependency
-
-
-def test_a_reference_reaches_no_dependency_golem_added_itself():
-    # A reference names what a project file declared, and a transitive entry
-    # carries the local name of the project that declared it.
-    dependency = declare_dependency(name="boost", location="@boost")
-    dependency.dynamically_added = True
-
-    assert make_dependency_context(dependency).find_dependency("boost") is None
-
-
-def test_a_reference_naming_two_dependencies_is_refused():
-    context = make_dependency_context(
-        declare_dependency(location="@boost@boostorg"),
-        declare_dependency(location="@boost@myfork"),
-    )
-
-    with pytest.raises(RuntimeError) as refusal:
-        context.find_dependency("@boost")
-
-    assert "@boost" in str(refusal.value)
-    assert "@boost@boostorg" in str(refusal.value)
-    assert "@boost@myfork" in str(refusal.value)
-
-
-def test_a_reference_naming_one_of_two_rung_sharing_dependencies_is_answered():
-    forked = declare_dependency(location="@boost@myfork")
-    context = make_dependency_context(
-        declare_dependency(location="@boost@boostorg"), forked
-    )
-
-    assert context.find_dependency("@boost@myfork") is forked
 
 
 def test_two_declarations_coming_to_one_invocation_are_one_key():
@@ -2358,3 +2320,38 @@ def test_two_declarations_asking_for_different_exports_are_two_keys():
     assert Context.make_dep_invocation_key(first) != Context.make_dep_invocation_key(
         second
     )
+
+
+def make_implying_context(project_dir, *dependencies):
+    """A context that can imply a dependency from a reference."""
+    context = make_dependency_context(*dependencies)
+    context.project.project_dir = str(project_dir)
+    context.get_project_dir = lambda: str(project_dir)
+    return context
+
+
+def define(name, deps):
+    definition = Definition(type="program", name=name, deps=deps)
+    return definition
+
+
+def test_a_reference_matching_no_declaration_declares_one(tmp_path):
+    (tmp_path / "mylib").mkdir()
+    context = make_implying_context(tmp_path)
+    context.project.definitions = [define("app", ["./mylib"])]
+
+    context.imply_dependencies_from_references()
+
+    implied = context.project.deps[0]
+    assert implied.implicit and implied.name == ""
+    assert implied.location == "./mylib"
+
+
+def test_one_entry_written_twice_is_gathered_once(tmp_path):
+    # `gather_dependency_references` collapses identical strings, so the
+    # matching below never sees the second one.
+    (tmp_path / "mylib").mkdir()
+    context = make_implying_context(tmp_path)
+    context.project.definitions = [define("a", ["./mylib"]), define("b", ["./mylib"])]
+
+    assert context.gather_dependency_references() == ["./mylib"]
