@@ -34,11 +34,6 @@ Here is how a **golemfile.py** looks like:
 ```python
 def configure(project):
 
-    project.dependency(name='json',
-                       repository='https://github.com/nlohmann/json.git',
-                       version='^3.0.0',
-                       shallow=True)
-
     project.library(name='mylib',
                     includes=['mylib/include'],
                     source=['mylib/src'],
@@ -51,7 +46,7 @@ def configure(project):
     project.program(name='hello',
                     source=['src'],
                     use=['mylib'],
-                    deps=['json'])
+                    deps=['@json@nlohmann'])
 ```
 
 But alternatively, you can also define an equivalent [golemfile.json](/examples/minimal/golemfile.json).

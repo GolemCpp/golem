@@ -25,6 +25,9 @@ from golemcpp.golem.advertisement import (
     TAG_PREFIX,
 )
 
+# Ask for all the semver version tags
+ANY_VERSION = "*"
+
 
 class VersionResolver:
     @staticmethod
@@ -77,24 +80,36 @@ class VersionResolver:
 
         The remote is asked once, then answers in five steps:
 
-        1. No version, or `HEAD`: the default branch. Asking for nothing is
-        asking for what a plain `git clone` gives.
+        1. No version: the latest semver version tag, or the default branch where the
+        repository publishes none. Asking for nothing is asking for what a consumer
+        project usually wants.
 
-        2. A ref by that name, looked up the way git looks a bare name up.
+        2. `HEAD`: the default branch.
 
-        3. Gather the tags looking like semvers and normalize them to find
+        3. A ref by that name, looked up the way git looks a bare name up.
+
+        4. Gather the tags looking like semvers and normalize them to find
         if any matches. Multiples can match so only the last one is selected to
         follow what OpenSSL does.
 
-        4. Accept a commit as standing for itself. `ls-remote` matches ref
-        names, therefore it can never have answered the second step with one.
+        5. Accept a commit hash.
 
-        5. Nothing names it. Raise here, where the version asked for is
+        6. Nothing names it. Raise here, where the version asked for is
         still at hand, rather than hand git a value it cannot resolve either.
         """
         url = str(requested.locator)
         version = requested.version
         advertisement = VersionResolver.advertised(url)
+
+        if not version:
+            newest = VersionResolver.find_version(
+                advertisement.tags(requested.version_regex), ANY_VERSION
+            )
+            if newest:
+                return ResolvedVersion(
+                    reference=newest,
+                    revision=advertisement.revision_of(TAG_PREFIX + newest),
+                )
 
         if not version or version == HEAD_VERSION:
             revision = advertisement.revision_of(HEAD_VERSION)
@@ -189,10 +204,9 @@ class VersionResolver:
 
 def report_resolution(name, version, resolved):
     """Say what a version resolved to, under the name the resource goes by."""
-    # Asking for nothing is asking for HEAD, so say that rather than leave a gap
-    # where the question goes.
+    # A project asking for nothing has no spelling to show.
+    request = "{} ".format(version) if version else ""
+
     print(
-        "{}: {} -> {} ({})".format(
-            name, version or HEAD_VERSION, resolved.reference, resolved.revision
-        )
+        "{}: {}-> {} ({})".format(name, request, resolved.reference, resolved.revision)
     )

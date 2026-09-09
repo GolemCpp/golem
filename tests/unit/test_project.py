@@ -130,14 +130,28 @@ def test_a_copied_directory_is_never_asked_for_a_cached_version(capsys):
 
 
 def test_a_cached_entry_for_another_dependency_is_not_read(capsys):
+    # Paired on the request rather than on the name, so what tells two entries
+    # apart is the source they ask for.
     project = make_project(
         declare(name="json", repository="https://host/json.git", version="^3.0.0")
     )
 
-    project.deps_load_json([record(name="boost", version="^3.0.0")])
+    project.deps_load_json([record(locator="https://host/boost.git", version="^3.0.0")])
 
     assert not project.deps[0].resolved.version
     assert "no cached version" in capsys.readouterr().out
+
+
+def test_a_renamed_dependency_keeps_its_cached_resolution():
+    # The name is a label, so changing it asks for the same source and the same
+    # version; requiring it to match used to report "no cached version".
+    project = make_project(
+        declare(name="blob", repository="https://host/json.git", version="^3.0.0")
+    )
+
+    project.deps_load_json([record(name="json", version="^3.0.0")])
+
+    assert project.deps[0].resolved.version.revision == STUB_REVISION
 
 
 def make_chain(name, cookbook):
@@ -342,3 +356,40 @@ def test_a_project_exporting_one_name_twice_is_refused():
         project.validate()
 
     assert "mylib" in str(refusal.value)
+
+
+def test_two_dependencies_sharing_a_name_are_refused():
+    project = make_project(
+        declare(name="dup", repository="https://host/a.git"),
+        declare(name="dup", repository="https://host/b.git"),
+    )
+
+    with pytest.raises(ValueError, match="declares the dependency 'dup' twice"):
+        project.validate()
+
+
+def test_two_unnamed_dependencies_sharing_an_identity_are_refused():
+    # Neither has a name, so both are referred to by the source identity, and
+    # no reference could tell them apart.
+    project = make_project(declare(location="@boost"), declare(location="@boost"))
+
+    with pytest.raises(ValueError, match="declares the dependency '@boost' twice"):
+        project.validate()
+
+
+def test_two_unnamed_dependencies_sharing_only_a_rung_are_allowed():
+    # Two source identities, each reachable on its own. Only a reference naming
+    # both is at fault, and that is refused where it is resolved.
+    project = make_project(
+        declare(location="@boost@boostorg"), declare(location="@boost@myfork")
+    )
+
+    assert project.validate() is None
+
+
+def test_a_name_takes_a_dependency_off_the_identity_it_would_share():
+    project = make_project(
+        declare(name="lib", location="@boost"), declare(location="@boost")
+    )
+
+    assert project.validate() is None

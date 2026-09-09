@@ -81,6 +81,9 @@ class Dependency(Configuration):
         # from a dependencies.json comes back without one.
         self.cached_resource = None
         self.dynamically_added = False
+        # Implied by a `deps=` entry that matches no dependency declaration in the
+        # project. Recomputed on every command rather than serialized.
+        self.implicit = False
 
     def __str__(self):
         return helpers.print_obj(self)
@@ -172,20 +175,62 @@ class Dependency(Configuration):
                 source.SOURCE_TYPE_GIT,
             )
 
+    def is_declared_by_identity(self):
+        """
+        Is this dependency explicitely written as an identity?
+
+        If the dependency is declared with a repository URL or a filesystem path, it's
+        not explicitely writtten as an identity.
+        """
+        return bool(self.location) and source_location.names_an_identity(self.location)
+
     def declared_identity(self):
         """
-        The identity this dependency's location names, None when it names none.
+        The identity this dependency's source corresponds to.
+
+        If the dependency doesn't declare an identity explicitely, it returns the
+        resolved one from what's declared. E.g. local path, URL, etc.
         """
-        if not self.location:
+        if self.is_declared_by_identity():
+            # No project directory needed.
+            return source_location.parse(
+                self.location, project_directory=None, identity_allowed=True
+            ).identity
+
+        if not self.location and not self.repository and not self.directory:
             return None
 
-        if not source_location.names_an_identity(self.location):
-            return None
+        return self.resolved.identity
 
-        # No project directory needed.
-        return source_location.parse(
-            self.location, project_directory=None, identity_allowed=True
-        ).identity
+    def get_display_name(self):
+        """
+        Get the display name by picking the name if declared or the declared identity.
+        """
+        return self.name or str(self.declared_identity() or "")
+
+    def is_referred_to_by(self, reference):
+        """
+        Is this the dependency a `deps=` entry names, read as a source?
+
+        If the dependency has a name, attempt to match it first.
+
+        If the dependency is **implied**, attempt to match its identity and version to
+        the whole reference.
+
+        If the dependency is **declared**, test the reference is a rung of its identity.
+        """
+        if self.name:
+            return False
+
+        identity = self.declared_identity()
+
+        if identity is None:
+            return False
+
+        if self.implicit:
+            return reference.identity == identity and reference.version == self.version
+
+        return reference.is_asking_for_the_source(identity)
 
     def settle_from_recipe(self, identity, recipe):
         """

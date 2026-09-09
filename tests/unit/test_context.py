@@ -24,6 +24,7 @@ from golemcpp.golem.cache_configuration import (
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
+from golemcpp.golem.definition import Definition
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.export_manifest import ExportManifest
 from golemcpp.golem.project import Project
@@ -930,6 +931,7 @@ def test_run_dep_command_forwards_runtime_link_and_runtime_variant(monkeypatch):
 
     dep = SimpleNamespace(
         name="demo",
+        get_display_name=lambda: "demo",
         version="1.0.0",
         runtime_link=None,
         runtime_variant=None,
@@ -1014,6 +1016,7 @@ def test_run_dep_command_refreshes_the_repository_only_when_building(monkeypatch
         context.run_dep_command(
             dep=SimpleNamespace(
                 name="demo",
+                get_display_name=lambda: "demo",
                 version="1.0.0",
                 runtime_link=None,
                 runtime_variant=None,
@@ -2282,3 +2285,73 @@ def test_an_import_and_a_target_both_publish_their_exports():
     context = make_asked_context(exports="multi", targets="headers")
 
     assert context.resolve_asked_exports() == ["multi", "headers"]
+
+
+def make_dependency_context(*dependencies):
+    """A context answering only which dependencies a project declares."""
+    context = Context.__new__(Context)
+    context.project = Project(project_dir="/proj")
+    context.project.deps = list(dependencies)
+    context.get_project_dir = lambda: "/proj"
+    return context
+
+
+def declare_dependency(**fields):
+    dependency = Dependency(**fields)
+    dependency.update_source("/proj", identity_allowed=True)
+    return dependency
+
+
+def test_two_declarations_coming_to_one_invocation_are_one_key():
+    # What tells one sub-invocation from another is the source, how it is built
+    # and what is asked of it -- never the local name.
+    first = declare_dependency(name="lib", repository="https://host/json.git")
+    second = declare_dependency(name="hdr", repository="https://host/json.git")
+
+    assert Context.make_dep_invocation_key(first) == Context.make_dep_invocation_key(
+        second
+    )
+
+
+def test_two_declarations_asking_for_different_exports_are_two_keys():
+    first = declare_dependency(repository="https://host/json.git", imports="core")
+    second = declare_dependency(repository="https://host/json.git", imports="headers")
+
+    assert Context.make_dep_invocation_key(first) != Context.make_dep_invocation_key(
+        second
+    )
+
+
+def make_implying_context(project_dir, *dependencies):
+    """A context that can imply a dependency from a reference."""
+    context = make_dependency_context(*dependencies)
+    context.project.project_dir = str(project_dir)
+    context.get_project_dir = lambda: str(project_dir)
+    return context
+
+
+def define(name, deps):
+    definition = Definition(type="program", name=name, deps=deps)
+    return definition
+
+
+def test_a_reference_matching_no_declaration_declares_one(tmp_path):
+    (tmp_path / "mylib").mkdir()
+    context = make_implying_context(tmp_path)
+    context.project.definitions = [define("app", ["./mylib"])]
+
+    context.imply_dependencies_from_references()
+
+    implied = context.project.deps[0]
+    assert implied.implicit and implied.name == ""
+    assert implied.location == "./mylib"
+
+
+def test_one_entry_written_twice_is_gathered_once(tmp_path):
+    # `gather_dependency_references` collapses identical strings, so the
+    # matching below never sees the second one.
+    (tmp_path / "mylib").mkdir()
+    context = make_implying_context(tmp_path)
+    context.project.definitions = [define("a", ["./mylib"]), define("b", ["./mylib"])]
+
+    assert context.gather_dependency_references() == ["./mylib"]

@@ -39,6 +39,7 @@ from golemcpp.golem import project_file
 from golemcpp.golem.project import Project
 from golemcpp.golem.build_arguments import BuildArguments
 from golemcpp.golem.dependency import Dependency
+from golemcpp.golem import dependency_reference
 from golemcpp.golem import build_slug
 from golemcpp.golem import target_platform
 from golemcpp.golem import target_resolver
@@ -176,6 +177,19 @@ class Context:
             dependency.runtime_variant,
         )
 
+    @staticmethod
+    def make_dep_invocation_key(dependency):
+        """
+        Make a key to sort dependencies by what they ask to run build commands once.
+
+        Which source, built how, and what is asked of it.
+        """
+        return (
+            Context.make_dependency_unique_identifier(dependency),
+            tuple(dependency.imports),
+            tuple(dependency.targets),
+        )
+
     def load_resolved_dependencies(self):
         overrides_configuration = self.load_overrides_configuration()
         if overrides_configuration:
@@ -232,10 +246,11 @@ class Context:
         resolver = RecipeResolver(self.cached_cookbooks)
 
         for dependency in self.project.deps:
-            identity = dependency.declared_identity()
-
-            if identity is None:
+            # If the declaration holds explicitly an identity, no identity to settle
+            if not dependency.is_declared_by_identity():
                 continue
+
+            identity = dependency.declared_identity()
 
             # Quietly, since the line below names the source, and the
             # sub-invocation configuring the dependency names the recipe.
@@ -1419,6 +1434,11 @@ class Context:
         self.cache_configuration = self.make_cache_configuration()
         self.load_recipe()
 
+        # The second half of validating a project.
+        # Here, a `deps=` written inside a `when(...)` can be interpreted properly,
+        # before anything walks project.deps.
+        self.imply_dependencies_from_references()
+
         if resolve_dependencies:
             self.resolve_dependencies()
         else:
@@ -1588,7 +1608,7 @@ class Context:
         A (kind, name) pair, or None where the manifest holds all of it.
         """
         if manifest is None:
-            return ("manifest", dep.name)
+            return ("manifest", dep.get_display_name())
 
         for name in dep.imports:
             if name not in manifest.exports:
@@ -1659,7 +1679,7 @@ class Context:
     def refuse_without_a_manifest(dep):
         raise RuntimeError(
             "Error: run golem resolve first! {} published no export "
-            "manifest".format(dep.name)
+            "manifest".format(dep.get_display_name())
         )
 
     @staticmethod
@@ -1667,7 +1687,7 @@ class Context:
         raise RuntimeError(
             "Dependency '{}' imports {}, which {} does not export. "
             "Available exports: {}".format(
-                dep.name,
+                dep.get_display_name(),
                 ", ".join(unknown),
                 dep.get_source_location(),
                 ", ".join(manifest.exports) or "nothing",
@@ -1679,7 +1699,7 @@ class Context:
         raise RuntimeError(
             "Dependency '{}' asks for target '{}', which no export of {} builds "
             "Available exports: {}".format(
-                dep.name,
+                dep.get_display_name(),
                 target,
                 dep.get_source_location(),
                 ", ".join(manifest.exports) or "nothing",
@@ -1700,8 +1720,8 @@ class Context:
         The merge is about adding what the folded dependency declares into the kept
         one.
         """
-        # When the folded dependency declares no import/target, it expands to the default
-        # imports/targets. So the kept dependency must declare none too.
+        # When the folded dependency declares no import/target, it expands to the
+        # default imports/targets. So the kept dependency must declare none too.
         if not folded.imports and not folded.targets:
             kept.imports = []
             kept.targets = []
@@ -1910,12 +1930,18 @@ class Context:
 
         should_clean_repo = False
         if command == "resolve":
-            Logs.info("Resolving {} ({})...".format(dep.name, dep.version))
+            Logs.info(
+                "Resolving {} ({})...".format(dep.get_display_name(), dep.version)
+            )
         elif command == "build":
-            Logs.info("Building {} ({})...".format(dep.name, dep.version))
+            Logs.info("Building {} ({})...".format(dep.get_display_name(), dep.version))
             should_clean_repo = True
         else:
-            Logs.info("Running {} on {} ({})...".format(command, dep.name, dep.version))
+            Logs.info(
+                "Running {} on {} ({})...".format(
+                    command, dep.get_display_name(), dep.version
+                )
+            )
 
         manager = get_dependency_manager(self.cache_configuration)
         cached_dep = manager.get_cached_resource(dep)
@@ -1924,7 +1950,7 @@ class Context:
         if cached_dep.is_read_only:
             raise RuntimeError(
                 "Cannot run {} on {} from the read-only cache location {}".format(
-                    command, dep.name, cached_dep.cache_root
+                    command, dep.get_display_name(), cached_dep.cache_root
                 )
             )
 
@@ -2403,7 +2429,7 @@ class Context:
         missing = None
 
         if missing_from_manifest is not None:
-            missing = "an export manifest for {}".format(dep.name)
+            missing = "an export manifest for {}".format(dep.get_display_name())
         else:
             for json_path in self.get_dep_artifact_json_list(
                 dep, self.make_target_requests(dep, manifest)
@@ -2441,9 +2467,11 @@ class Context:
         if dep.is_non_git_directory():
             are_artifacts_availables = False
 
+        invocation = Context.make_dep_invocation_key(dep)
+
         is_resolving = (
             command == "resolve"
-            and dep.name not in self.deps_to_resolve
+            and invocation not in self.deps_to_resolve
             and self.deps_resolve
         )
         is_building = command == "build" and (
@@ -2456,17 +2484,17 @@ class Context:
             if missing_artifacts:
                 Logs.warn(
                     "Missing artifacts: {} requires {}".format(
-                        dep.name, missing_artifacts
+                        dep.get_display_name(), missing_artifacts
                     )
                 )
             if cached_dep.is_read_only:
                 raise RuntimeError(
                     "Cannot find artifacts {} for {} from the read-only cache location {}".format(
-                        missing_artifacts, dep.name, cached_dep.cache_root
+                        missing_artifacts, dep.get_display_name(), cached_dep.cache_root
                     )
                 )
             self.run_dep_command(dep, command)
-            self.deps_to_resolve.append(dep.name)
+            self.deps_to_resolve.append(invocation)
 
         self.use_dep(config, dep)
 
@@ -2541,15 +2569,12 @@ class Context:
         deps_count = 0
         while len(self.project.deps) != deps_count:
             deps_count = len(self.project.deps)
-            for dep_name in config.deps:
-                if dep_name in deps_linked:
+            for reference in config.deps:
+                dep = self.find_dependency(reference)
+                if dep is None or dep in deps_linked:
                     continue
-                for dep in self.project.deps:
-                    if dep.dynamically_added == True:
-                        continue
-                    if dep_name == dep.name:
-                        callback(config, dep)
-                        deps_linked.append(dep.name)
+                callback(config, dep)
+                deps_linked.append(dep)
 
     def gather_build_arguments(self, task, targets_to_process, config):
 
@@ -4635,27 +4660,48 @@ class Context:
             )
         )
 
-    def find_dependency(self, dep_name):
-        found_dep = None
-        for dep in self.project.deps:
-            if dep_name == dep.name:
-                found_dep = dep
-                break
-        return found_dep
+    def gather_dependency_references(self):
+        """
+        Every `deps=` entry this project holds, once each.
 
-    def find_dependency_includes(self, dep_name):
-        dep_include = []
-        for dep in self.project.deps:
-            if dep_name == dep.name:
-                dep_include.append(self.get_dep_include_location(dep))
-        return dep_include
+        Read from the merged configurations, so a reference written inside a
+        `when(...)` is seen exactly where that condition holds.
+        """
+        references = []
 
-    def find_dependency_libraries(self, dep_name):
-        dep_lib_paths = []
-        for dep in self.project.deps:
-            if dep_name == dep.name:
-                dep_lib_paths.append(self.get_dep_artifact_location(dep))
-        return dep_lib_paths
+        for definition in self.project.definitions + self.project.exports:
+            references += definition.merge_configs(self).deps
+
+        return helpers.filter_unique(references)
+
+    def imply_dependencies_from_references(self):
+        """
+        Declare a dependency for every `deps=` entry without a matching dependency.
+        """
+        for reference in dependency_reference.find_references_to_imply(
+            self.gather_dependency_references(),
+            self.project.deps,
+            self.get_project_dir(),
+        ):
+            implied = Dependency(location=reference.text)
+            implied.implicit = True
+            implied.update_source(self.get_project_dir(), identity_allowed=True)
+
+            self.project.deps.append(implied)
+
+    def find_dependency(self, reference):
+        """The dependency a `deps=` entry names, None where the project holds none."""
+        return dependency_reference.find_dependency_referred_to(
+            reference, self.project.deps, self.get_project_dir()
+        )
+
+    def find_dependency_includes(self, reference):
+        dep = self.find_dependency(reference)
+        return [self.get_dep_include_location(dep)] if dep else []
+
+    def find_dependency_libraries(self, reference):
+        dep = self.find_dependency(reference)
+        return [self.get_dep_artifact_location(dep)] if dep else []
 
     def find_dependency_artifacts_dev(self, dep_name, target_name=None):
         """
@@ -4663,43 +4709,40 @@ class Context:
 
         A target names the export building it.
         """
-        for dep in self.project.deps:
-            if dep_name != dep.name:
-                continue
+        dep = self.find_dependency(dep_name)
 
-            export_manifest = self.read_dep_export_manifest(dep)
+        if dep is None:
+            return None
 
-            if not target_name:
-                # The declaration is what is asked for, so it is what is checked.
-                missing = self.find_what_the_manifest_is_missing(dep, export_manifest)
-                if missing is not None:
-                    self.refuse_what_the_manifest_is_missing(
-                        dep, export_manifest, missing
-                    )
+        export_manifest = self.read_dep_export_manifest(dep)
 
-                target_requests = self.make_target_requests(dep, export_manifest)
-            else:
-                # Export manifest must exist
-                if export_manifest is None:
-                    self.refuse_without_a_manifest(dep)
+        if not target_name:
+            # The declaration is what is asked for, so it is what is checked.
+            missing = self.find_what_the_manifest_is_missing(dep, export_manifest)
+            if missing is not None:
+                self.refuse_what_the_manifest_is_missing(dep, export_manifest, missing)
 
-                # Target must have an export in the export manifest
-                export = export_manifest.find_owning_export(target_name)
-                if export is None:
-                    self.refuse_an_unknown_target(dep, export_manifest, target_name)
+            target_requests = self.make_target_requests(dep, export_manifest)
+        else:
+            # Export manifest must exist
+            if export_manifest is None:
+                self.refuse_without_a_manifest(dep)
 
-                target_requests = [(export, target_name)]
+            # Target must have an export in the export manifest
+            export = export_manifest.find_owning_export(target_name)
+            if export is None:
+                self.refuse_an_unknown_target(dep, export_manifest, target_name)
 
-            artifacts_dev = []
-            for config in self.read_dep_configs_list(
-                dep=dep, target_requests=target_requests
-            ):
-                for artifact in config.artifacts_dev:
-                    if artifact not in artifacts_dev:
-                        artifacts_dev.append(artifact)
-            return artifacts_dev
+            target_requests = [(export, target_name)]
 
-        return None
+        artifacts_dev = []
+        for config in self.read_dep_configs_list(
+            dep=dep, target_requests=target_requests
+        ):
+            for artifact in config.artifacts_dev:
+                if artifact not in artifacts_dev:
+                    artifacts_dev.append(artifact)
+        return artifacts_dev
 
     def find_dependency_libraries_files(self, dep_name, target_name=None):
         lib_paths = []

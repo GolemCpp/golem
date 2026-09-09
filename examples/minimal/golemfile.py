@@ -1,12 +1,5 @@
 def configure(project):
 
-    project.dependency(
-        name="json",
-        repository="https://github.com/nlohmann/json.git",
-        version="^3.0.0",
-        shallow=True,
-    )
-
     project.library(
         name="mylib",
         includes=["mylib/include"],
@@ -16,4 +9,7 @@ def configure(project):
 
     project.export(name="mylib", includes=["mylib/include"], defines=["FOO_API_IMPORT"])
 
-    project.program(name="hello-minimal", source=["src"], use=["mylib"], deps=["json"])
+    # Here we use @json to refer to the recipe declared in the cookbook living beside
+    # this project. But the default cookbook has an equivalent recipe reachable with
+    # @json@nlohmann.
+    project.program(name="hello-minimal", source=["src"], use=["mylib"], deps=["@json"])

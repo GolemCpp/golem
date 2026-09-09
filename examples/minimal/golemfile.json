@@ -1,12 +1,4 @@
 {
-    "dependencies": [
-        {
-            "name": "json",
-            "repository": "https://github.com/nlohmann/json.git",
-            "version": "^3.0.0",
-            "shallow": true
-        }
-    ],
     "targets": [
         {
             "name": "mylib",
@@ -20,7 +12,7 @@
             "type": "program",
             "source": ["src"],
             "use": ["mylib"],
-            "deps": ["json"]
+            "deps": ["@json"]
         }
     ],
     "exports": [
