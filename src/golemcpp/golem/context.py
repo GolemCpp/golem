@@ -2505,7 +2505,6 @@ class Context:
         self.dep_command(config, dep, "build", True)
 
     def get_build_path(self):
-        # return self.context.out_dir if (hasattr(self.context, 'out_dir') and self.context.out_dir) else self.context.options.out if (hasattr(self.context.options, 'out') and self.context.options.out) else ''
         return self.make_golem_path("obj")
 
     def make_golem_path(self, path):
@@ -2603,12 +2602,6 @@ class Context:
             for i, feature in enumerate(config.features):
                 if feature.startswith("QT5"):
                     config.features[i] += "D"
-            for i, feature in enumerate(config.features):
-                pass
-                # NOTE: This may not be required anymore
-                # INSTALL_QT6CORED can't be find, even in debug variant
-                # if feature.startswith("QT6"):
-                #    config.features[i] += "D"
 
         listinclude = self.list_include(config.includes, self.get_project_dir())
         qrc_sources = self.list_qt_qrc(config.source)
@@ -2917,15 +2910,6 @@ class Context:
         if self.is_darwin() and "QTLIBS" in self.context.env:
             if self.context.env.QTLIBS:
                 rpath_link += ["-Wl,-rpath,{}".format(self.context.env.QTLIBS)]
-
-        # TODO: Should link static library with absolute path on macOS
-        # if self.is_darwin():
-        #    stlib_filename = os.path.join(path, self.artifact_prefix(
-        #        config
-        #    ) + decorated_target + self.artifact_suffix_dev(
-        #        config))
-        #    if stlib_filename not in config.ldflags:
-        #        config.ldflags.append(stlib_filename)
 
         qt_cxxflags = []
         if is_qt_on and self.is_msvc_like():
@@ -4936,15 +4920,6 @@ class Context:
                         dirs_exist_ok=True,
                     )
 
-                # NOTE: Disable export of libs in a separate directory
-                # outpath_lib = os.path.join(outpath, self.build_path())
-                # if not os.path.exists(outpath_lib):
-                #    os.makedirs(outpath_lib)
-
-                # out_path = self.make_out_path()
-                # if os.path.exists(out_path):
-                #    copy_tree(self.make_out_path(), outpath_lib)
-
     def merge_local_dependent_used_target_configs(self, config, exporting=False):
         for use_name in config.use:
             for export in self.project.exports:
@@ -5619,10 +5594,14 @@ class Context:
 
                 if candidate_path:
                     new_path = candidate_path
-                # else:
-                #    raise RuntimeError(
-                #        "Can't find path in any cache directories {}".format(
-                #            path))
+                # A path no cache holds keeps its prefix, deliberately. The
+                # resource may have been purged since the configuration was
+                # written, or written against cache locations this project does
+                # not list. Downstream reads that as an artifact that is not
+                # there: `get_expected_artifacts` runs `os.path.exists` over
+                # these same translated paths, and `dep_command` rebuilds the
+                # dependency on a miss. Refusing here would turn a state Golem
+                # recovers from into a failure.
 
             results.append(new_path)
         return results

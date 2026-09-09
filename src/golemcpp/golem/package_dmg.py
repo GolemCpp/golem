@@ -18,7 +18,6 @@ def package_dmg(self, package_build_context):
     depends = helpers.filter_unique(depends)
 
     dmg_package = package_build_context.package.dmg_package
-    # depends = helpers.filter_unique(dmg_package.depends + depends)
 
     print("Gather package metadata")
     prefix = ""
@@ -28,11 +27,6 @@ def package_dmg(self, package_build_context):
     package_name = (
         dmg_package.name if dmg_package.name else package_build_context.package.name
     )
-    # package_section = dmg_package.section
-    # package_priority = dmg_package.priority
-    # package_maintainer = dmg_package.maintainer
-    # package_description = dmg_package.description
-    # package_homepage = dmg_package.homepage
 
     version = Version(
         working_dir=self.get_project_dir(), build_number=self.get_build_number()
