@@ -9,11 +9,9 @@ from enum import Enum
 from golemcpp.golem import cache_configuration
 from golemcpp.golem.source import Source
 
-# Filename of the descriptor dropped at the root of every cached resource. It is
-# hidden and golem-namespaced so it never collides with (and stays visually
-# distinct from) the contents of a cloned repository, and it survives a
-# `git reset --hard`, which does not remove untracked files.
-MANIFEST_FILENAME = ".golem-manifest.json"
+# Filename of the descriptor naming every cached resource. It sits at the resource
+# root, which Golem made and owns.
+MANIFEST_FILENAME = "resource.json"
 
 # Current manifest schema version. Bump this whenever the on-disk layout or the
 # manifest structure changes, so future golem versions can migrate old entries.
