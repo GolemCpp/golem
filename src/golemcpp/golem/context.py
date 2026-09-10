@@ -2562,8 +2562,17 @@ class Context:
         self.recursively_apply_to_deps(config, self.link_dependency)
 
     def recursively_apply_to_deps(self, config, callback):
-        # TODO: `deps_linked` is local to this call and process_external_deps
-        # runs once per task, so a dependency two tasks name is processed twice.
+        # `deps_linked` is local to this call, and it has to stay that way. Each caller
+        # walks a different configuration (one per task, one per target, etc.) and
+        # `dep_command` ends in `use_dep(config, dep)`, which merges the dependency's
+        # exported configuration into that one.
+        #
+        # A dependency two tasks name is therefore walked twice, and the costly halves
+        # are already spared. `deps_to_resolve` holds the invocation key, so the
+        # sub-invocation runs once, and a build finds the headers and the artifacts in
+        # place and skips.
+        # 
+        # What repeats is the checking. Not worth deduping for now.
         deps_linked = []
         deps_count = 0
         while len(self.project.deps) != deps_count:
