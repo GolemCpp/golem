@@ -7,32 +7,40 @@
 # - Add your source files in `src/` if you want to build a simple program.
 # - Run `golem configure --variant=debug` to generate the build files.
 # - Run `golem build` to build local targets.
-# - If you add dependencies with `project.dependency(...)`, run
-#   `golem resolve` and then `golem dependencies` before `golem build`.
+# - If you add dependencies, with `project.dependency(...)` or by naming a
+#   source in `deps`, run `golem resolve` and then `golem dependencies`
+#   before `golem build`.
+
 
 def configure(project):
-    # Example dependency declaration:
-    # project.dependency(name='json',
-    #                    repository='https://github.com/nlohmann/json.git',
-    #                    version='^3.0.0',
-    #                    variant='release',
-    #                    shallow=True)
+    # A dependency declared under a local name, which `deps=["json"]` then
+    # refers to. Declare one to pin a version, choose a variant, or set any
+    # other parameter on it.
+    # project.dependency(name="json",
+    #                    repository="https://github.com/nlohmann/json.git",
+    #                    version="^3.0.0",
+    #                    variant="release")
 
     # Example library + export pair:
-    # project.library(name='mylib',
-    #                 includes=['mylib/include'],
-    #                 source=['mylib/src'],
-    #                 defines=['MYLIB_API_EXPORT'])
-    # project.export(name='mylib',
-    #                includes=['mylib/include'],
-    #                defines=['MYLIB_API_IMPORT'])
+    # project.library(name="mylib",
+    #                 includes=["mylib/include"],
+    #                 source=["mylib/src"],
+    #                 defines=["MYLIB_API_EXPORT"])
+    # project.export(name="mylib",
+    #                includes=["mylib/include"],
+    #                defines=["MYLIB_API_IMPORT"])
 
     # Simple executable built from every source file under `src/`.
-    project.program(name='hello',
-                    source=['src'])
+    project.program(name="hello", source=["src"])
 
-    # Alternatively, if using the example dependency and library above
-    # project.program(name='hello',
-    #                 source=['src'],
-    #                 deps=['json'],
-    #                 use=['mylib'])
+    # A `deps` entry naming a source declares the dependency on its own, and
+    # `#<version>` pins it. Nothing else is needed for the common case.
+    # project.program(name="hello",
+    #                 source=["src"],
+    #                 deps=["@json@nlohmann#^3.0.0"])
+
+    # Alternatively, using the dependency and the library declared above.
+    # project.program(name="hello",
+    #                 source=["src"],
+    #                 deps=["json"],
+    #                 use=["mylib"])
