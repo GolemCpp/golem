@@ -226,13 +226,7 @@ def resource_details(resource) -> list:
         ("created", humanize_age(resource.created_at)),
         (
             "manifest",
-            (
-                "version {}, golem {}".format(
-                    manifest.version, manifest.golem_version or "?"
-                )
-                if manifest
-                else NOTHING
-            ),
+            "version {}".format(manifest.version) if manifest else NOTHING,
         ),
         ("path", resource.path),
     ]
@@ -252,7 +246,8 @@ class CacheCommandHandler:
         print("       golem cache caches [--json]")
         print("       golem cache size [<selection>]")
         print(
-            "       golem cache remove <path-or-regex> [--regex] [<selection>] [--dry-run] [--yes]"
+            "       golem cache remove <path-or-regex> [--regex] [<selection>]"
+            " [--dry-run] [--yes]"
         )
         print("       golem cache purge [<selection>] [--dry-run] [--yes]")
         print("       golem cache unidentified [--remove] [--dry-run] [--yes]")
@@ -584,9 +579,8 @@ class CacheCommandHandler:
             if self.options.older_than:
                 # Age alone selects nothing here: that is what purging does.
                 print(
-                    'Selecting by age alone is "golem cache purge --older-than={}".'.format(
-                        self.options.older_than
-                    )
+                    'Selecting by age alone is "golem cache purge'
+                    ' --older-than={}".'.format(self.options.older_than)
                 )
             self.print_help()
             return 1

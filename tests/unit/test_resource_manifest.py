@@ -51,7 +51,6 @@ def test_write_and_read_manifest_roundtrip(tmp_path):
     assert manifest.source == make_source(reference="v3.12.0")
     assert manifest.created_at
     assert manifest.last_used_at == manifest.created_at
-    assert manifest.golem_version
 
     data = json.loads(manifest_file.read_text(encoding="utf-8"))
     assert "source" in data

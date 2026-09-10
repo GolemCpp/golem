@@ -15,7 +15,6 @@ def package_msi(self, package_build_context):
     depends = helpers.filter_unique(depends)
 
     msi_package = package_build_context.package.msi_package
-    # depends = helpers.filter_unique(msi_package.depends + depends)
 
     print("Gather package metadata")
     prefix = ""
@@ -23,11 +22,6 @@ def package_msi(self, package_build_context):
     subdirectory = prefix
 
     package_name = package_build_context.package.name
-    # package_section = msi_package.section
-    # package_priority = msi_package.priority
-    # package_maintainer = msi_package.maintainer
-    # package_description = msi_package.description
-    # package_homepage = msi_package.homepage
 
     version = Version(
         working_dir=self.get_project_dir(), build_number=self.get_build_number()

@@ -125,11 +125,29 @@ class Project:
         """
         Write into the shared cache which recipes served this project's dependencies.
 
-        The entries were written before anything was fetched, so they carry no recipe.
-
         Reloaded rather than saved from what this project holds. Because every
         sub-invocation appends to the same file, and writing a stale list back would
         drop what they added.
+
+        This constitutes the second write on all_dependencies.json, and the reasons
+        it stays:
+
+        - Only the recipe chain can be known from here: everything else can be known
+          at the first write, and a chain only becomes knowable once the source is
+          on disk, since a dependency shipping its own project file needs no recipe.
+        - A single write would cost a fetch pass: every dependency would have to be
+          cloned before writing the file to be able to determine the recipe chain.
+          But the file's promise is to be incomplete for the whole run anyway, since
+          a child appends what its own dependencies resolve to and no parent knows
+          those in advance.
+        - No reader needs the chain: a child adopts an entry's `resolved` wholesale
+          to skip a git query, and nothing acts on `recipe`. A dependency the child
+          fetches gets its chain from its own cookbook stack, which the parent's cannot
+          stand in for.
+        - One effect leaks out: `make_dependencies_slug` digests the whole of
+          `resolved`, so `bin-<slug>` moves once a chain is settled. The fix there
+          narrows the slug to what identifies the artifacts, which a single write
+          here would leave untouched.
         """
         if not global_config_file or not os.path.exists(global_config_file):
             return

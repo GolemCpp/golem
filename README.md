@@ -29,7 +29,7 @@ Golem is a cross-platform build system for C/C++ projects. It can build projects
 
 Golem's main goal is to remove the noise in the project file, and favor the developers intents rather than the technical details when unneeded.
 
-Here is how a **golemfile.py** looks like:
+Here is what a **golemfile.py** looks like:
 
 ```python
 def configure(project):
@@ -48,6 +48,8 @@ def configure(project):
                     use=['mylib'],
                     deps=['@json@nlohmann'])
 ```
+
+Note that `@json@nlohmann` above is not a package name and no registry sits behind it. Golem composes it from the repository URL. See [Sources, not Packages](https://golemcpp.org/docs/guides/sources-not-packages/) to learn more.
 
 But alternatively, you can also define an equivalent [golemfile.json](/examples/minimal/golemfile.json).
 
@@ -184,6 +186,7 @@ These commands are not part of the build workflow. Call them whenever you need t
 
 - [golem config](https://golemcpp.org/docs/commands/golem-config/) to get and set global or project-local settings
 - [golem tools](https://golemcpp.org/docs/commands/golem-tools/) to install, uninstall, and list external tools (for example cppfront)
+- [golem cache](https://golemcpp.org/docs/commands/golem-cache/) to list, size, and clean the resources stored in the caches
 
 ## 🚀 Roadmap
 
@@ -192,14 +195,10 @@ Here is a list of important features to add as a priority:
 - Add a Visual Studio solution generator (investigate waf capabilities and in slnx too)
 - Allow to define individual header files in export()
 - Add the ability to have different recipes for different versions of the dependency
-- Make an empty version on a dependency default to the latest available version
 - Generate API header and associated defines for libraries when `auto_api_name='MYLIB_API'` is defined (can possibly switch later to a systematic generation with a switch to disable the generation)
 - Add command to initialize a recipe (takes a URL and an option for the build system, include comments in project file)
 - Add the ability for a project file to include another one
-- Set default value for shallow on dependencies to True, or 'auto' (when version is a tag then shallow=True, otherwise for branches and commit hashes shallow=false) (this new behavior requires to check how version_template will behave, and it requires to fix how golem projects generate artifacts with the asked version to no break dependencies)
-- Generate an implicit export on a library when a program tries to use it
 - Support downloadable archives instead of git repositories
-- Add commands to manage the dependencies in the cache system
 - Supporting libraries mixing compiled targets and header only targets (e.g. boost)
 - Consider packaging Golem for Windows, Linux, MacOS (see https://pyinstaller.org/en/stable/)
 - Return a sensible error message to the user when running golem commands in the wrong order
@@ -207,7 +206,6 @@ Here is a list of important features to add as a priority:
 - Add pre/post build scripts
 - Add user-defined options on Configuration to allow scripts in recipes to set special options (e.g. backend=opengl)
 - Implement [CPS](https://cps-org.github.io/cps/) ([sample](https://cps-org.github.io/cps/sample.html))
-- Detect when `/external:I` or `-isystem` are available before using them
 - Merge `use` and `deps` with a properly defined convention to differentiate the dependencies (e.g. @json, needs analysis)
 - Generate by default `qmldir` and a `qrc` file for all the found QML files (allow to customize the namespace, or to disable generation)
 - Add a meaningful example that mixes the best of Golem (dependencies, Qt/QML, cppfront, modules, etc.)
@@ -215,8 +213,6 @@ Here is a list of important features to add as a priority:
 Here is a list of important improvements to work on the long term:
 
 - Add more documentation
-- Add integration tests
-- Add unit tests
 - Add the ability to create user-defined variants
 - Use the task mechanism of Waf for everything (e.g. resolving, building dependencies)
 - Improve available helper functions to build dependencies using other build systems (recipes)
@@ -227,7 +223,6 @@ Here is a list of other nice improvements to work on:
 
 - Properly log messages instead of using print() (needs anlaysis, consider using waflibs.Logs)
 - Properly abort execution when encoutering an error instead of raising an exception (needs anlaysis, consider using config.fatal(''), raise Waf.Error(), etc.)
-- Show the full path of the compiler when in a NixOS shell (issue on Waf's side)
 - Add a `golemfile.yml` format as project file
 
 Contributions are very welcome!
@@ -256,10 +251,7 @@ After the neccessary improvements, I'll advertise Golem to a broader audience.
 
 ### Known issues
 
-- The cache system accumulates the dependencies and there are no commands yet to clean it up (requires manual deletion)
-- Failure on a dependency processed by `golem resolve` may put this dependency in an unrecoverable state, requiring to delete it manually from the cache
 - Errors of often not user friendly (raised exceptions)
-- In some specific environments, such as NixOS, the path to the compiler is not a full path (not a blocking issue, need to fixed on Waf's side)
 - When dealing with conflicting variants of a same dependency, there is no message to warn the user, and Golem attemps to link both anyway (overrides.json is a good workaround for most cases)
 - Only 1 template among those having the same source will get processed (bug caused by `if str(version_template_src) in self.context_tasks: continue`)
 - No support for specifying header files in include parameter to export a library (needs to be a directory for now)

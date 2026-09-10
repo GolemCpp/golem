@@ -7,14 +7,11 @@ from datetime import timezone
 from enum import Enum
 
 from golemcpp.golem import cache_configuration
-from golemcpp.golem import command_version
 from golemcpp.golem.source import Source
 
-# Filename of the descriptor dropped at the root of every cached resource. It is
-# hidden and golem-namespaced so it never collides with (and stays visually
-# distinct from) the contents of a cloned repository, and it survives a
-# `git reset --hard`, which does not remove untracked files.
-MANIFEST_FILENAME = ".golem-manifest.json"
+# Filename of the descriptor naming every cached resource. It sits at the resource
+# root, which Golem made and owns.
+MANIFEST_FILENAME = "resource.json"
 
 # Current manifest schema version. Bump this whenever the on-disk layout or the
 # manifest structure changes, so future golem versions can migrate old entries.
@@ -86,7 +83,6 @@ class ResourceManifest:
     # Empty for a copied directory, which is not fetched at all.
     fetched: dict = field(default_factory=dict)
     version: int = MANIFEST_VERSION
-    golem_version: str = ""
     created_at: str = ""
     last_used_at: str = ""
 
@@ -103,7 +99,6 @@ class ResourceManifest:
             source=dict(source),
             fetched=dict(fetched or {}),
             version=MANIFEST_VERSION,
-            golem_version=command_version.get_golem_version(),
             created_at=now,
             last_used_at=now,
         )
@@ -141,7 +136,6 @@ class ResourceManifest:
             source=data.get("source", {}),
             fetched=data.get("fetched", {}),
             version=data.get("version", MANIFEST_VERSION),
-            golem_version=data.get("golem_version", ""),
             created_at=data.get("created_at", ""),
             last_used_at=data.get("last_used_at", ""),
         )
@@ -155,7 +149,6 @@ class ResourceManifest:
             "version": self.version,
             "kind": self.kind,
             "cache_key": self.cache_key,
-            "golem_version": self.golem_version,
             "source": self.source,
             "fetched": self.fetched,
             "created_at": self.created_at,
