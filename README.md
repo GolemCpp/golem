@@ -29,7 +29,7 @@ Golem is a cross-platform build system for C/C++ projects. It can build projects
 
 Golem's main goal is to remove the noise in the project file, and favor the developers intents rather than the technical details when unneeded.
 
-Here is how a **golemfile.py** looks like:
+Here is what a **golemfile.py** looks like:
 
 ```python
 def configure(project):
@@ -48,6 +48,8 @@ def configure(project):
                     use=['mylib'],
                     deps=['@json@nlohmann'])
 ```
+
+Note that `@json@nlohmann` above is not a package name and no registry sits behind it. Golem composes it from the repository URL. See [Sources, not Packages](https://golemcpp.org/docs/guides/sources-not-packages/) to learn more.
 
 But alternatively, you can also define an equivalent [golemfile.json](/examples/minimal/golemfile.json).
 
