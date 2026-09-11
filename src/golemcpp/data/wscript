@@ -117,7 +117,7 @@ def resolve(bld):
     builder.resolve(bld)
 
 
-class tmp(BuildContext):
+class tmp(Context):
     cmd = 'resolve'
     fun = 'resolve'
 

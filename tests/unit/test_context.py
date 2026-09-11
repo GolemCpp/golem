@@ -1,3 +1,4 @@
+import optparse
 import os
 import pytest
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ from golemcpp.golem.cache_configuration import (
 from golemcpp.golem.cache_resolution_policy import CacheResolutionPolicy
 from golemcpp.golem.cache_directory import CacheDirectory
 from golemcpp.golem.context import Context
+from golemcpp.golem.context import Phase
 from golemcpp.golem.definition import Definition
 from golemcpp.golem.dependency import Dependency
 from golemcpp.golem.export_manifest import ExportManifest
@@ -67,6 +69,9 @@ def make_configure_context(project_qt=True, project_qtdir=""):
             variant="debug",
             link="shared",
             arch=None,  # unset, as it now is unless asked for
+            # The declared defaults: a root configure, told nothing.
+            resolved_arch=None,
+            resolved_compiler=None,
             project_dir=os.getcwd(),
             compile_commands=False,
             vscode=False,
@@ -564,10 +569,11 @@ def test_vs_platform_refuses_an_arch_visual_studio_cannot_build(arch):
 
 def test_the_target_is_unavailable_until_a_compiler_has_answered():
     context = make_runtime_context()
-    del context.context.options.resolved_arch
+    # The option's declared default: present, and holding nothing yet.
+    context.context.options.resolved_arch = None
 
     with pytest.raises(RuntimeError, match=r"not resolved yet"):
-        context.target()
+        context.target_platform()
 
 
 def test_selecting_flags_do_not_need_a_resolved_target():
@@ -2355,3 +2361,129 @@ def test_one_entry_written_twice_is_gathered_once(tmp_path):
     context.project.definitions = [define("a", ["./mylib"]), define("b", ["./mylib"])]
 
     assert context.gather_dependency_references() == ["./mylib"]
+
+
+def make_resolve_context(tmp_path, resolved_compiler=None, resolved_arch=None):
+    """
+    A context for a plain waf command, the way `resolve` runs: no `load_envs`,
+    no `all_envs`, and an env that is whatever `environment()` assigns.
+    """
+    context = Context.__new__(Context)
+    context.project = None
+    context.settings = None
+    context.deps_resolve = False
+    context.context = SimpleNamespace(
+        # waf's own options object, since restoring persisted options replaces
+        # its __dict__ and a SimpleNamespace refuses that.
+        options=optparse.Values(
+            dict(
+                resolved_compiler=resolved_compiler,
+                # The request, which a told resolve must not read as the result.
+                arch="riscv64",
+                resolved_arch=resolved_arch,
+                targets="",
+                output_file="",
+                only_update_dependencies_regex="",
+            )
+        )
+    )
+    context.get_build_path = lambda: str(tmp_path)
+    return context
+
+
+def test_a_resolve_told_its_compiler_reads_no_c4che(tmp_path):
+    context = make_resolve_context(
+        tmp_path, resolved_compiler="gcc-15.2.0", resolved_arch="x64"
+    )
+
+    context.restore_resolved_environment()
+
+    assert context.compiler() == "gcc-15.2.0"
+    assert context.context.options.resolved_arch == "x86_64"
+    assert context.target_platform().arch == "x86_64"
+    assert not (tmp_path / "c4che").exists()
+
+
+def test_a_resolve_told_nothing_reads_the_c4che_its_configure_wrote(tmp_path):
+    from waflib.ConfigSet import ConfigSet
+
+    configured = ConfigSet()
+    configured.CXX_NAME = "clang"
+    configured.CC_VERSION = ("17", "0", "1")
+    configured.OPTIONS = json.dumps(
+        {
+            "resolved_arch": "aarch64",
+            "runtime_link": "shared",
+            "targets": "",
+            "only_update_dependencies_regex": "",
+            "output_file": "",
+        }
+    )
+    (tmp_path / "c4che").mkdir()
+    configured.store(str(tmp_path / "c4che" / "main_cache.py"))
+    context = make_resolve_context(tmp_path)
+
+    configured = context.load_environment_from_file()
+    context.restore_configured_environment(configured)
+
+    assert context.compiler() == "clang-17.0.1"
+    assert context.context.options.resolved_arch == "aarch64"
+
+
+def test_a_resolve_before_any_configure_is_refused_by_name(tmp_path):
+    context = make_resolve_context(tmp_path)
+
+    assert context.get_phase() is Phase.CONFIGURE
+    with pytest.raises(RuntimeError, match="golem configure"):
+        context.environment()
+
+
+def write_configured_environment(tmp_path):
+    from waflib.ConfigSet import ConfigSet
+
+    (tmp_path / "c4che").mkdir()
+    ConfigSet().store(str(tmp_path / "c4che" / "main_cache.py"))
+
+
+def test_the_phase_is_read_off_the_context_the_disk_and_the_parent(tmp_path):
+    # A plain context, nothing told: the root's resolve, at CONFIGURE until its
+    # own configure has run.
+    root = make_resolve_context(tmp_path)
+    assert root.get_phase() is Phase.CONFIGURE
+    write_configured_environment(tmp_path)
+    assert root.get_phase() is Phase.RESOLVE
+
+    # A build context stands at BUILD once configured, and at CONFIGURE before.
+    build = make_resolve_context(tmp_path)
+    build.context.load_envs = lambda: None
+    assert build.get_phase() is Phase.BUILD
+    unconfigured = make_resolve_context(tmp_path / "elsewhere")
+    unconfigured.context.load_envs = lambda: None
+    assert unconfigured.get_phase() is Phase.CONFIGURE
+
+
+def test_a_dependency_resolve_is_never_at_configure(tmp_path):
+    # Handed its toolchain, a dependency's resolve runs before its configure
+    # by design, whether or not an earlier run left a c4che behind.
+    child = make_resolve_context(
+        tmp_path, resolved_compiler="gcc-15.2.0", resolved_arch="x86_64"
+    )
+    assert child.get_phase() is Phase.RESOLVE
+    write_configured_environment(tmp_path)
+    assert child.get_phase() is Phase.RESOLVE
+
+
+def test_a_child_configure_refuses_a_toolchain_its_parent_did_not_find(tmp_path):
+    from golemcpp.golem.resolved_toolchain import ResolvedToolchain
+
+    context = make_resolve_context(tmp_path)
+    context.context.options.project_dir = "/cache/@zlib/source"
+    told = ResolvedToolchain(compiler="gcc-15.2.0", arch="x86_64")
+    found = ResolvedToolchain(compiler="clang-17.0.1", arch="x86_64")
+
+    with pytest.raises(RuntimeError) as refusal:
+        context.refuse_a_toolchain_disagreeing_with_the_parent(found, told)
+
+    message = str(refusal.value)
+    assert "/cache/@zlib/source" in message
+    assert "clang-17.0.1 here, gcc-15.2.0 for the parent" in message

@@ -170,7 +170,7 @@ The commands are presented in the order they are expected to be called, when nee
 
 - [golem init](https://golemcpp.org/docs/commands/golem-init/) to generate a documented starter `golemfile.py`
 - [golem configure](https://golemcpp.org/docs/commands/golem-configure/) to configure your project
-- [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to retrieve and configure dependencies
+- [golem resolve (if using dependencies)](https://golemcpp.org/docs/commands/golem-resolve/) to resolve and retrieve dependencies
   - About the [Cache System](https://golemcpp.org/docs/advanced/cache-system/)
   - About managing [Dependencies](https://golemcpp.org/docs/advanced/dependencies/)
   - About the [Recipes](https://golemcpp.org/docs/advanced/recipes/)

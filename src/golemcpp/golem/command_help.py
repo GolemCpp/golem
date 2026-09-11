@@ -4,7 +4,8 @@ def handle_help_command() -> None:
     print("  init          Create a documented starter golemfile.py")
     print("  configure     Configure the project with all the needed options")
     print(
-        "  resolve       Retrieve and configure dependencies (if dependencies are defined)"
+        "  resolve       Resolve and retrieve dependencies "
+        "(if dependencies are defined)"
     )
     print(
         "  dependencies  Build dependencies after resolve (if dependencies are defined)"

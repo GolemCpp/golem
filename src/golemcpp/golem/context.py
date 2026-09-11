@@ -12,12 +12,14 @@ import subprocess
 import stat
 import string
 import copy
+import enum
 
 from datetime import datetime
 from collections import OrderedDict
 from pathlib import Path
 
-from waflib import Logs, Task
+from waflib import Build, Logs, Task
+from waflib.ConfigSet import ConfigSet
 from waflib.Tools import msvc
 
 from golemcpp.golem.module import Module
@@ -43,6 +45,7 @@ from golemcpp.golem import dependency_reference
 from golemcpp.golem import build_slug
 from golemcpp.golem import target_platform
 from golemcpp.golem import target_resolver
+from golemcpp.golem import resolved_toolchain
 from golemcpp.golem.target_platform import TargetPlatform
 from golemcpp.golem import locator
 from golemcpp.golem.source import Source
@@ -58,6 +61,19 @@ from golemcpp.golem.definition import Definition
 from golemcpp.golem.artifact import Artifact
 from golemcpp.golem.package_msi import package_msi
 from golemcpp.golem.package_dmg import package_dmg
+
+
+class Phase(enum.Enum):
+    """
+    Golem's invocation cycle: configure, then resolve, then build.
+    """
+
+    # The project isn't configured yet.
+    CONFIGURE = "configure"
+    # The project is resolving.
+    RESOLVE = "resolve"
+    # The project is building: build, export, dependencies, package.
+    BUILD = "build"
 
 
 class Context:
@@ -687,15 +703,17 @@ class Context:
         """The architecture that was asked for, or '' when none was."""
         return target_resolver.arch_request(self.context.options)
 
-    def target(self):
+    def target_platform(self):
         """
-        What this build is for. Only available once a compiler has answered.
+        What this build is for.
 
-        The alternative is to fall back to the request or the host, and both
-        are provisional values that would flow into a build slug and an
-        advertisement and be wrong there, silently.
+        Available once a compiler is resolved, or from the perspective of a
+        dependency's resolve where the values are provided by the consumer.
+
+        Falling back to the request or the host would be wrong and poison silently the
+        cache slug.
         """
-        resolved = getattr(self.context.options, "resolved_arch", None)
+        resolved = self.context.options.resolved_arch
         if not resolved:
             raise RuntimeError(
                 "The target architecture is not resolved yet. It is settled "
@@ -706,7 +724,7 @@ class Context:
         return TargetPlatform(osystem=target_platform.host_osystem(), arch=resolved)
 
     def osname(self):
-        return self.target().osystem
+        return self.target_platform().osystem
 
     def compiler(self):
         return self.context.env.CXX_NAME + "-" + ".".join(self.context.env.CC_VERSION)
@@ -836,10 +854,10 @@ class Context:
         return platform.machine()
 
     def get_arch(self):
-        return self.target().arch
+        return self.target_platform().arch
 
     def arch_capability(self):
-        return self.target().capability
+        return self.target_platform().capability
 
     def selecting_capability(self):
         """
@@ -944,7 +962,7 @@ class Context:
 
     def get_arch_for_linux(self, arch=None):
         capability = (
-            self.target().capability
+            self.target_platform().capability
             if arch is None
             else target_platform.arch_capability(arch)
         )
@@ -1031,6 +1049,22 @@ class Context:
             action="store",
             default=None,  # unset observes; see resolve_target_arch
             help="Target Architecture",
+        )
+        # Configure settles it from the compiler and persists it.
+        # A parent passes what its configure found so a child's resolve use it.
+        context.add_option(
+            "--resolved-compiler",
+            action="store",
+            default=None,
+            help="Compiler the parent build was configured with, as <name>-<version>",
+        )
+        # Configure settles it from the compiler and persists it.
+        # A parent passes what its configure found so a child's resolve use it.
+        context.add_option(
+            "--resolved-arch",
+            action="store",
+            default=None,
+            help="Architecture the parent build was configured for",
         )
 
         context.add_option(
@@ -1416,16 +1450,115 @@ class Context:
 
         return flags
 
-    def environment(self, resolve_dependencies=False):
+    def is_build_context(self):
+        """
+        Whether the waf context is a build context.
 
-        # load all environment variables
+        Loads its own envs.
+        """
+        return hasattr(self.context, "load_envs")
+
+    def has_a_toolchain_from_its_parent(self):
+        """
+        Whether a parent build handed the toolchain settled above it.
+
+        The root project's configure settled it and every build between relays them at
+        resolve time. A later configure before build time must agree with it.
+        """
+        return (
+            resolved_toolchain.ResolvedToolchain.from_options(self.context.options)
+            is not None
+        )
+
+    def is_root_project(self):
+        """
+        Whether this is the project the user runs golem on, rather than a dependency.
+        """
+        return not self.has_a_toolchain_from_its_parent()
+
+    def get_configured_environment_path(self):
+        """
+        Get the path `golem configure` wrote the env to.
+        """
+        return os.path.join(
+            self.get_build_path(), Build.CACHE_DIR, "main" + Build.CACHE_SUFFIX
+        )
+
+    def is_configured(self):
+        return os.path.isfile(self.get_configured_environment_path())
+
+    def get_phase(self):
+        """
+        Get the phase this invocation stands at.
+        """
+        # Note that a dependency's resolve (not a root project, not under a build
+        # context) doesn't need to go through the configure phase. Because it relies on
+        # what the parent project handed down instead.
+
+        needs_a_configure = self.is_build_context() or self.is_root_project()
+        if needs_a_configure and not self.is_configured():
+            return Phase.CONFIGURE
+        if not self.is_build_context():
+            return Phase.RESOLVE
+        return Phase.BUILD
+
+    def load_environment_through_waf(self):
+        """
+        Load the env `golem configure` wrote.
+        """
         self.context.load_envs()
+        return self.context.all_envs["main"]
 
-        _ = self.restore_options_env(self.context.all_envs["main"])
-        self.context.env = self.context.all_envs["main"].derive()
+    def load_environment_from_file(self):
+        """
+        Load the env `golem configure` wrote, but without the Waf function for it.
+        """
+        configured = ConfigSet()
+        configured.load(self.get_configured_environment_path())
+        return configured
+
+    def restore_configured_environment(self, configured):
+        """
+        Restore the env `golem configure` wrote.
+        """
+        _ = self.restore_options_env(configured)
+        self.context.env = configured.derive()
 
         # Restore options
         self.restore_options()
+
+    def restore_resolved_environment(self):
+        """
+        Restore the resolved environment the parent handed down.
+
+        This allows a dependency to be resolved with the same toolchain the parent
+        project settled.
+        """
+        options = self.context.options
+        told = resolved_toolchain.ResolvedToolchain.from_options(options)
+        self.context.env = told.environment()
+        options.resolved_arch = told.arch
+
+    def environment(self, resolve_dependencies=False):
+
+        phase = self.get_phase()
+        if phase is Phase.CONFIGURE:
+            raise RuntimeError(
+                "The project is not configured: run golem configure first"
+            )
+        elif phase is Phase.RESOLVE:
+            if self.is_root_project():
+                # After its own configure, which wrote the c4che it reads.
+                configured = self.load_environment_from_file()
+                self.restore_configured_environment(configured)
+            else:
+                # Before its configure: the toolchain it was handed instead.
+                self.restore_resolved_environment()
+        elif phase is Phase.BUILD:
+            configured = self.load_environment_through_waf()
+            self.restore_configured_environment(configured)
+        else:
+            raise RuntimeError("Unknown phase {}".format(phase))
 
         # init default environment variables
         self.configure_init()
@@ -1978,12 +2111,13 @@ class Context:
                 "--runtime-link={}".format(self.runtime_link(dep)),
                 "--runtime-variant={}".format(self.runtime_variant(dep)),
                 "--link={}".format(self.link(dep)),
-                # The resolved identity, not the request: this build has already
-                # observed what its compiler produces, so the dependency is told
-                # rather than left to observe independently. It also means a child
-                # whose compiler disagrees fails instead of building something the
-                # parent cannot link.
+                # What the child is asked to build for. Its configure confirms
+                # it against its own compiler, as any request.
                 "--arch={}".format(self.get_arch()),
+                # What this build found, which the child is expected to find too:
+                # its resolve trusts these, its configure checks them.
+                "--resolved-compiler={}".format(self.compiler()),
+                "--resolved-arch={}".format(self.get_arch()),
                 "--variant={}".format(
                     self.context.options.variant if not dep.variant else dep.variant[0]
                 ),
@@ -2066,9 +2200,14 @@ class Context:
 
         export_options = path_options + []
 
-        helpers.run_task(
-            helpers.make_golem_command("configure") + configure_options, cwd=repo_path
-        )
+        # A resolve runs before the configure and reads no c4che.
+        if command == "resolve":
+            command_options = configure_options
+        else:
+            helpers.run_task(
+                helpers.make_golem_command("configure") + configure_options,
+                cwd=repo_path,
+            )
 
         if command == "build":
             helpers.run_task(
@@ -2571,7 +2710,7 @@ class Context:
         # are already spared. `deps_to_resolve` holds the invocation key, so the
         # sub-invocation runs once, and a build finds the headers and the artifacts in
         # place and skips.
-        # 
+        #
         # What repeats is the checking. Not worth deduping for now.
         deps_linked = []
         deps_count = 0
@@ -4562,6 +4701,27 @@ class Context:
         ):
             self.context.options.cppfront_include = cppfront_cache_info.include_path
 
+    def refuse_a_toolchain_disagreeing_with_the_parent(self, found, told):
+        """
+        A parent passes the compiler and the arch its configure found. The current
+        configure (child) must agree or this build stops here.
+
+        The root has no parent: nothing told, and this is never reached.
+        """
+        disagreements = found.disagreements(told)
+        if not disagreements:
+            return
+        raise RuntimeError(
+            "The toolchain configuring {} is not the one the parent build was "
+            "configured with: {}".format(
+                self.get_project_dir(),
+                "; ".join(
+                    "{} is {} here, {} for the parent".format(name, found, told)
+                    for name, found, told in disagreements
+                ),
+            )
+        )
+
     def configure(self):
 
         self.cache_configuration = self.make_cache_configuration()
@@ -4579,9 +4739,16 @@ class Context:
         if self.is_windows():
             self.context.env.MSVC_TARGETS = self.msvc_target_preference()
         self.context.load(["compiler_c", "compiler_cxx"])
+        # What the parent found, read before the probe below settles this.
+        told = resolved_toolchain.ResolvedToolchain.from_options(self.context.options)
         self.context.options.resolved_arch = target_resolver.TargetResolver(
             self.context, msvc=self.is_msvc_like()
         ).resolve()
+        if told is not None:
+            found = resolved_toolchain.ResolvedToolchain.from_configure(
+                self.context.env, self.context.options.resolved_arch
+            )
+            self.refuse_a_toolchain_disagreeing_with_the_parent(found, told)
 
         tasks_and_targets = self.get_tasks_and_targets_to_process()
 
